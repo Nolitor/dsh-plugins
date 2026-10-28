@@ -1,0 +1,203 @@
+{
+  "ok": true,
+  "checks": 39,
+  "failed": 0,
+  "failures": [],
+  "results": [
+    {
+      "name": "workspace.json parses",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "DSH Plugins record preserved (id 14879f56...)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "title == \"DSH Plugins\"",
+      "ok": true,
+      "detail": "DSH Plugins"
+    },
+    {
+      "name": "path == plugins root",
+      "ok": true,
+      "detail": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins"
+    },
+    {
+      "name": "path exists and is directory",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "path is canonical realpath",
+      "ok": true,
+      "detail": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins"
+    },
+    {
+      "name": "8 sessionIds preserved in same order",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no workspace titled \"DSH Notify\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "all workspace paths unique",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no session accounted twice",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "workspaceIds count matches table",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "old DSH Notify session dir removed",
+      "ok": true,
+      "detail": "/home/minami/.dsh/sessions/--home-minami-Workspace-projects-DSH~0020Notify--"
+    },
+    {
+      "name": "old project dir removed",
+      "ok": true,
+      "detail": "/home/minami/Workspace/projects/DSH Notify"
+    },
+    {
+      "name": "derived project dir exists",
+      "ok": true,
+      "detail": "/home/minami/.dsh/sessions/--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--"
+    },
+    {
+      "name": "all 8 sessions: 2 frames, header cwd/path identity, body preserved",
+      "ok": true,
+      "detail": "8/8"
+    },
+    {
+      "name": "track exists: dsh-korean-locale",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-korean-locale/package.json",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-korean-locale/lib/index.js",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-korean-locale/lib/client.js",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-korean-locale/data/ko.json",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-korean-locale/locale/ko.json",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-korean-locale/cordis.patch.yml",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "track exists: dsh-notify",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-notify/package.json",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-notify/cordis.patch.yml",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-notify/lib/index.js",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-notify/lib/client.js",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "track exists: dsh-sidebar-manager",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-sidebar-manager/package.json",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-sidebar-manager/cordis.patch.yml",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-sidebar-manager/lib/index.js",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "  dsh-sidebar-manager/lib/client.js",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "doc exists: docs/dsh-plugin-runtime-spec.md",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "doc exists: docs/plugin-boot-card.md",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "profile dependency points to new path",
+      "ok": true,
+      "detail": "link:/home/minami/Workspace/projects/dsh-workspace/dsh-plugins/dsh-korean-locale"
+    },
+    {
+      "name": "profile bundles include korean-locale",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "locale node_modules link resolves",
+      "ok": true,
+      "detail": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins/dsh-korean-locale"
+    },
+    {
+      "name": "locale plugin package name",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no broken symlinks under DSH Plugins",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

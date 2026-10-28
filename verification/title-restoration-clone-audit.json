@@ -1,0 +1,100 @@
+{
+  "at": "2026-10-24T10:20:07.938Z",
+  "sessions": [
+    {
+      "id": "session-b53400d8-41db-4a3b-b611-a14f43e62916",
+      "expectedTitle": "DSH Notify 하이브리드 듀얼 모드 아키텍처 설계",
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "storedIdentityCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "identityMatchesCwd": true,
+      "projectionPresent": true,
+      "title": "DSH Notify 하이브리드 듀얼 모드 아키텍처 설계",
+      "titleMatches": true,
+      "pass": true
+    },
+    {
+      "id": "session-a3b2bf75-8959-4a8e-8b53-9d4394b898e3",
+      "expectedTitle": "부트 카드 읽고 헤더 인덱싱 작업",
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "storedIdentityCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "identityMatchesCwd": true,
+      "projectionPresent": true,
+      "title": "부트 카드 읽고 헤더 인덱싱 작업",
+      "titleMatches": true,
+      "pass": true
+    },
+    {
+      "id": "session-95a9341d-a091-4a4b-879d-899cb432b9cc",
+      "expectedTitle": null,
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "storedIdentityCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "identityMatchesCwd": true,
+      "projectionPresent": true,
+      "title": null,
+      "titleMatches": true,
+      "pass": true
+    },
+    {
+      "id": "session-21197fd9-a032-4cbd-b5b5-cd0882ce3fe9",
+      "expectedTitle": null,
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "storedIdentityCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "identityMatchesCwd": true,
+      "projectionPresent": true,
+      "title": null,
+      "titleMatches": true,
+      "pass": true
+    },
+    {
+      "id": "session-318f99bb-f0dd-462a-8540-3cb7d3694e2d",
+      "expectedTitle": null,
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "storedIdentityCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "identityMatchesCwd": true,
+      "projectionPresent": true,
+      "title": null,
+      "titleMatches": true,
+      "pass": true
+    },
+    {
+      "id": "session-c7a8072b-507d-4679-833c-3952f3b041c6",
+      "expectedTitle": null,
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "storedIdentityCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "identityMatchesCwd": true,
+      "projectionPresent": true,
+      "title": null,
+      "titleMatches": true,
+      "pass": true
+    },
+    {
+      "id": "session-58a2dc78-0e98-49ac-8f3a-beec8a2997c6",
+      "expectedTitle": null,
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "storedIdentityCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "identityMatchesCwd": true,
+      "projectionPresent": true,
+      "title": null,
+      "titleMatches": true,
+      "pass": true
+    },
+    {
+      "id": "session-f9c95dba-191d-4096-94c6-be35c1f8ef4b",
+      "expectedTitle": null,
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "storedIdentityCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "identityMatchesCwd": true,
+      "projectionPresent": true,
+      "title": null,
+      "titleMatches": true,
+      "pass": true
+    }
+  ],
+  "checks": {
+    "allIdentityMatch": true,
+    "allProjectionsPresent": true,
+    "allTitlesMatchHistorical": true,
+    "listedTitleServing": 2,
+    "allPass": true
+  }
+}

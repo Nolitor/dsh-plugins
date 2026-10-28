@@ -1,0 +1,13 @@
+{
+  "name": "dsh-sidebar-manager-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Playwright E2E harness for @nolit/dsh-sidebar-manager",
+  "scripts": {
+    "fixture": "node prepare-fixture.mjs",
+    "e2e": "node run-e2e.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.63.0"
+  }
+}

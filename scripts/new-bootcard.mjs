@@ -1,0 +1,127 @@
+#!/usr/bin/env node
+/**
+ * Generate a timestamped DSH Plugins boot card and point the lightweight
+ * AGENTS.md index at only the newest card.
+ *
+ * Run: node scripts/new-bootcard.mjs [note]
+ */
+import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const root = new URL('..', import.meta.url).pathname
+const readJson = (rel) => JSON.parse(readFileSync(join(root, rel), 'utf8'))
+const run = (cmd, args) => {
+  try { return execFileSync(cmd, args, { encoding: 'utf8' }).trim() } catch { return 'unknown' }
+}
+const now = new Date()
+const pad = (n) => String(n).padStart(2, '0')
+const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
+const stamp = `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.getUTCDate())}T${pad(kst.getUTCHours())}${pad(kst.getUTCMinutes())}+0900`
+const id = `${stamp}`
+const note = process.argv.slice(2).join(' ').trim()
+
+const plugins = [
+  ['Korean locale', 'dsh-korean-locale/package.json', 'artifacts/nolit-dsh-korean-locale-0.2.3.tgz'],
+  ['Sidebar Manager', 'dsh-sidebar-manager/package.json', 'artifacts/nolit-dsh-sidebar-manager-0.1.1.tgz'],
+  ['Notify Web', 'dsh-notify/package.json', 'artifacts/nolit-dsh-notify-web-0.1.6.tgz'],
+]
+const lines = []
+for (const [label, pkgPath, artifact] of plugins) {
+  if (!existsSync(join(root, pkgPath))) continue
+  const pkg = readJson(pkgPath)
+  const artifactPath = join(root, artifact)
+  const hash = existsSync(artifactPath) ? createHash('sha256').update(readFileSync(artifactPath)).digest('hex') : 'missing'
+  lines.push(`| ${label} | \`${pkg.name}@${pkg.version}\` | \`${pkg.engines?.dsh ?? 'n/a'}\` | \`${hash}\` |`)
+}
+
+const card = `# DSH Plugins — Boot Card ${stamp}
+
+> Status: active · Generated: ${stamp} (KST) · Runtime: DSH \`${run('dsh', ['--version'])}\` · Node \`${run('node', ['--version'])}\`
+> Previous cards: [INDEX.md](./INDEX.md) · Policy: [../docs/DSH-HARNESS-POLICY.md](../docs/DSH-HARNESS-POLICY.md)
+
+## 0. Read this first
+
+This is the **only boot card an agent should read by default**. Older timestamped cards are
+historical evidence; open them only when investigating a version/policy delta.
+
+${note ? `Latest session note: ${note}\n\n` : ''}## 1. Non-negotiable rules
+
+1. **Measure first.** Read actual state; do not trust memory, report text, or a plan.
+2. **Isolate live state.** Use a workspace-local \`DSH_HOME\` for experiments. Do not write
+   \`~/.dsh\`, the live profile, sessions, or the running 3080 service without explicit approval.
+3. **Version gate.** Plugin \`engines.dsh\` must include the running DSH prerelease exactly:
+   \`>=0.2.2-alpha.2 <0.3.0\` for the current generation.
+4. **Release artifacts are immutable.** Update \`artifacts/SHA256SUMS.*\` whenever a package
+   changes; never claim a release without a matching hash.
+5. **UTM is advisory.** Do not introduce hard write-blocks based on UTM role/policy. Use
+   observation, warning, soft rejection, and audit records only.
+6. **Notification delivery is deduped.** If Chrome OS notification succeeds, do not also show
+   the in-app toast; use toast/title/sound only as fallback.
+7. **Locale parity.** Korean dictionaries must match both \`en\` and \`zh\` key sets and
+   placeholders before release.
+
+## 2. Runtime snapshot
+
+| Component | Value |
+|---|---|
+| DSH CLI | \`${run('dsh', ['--version'])}\` |
+| Node | \`${run('node', ['--version'])}\` |
+| Cordis | \`${(() => { try { return JSON.parse(readFileSync(`${process.env.HOME}/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/package.json`, 'utf8')).version } catch { return 'from installed DSH' } })()}\` |
+| Live profile | \`~/.dsh/profiles/web\` (read-only from this sandbox) |
+| Active bundles | base, web-app, auto-review, agent-team-profile, Korean locale, Sidebar Manager |
+
+## 3. Managed plugins and artifacts
+
+| Plugin | Version | \`engines.dsh\` | Artifact SHA-256 |
+|---|---|---|---|
+${lines.join('\n')}
+
+## 4. Current policies and known deltas
+
+- DSH 0.2.2-alpha.2 changed **manifest/engine enforcement** to include prereleases for the
+  declared window; all three plugins pin \`>=0.2.2-alpha.2 <0.3.0\`.
+- Korean pack refreshed to **68 namespaces / 3,019 keys**, en/zh key and placeholder parity 0.
+- Notify v0.1.6: auto permission request once per page; OS notification success suppresses
+  toast; denied/insecure/error falls back to toast + tab title + sound.
+- Sidebar Manager is functionally healthy on alpha.2 (123/123 tests). Forge/Worktree coupling
+  needs advisory preflight (no hard block): \`.agents/worktrees\` observation, cwd/handoff audit,
+  worktree identity/lifecycle mapping.
+
+## 5. Key documents
+
+- [Runtime spec](../docs/dsh-plugin-runtime-spec.md)
+- [Plugin boot card baseline](../docs/plugin-boot-card.md)
+- [DSH harness policy + version changelog](../docs/DSH-HARNESS-POLICY.md)
+- [Forge vs Sidebar/UTM comparison](../FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md)
+- [UTM review](../UTM-REVIEW-FORGE-VS-SIDEBAR.md)
+- [Runtime measurement](../FORGE-VS-SIDEBAR-UTM-RUNTIME-MEASUREMENT.md)
+- [Latest runtime report](../DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
+
+## 6. Verification commands
+
+\`\`\`bash
+(cd dsh-korean-locale && npm run verify)
+(cd dsh-sidebar-manager && npm test)
+(cd dsh-notify && npm test)
+node scripts/audit-promoted-state.mjs
+node scripts/audit-installed-vs-packaged.mjs
+\`\`\`
+`
+writeFileSync(join(root, 'bootcards', `${id}.md`), card)
+if (!existsSync(join(root, 'bootcards', 'INDEX.md'))) {
+  writeFileSync(join(root, 'bootcards', 'INDEX.md'), '# Boot Card Index\n\nNewest first. Agents read only the card referenced by AGENTS.md unless comparing historical deltas.\n\n')
+}
+const indexPath = join(root, 'bootcards', 'INDEX.md')
+let index = readFileSync(indexPath, 'utf8')
+if (!index.includes(`(${id}.md)`)) {
+  index = index.replace('\n', `\n- [${id}](${id}.md)\n`)
+  writeFileSync(indexPath, index)
+}
+const agentsPath = join(root, 'AGENTS.md')
+let agents = existsSync(agentsPath) ? readFileSync(agentsPath, 'utf8') : '# DSH Plugins — Agent Boot Index\n\n<!-- LATEST_BOOT_CARD:START -->\n<!-- LATEST_BOOT_CARD:END -->\n'
+const block = `<!-- LATEST_BOOT_CARD:START -->\nLatest boot card: [bootcards/${id}.md](bootcards/${id}.md)\nGenerated: ${stamp} (KST)\nRead only this latest card by default; older cards are historical evidence.\n<!-- LATEST_BOOT_CARD:END -->`
+agents = agents.replace(/<!-- LATEST_BOOT_CARD:START -->[\s\S]*?<!-- LATEST_BOOT_CARD:END -->/, block)
+writeFileSync(agentsPath, agents)
+console.log(JSON.stringify({ id, card: `bootcards/${id}.md`, latest: `bootcards/${id}.md` }, null, 2))

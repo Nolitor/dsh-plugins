@@ -1,0 +1,201 @@
+{
+  "at": "2026-10-24T10:07:09.844Z",
+  "targetPath": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+  "workspaces": [
+    {
+      "id": "90bee0c6-a98f-4976-8ac8-b75bc384e230",
+      "title": "UTM",
+      "path": "/home/minami/Workspace/projects/project-promotion-manager",
+      "sessionIds": [
+        "session-cbcf7268-3028-4de7-9166-7b9b6c53cbef",
+        "session-86b3c745-2293-4047-8fa6-6c58b1c5c6be",
+        "session-9ee65aae-6504-4469-abad-ae0f93bbc8ca",
+        "session-d9027e70-a897-46b1-a26c-0ecacba01ef8",
+        "session-ef976cda-17f6-46a8-a1fe-5bc4a316b0af",
+        "session-44963370-20f5-4724-995a-6f0f4906e8b7"
+      ],
+      "createdAt": "2026-10-23T11:20:40.768Z"
+    },
+    {
+      "id": "970131f8-5a2d-4d2f-b1aa-0a2d7869fedb",
+      "title": "UROH",
+      "path": "/home/minami/Workspace/projects/release-harness",
+      "sessionIds": [
+        "session-2273af2c-71e8-4bdd-b2f0-dc2d28956b43",
+        "session-7b2cc3e8-ae1c-4ba6-bdb7-66cc0933366e"
+      ],
+      "createdAt": "2026-10-23T00:46:10.360Z"
+    },
+    {
+      "id": "3759c0fc-a229-4b40-9809-d3613cd8e15e",
+      "title": "Skill Intelligence",
+      "path": "/home/minami/Workspace/projects/total-skill-intelligence",
+      "sessionIds": [],
+      "createdAt": "2026-10-23T13:22:08.945Z"
+    },
+    {
+      "id": "188604f8-185e-4e75-a99b-a24681255384",
+      "title": "Total Skill Addon",
+      "path": "/home/minami/Workspace/projects/total_skill",
+      "sessionIds": [
+        "session-2dc3531f-1b50-406e-bacc-9ce73345e193",
+        "session-6095d46a-4172-470d-9f09-7cdb301c510d",
+        "session-c889802e-7362-47a8-ba6e-e9c3114ebc2c",
+        "session-110f0202-70dc-430d-9c12-e10f08141255",
+        "session-1a783f86-a02b-478c-afae-1eefba2f6db8",
+        "session-bb8cc36a-a246-4401-bbea-e32afedede91",
+        "session-d04f0e17-7e6e-4b35-a714-bf6de665dfe6",
+        "session-8f534d83-fe36-41fa-877e-0adcc5013b9d"
+      ],
+      "createdAt": "2026-10-20T14:18:38.773Z"
+    },
+    {
+      "id": "3f7ba34a-7549-4400-9bc5-3b8179415f25",
+      "title": "기본 작업공간",
+      "path": "/home/minami/Workspace/projects/dsh-workspace",
+      "sessionIds": [
+        "session-276ff026-7779-412e-b442-adf45a377046",
+        "session-940b5b9d-a5d3-4610-a821-06b8b6c1a88d",
+        "session-ebc6d16e-e21f-42a9-a181-817815451b45",
+        "session-8dcbf859-ccd1-4d35-8cc9-5d61b941b368",
+        "session-281956f8-db78-4718-ad65-1f405053248d",
+        "session-9bde4597-b4ea-4b2e-a7a1-a92a676e726d",
+        "session-a89aa930-e440-4fbd-902b-deede4e04c7c",
+        "session-d7719d2e-0912-4ac4-8c36-6a70765dbcda",
+        "session-00914377-1771-421f-bfc8-40cc91a9fa6b",
+        "ffb32206-554c-4af7-a5ca-6992e5a7ba74",
+        "8f53a8b4-6c0a-49cb-837c-60f01a835887",
+        "session-a86ca5f6-a254-4bb9-a940-f2cf3e70cb08",
+        "session-1df5bfdf-d824-4b38-9c83-2030ea8e6a37",
+        "session-f5632d9b-f617-48df-af37-fcd94a0f5268",
+        "session-c6e16f8d-672d-4900-bbfc-3e6225bda136"
+      ],
+      "createdAt": "2026-10-20T06:02:00.520Z"
+    },
+    {
+      "id": "14879f56-24e5-4b96-a1b5-0778356e8960",
+      "title": "DSH Plugins",
+      "path": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "sessionIds": [
+        "session-b53400d8-41db-4a3b-b611-a14f43e62916",
+        "session-95a9341d-a091-4a4b-879d-899cb432b9cc",
+        "session-21197fd9-a032-4cbd-b5b5-cd0882ce3fe9",
+        "session-318f99bb-f0dd-462a-8540-3cb7d3694e2d",
+        "session-c7a8072b-507d-4679-833c-3952f3b041c6",
+        "session-a3b2bf75-8959-4a8e-8b53-9d4394b898e3",
+        "session-58a2dc78-0e98-49ac-8f3a-beec8a2997c6",
+        "session-f9c95dba-191d-4096-94c6-be35c1f8ef4b"
+      ],
+      "createdAt": "2026-10-19T16:24:07.564Z"
+    },
+    {
+      "id": "52304bad-9e7f-43d3-ad25-e9985c0872d1",
+      "title": "투데이웍(Today's Work)",
+      "path": "/home/minami/Workspace/projects/todaysapp",
+      "sessionIds": [
+        "session-98ac86b4-ec3a-4c72-b0b5-976e3de2ee09",
+        "session-eab7f9e8-dbd4-4ec9-88fd-16a73ff666dc",
+        "session-5ac1f31d-9813-46b9-8581-d1bc9affbd0f",
+        "session-f613112e-4d07-4a83-883e-a307dfa2a607",
+        "session-d757bd65-5e26-427b-87c2-b4da86e71a82"
+      ],
+      "createdAt": "2026-10-19T08:10:48.782Z"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "session-b53400d8-41db-4a3b-b611-a14f43e62916",
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "headerId": "session-b53400d8-41db-4a3b-b611-a14f43e62916",
+      "events": 6043,
+      "firstEventType": "permission/preset",
+      "lastEventType": "session/end-seed",
+      "eventState": "shared-frozen"
+    },
+    {
+      "id": "session-95a9341d-a091-4a4b-879d-899cb432b9cc",
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "headerId": "session-95a9341d-a091-4a4b-879d-899cb432b9cc",
+      "events": 11,
+      "firstEventType": "permission/preset",
+      "lastEventType": "agent/inbox/spliced",
+      "eventState": "shared-frozen"
+    },
+    {
+      "id": "session-21197fd9-a032-4cbd-b5b5-cd0882ce3fe9",
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "headerId": "session-21197fd9-a032-4cbd-b5b5-cd0882ce3fe9",
+      "events": 4,
+      "firstEventType": "permission/preset",
+      "lastEventType": "subagent/model-selection-policy",
+      "eventState": "shared-frozen"
+    },
+    {
+      "id": "session-318f99bb-f0dd-462a-8540-3cb7d3694e2d",
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "headerId": "session-318f99bb-f0dd-462a-8540-3cb7d3694e2d",
+      "events": 4,
+      "firstEventType": "permission/preset",
+      "lastEventType": "subagent/model-selection-policy",
+      "eventState": "shared-frozen"
+    },
+    {
+      "id": "session-c7a8072b-507d-4679-833c-3952f3b041c6",
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "headerId": "session-c7a8072b-507d-4679-833c-3952f3b041c6",
+      "events": 4,
+      "firstEventType": "permission/preset",
+      "lastEventType": "subagent/model-selection-policy",
+      "eventState": "shared-frozen"
+    },
+    {
+      "id": "session-a3b2bf75-8959-4a8e-8b53-9d4394b898e3",
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "headerId": "session-a3b2bf75-8959-4a8e-8b53-9d4394b898e3",
+      "events": 5853,
+      "firstEventType": "permission/preset",
+      "lastEventType": "session/end-seed",
+      "eventState": "shared-frozen"
+    },
+    {
+      "id": "session-58a2dc78-0e98-49ac-8f3a-beec8a2997c6",
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "headerId": "session-58a2dc78-0e98-49ac-8f3a-beec8a2997c6",
+      "events": 12,
+      "firstEventType": "permission/preset",
+      "lastEventType": "approval/policy",
+      "eventState": "shared-frozen"
+    },
+    {
+      "id": "session-f9c95dba-191d-4096-94c6-be35c1f8ef4b",
+      "headerCwd": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+      "headerId": "session-f9c95dba-191d-4096-94c6-be35c1f8ef4b",
+      "events": 4,
+      "firstEventType": "permission/preset",
+      "lastEventType": "subagent/model-selection-policy",
+      "eventState": "shared-frozen"
+    }
+  ],
+  "errors": [],
+  "target": {
+    "id": "14879f56-24e5-4b96-a1b5-0778356e8960",
+    "title": "DSH Plugins",
+    "path": "/home/minami/Workspace/projects/dsh-workspace/dsh-plugins",
+    "sessionCount": 8,
+    "sessionIds": [
+      "session-b53400d8-41db-4a3b-b611-a14f43e62916",
+      "session-95a9341d-a091-4a4b-879d-899cb432b9cc",
+      "session-21197fd9-a032-4cbd-b5b5-cd0882ce3fe9",
+      "session-318f99bb-f0dd-462a-8540-3cb7d3694e2d",
+      "session-c7a8072b-507d-4679-833c-3952f3b041c6",
+      "session-a3b2bf75-8959-4a8e-8b53-9d4394b898e3",
+      "session-58a2dc78-0e98-49ac-8f3a-beec8a2997c6",
+      "session-f9c95dba-191d-4096-94c6-be35c1f8ef4b"
+    ]
+  },
+  "targetPathOk": true,
+  "targetSessionCountOk": true,
+  "pathsUnique": true,
+  "allSessionsLoaded": true,
+  "noDroppedSessions": true
+}

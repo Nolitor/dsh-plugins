@@ -1,0 +1,16 @@
+# Local measurement sandboxes, browser profiles, cookies, caches
+.runtime-measure/
+
+# Node package/dependency artifacts
+node_modules/
+*.log
+npm-debug.log*
+
+# Secrets / local credentials
+.credentials.yaml
+*.secret_token
+.env
+.env.*
+
+# OS noise
+.DS_Store

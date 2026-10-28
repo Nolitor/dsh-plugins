@@ -1,0 +1,3 @@
+[submodule "dsh-korean-locale"]
+path = dsh-korean-locale
+url = https://github.com/linuxsung/dsh-korean-locale.git
