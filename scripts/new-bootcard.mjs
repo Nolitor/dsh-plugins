@@ -49,17 +49,20 @@ historical evidence; open them only when investigating a version/policy delta.
 ${note ? `Latest session note: ${note}\n\n` : ''}## 1. Non-negotiable rules
 
 1. **Measure first.** Read actual state; do not trust memory, report text, or a plan.
-2. **Isolate live state.** Use a workspace-local \`DSH_HOME\` for experiments. Do not write
+2. **Sidebar Manager drift gate.** The live plugin may include UTM modifications that differ from
+   the packaged release. Before any change/version-up: run `node scripts/audit-installed-vs-packaged.mjs`,
+   record tree SHA-256, test the current behavior in an isolated `DSH_HOME`, then version-up.
+3. **Isolate live state.** Use a workspace-local \`DSH_HOME\` for experiments. Do not write
    \`~/.dsh\`, the live profile, sessions, or the running 3080 service without explicit approval.
-3. **Version gate.** Plugin \`engines.dsh\` must include the running DSH prerelease exactly:
+4. **Version gate.** Plugin \`engines.dsh\` must include the running DSH prerelease exactly:
    \`>=0.2.2-alpha.2 <0.3.0\` for the current generation.
-4. **Release artifacts are immutable.** Update \`artifacts/SHA256SUMS.*\` whenever a package
+5. **Release artifacts are immutable.** Update \`artifacts/SHA256SUMS.*\` whenever a package
    changes; never claim a release without a matching hash.
-5. **UTM is advisory.** Do not introduce hard write-blocks based on UTM role/policy. Use
+6. **UTM is advisory.** Do not introduce hard write-blocks based on UTM role/policy. Use
    observation, warning, soft rejection, and audit records only.
-6. **Notification delivery is deduped.** If Chrome OS notification succeeds, do not also show
+7. **Notification delivery is deduped.** If Chrome OS notification succeeds, do not also show
    the in-app toast; use toast/title/sound only as fallback.
-7. **Locale parity.** Korean dictionaries must match both \`en\` and \`zh\` key sets and
+8. **Locale parity.** Korean dictionaries must match both \`en\` and \`zh\` key sets and
    placeholders before release.
 
 ## 2. Runtime snapshot
@@ -85,7 +88,8 @@ ${lines.join('\n')}
 - Korean pack refreshed to **68 namespaces / 3,019 keys**, en/zh key and placeholder parity 0.
 - Notify v0.1.6: auto permission request once per page; OS notification success suppresses
   toast; denied/insecure/error falls back to toast + tab title + sound.
-- Sidebar Manager is functionally healthy on alpha.2 (123/123 tests). Forge/Worktree coupling
+- Sidebar Manager is functionally healthy on alpha.2. Its installed tree can carry UTM changes;
+  always baseline-measure before a version-up (current measured version 0.1.2, 126/126 tests). Forge/Worktree coupling
   needs advisory preflight (no hard block): \`.agents/worktrees\` observation, cwd/handoff audit,
   worktree identity/lifecycle mapping.
 

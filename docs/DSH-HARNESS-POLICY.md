@@ -42,6 +42,20 @@ result it came from.
 - Profile file changes require a DSH web service restart; runtime state is in-memory until restart.
 - Notification/plugin behavior changes must be verified in both isolated and live-like state.
 
+### 3.1 Sidebar Manager installed-vs-packaged gate (mandatory)
+
+The Sidebar Manager is the one plugin UTM may modify outside the normal release flow. Every
+session that touches it must do this **before** changing code or bumping the version:
+
+1. Resolve the live profile `link:` target and confirm it equals the workspace track.
+2. Run `node scripts/audit-installed-vs-packaged.mjs` and record the tree SHA-256.
+3. Run its tests and an isolated `DSH_HOME` boot with live `workspace.json` + `groups.json`.
+4. Probe `groups/list`, `groups/view`, advisory and any routes being changed.
+5. Compare UTM-modified files with `RECOVERY-NOTES.md`/previous boot cards.
+6. Only then version-up, regenerate the artifact, record SHA-256, and re-measure.
+
+Skipping this gate is a policy violation even when the code looks unchanged.
+
 ## 4. Release policy
 
 - Every package change bumps `version`.
