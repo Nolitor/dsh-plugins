@@ -593,5 +593,5 @@ Related assets:
 | Korean coverage | 68 namespaces / 3,019 keys; enabled-surface missing = 0 |
 | Plugin tests | Korean verify PASS; sidebar 123/123; notify 19/19 |
 | Installed vs workspace tree | `sidebar-manager` link resolves to the same realpath; tree SHA-256 matches |
-| UTM drift audit | post-recovery UTM additions detected; local `0.1.1` tarball (`8863088d…c74c2`) re-baselined by `scripts/audit-installed-vs-packaged.mjs` |
+| UTM drift audit | post-recovery UTM additions detected; local `0.1.2` tarball (`fef72c59…8972c`) re-baselined by `scripts/audit-installed-vs-packaged.mjs` |
 | OS notification daemon | `org.freedesktop.Notifications` not activatable → toast/sound fallback only |

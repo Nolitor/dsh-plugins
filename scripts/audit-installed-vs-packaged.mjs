@@ -62,10 +62,16 @@ const declaredFiles = new Set((pkg.files ?? []).filter((entry) => !entry.include
 const missingDeclared = [...declaredFiles].filter((path) => !existsSync(join(track, path)))
 const liveTreeHash = liveResolved ? treeHash(liveResolved) : null
 const trackTreeHash = treeHash(track)
-const artifactDir = join(root, '.runtime-measure/artifacts')
+const artifactDirs = [join(root, 'artifacts'), join(root, '.runtime-measure/artifacts')]
 const artifactCandidates = [
   ...walk(track).filter((path) => /\.(?:tgz|zip|tar\.gz)$/.test(path)),
-  ...(existsSync(artifactDir) ? readdirSync(artifactDir).map((name) => join(artifactDir, name)).filter((path) => /\.(?:tgz|zip|tar\.gz)$/.test(path)) : []),
+  ...artifactDirs.flatMap((dir) =>
+    existsSync(dir)
+      ? readdirSync(dir)
+          .map((name) => join(dir, name))
+          .filter((path) => /\.(?:tgz|zip|tar\.gz)$/.test(path))
+      : [],
+  ),
 ]
 const generatedAt = new Date().toISOString()
 const result = {

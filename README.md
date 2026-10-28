@@ -32,7 +32,7 @@ It sits under the standardized unified tree:
 |---|---|---|
 | `dsh-korean-locale/` | Korean (ko) language pack `@nolit/dsh-korean-locale` (font stack + dictionaries) | Active, linked into the `web` profile |
 | `dsh-notify/` | `@nolit/dsh-notify-web` browser notification plugin + recovered Windows PowerShell prototype | Measured under an isolated `DSH_HOME`; not enabled in the live profile |
-| `dsh-sidebar-manager/` | `@nolit/dsh-sidebar-manager` right-sidebar workspace/session switcher extension | Active, linked into the `web` profile (v0.1.1) |
+| `dsh-sidebar-manager/` | `@nolit/dsh-sidebar-manager` right-sidebar workspace/session switcher extension | Active, linked into the `web` profile (v0.1.2) |
 | `docs/` | Shared runtime documentation: plugin runtime spec, boot card | Active reference |
 
 Each track keeps its own `package.json`, `cordis.patch.yml`, locale dictionaries,

@@ -39,7 +39,7 @@ import { classifyOrphanLogs } from './orphan-classifier.mjs'
 import { auditResidentBudget, checkCrossGroupFork } from './harness-diet.mjs'
 import { auditSubagentArtifacts } from './subagent-guard.mjs'
 import { runPromotionGate } from './promotion-gate.mjs'
-import { buildAdvisoryReport, evaluateMutation } from './contract-advisory.mjs'
+import { buildAdvisoryReport, evaluateMutation, evaluateWorktreePreflight } from './contract-advisory.mjs'
 import { assertGovernanceTarget, DEPRECATED_WORKSPACES } from './workspace-lifecycle.mjs'
 
 const DEFAULT_PROJECTS_ROOT = path.join(os.homedir(), 'Workspace', 'projects')
@@ -1578,6 +1578,27 @@ export function createTransactionRoutes(ctx, options) {
         policy: member.policy?.access,
         role: member.role,
       })
+    }),
+    'groups/worktree-preflight': safe(async (request) => {
+      const body = await readBody(request)
+      const registry = ctx.get('workspaceRegistry')
+      const target = registry.get(String(body.workspaceId ?? body.targetWorkspaceId ?? ''))
+      if (target === undefined) {
+        return json(
+          { ok: true, advisory: true, blocking: false, allowed: false, code: 'WORKSPACE_MISSING', detail: 'target workspace not found' },
+          200,
+        )
+      }
+      const { document } = readGroups(options)
+      const member = document.members[String(target.id)] ?? {}
+      return json(
+        evaluateWorktreePreflight({
+          target: { id: String(target.id), title: target.title, policy: member.policy },
+          originWorkspaceId:
+            body.originWorkspaceId === undefined ? String(target.id) : String(body.originWorkspaceId),
+          worktreePath: body.worktreePath,
+        }),
+      )
     }),
     'groups/subagents': safe(async () => {
       const registry = ctx.get('workspaceRegistry')

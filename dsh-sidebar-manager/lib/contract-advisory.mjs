@@ -47,6 +47,17 @@ function listTopLevel(targetPath) {
   }
 }
 
+/** List runtime Git worktrees created under `<contract>/.agents/worktrees`. */
+export function listRuntimeWorktrees(targetPath) {
+  const pool = path.join(targetPath, '.agents', 'worktrees')
+  try {
+    if (!fs.existsSync(pool)) return []
+    return fs.readdirSync(pool, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path.join(pool, entry.name))
+  } catch {
+    return []
+  }
+}
+
 /**
  * Observe a single workspace for advisory signals.
  *
@@ -76,6 +87,19 @@ export function observeWorkspace({ workspace, enforcePolicy = true }) {
         title: workspace.title,
         detail: `implementation artifacts observed in contract node: ${hits.join(', ')}`,
         hint: 'advisory only — nothing was moved, blocked, or quarantined',
+      })
+    }
+
+    const worktrees = listRuntimeWorktrees(workspace.path)
+    if (worktrees.length > 0) {
+      observations.push({
+        level: 'notice',
+        code: 'WORKTREE_ARTIFACT_IN_CONTRACT_NODE',
+        workspaceId: workspace.id,
+        title: workspace.title,
+        detail: `${worktrees.length} runtime Git worktree(s) observed under .agents/worktrees`,
+        hint: 'advisory only — Forge/Worktree changed the checkout context; record a handoff/audit if intentional',
+        worktrees: worktrees.slice(0, 8),
       })
     }
   }
@@ -147,6 +171,48 @@ export function evaluateMutation({ target, originWorkspaceId, action = 'write' }
     }
   }
   return { allowed: true, softRejection: undefined, observations: [] }
+}
+
+/**
+ * Advisory preflight for Forge/Worktree-style actions. Always non-blocking:
+ * `blocking` stays false even when `allowed` is false; callers may show a
+ * warning or soft rejection, but must not hard-disable the action.
+ *
+ * @param {object} input
+ * @param {{id:string,title:string,policy?:object}} input.target
+ * @param {string} input.originWorkspaceId
+ * @param {string} [input.worktreePath]
+ * @returns {object}
+ */
+export function evaluateWorktreePreflight({ target, originWorkspaceId, worktreePath }) {
+  const verdict = evaluateMutation({ target, originWorkspaceId, action: 'worktree' })
+  return {
+    ok: true,
+    advisory: true,
+    blocking: false,
+    allowed: verdict.allowed,
+    softRejection: verdict.softRejection,
+    policy: target?.policy?.access ?? null,
+    observation: verdict.softRejection
+      ? {
+          level: 'policy',
+          code: 'WORKTREE_POLICY_ADVISORY',
+          targetWorkspaceId: target?.id ?? null,
+          targetTitle: target?.title ?? null,
+          originWorkspaceId: originWorkspaceId ?? null,
+          detail: verdict.softRejection.detail,
+          hint: 'advisory only — record the exception and continue if intentional',
+        }
+      : {
+          level: 'info',
+          code: 'WORKTREE_CONTEXT_ALLOWED',
+          targetWorkspaceId: target?.id ?? null,
+          targetTitle: target?.title ?? null,
+          originWorkspaceId: originWorkspaceId ?? null,
+          detail: 'worktree context is allowed by the advisory policy',
+        },
+    worktreePath: typeof worktreePath === 'string' && worktreePath.trim() !== '' ? worktreePath : null,
+  }
 }
 
 /**

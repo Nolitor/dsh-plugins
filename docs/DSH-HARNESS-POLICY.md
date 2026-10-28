@@ -54,7 +54,7 @@ Current artifacts:
 | Plugin | Version | SHA-256 |
 |---|---|---|
 | Korean locale | `0.2.3` | `c6afbcea8dec596832e6e29a4878cedc3653dacb50066d8a2b16f08c38f33394` |
-| Sidebar Manager | `0.1.1` | `8863088db5a28b148f4066c2b8c24cd1067fb50ddb73ac5997025458511c74c2` |
+| Sidebar Manager | `0.1.2` | `fef72c599ef31e7085a8c21b2f47cab309641c92e1e2860c291672696ea8972c` |
 | Notify Web | `0.1.6` | `426c36e721884163794f57a464d4d8c60a82b60502e68dececced47ec24ad7a5` |
 
 ## 5. Notification delivery policy

@@ -24,7 +24,7 @@ const note = process.argv.slice(2).join(' ').trim()
 
 const plugins = [
   ['Korean locale', 'dsh-korean-locale/package.json', 'artifacts/nolit-dsh-korean-locale-0.2.3.tgz'],
-  ['Sidebar Manager', 'dsh-sidebar-manager/package.json', 'artifacts/nolit-dsh-sidebar-manager-0.1.1.tgz'],
+  ['Sidebar Manager', 'dsh-sidebar-manager/package.json', 'artifacts/nolit-dsh-sidebar-manager-0.1.2.tgz'],
   ['Notify Web', 'dsh-notify/package.json', 'artifacts/nolit-dsh-notify-web-0.1.6.tgz'],
 ]
 const lines = []

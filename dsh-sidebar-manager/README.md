@@ -126,3 +126,10 @@ preflight.preview.ok === true
 - 언어는 `navigator.language`가 `ko*`이면 한국어, 그 외에는 영어로 자동 선택됩니다.
 - `{count}`, `{oldPath}`, `{newPath}` 같은 자리표시자는 `t(key, vars)`에서 치환됩니다.
 - 플러그인 목록에 표시되는 제목/설명은 별도로 `locale/{en,ko}.json`의 `meta`가 담당합니다.
+
+
+## v0.1.2 — advisory worktree guardrails
+
+- Contract-node advisory now observes `.agents/worktrees` runtime artifacts.
+- New `groups/worktree-preflight` route returns non-blocking policy observations for Forge-style callers.
+- No hard write-block was added; UTM policies remain advisory.

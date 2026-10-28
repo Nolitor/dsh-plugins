@@ -22,7 +22,12 @@ import {
   migrateDocument,
   mutateGroups,
 } from '../lib/groups.mjs'
-import { observeWorkspace, evaluateMutation, buildAdvisoryReport } from '../lib/contract-advisory.mjs'
+import {
+  observeWorkspace,
+  evaluateMutation,
+  evaluateWorktreePreflight,
+  buildAdvisoryReport,
+} from '../lib/contract-advisory.mjs'
 
 function makeRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'adv-v3-'))
@@ -141,6 +146,41 @@ test('advisory: report is explicitly non-blocking', () => {
   assert.equal(report.advisory, true)
   assert.equal(report.blocking, false)
   assert.equal(report.ok, true)
+})
+
+test('advisory: .agents/worktrees in a contract node is a NOTICE, not a block', () => {
+  const { projects } = makeRoot()
+  const dir = path.join(projects, 'Core-00-System')
+  fs.mkdirSync(path.join(dir, '.agents', 'worktrees', 'dsh-abc'), { recursive: true })
+  const result = observeWorkspace({ workspace: { id: 'w', path: dir, title: 'Core-00-System', role: 'contract' } })
+  const worktree = result.observations.find((observation) => observation.code === 'WORKTREE_ARTIFACT_IN_CONTRACT_NODE')
+  assert.ok(worktree, 'worktree observation must be present')
+  assert.equal(worktree.level, 'notice')
+  assert.equal(worktree.blocking, undefined)
+  assert.ok(fs.existsSync(path.join(dir, '.agents', 'worktrees', 'dsh-abc')))
+})
+
+test('worktree preflight: policy mismatch is advisory and non-blocking', () => {
+  const result = evaluateWorktreePreflight({
+    target: { id: 'core-spec', title: 'Core-00-System', policy: { access: 'read-only' } },
+    originWorkspaceId: 'utm',
+    worktreePath: '/repo/.agents/worktrees/dsh-abc',
+  })
+  assert.equal(result.ok, true)
+  assert.equal(result.advisory, true)
+  assert.equal(result.blocking, false)
+  assert.equal(result.allowed, false)
+  assert.equal(result.observation.code, 'WORKTREE_POLICY_ADVISORY')
+})
+
+test('worktree preflight: same-context request is allowed', () => {
+  const result = evaluateWorktreePreflight({
+    target: { id: 'core-spec', title: 'Core-00-System', policy: { access: 'read-only' } },
+    originWorkspaceId: 'core-spec',
+  })
+  assert.equal(result.allowed, true)
+  assert.equal(result.blocking, false)
+  assert.equal(result.observation.code, 'WORKTREE_CONTEXT_ALLOWED')
 })
 
 // --- selective policies -------------------------------------------------------
