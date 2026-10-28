@@ -50,8 +50,8 @@ ${note ? `Latest session note: ${note}\n\n` : ''}## 1. Non-negotiable rules
 
 1. **Measure first.** Read actual state; do not trust memory, report text, or a plan.
 2. **Sidebar Manager drift gate.** The live plugin may include UTM modifications that differ from
-   the packaged release. Before any change/version-up: run `node scripts/audit-installed-vs-packaged.mjs`,
-   record tree SHA-256, test the current behavior in an isolated `DSH_HOME`, then version-up.
+   the packaged release. Before any change/version-up: run \`node scripts/audit-installed-vs-packaged.mjs\`,
+   record tree SHA-256, test the current behavior in an isolated \`DSH_HOME\`, then version-up.
 3. **Isolate live state.** Use a workspace-local \`DSH_HOME\` for experiments. Do not write
    \`~/.dsh\`, the live profile, sessions, or the running 3080 service without explicit approval.
 4. **Version gate.** Plugin \`engines.dsh\` must include the running DSH prerelease exactly:
