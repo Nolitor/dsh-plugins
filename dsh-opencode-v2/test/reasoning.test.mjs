@@ -292,3 +292,32 @@ test('concurrent route resolution shares one discovery probe', async () => {
   await adapter.resolveModel('opencode-agent', FLASH.id)
   assert.equal(probes, 1)
 })
+
+test('stream rejects a level the route does not advertise before spawning', async () => {
+  const { adapter, ctx } = makeAdapter([{ ...FLASH, id: 'opencode/big-pickle', variants: undefined }])
+  const chunks = await collect(adapter.stream({
+    ...OPTIONS,
+    model: 'opencode/big-pickle',
+    reasoningEffort: 'high',
+  }))
+  assert.equal(ctx.calls.length, 0)
+  assert.deepEqual(chunks, [{
+    type: 'finish',
+    reason: {
+      kind: 'error',
+      failure: {
+        code: 'UNSUPPORTED_REASONING_EFFORT',
+        message: 'provider "opencode-agent" model "opencode/big-pickle" does not support reasoning effort "high" (advertised: none)',
+      },
+    },
+  }])
+})
+
+test('stream rejects a stale level on a route that advertises other levels', async () => {
+  const { adapter, ctx } = makeAdapter([FLASH])
+  const chunks = await collect(adapter.stream({ ...OPTIONS, reasoningEffort: 'xhigh' }))
+  assert.equal(ctx.calls.length, 0)
+  const failure = chunks.at(-1)?.reason?.failure
+  assert.equal(failure?.code, 'UNSUPPORTED_REASONING_EFFORT')
+  assert.match(failure.message, /advertised: low, high, max\)$/)
+})

@@ -1504,3 +1504,211 @@ Replaying the 12 settlements of `session-bfeb1eaa…`:
 - `contextWindow` 1,000,000 is correct for `opencode-go/deepseek-v4.1-flash`; the window was never
   the bug.
 - `(Go)` / `(Zen)` model labels and the catalog snapshot path are unaffected by this patch.
+
+## 24. v0.3.6 — why only some models offer a thinking level; `default` row inherits its route
+
+### 24.1 The reported asymmetry is an OpenCode catalog fact
+
+Question measured: in the prompt's model picker, some routes offer a thinking level and some do not.
+The chain is unchanged from §12: `buildModelCatalog()` (`dsh-api-session-controller/lib/index.js`)
+fills `model.reasoning` from `llm.resolveModelInfo()`, and the picker builds no effort rows when it
+is absent (`ui-model-selection` `effortChoices` is `[]`, so the pane shows
+"이 모델은 추론 강도 단계를 제공하지 않습니다."). The adapter publishes `reasoning.efforts` only
+for a route whose `/api/model` entry carries `variants`.
+
+Re-measured 2026-10-30 against the live account and the running app's own cache:
+
+```
+$ opencode serve --port 0 && curl -s -u opencode:<pw> /api/model
+entries 45 | with variants 35
+variant id counts {"low":29,"high":30,"max":22,"medium":20,"xhigh":17,"none":13,"minimal":4,"thinking":1}
+
+$ node -e '... modelsFromApiPayload(...)'
+routes parsed: 45 with variants: 35        # same projection the adapter stores
+no-variant routes: opencode-go/iceman-contributor-free, opencode-go/mimo-v2.6-flash,
+opencode-go/mimo-v2.6-pro, opencode/mimo-v2.6-flash-free, opencode/nemotron-3.5-lightning-free,
+opencode-go/longcat-2.0, opencode-go/kimi-k2.7-code, opencode-go/mimo-v2.5,
+opencode-go/mimo-v2.5-pro, opencode/big-pickle
+
+$ ~/.dsh/profiles/web/opencode-models.json      # the live profile's cached catalog, saved 00:25
+models 45 with variants 35                       # identical id set
+```
+
+So the 10 variant-less routes have no selectable level because OpenCode declares none for them —
+not because discovery failed, the cache is stale, or the mapping dropped them. `--thinking`
+(streaming) is orthogonal and still configurable per plugin.
+
+### 24.2 Defect found while answering: the `default` row lost its route's levels
+
+`OpencodeHttpAdapter.lookupModel()` computed `const route = model === 'default' ? defaultModel : model`
+and then matched the catalog against the literal `model`, never `route`. The `default` row therefore
+resolved to `null` and fell back to `contextWindow 32768` / no `reasoning`, even though `stream()`
+ran the resolved route through `modelRefFromRoute()` and that route had a 200 KB–1 MB window and
+levels.
+
+Measured before the fix (`test/http.test.mjs`, fake catalog `opencode/beam-free` 200000 / `low,high`):
+
+```
+resolveModel('default').context.contextWindow === 32768      # expected 200000
+resolveModel('default').reasoning === undefined              # expected low|high
+```
+
+Fix: `lookupModel()` resolves `default` through the same `modelRefFromRoute('default', models,
+defaultModel)` call the wire uses, then matches the resulting `provider/id`. The route table's
+`default.opencodeModel` still overrides `defaultModel`, and an override route without variants
+still advertises no levels.
+
+New test: `resolveModel default route inherits the route it actually runs` covers both the
+`defaultModel` inheritance and the table override.
+
+### 24.3 Verification
+
+```
+$ (cd dsh-opencode-v2 && npm test)
+ℹ tests 166
+ℹ pass 166
+ℹ fail 0
+```
+
+Live adapter probe against a fresh `opencode serve --port 0` (real CLI, real `/api/model`,
+`defaultModel: opencode/beam-free`), after the fix:
+
+```
+default                         ctx=1048576 levels=low|medium|high|xhigh|max
+opencode/beam-free              ctx=1048576 levels=low|medium|high|xhigh|max
+opencode-go/deepseek-v4.1-flash ctx=1000000 levels=low|high|max
+opencode-go/kimi-k3             ctx=1048576 levels=max
+opencode-go/minimax-m3          ctx=1000000 levels=none|thinking
+opencode-go/mimo-v2.6-flash     ctx=1048576 levels=-          # route declares no variants
+opencode/big-pickle             ctx=200000  levels=-
+```
+
+The variant-less rows resolve a real context window yet no levels, which separates "OpenCode
+declares no variants" from "discovery failed" (the failure mode of §12.1 returned `32768` for
+every row). `default` now matches the route `stream()` runs instead of the floor.
+
+Status: code + tests applied in the workspace. The running 3080 process still holds the pre-change
+module; the `default` row shows the inherited levels after a restart. Live `~/.dsh` was not written.
+
+## 25. v0.3.7 — preflight validation and a loud discovery fallback
+
+### 25.1 What already existed (and what did not)
+
+The with/without-levels decision is implemented at three layers, not missing:
+
+| Layer | Behaviour | Code |
+|---|---|---|
+| Catalog | `reasoning.efforts` only when the route has `/api/model` `variants` | `lib/shared.js` `reasoningEffortsFromVariants`, `lib/provider.js` / `lib/http.js` `resolveModel` |
+| Host | rejects any requested effort the exact model does not advertise (`UNSUPPORTED_REASONING_EFFORT`); selection drops an effort on model switch | `dsh-llm/src/index.ts` `resolveCallWithInfo`, `dsh-api-session-controller/src/commands.ts` `selectModel` |
+| Client | no effort pane when `model.reasoning` is absent; the root menu hides the Effort cell entirely | `dsh-client-ui-model-selection/ModelSelect.tsx:139-151, 509-520` |
+
+The client layer is why the difference is invisible until a level is offered: a variant-less model
+shows no Effort row at all, not "no levels available". That is a DSH UI gap, not plugin logic.
+
+### 25.2 Gap 1 — an unadvertised level failed inside OpenCode, not at the seam
+
+Measured against the real CLI:
+
+```
+$ printf 'say OK' | opencode run -m opencode-go/mimo-v2.6-flash#high --auto --format json
+{"type":"error", ..., "error":{"type":"provider.no-route","message":"Variant unavailable for opencode-go/mimo-v2.6-flash: high"}}
+```
+
+`mimo-v2.6-flash` declares no variants, so that argv can only fail after OpenCode starts. The host
+normally blocks it first, but direct adapter callers and a selection made against an older catalog
+bypass that check and get the opaque provider error.
+
+Fix: both adapters validate `options.reasoningEffort` against the resolved route's variants before
+spawning (`opencode-agent`) or creating a session (`opencode-http-agent`), and yield
+`{ kind: 'error', failure: { code: 'UNSUPPORTED_REASONING_EFFORT', message } }` with the advertised
+list: `… does not support reasoning effort "high" (advertised: none)`. An unknown route (discovery
+unavailable) stays unvalidated so a transient catalog failure cannot block a valid call.
+
+### 25.3 Gap 2 — the CLI fallback dropped every level silently
+
+`discoverOnce()` fell through to `opencode models` (ids only) without logging. That path removes
+every reasoning level and collapses context windows to `32768`, which looks exactly like "these
+models cannot reason". It now logs:
+
+```
+opencode-agent: serve discovery unavailable (<reason>); falling back to the CLI listing,
+which advertises no reasoning levels and a conservative context window
+```
+
+### 25.4 Tests and status
+
+```
+$ (cd dsh-opencode-v2 && npm test)
+ℹ tests 169
+ℹ pass 169
+ℹ fail 0
+```
+
+New coverage: a variant-less route rejects an effort without spawning; a route with levels rejects a
+stale one and names the offered list; the HTTP route rejects before `POST /api/session` (0 creates).
+The existing tests still pin that an advertised level reaches `-m …#high` and the HTTP session
+`variant`.
+
+Status: applied in the workspace, artifact `0.3.7`. The running 3080 service still holds the
+previous module; restart required. Live `~/.dsh` was not written.
+
+## 25. v0.3.7 — reasoning-level handling at the serving boundary
+
+### 25.1 What was already implemented (three layers)
+
+The picker asymmetry from §24 is produced by deliberate logic, not by a missing branch:
+
+| Layer | Code | Behavior |
+|---|---|---|
+| Plugin catalog | `reasoningEffortsFromVariants()`; `resolveModel()` spreads `reasoning` only `if (efforts.length)` | a route advertises levels iff `/api/model` carries `variants` |
+| Host selection | `llm.resolveCallWithInfo()` (`packages/llm/llm/src/index.ts:916-940`) | rejects any effort for a model with no `reasoning`; rejects levels outside `efforts` |
+| Client | `ModelSelect.tsx` root pane renders the Effort cell only when `reasoning !== undefined` | no effort entry is shown at all for a variant-less route |
+
+The missing piece was **not** the with/without-model branch; it was what happens at the adapter
+when a level is requested anyway, and what the user is told.
+
+### 25.2 Measured defect: an unadvertised level reached the wire
+
+Real CLI against the real account (route `opencode-go/mimo-v2.6-flash`, which advertises no
+variants):
+
+```
+$ printf 'say OK' | opencode run -m opencode-go/mimo-v2.6-flash#high --auto --format json
+{"type":"error", ..., "error":{"type":"provider.no-route",
+ "message":"Variant unavailable for opencode-go/mimo-v2.6-flash: high"}}
+```
+
+The adapter appended `#high` unconditionally (`withVariant(resolveOpencodeModel(...),
+options.reasoningEffort)`); the HTTP adapter passed `variant` the same way. A stale catalog, a
+direct adapter caller, or a selection made before a catalog refresh therefore produced an opaque
+upstream error mid-run instead of a local, actionable failure.
+
+### 25.3 Fix
+
+- `shared.unsupportedEffortMessage()` produces one message naming the provider, model, requested
+  level, and the levels the route advertised (or `none`).
+- `OpencodeLlmAdapter.stream()` and `OpencodeHttpAdapter.stream()` now resolve the exact route and
+  reject a level it does not advertise **before spawning** / **before creating a session**, yielding
+  `finish.kind = "error"` with `code: "UNSUPPORTED_REASONING_EFFORT"` and logging the same message.
+  An unknown route (no catalog entry) is left to the server, so a transient discovery failure does
+  not block a call the host already validated.
+- `discoverOnce()` logs when the `serve` probe is unavailable and the CLI listing is used, because
+  that fallback silently removes every level and collapses context windows to the `32768` floor —
+  the failure mode that looks like "this model cannot reason".
+
+### 25.4 Verification
+
+```
+$ (cd dsh-opencode-v2 && npm test)
+ℹ tests 169
+ℹ pass 169
+ℹ fail 0
+```
+
+New tests: `stream rejects a level the route does not advertise before spawning` (no child spawned,
+exact failure payload), `stream rejects a stale level on a route that advertises other levels`
+(advertised list in the message), and the HTTP equivalent
+`stream rejects a level the route does not advertise before creating a session` (`state.creates`
+stays 0). Advertised levels still take the existing `-m …#<variant>` / session-variant paths.
+
+Status: applied in the workspace; the running 3080 process needs a restart to load 0.3.6 + 0.3.7.

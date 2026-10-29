@@ -15,8 +15,8 @@
 
 ## rule
 
-- **1.0** · active · 2026-10-29 · [docs/RULES.md](RULES.md)
-  Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement, docs/skeleton contract, reporting.
+- **1.1** · active · 2026-10-30 · [docs/RULES.md](RULES.md)
+  Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement, docs/skeleton contract (including the track-not-indexed rule), reporting.
 
 ## spec
 
@@ -48,6 +48,8 @@
 
 ## measurement
 
+- **1.3** · measured · 2026-10-30 · [OPENCODE-V2-SURFACE-MEASUREMENT.md](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
+  Measured opencode v2.2.0 CLI surface: event schema, session-export tokens, removed flags, and per-model reasoning variants (re-measured 2026-10-30, preflight rules); corrects the 0919 boot card.
 - **1.0** · measured · 2026-10-29 · [DSH-PARENT-CAPABILITY-MEASUREMENT.md](../DSH-PARENT-CAPABILITY-MEASUREMENT.md)
   Measured whether usage, a cluster host controller, and cache nesting can be added as one DSH plugin, and whether the DeepSeek API supplies them; verified by isolated mount.
 - **1.0** · measured · 2026-10-29 · [FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md](../FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md)
@@ -58,8 +60,6 @@
   Feasibility of OpenCode and Antigravity CLI as DSH subagents/models: auth, routes, sandbox limits.
 - **1.0** · measured · 2026-10-29 · [OPENCODE-V2-HTTP-API-MEASUREMENT.md](../OPENCODE-V2-HTTP-API-MEASUREMENT.md)
   Measured the OpenCode v2.2.0 HTTP server (130 endpoints, SSE event stream) as a DSH-controlled transport instead of per-turn `opencode run` subprocesses; auth, sessions, streaming, usage/cache, permissions, variants, and lifecycle.
-- **1.1** · measured · 2026-10-29 · [OPENCODE-V2-SURFACE-MEASUREMENT.md](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
-  Measured opencode v2.2.0 CLI surface: event schema, session-export tokens, removed flags, and per-model reasoning variants; corrects the 0919 boot card.
 
 ## policy
 
@@ -85,19 +85,19 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 13)
+## boot (newest 5 of 15)
 
+- **active** · 2026-10-30T0032+0900.md · [card](../bootcards/2026-10-30T0032+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-10-30T0032+0900. Older cards are historical.
+- **active** · 2026-10-29T2326+0900.md · [card](../bootcards/2026-10-29T2326+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-10-29T2326+0900. Older cards are historical.
 - **active** · 2026-10-29T2306+0900.md · [card](../bootcards/2026-10-29T2306+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T2306+0900. Older cards are historical.
 - **active** · 2026-10-29T2242+0900.md · [card](../bootcards/2026-10-29T2242+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T2242+0900. Older cards are historical.
 - **active** · 2026-10-29T1213+0900.md · [card](../bootcards/2026-10-29T1213+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T1213+0900, including the off-peak isolated A/B plan for the OpenCode v2 HTTP provider (real workloads). Older cards are historical.
-- **active** · 2026-10-29T1132+0900.md · [card](../bootcards/2026-10-29T1132+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-10-29T1132+0900. Older cards are historical.
-- **active** · 2026-10-29T1027+0900.md · [card](../bootcards/2026-10-29T1027+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-10-29T1027+0900. Older cards are historical.
 
 ---
 
-38 indexed (13 boot cards), 0 missing header, 38 total.
+40 indexed (15 boot cards), 0 missing header, 40 total.

@@ -1,9 +1,9 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 1.5
+version: 1.6
 kind: readme
 status: active
-updated: 2026-10-29
+updated: 2026-10-30
 summary: OpenCode v2.2.0 managed plugin: tool + /opencode + opencode-agent route, real token usage, per-model contextWindow, per-route reasoning levels (variants), stdin prompt delivery that survives the 128 KiB argv limit, and an HTTP provider that drives the OpenCode v2 server API with persistent sessions, a verified server endpoint, and visible discovery failures.
 -->
 
@@ -126,6 +126,36 @@ Measured levels on this account: `low` (29 models), `high` (30), `max` (22), `me
 `xhigh` (17), `none` (13), `minimal` (4), `thinking` (1). The host catalog advertises 46 routes
 (45 models plus the `default` pseudo-route) and 35 of them carry levels. A route with no variants
 advertises none, so the host rejects a level instead of silently running at a different one.
+
+Re-measured 2026-10-30 against the live account (`GET /api/model`, 45 entries) and the running
+profile's cached catalog (`~/.dsh/profiles/web/opencode-models.json`): both report the same 35
+routes with levels and the same 10 without — `opencode/big-pickle`,
+`opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`,
+`opencode-go/iceman-contributor-free`, `opencode-go/kimi-k2.7-code`, `opencode-go/longcat-2.0`,
+`opencode-go/mimo-v2.5`, `opencode-go/mimo-v2.5-pro`, `opencode-go/mimo-v2.6-flash`, and
+`opencode-go/mimo-v2.6-pro`. Those routes declare no `variants` upstream, so their picker row has
+no level choice; this is an OpenCode catalog fact, not a discovery or mapping failure. `--thinking`
+is independent: a variant-less model can still stream reasoning blocks.
+
+`default` has no `/api/model` entry of its own. The HTTP adapter resolves it through the same
+`modelRefFromRoute()` call it uses on the wire (`models[].opencodeModel` for `default`, else
+`defaultModel`), so the row inherits that route's context window and levels instead of the
+conservative floor. The CLI adapter inherits them when the route table's `default.opencodeModel`
+names a discovered route; with no such entry it advertises none and sends no `-m`, leaving
+OpenCode's own default in force.
+
+A level reaches the wire only when the resolved route advertises it. Both adapters reject an
+unadvertised level before spawning or creating a session, with `UNSUPPORTED_REASONING_EFFORT` and
+the advertised list, instead of OpenCode's `provider.no-route` ("Variant unavailable"). When the
+`serve` probe is unavailable, the CLI route logs that it fell back to `opencode models`; that
+listing carries ids only, so a fallback catalog advertises no levels and the `32768` context floor.
+
+A level the resolved route does not advertise is rejected **before spawning** or creating an HTTP
+session: the failure carries `UNSUPPORTED_REASONING_EFFORT` and the advertised list (or `none`),
+instead of OpenCode's `provider.no-route` "Variant unavailable" mid-run. This guards direct adapter
+callers and selections made against an older catalog. When the `serve` probe is unavailable the
+adapter logs that it fell back to `opencode models` (ids only), because that fallback removes every
+level and collapses context windows to the floor.
 
 The catalog resolves every route at once, so discovery is **single-flight**: one `opencode serve`
 per cache window, not one per route (measured: 0 extra probes for a 46-route catalog build).

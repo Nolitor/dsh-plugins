@@ -1,11 +1,11 @@
 # DSH Plugins — Detailed Rules
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: rule
 status: active
-updated: 2026-10-29
-summary: Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement, docs/skeleton contract, reporting.
+updated: 2026-10-30
+summary: Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement, docs/skeleton contract (including the track-not-indexed rule), reporting.
 -->
 
 > **Reading chain:** global rules (`~/.dsh/AGENTS.md`) → **this file** (project rules) →
@@ -85,6 +85,11 @@ summary: one line, <= 140 chars, what the doc answers
   as-is until substantively rewritten.
 - Do not hand-edit `INDEX.md` or `docs/SKELETON.md`; they are generated.
 - After adding/renaming a doc run `npm run docs:index`; `npm run docs:check` must pass.
+- **Plugin-track docs are not indexed.** `scripts/doc-index.mjs` skips every `dsh-*` directory, so
+  `dsh-<track>/README.md` and `VERIFICATION.md` never appear in `INDEX.md` or `docs/SKELETON.md`.
+  Measurements, defects, and decisions a later session must find belong in the root-level doc that
+  owns that fact (update its skeleton `version`/`updated`/`summary`), with the track doc as the
+  implementation detail. Reporting a measurement only inside a track is a documentation miss.
 
 ## 7. Reporting format
 

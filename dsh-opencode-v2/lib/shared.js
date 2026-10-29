@@ -382,6 +382,27 @@ export function reasoningEffortsFromVariants(variants) {
 }
 
 /**
+ * Failure message for a reasoning level the route does not offer.
+ *
+ * The plugin composes `-m provider/model#<variant>` only from levels discovery
+ * advertised; this message covers callers that bypass the host's
+ * `UNSUPPORTED_REASONING_EFFORT` check (direct adapter use, a selection made
+ * against an older catalog). It names the offered levels so a mismatch is
+ * actionable instead of OpenCode's opaque "Variant unavailable".
+ *
+ * @param {string} provider - DSH provider id of the served route
+ * @param {string} model - advertised route id that was requested
+ * @param {string} effort - requested level id
+ * @param {readonly string[]} offered - levels the route advertised, possibly empty
+ * @returns {string} one-line failure message
+ */
+export function unsupportedEffortMessage(provider, model, effort, offered) {
+  const levels = (offered ?? []).filter((id) => typeof id === 'string' && id.length > 0)
+  return `provider "${provider}" model "${model}" does not support reasoning effort "${effort}"`
+    + ` (advertised: ${levels.length ? levels.join(', ') : 'none'})`
+}
+
+/**
  * Map one `/api/model` entry from `opencode serve` onto the host catalog shape.
  *
  * Measured v2.2.0 payload: { id, modelID, providerID, name, limit:

@@ -38,6 +38,7 @@ import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   modelsFromApiPayload,
   reasoningEffortsFromVariants,
+  unsupportedEffortMessage,
 } from './shared.js'
 import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
 import { SessionMap } from './session-map.js'
@@ -723,10 +724,16 @@ export class OpencodeHttpAdapter {
   async lookupModel(model) {
     const discovered = await this.discover()
     if (!discovered?.models?.length) return null
-    const route = model === 'default' ? this.config.defaultModel.get() : model
+    // `default` has no catalog entry of its own: it runs through the same
+    // resolution `stream()` uses, so its row must inherit the actual route's
+    // context window and reasoning levels instead of the conservative floor.
+    const ref = model === 'default'
+      ? modelRefFromRoute('default', this.config.models.get(), this.config.defaultModel.get())
+      : null
+    const routeId = ref ? `${ref.providerID}/${ref.id}` : model
     return (
-      discovered.models.find((entry) => entry.id === model) ??
-      discovered.models.find((entry) => entry.id.endsWith(`/${model}`)) ??
+      discovered.models.find((entry) => entry.id === routeId) ??
+      discovered.models.find((entry) => entry.id.endsWith(`/${routeId}`)) ??
       null
     )
   }
@@ -844,6 +851,28 @@ export class OpencodeHttpAdapter {
     if (!ref) {
       yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_HTTP_MODEL', message: `unmapped route ${options.model}` } } }
       return
+    }
+    // Same guard as the CLI route: a level reaches the session model object only
+    // when discovery advertised it. An unknown route stays unvalidated here
+    // (discovery may be unavailable); a known route with no variants rejects.
+    if (options.reasoningEffort !== undefined) {
+      let found = null
+      try {
+        found = await this.lookupModel(options.model)
+      } catch {
+        /* discovery unavailable: leave the decision to the server */
+      }
+      if (found && !(found.variants ?? []).includes(options.reasoningEffort)) {
+        const message = unsupportedEffortMessage(
+          options.provider,
+          options.model,
+          options.reasoningEffort,
+          found.variants ?? [],
+        )
+        this.ctx?.logger?.warn?.(`opencode-http-agent: ${message}`)
+        yield { type: 'finish', reason: { kind: 'error', failure: { code: 'UNSUPPORTED_REASONING_EFFORT', message } } }
+        return
+      }
     }
 
     // Aggregated blocks, keyed by "<kind>:<ordinal>" so a tool-using step can

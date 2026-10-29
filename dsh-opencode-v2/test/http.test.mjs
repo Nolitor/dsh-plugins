@@ -251,6 +251,55 @@ test('resolveModel publishes contextWindow and reasoning variants from /api/mode
   }
 })
 
+test('resolveModel default route inherits the route it actually runs', async () => {
+  const state = await startServer()
+  try {
+    // `default` has no catalog entry of its own: it runs through `defaultModel`
+    // (or the route table's `default.opencodeModel`), so the picker row must
+    // carry that route's context window and reasoning levels.
+    const adapter = makeAdapter(state)
+    const viaConfig = await adapter.resolveModel('opencode-http-agent', 'default')
+    assert.equal(viaConfig.id, 'default')
+    assert.equal(viaConfig.context.contextWindow, 200000)
+    assert.deepEqual(viaConfig.reasoning.efforts.map((effort) => effort.id), ['low', 'high'])
+    const viaTable = makeAdapter(state, {
+      models: [{ id: 'default', opencodeModel: 'opencode-go/deepseek-v4.1-flash', name: '' }],
+    })
+    const overridden = await viaTable.resolveModel('opencode-http-agent', 'default')
+    assert.equal(overridden.context.contextWindow, 1000000)
+    // The override route declares no variants, so no level choice is offered.
+    assert.equal(overridden.reasoning, undefined)
+  } finally {
+    await state.close()
+  }
+})
+
+test('stream rejects a level the route does not advertise before creating a session', async () => {
+  const state = await startServer()
+  try {
+    const adapter = makeAdapter(state)
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      reasoningEffort: 'high',
+    }))
+    assert.equal(state.creates, 0)
+    assert.deepEqual(chunks, [{
+      type: 'finish',
+      reason: {
+        kind: 'error',
+        failure: {
+          code: 'UNSUPPORTED_REASONING_EFFORT',
+          message: 'provider "opencode-http-agent" model "opencode-go/deepseek-v4.1-flash" does not support reasoning effort "high" (advertised: none)',
+        },
+      },
+    }])
+  } finally {
+    await state.close()
+  }
+})
+
 test('stream maps SSE deltas, usage, and stop; creates one session', async () => {
   const state = await startServer()
   try {

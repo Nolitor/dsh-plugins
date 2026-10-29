@@ -32,6 +32,7 @@ import {
   reasoningEffortsFromVariants,
   sendPrompt,
   stripUnsupportedFlags,
+  unsupportedEffortMessage,
   withVariant,
 } from './shared.js'
 import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
@@ -499,6 +500,14 @@ export class OpencodeLlmAdapter {
 
   /** One uncached catalog probe: `serve` -> /api/model, then the CLI listing. */
   async discoverOnce(signal) {
+    // A silent fallback is indistinguishable from "this model has no levels": the
+    // CLI listing carries ids only, so every level and context window is lost.
+    const warnFallback = (reason) => {
+      this.ctx?.logger?.warn?.(
+        `opencode-agent: serve discovery unavailable (${reason}); falling back to the CLI listing,`
+        + ' which advertises no reasoning levels and a conservative context window',
+      )
+    }
     // 1) `serve` -> /api/model carries per-model limit.context (needed for compaction)
     // and the route's reasoning variants.
     try {
@@ -511,8 +520,9 @@ export class OpencodeLlmAdapter {
         signal,
       })
       if (viaServe?.models?.length) return viaServe
-    } catch {
-      /* fall through to the CLI listing */
+      warnFallback('serve discovery returned no models')
+    } catch (error) {
+      warnFallback(messageOf(error))
     }
     try {
       return await discoverModels(this.ctx, {
@@ -623,6 +633,24 @@ export class OpencodeLlmAdapter {
       yield { type: 'block-end', index: 0, block: { type: 'text', text } }
       yield { type: 'finish', reason: { kind: 'stop' } }
       return
+    }
+
+    // A level reaches `-m …#<variant>` only when discovery advertised it for
+    // this exact route. A stale or direct selection would otherwise fail inside
+    // OpenCode as an opaque `provider.no-route`; reject it before spawning.
+    if (options.reasoningEffort !== undefined) {
+      const found = await this.lookupModel(options.model, options.signal)
+      if (found && !(found.variants ?? []).includes(options.reasoningEffort)) {
+        const message = unsupportedEffortMessage(
+          options.provider,
+          options.model,
+          options.reasoningEffort,
+          found.variants ?? [],
+        )
+        this.ctx?.logger?.warn?.(`opencode-agent: ${message}`)
+        yield { type: 'finish', reason: { kind: 'error', failure: { code: 'UNSUPPORTED_REASONING_EFFORT', message } } }
+        return
+      }
     }
 
     const config = this.config
