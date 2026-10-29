@@ -1,38 +1,27 @@
 # Bundle config layer for @nolit/dsh-antigravity-cli-worker — Antigravity CLI worker tool.
 #
-# Registers a dedicated CLI worker tool that uses the official `agy` CLI
-# to run simple tasks with gemini-3.8-flash (thinking low) by default.
+# Registers one tool, `agy_worker`, that runs a single isolated `agy` call per
+# invocation. The row id must match the package name's plugin id.
 - insert:
-  - id: dsh-antigravity-cli-worker
-    name: '@nolit/dsh-antigravity-cli-worker'
-    config:
-      # Path or PATH-resolved name of the agy executable.
-      agyPath: 'agy'
-      # Default model for the antigravity worker. gemini-3.8-flash-low includes low thinking.
-      model: 'gemini-3.8-flash-low'
-      # Reasoning effort for the current CLI session (low|medium|high|xhigh|max).
-      effort: 'low'
-      # Hard timeout for one worker call in milliseconds.
-      timeoutMs: 600000
-      # In-memory cap per output stream; overflow keeps the tail.
-      maxOutputBytes: 262144
-      # Environment variable names forwarded to the agy child process.
-      forwardEnv:
-      - PATH
-      - HOME
-      - USER
-      - XDG_CONFIG_HOME
-      - XDG_DATA_HOME
-      - XDG_CACHE_HOME
-      - GEMINI_CONFIG_DIR
-      - GOOGLE_APPLICATION_CREDENTIALS
-      # Extra CLI flags appended verbatim.
-      extraArgs: []
-      # Enable the tool registration.
-      enabled: true
-      # Artifact collection limit.
-      artifactLimit: 100
-      # Whether to auto-approve all tool permission requests.
-      dangerouslySkipPermissions: true
-      # Run in headless/non-interactive mode.
-      printMode: true
+    - id: dsh-antigravity-cli-worker
+      name: '@nolit/dsh-antigravity-cli-worker'
+      config:
+        # Path or PATH-resolved name of the agy executable.
+        agyPath: agy
+        # gemini-3.8-flash-low carries gemini-3.8-flash with low thinking effort.
+        model: gemini-3.8-flash-low
+        effort: low
+        timeoutMs: 600000
+        maxOutputBytes: 262144
+        artifactLimit: 100
+        workerEnabled: true
+        forwardEnv:
+          - PATH
+          - HOME
+          - USER
+          - XDG_CONFIG_HOME
+          - XDG_DATA_HOME
+          - XDG_CACHE_HOME
+          - GEMINI_CONFIG_DIR
+          - GOOGLE_APPLICATION_CREDENTIALS
+        extraArgs: []

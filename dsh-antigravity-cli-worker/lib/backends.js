@@ -1,101 +1,78 @@
 /**
- * Antigravity CLI worker backend for `agy` (Antigravity CLI v1.4.x).
+ * Antigravity CLI (`agy`) argv builder and output parser.
  *
- * Uses the measured stream-json/headless surface:
- *   - `agy -p <prompt> --model <model> --effort <effort> --output-format json`
- *     for one-shot calls (simple and reliable)
- *   - or `--input-format stream-json --output-format stream-json` for multi-turn
- *     (not needed for a simple worker tool)
+ * Measured surface (agy 1.4.10):
+ *   `agy -p <prompt> --model <model> --effort <effort> --output-format json`
+ * prints one JSON object:
+ *   { conversation_id, status, response, usage: { input_tokens, output_tokens,
+ *     thinking_tokens, cache_read_tokens }, ... }
  *
- * Default: gemini-3.8-flash-low with effort low for fast, cheap simple tasks.
+ * The prompt must ride beside `-p`; the CLI rejects an empty `-p` whose next
+ * token is another flag ("-p took \"--model\" as its prompt").
  */
 
+/** Default model: flash with low thinking effort. */
 export const DEFAULT_MODEL = 'gemini-3.8-flash-low'
+
+/** Default reasoning effort. */
 export const DEFAULT_EFFORT = 'low'
 
 /**
- * Build argv for a one-shot agy call.
- * @param {{executable: string, model?: string, effort?: string, extraArgs?: string[]}} options
- * @returns {string[]}
+ * Build the argv for one headless print-mode call.
+ * @param {object} options - call options.
+ * @param {string} options.executable - resolved `agy` executable.
+ * @param {string} options.prompt - task text delivered as the `-p` value.
+ * @param {string} [options.model] - model id; falls back to `DEFAULT_MODEL`.
+ * @param {string} [options.effort] - reasoning effort; falls back to `DEFAULT_EFFORT`.
+ * @param {string[]} [options.extraArgs] - verbatim trailing flags.
+ * @returns {string[]} the complete argv.
  */
 export function buildAgyArgv(options) {
-  const argv = [options.executable]
-  const prompt = options.prompt
-  if (prompt) {
-    argv.push('-p', prompt)
-  } else {
-    argv.push('-p')
+  if (typeof options.prompt !== 'string' || options.prompt.trim() === '') {
+    throw new TypeError('buildAgyArgv requires a non-empty prompt: `-p` with an empty value consumes the next flag')
   }
-  if (options.model || DEFAULT_MODEL) {
-    argv.push('--model', options.model || DEFAULT_MODEL)
-  }
-  if (options.effort || DEFAULT_EFFORT) {
-    argv.push('--effort', options.effort || DEFAULT_EFFORT)
-  }
+  const argv = [options.executable, '-p', options.prompt]
+  argv.push('--model', options.model || DEFAULT_MODEL)
+  argv.push('--effort', options.effort || DEFAULT_EFFORT)
   argv.push('--output-format', 'json')
-  if (options.extraArgs?.length) {
-    argv.push(...options.extraArgs)
-  }
+  if (options.extraArgs?.length) argv.push(...options.extraArgs)
   return argv
 }
 
+/** Empty usage record used when the CLI prints no JSON envelope. */
+const NO_USAGE = Object.freeze({ inputTokens: 0, outputTokens: 0, thinkingTokens: 0, cacheReadTokens: 0 })
+
 /**
- * Parse `agy --output-format json` stdout.
- * @param {string} stdout
- * @returns {{summary: string, usage: {inputTokens: number, outputTokens: number, thinkingTokens: number, cacheReadTokens: number}, conversationId?: string, status?: string}}
+ * Parse the JSON envelope printed by `--output-format json`.
+ *
+ * An unrecognised or truncated payload degrades to the raw text so a worker
+ * still reports what it produced.
+ * @param {string} stdout - captured stdout.
+ * @returns {{summary: string, usage: object, conversationId: string, status: string, parsed: boolean}} parsed result.
  */
 export function parseAgyOutput(stdout) {
   const text = String(stdout ?? '').trim()
-  if (!text) {
-    return {
-      summary: '',
-      usage: { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, cacheReadTokens: 0 },
-    }
-  }
-  
-  // Try to parse as JSON
+  if (!text) return { summary: '', usage: NO_USAGE, conversationId: '', status: '', parsed: false }
   try {
     const result = JSON.parse(text)
     if (result && typeof result === 'object') {
       const usage = result.usage && typeof result.usage === 'object' ? result.usage : {}
+      const num = (value) => (Number.isFinite(value) ? value : 0)
       return {
         summary: typeof result.response === 'string' ? result.response.trim() : text,
         usage: {
-          inputTokens: Number.isFinite(usage.input_tokens) ? usage.input_tokens : 0,
-          outputTokens: Number.isFinite(usage.output_tokens) ? usage.output_tokens : 0,
-          thinkingTokens: Number.isFinite(usage.thinking_tokens) ? usage.thinking_tokens : 0,
-          cacheReadTokens: Number.isFinite(usage.cache_read_tokens) ? usage.cache_read_tokens : 0,
+          inputTokens: num(usage.input_tokens),
+          outputTokens: num(usage.output_tokens),
+          thinkingTokens: num(usage.thinking_tokens),
+          cacheReadTokens: num(usage.cache_read_tokens),
         },
-        conversationId: result.conversation_id,
-        status: result.status,
-        error: result.error,
+        conversationId: typeof result.conversation_id === 'string' ? result.conversation_id : '',
+        status: typeof result.status === 'string' ? result.status : '',
+        parsed: true,
       }
     }
   } catch {
-    // Fall through to plain text
+    // A non-JSON payload (for example an argument error) is reported as text.
   }
-  
-  return {
-    summary: text,
-    usage: { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, cacheReadTokens: 0 },
-  }
-}
-
-/**
- * Build argv for stream-json mode (for multi-turn if needed later).
- * @param {{executable: string, model?: string, effort?: string}} options
- * @returns {string[]}
- */
-export function buildAgyStreamArgv(options) {
-  const argv = [options.executable]
-  if (options.model || DEFAULT_MODEL) {
-    argv.push('--model', options.model || DEFAULT_MODEL)
-  }
-  if (options.effort || DEFAULT_EFFORT) {
-    argv.push('--effort', options.effort || DEFAULT_EFFORT)
-  }
-  argv.push('--input-format', 'stream-json')
-  argv.push('--output-format', 'stream-json')
-  argv.push('--dangerously-skip-permissions')
-  return argv
+  return { summary: text, usage: NO_USAGE, conversationId: '', status: '', parsed: false }
 }

@@ -1,42 +1,82 @@
 # @nolit/dsh-antigravity-cli-worker
 
-Antigravity (agy) CLI worker tool plugin for DeepSeek Harness.
+Antigravity (`agy`) CLI worker tool for DeepSeek Harness — the "Antigravity subagent" plugin.
 
-## Purpose
-Provides a dedicated CLI worker tool `agy_worker` that uses the official `agy` CLI to run simple, isolated tasks. Optimized for quick/simple tasks using `gemini-3.8-flash-low` with low thinking effort by default.
+## What it is
 
-## Tool: `agy_worker`
-- **prompt** (required): Task text to send to worker
-- **cwd** (required): Absolute working directory
-- **model** (optional): Override model (default: `gemini-3.8-flash-low`)
-- **effort** (optional): Reasoning effort `low|medium|high|xhigh|max`
-- **timeoutMs** (optional): Timeout
-- **artifacts** (optional): Glob patterns to collect files
+One tool, `agy_worker`, that runs **one isolated Antigravity CLI call per invocation**. The worker sees only the task text the caller passes (never the host conversation) and returns its final message plus any collected artifacts. Defaults: `gemini-3.8-flash-low` — gemini-3.8-flash with low thinking effort.
 
-Returns: `{ok, summary, usage{inputTokens,outputTokens,thinkingTokens,cacheReadTokens}, conversationId, artifacts, ...}`
+This is a **tool**, not an LLM provider route: no provider/model registration, no conversation streaming into the chat.
 
-## Installation
-This is a local plugin in the DSH plugins workspace. Load via bundle patch or add to cordis config.
+## Tool parameters
 
-## Configuration (cordis.patch.yml)
+| Parameter | Type | Required | Meaning |
+|---|---|---|---|
+| `task` | string | yes | Complete instruction for the worker; it has no conversation context. |
+| `cwd` | string | yes | Absolute directory the worker may modify. |
+| `model` | string | no | `agy` model id. Defaults to config `model`. |
+| `effort` | string | no | `low` \| `medium` \| `high` \| `xhigh` \| `max`. Defaults to config `effort`. |
+| `timeoutMs` | number | no | Hard budget in milliseconds. Defaults to config `timeoutMs`. |
+| `collect` | string[] | no | Globs relative to `cwd` returned as hashed artifacts. |
+
+Result keys: `ok`, `exitCode`, `signal`, `timedOut`, `truncated`, `summary`, `conversationId`, `status`, `inputTokens`, `outputTokens`, `thinkingTokens`, `cacheReadTokens`, `stderrTail`, `artifacts[]`, `missing[]`, `skipped`.
+
+## Configuration
+
 ```yaml
 - insert:
-  - id: dsh-antigravity-cli-worker
-    name: '@nolit/dsh-antigravity-cli-worker'
-    config:
-      agyPath: 'agy'
-      model: 'gemini-3.8-flash-low'
-      effort: 'low'
-      timeoutMs: 600000
+    - id: dsh-antigravity-cli-worker
+      name: '@nolit/dsh-antigravity-cli-worker'
+      config:
+        agyPath: agy
+        model: gemini-3.8-flash-low
+        effort: low
+        timeoutMs: 600000
+        maxOutputBytes: 262144
+        artifactLimit: 100
+        workerEnabled: true
+        forwardEnv: [PATH, HOME, USER, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_CACHE_HOME, GEMINI_CONFIG_DIR, GOOGLE_APPLICATION_CREDENTIALS]
+        extraArgs: []
 ```
 
-## Notes
-- Uses one-shot `agy -p ... --output-format json` mode (simple, fast)
-- For multi-turn conversations, the stream-json worker pattern is better (like Hermes) - this is optimized for simple isolated tasks
-- Requires `agy` CLI installed and authenticated
-- Tested with agy v1.4.10
+## Measured `agy` surface
+
+`agy` 1.4.10, one-shot print mode:
+
+```
+agy -p "<task>" --model <model> --effort <effort> --output-format json
+```
+
+prints one JSON object:
+
+```json
+{"conversation_id":"…","status":"SUCCESS","response":"…","usage":{"input_tokens":10229,"output_tokens":2,"thinking_tokens":0,"cache_read_tokens":0}}
+```
+
+Two measured constraints drive the implementation:
+
+1. **The prompt must ride beside `-p`.** `agy -p --model …` fails with `-p took "--model" as its prompt, so the intended prompt was left as an argument and ignored`, and the turn is not executed.
+2. **Usage is per call here.** Unlike the stream-json multi-turn worker, one print-mode call reports its own `usage`, so no cumulative-to-delta subtraction is needed.
+
+## Install
+
+The bundle declares `dsh.bundle.patch`, so a profile installs it like any other out-of-tree bundle:
+
+```bash
+cd ~/.dsh/profiles/<profile>
+pnpm add link:/absolute/path/to/dsh-antigravity-cli-worker
+```
+
+then add `@nolit/dsh-antigravity-cli-worker` to `dsh.profile.bundles` in that profile's `package.json`.
+
+Using `link:` (not `file:`) keeps the profile entry a symlink, so the plugin's own `node_modules` — where `@deepseek-ai/schemastery` and friends resolve — is used exactly as for the other `@nolit` plugins.
+
+## Requirements
+
+- `agy` installed and already authenticated (this plugin never handles credentials).
+- `@deepseek-ai/schemastery` imported as the **default export**; the package has no named `Schema` export.
 
 ## References
-- [dsh-opencode-v2 cli_worker](../dsh-opencode-v2/) - pattern reference
-- [Core-02-HUB Antigravity docs](../../../../Workspace/projects/Core-02-HUB/docs/unified-ai-hub/sources/antigravity/)
-- Hermes antigravity plugins for more advanced patterns
+
+- `../dsh-opencode-v2/` — the worker tool pattern this follows (`defineTool`, `ctx.subprocess.spawn`, artifact collection).
+- `/.agents/skills/dsh-prose-standard/` and DSH docs `docs/cookbook/adding-a-package.md` for plugin display metadata.

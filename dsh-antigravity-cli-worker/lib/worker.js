@@ -1,136 +1,167 @@
 /**
- * Process orchestration for the antigravity CLI worker tool.
+ * Process orchestration for the Antigravity worker tool.
+ *
+ * One call owns exactly one `agy` process. The prompt rides in argv beside `-p`;
+ * stdout is collected as a bounded tail and parsed as the CLI's JSON envelope.
+ * A resolve miss, a spawn failure, a non-zero exit, and a timeout all return
+ * facts instead of throwing, so the caller decides what to report.
  */
-import { stat } from 'node:fs/promises'
 import { isAbsolute, resolve } from 'node:path'
+
 import { buildAgyArgv, parseAgyOutput } from './backends.js'
 import { collectArtifacts } from './artifacts.js'
 
+/** Tail size kept from stderr for diagnostics. */
 const STDERR_TAIL_CHARS = 4000
 
-async function resolveWorkerCwd(cwd) {
-  if (!cwd || !isAbsolute(cwd)) {
-    throw new Error('agy_worker requires an absolute "cwd" outside the workspace')
+/**
+ * Forward selected environment variables to the child.
+ * @param {string[]} names - variable names to copy.
+ * @returns {Record<string, string>} the forwarded subset.
+ */
+function forwardedEnv(names) {
+  const env = {}
+  for (const key of names ?? []) {
+    const value = process.env[key]
+    if (value !== undefined) env[key] = value
   }
-  const absolute = resolve(cwd)
-  let info
-  try {
-    info = await stat(absolute)
-  } catch {
-    throw new Error(`agy_worker cwd does not exist: ${absolute}`)
-  }
-  if (!info.isDirectory()) {
-    throw new Error(`agy_worker cwd is not a directory: ${absolute}`)
-  }
-  return absolute
+  return env
 }
 
-function tail(s, n) {
-  const str = String(s ?? '')
-  if (str.length <= n) return str
-  return str.slice(str.length - n)
+/**
+ * Keep only the final `n` characters of a captured stream.
+ * @param {string} text - captured text.
+ * @param {number} n - maximum characters.
+ * @returns {string} the tail.
+ */
+function tail(text, n) {
+  const value = String(text ?? '')
+  return value.length <= n ? value : value.slice(value.length - n)
 }
 
-function forwardEnv(config) {
-  const list = Array.isArray(config.forwardEnv) ? config.forwardEnv : []
-  const out = {}
-  for (const k of list) {
-    if (process.env[k] !== undefined) out[k] = process.env[k]
-  }
-  return out
-}
-
+/**
+ * Run one Antigravity worker call.
+ * @param {object} ctx - host context exposing `subprocess`.
+ * @param {object} config - resolved plugin config with reactive getters.
+ * @param {object} options - call options.
+ * @param {string} options.prompt - task text.
+ * @param {string} options.cwd - absolute working directory.
+ * @param {string} [options.model] - model override.
+ * @param {string} [options.effort] - effort override.
+ * @param {number} [options.timeoutMs] - deadline override.
+ * @param {string[]} [options.collect] - artifact globs.
+ * @param {AbortSignal} [options.signal] - caller cancellation.
+ * @returns {Promise<object>} canonical worker result.
+ */
 export async function runAgyWorker(ctx, config, options) {
-  const cwd = await resolveWorkerCwd(options.cwd)
-  const executable = config.agyPath || 'agy'
-  const model = options.model || config.model || 'gemini-3.8-flash-low'
-  const effort = options.effort || config.effort || 'low'
-  const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : (config.timeoutMs ?? 600000)
-  const maxOutputBytes = Number.isFinite(config.maxOutputBytes) ? config.maxOutputBytes : 262144
+  if (!options.cwd || !isAbsolute(options.cwd)) {
+    throw new Error('agy_worker requires an absolute "cwd"')
+  }
+  const cwd = resolve(options.cwd)
+  const env = forwardedEnv(config.forwardEnv.get())
+  const timeoutMs = options.timeoutMs ?? config.timeoutMs.get()
+  const maxBytes = config.maxOutputBytes.get()
 
-  const argv = buildAgyArgv({ executable, model, effort, extraArgs: config.extraArgs, prompt: options.prompt })
+  let executable
+  try {
+    executable = await ctx.subprocess.resolveExecutable(config.agyPath.get(), env, options.signal)
+  } catch (error) {
+    return {
+      ok: false,
+      exitCode: -1,
+      signal: '',
+      timedOut: false,
+      truncated: false,
+      summary: `cannot resolve the agy executable: ${error instanceof Error ? error.message : String(error)}`,
+      conversationId: '',
+      status: '',
+      inputTokens: 0,
+      outputTokens: 0,
+      thinkingTokens: 0,
+      cacheReadTokens: 0,
+      stderrTail: '',
+      artifacts: [],
+      missing: [],
+      skipped: 0,
+    }
+  }
 
-  let stdout = Buffer.alloc(0)
-  let stderr = Buffer.alloc(0)
-  let truncated = false
-
-  const result = await ctx.subprocess.run(argv, {
-    cwd,
-    stdin: options.prompt ? '' : (options.prompt ?? ''),
-    env: forwardEnv(config),
-    timeoutMs,
-    onStdout: (chunk) => {
-      const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-      if (stdout.length + b.length > maxOutputBytes) {
-        truncated = true
-        stdout = Buffer.concat([stdout, b]).subarray(stdout.length + b.length - maxOutputBytes)
-      } else {
-        stdout = Buffer.concat([stdout, b])
-      }
-    },
-    onStderr: (chunk) => {
-      const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-      if (stderr.length + b.length > maxOutputBytes) {
-        stderr = Buffer.concat([stderr, b]).subarray(stderr.length + b.length - maxOutputBytes)
-      } else {
-        stderr = Buffer.concat([stderr, b])
-      }
-    },
+  const argv = buildAgyArgv({
+    executable,
+    prompt: options.prompt,
+    model: options.model ?? config.model.get(),
+    effort: options.effort ?? config.effort.get(),
+    extraArgs: config.extraArgs.get(),
   })
 
-  const stdoutStr = stdout.toString('utf8')
-  const stderrStr = stderr.toString('utf8')
-  const parsed = parseAgyOutput(stdoutStr)
+  const timeout = AbortSignal.timeout(timeoutMs)
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
 
-  let artifacts = []
-  if (Array.isArray(options.artifacts) && options.artifacts.length > 0) {
-    try {
-      artifacts = await collectArtifacts(cwd, options.artifacts)
-    } catch {
-      artifacts = []
-    }
-  }
-
-  if (result.timedOut) {
+  let outcome
+  let stdout = ''
+  let stderr = ''
+  let truncated = false
+  try {
+    const handle = ctx.subprocess.spawn({
+      argv,
+      cwd,
+      stdio: {
+        stdin: 'ignore',
+        stdout: { maxBytes },
+        stderr: { maxBytes },
+      },
+      graceMs: 10000,
+      signal,
+      env,
+    })
+    outcome = await handle.done
+    const out = handle.collected.stdout?.readFrom(0)
+    const err = handle.collected.stderr?.readFrom(0)
+    stdout = out?.text ?? ''
+    stderr = err?.text ?? ''
+    truncated = Boolean(out?.truncated)
+  } catch (error) {
     return {
       ok: false,
-      exitCode: result.exitCode,
-      signal: result.signal,
-      timedOut: true,
-      truncated,
-      summary: parsed.summary,
-      stderrTail: tail(stderrStr, STDERR_TAIL_CHARS),
-      usage: parsed.usage,
-      conversationId: parsed.conversationId,
-      artifacts,
+      exitCode: -1,
+      signal: '',
+      timedOut: timeout.aborted,
+      truncated: false,
+      summary: `agy failed to start: ${error instanceof Error ? error.message : String(error)}`,
+      conversationId: '',
+      status: '',
+      inputTokens: 0,
+      outputTokens: 0,
+      thinkingTokens: 0,
+      cacheReadTokens: 0,
+      stderrTail: '',
+      artifacts: [],
+      missing: [],
+      skipped: 0,
     }
   }
 
-  if (result.exitCode !== 0) {
-    return {
-      ok: false,
-      exitCode: result.exitCode,
-      signal: result.signal,
-      timedOut: false,
-      truncated,
-      summary: parsed.summary || (parsed.error ? String(parsed.error) : tail(stderrStr, STDERR_TAIL_CHARS)),
-      stderrTail: tail(stderrStr, STDERR_TAIL_CHARS),
-      usage: parsed.usage,
-      conversationId: parsed.conversationId,
-      artifacts,
-    }
-  }
+  const parsed = parseAgyOutput(stdout)
+  const collected = await collectArtifacts(cwd, options.collect, config.artifactLimit.get())
+  const failed = timeout.aborted || outcome.exitCode !== 0
+  const summary = parsed.summary || (failed ? '' : '(no output)')
 
   return {
-    ok: true,
-    exitCode: result.exitCode,
-    signal: result.signal,
-    timedOut: false,
+    ok: !failed && parsed.status !== 'ERROR',
+    exitCode: outcome.exitCode ?? -1,
+    signal: outcome.signal ?? '',
+    timedOut: timeout.aborted,
     truncated,
-    summary: parsed.summary,
-    usage: parsed.usage,
+    summary,
     conversationId: parsed.conversationId,
     status: parsed.status,
-    artifacts,
+    inputTokens: parsed.usage.inputTokens,
+    outputTokens: parsed.usage.outputTokens,
+    thinkingTokens: parsed.usage.thinkingTokens,
+    cacheReadTokens: parsed.usage.cacheReadTokens,
+    stderrTail: tail(stderr, STDERR_TAIL_CHARS),
+    artifacts: collected.artifacts,
+    missing: collected.missing,
+    skipped: collected.skipped,
   }
 }

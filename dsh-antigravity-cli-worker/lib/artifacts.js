@@ -1,125 +1,144 @@
 /**
- * Artifact collection for the antigravity CLI worker tool.
+ * Artifact collection for the Antigravity worker tool.
+ *
+ * The caller names globs; matches are resolved strictly inside the call's
+ * `cwd`, hashed, and reported. A glob that matches nothing is reported back as
+ * `missing`, and overflow past the limit is counted as `skipped`, so a caller
+ * never loses the fact that something was dropped.
  */
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 
+/** Directories that never contribute artifacts. */
 const SKIP_DIRECTORIES = new Set(['.git', 'node_modules', '.cache'])
+
+/** Bounds for one workspace walk. */
 const MAX_ENTRIES = 20000
 const MAX_DEPTH = 12
 
+/**
+ * Translate an artifact glob into an anchored regular expression over
+ * `/`-separated relative paths.
+ * @param {string} pattern - glob as written by the caller.
+ * @returns {RegExp} matcher for relative POSIX paths.
+ */
 export function globToRegExp(pattern) {
   const source = String(pattern ?? '')
   let re = '^'
-  let i = 0
-  const len = source.length
-  while (i < len) {
+  for (let i = 0; i < source.length; i += 1) {
     const ch = source[i]
-    if (ch === '\\') {
-      i += 1
-      if (i < len) {
-        re += '\\' + source[i]
-        i += 1
-      }
-      continue
-    }
     if (ch === '*') {
       if (source[i + 1] === '*') {
-        // **
         if (source[i + 2] === '/') {
           re += '(?:.*/)?'
-          i += 3
-        } else if (source[i + 2] === '\\' && source[i + 3] === '/') {
-          re += '(?:.*/)?'
-          i += 4
+          i += 2
         } else {
           re += '.*'
-          i += 2
+          i += 1
         }
         continue
       }
-      // *
       re += '[^/]*'
-      i += 1
       continue
     }
     if (ch === '?') {
       re += '[^/]'
-      i += 1
       continue
     }
-    if ('.+^$()[]{}|/'.includes(ch)) {
-      re += '\\' + ch
-      i += 1
-      continue
-    }
-    re += ch
-    i += 1
+    if ('.+^$()[]{}|/\\'.includes(ch)) re += `\\${ch}`
+    else re += ch
   }
-  re += '$'
-  return new RegExp(re)
+  return new RegExp(`${re}$`)
 }
 
+/**
+ * Walk a directory tree without following skipped directories.
+ * @param {string} dir - directory to read.
+ * @param {string} base - root used for relative paths.
+ * @param {number} depth - current depth.
+ * @param {Array<{full: string, rel: string}>} out - accumulator.
+ * @returns {Promise<void>} resolves after the subtree is listed.
+ */
 async function walk(dir, base, depth, out) {
   if (depth > MAX_DEPTH || out.length >= MAX_ENTRIES) return
   let entries
   try {
     entries = await readdir(dir, { withFileTypes: true })
   } catch {
+    // An unreadable directory contributes no artifacts.
     return
   }
   for (const entry of entries) {
     if (out.length >= MAX_ENTRIES) break
+    const full = join(dir, entry.name)
     if (entry.isDirectory()) {
       if (SKIP_DIRECTORIES.has(entry.name)) continue
-      await walk(join(dir, entry.name), base, depth + 1, out)
+      await walk(full, base, depth + 1, out)
       continue
     }
     if (entry.isFile() || entry.isSymbolicLink()) {
-      const full = join(dir, entry.name)
-      const rel = relative(base, full).split(sep).join('/')
-      out.push({ full, rel })
+      out.push({ full, rel: relative(base, full).split(sep).join('/') })
     }
   }
 }
 
+/**
+ * Hash one file with SHA-256.
+ * @param {string} path - absolute file path.
+ * @returns {Promise<string>} hex digest.
+ */
 async function hashFile(path) {
   return new Promise((resolve, reject) => {
-    const h = createHash('sha256')
-    const s = createReadStream(path)
-    s.on('data', (chunk) => h.update(chunk))
-    s.on('end', () => resolve(h.digest('hex')))
-    s.on('error', reject)
+    const hash = createHash('sha256')
+    const stream = createReadStream(path)
+    stream.on('data', (chunk) => hash.update(chunk))
+    stream.on('end', () => resolve(hash.digest('hex')))
+    stream.on('error', reject)
   })
 }
 
-export async function collectArtifacts(cwd, globs) {
+/**
+ * Collect artifact matches for the caller's globs.
+ * @param {string} cwd - absolute worker directory.
+ * @param {string[]} globs - caller globs, relative to `cwd`.
+ * @param {number} limit - maximum artifacts to report.
+ * @returns {Promise<{artifacts: Array<object>, missing: string[], skipped: number}>} collected artifacts and gaps.
+ */
+export async function collectArtifacts(cwd, globs, limit) {
   const patterns = Array.isArray(globs) ? globs.filter(Boolean).map(String) : []
-  if (patterns.length === 0) return []
+  if (patterns.length === 0) return { artifacts: [], missing: [], skipped: 0 }
+
   const files = []
   await walk(cwd, cwd, 0, files)
-  const regs = patterns.map(globToRegExp)
+
+  const artifacts = []
+  const missing = []
   const seen = new Set()
-  const results = []
-  for (const f of files) {
-    if (!regs.some((r) => r.test(f.rel))) continue
-    if (seen.has(f.rel)) continue
-    seen.add(f.rel)
-    try {
-      const st = await stat(f.full)
-      const hash = await hashFile(f.full)
-      results.push({
-        path: f.rel,
-        absolutePath: f.full,
-        size: st.size,
-        sha256: hash,
-      })
-    } catch {
-      // skip unreadable
+  let skipped = 0
+
+  for (const pattern of patterns) {
+    const matcher = globToRegExp(pattern)
+    const matches = files.filter((file) => matcher.test(file.rel))
+    if (matches.length === 0) {
+      missing.push(pattern)
+      continue
+    }
+    for (const file of matches) {
+      if (seen.has(file.rel)) continue
+      seen.add(file.rel)
+      if (artifacts.length >= limit) {
+        skipped += 1
+        continue
+      }
+      try {
+        const info = await stat(file.full)
+        artifacts.push({ path: file.rel, bytes: info.size, sha256: await hashFile(file.full) })
+      } catch {
+        missing.push(file.rel)
+      }
     }
   }
-  // Report globs that matched nothing? We still return matches; caller can see
-  return results
+  return { artifacts, missing, skipped }
 }
