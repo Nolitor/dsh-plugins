@@ -170,14 +170,45 @@ export async function runOpencode(ctx, config, options) {
   }
 }
 
+/**
+ * Run `opencode models` and return its text.
+ * @param {object} ctx - host context exposing `subprocess`.
+ * @param {object} config - plugin config with reactive getters.
+ * @param {string} cwd - absolute working directory.
+ * @returns {Promise<{ok: boolean, text: string}>} the listing, or a diagnostic.
+ */
+export async function listOpencodeModels(ctx, config, cwd) {
+  const env = forwardedEnv(config.forwardEnv.get())
+  try {
+    const executable = await ctx.subprocess.resolveExecutable(config.opencodePath.get(), env)
+    const handle = ctx.subprocess.spawn({
+      argv: [executable, 'models'],
+      cwd,
+      stdio: { stdin: 'ignore', stdout: { maxBytes: 262144 }, stderr: { maxBytes: 65536 } },
+      graceMs: 5000,
+      signal: AbortSignal.timeout(30000),
+      env,
+    })
+    const outcome = await handle.done
+    const out = handle.collected.stdout?.readFrom(0)?.text ?? ''
+    const err = handle.collected.stderr?.readFrom(0)?.text ?? ''
+    return { ok: (outcome.exitCode ?? 0) === 0, text: (out || err).trim() }
+  } catch (error) {
+    return { ok: false, text: `cannot list opencode models: ${error instanceof Error ? error.message : String(error)}` }
+  }
+}
+
 /** Usage text for the user-run `/ocode` command. */
 const OCODE_USAGE = [
   'Usage: /ocode [options] <task>',
+  '       /ocode models',
   '',
   'Options:',
   '  --model <route>     provider/model#variant (default: the last selected route)',
   '  --timeout <ms>      hard budget for this call',
   '  --json              append the raw result',
+  '  --models            list the opencode models available to this account',
+  '  --help              show this usage',
 ].join('\n')
 
 /**
@@ -191,7 +222,7 @@ export function parseOcodeInput(raw) {
   const unknown = []
   let rest = text
   const valueFlags = new Set(['model', 'timeout'])
-  const boolFlags = new Set(['json', 'help'])
+  const boolFlags = new Set(['json', 'help', 'models'])
 
   while (rest.startsWith('--')) {
     const match = /^--([a-zA-Z-]+)(?:=(\S*))?\s*/.exec(rest)
@@ -403,6 +434,10 @@ export async function apply(ctx, config) {
       handler: async ({ rawInput }) => {
         const { options, task, unknown } = parseOcodeInput(rawInput)
         if (unknown.length > 0) return { kind: 'error', text: `Unknown option: --${unknown[0]}\n\n${OCODE_USAGE}` }
+        if (task === 'models' || options.models) {
+          const listing = await listOpencodeModels(ctx, config, process.cwd())
+          return { kind: listing.ok ? 'success' : 'error', text: listing.text || '(no models reported)' }
+        }
         if (task === '' || options.help) {
           const saved = await readSelection('ocode')
           const model = saved.model ?? config.model.get()
