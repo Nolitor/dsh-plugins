@@ -583,4 +583,7 @@ test('tool apply registers the opencode tool and the /ocode command', async () =
   assert.equal(commands.length, 1)
   assert.equal(commands[0].name, 'ocode')
   assert.match(commands[0].description, /\/ocode/)
+  // Without an input descriptor the client executes the command immediately
+  // and discards everything typed after it, so options would never arrive.
+  assert.ok(commands[0].input, 'command must declare an input descriptor')
 })

@@ -397,6 +397,7 @@ export async function apply(ctx, config) {
   ctx.inject(['commands'], (commandCtx) => {
     commandCtx.commands.register({
       name: 'ocode',
+      input: { hint: '<task>   (--model <provider/model#variant> --timeout <ms>)' },
       description:
         'Run the OpenCode CLI worker. Usage: /ocode [--model <provider/model#variant>] [--timeout <ms>] <task>. Bare /ocode reuses the last selected model.',
       handler: async ({ rawInput }) => {

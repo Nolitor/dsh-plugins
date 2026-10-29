@@ -270,6 +270,7 @@ export async function registerAgyCommand(ctx, config) {
   ctx.inject(['commands'], (commandCtx) => {
     commandCtx.commands.register({
       name: COMMAND_NAME,
+      input: { hint: '<task>   (--model <id> --effort <level> --mode <mode>)' },
       description:
         'Run the Antigravity CLI worker. Usage: /agy [--model <id>] [--effort <level>] [--mode <mode>] <task>. Bare /agy reuses the last selected model.',
       handler: async ({ rawInput }) => {
