@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Antigravity Subagent",
+    "description": "Delegate one task to an isolated Antigravity (agy) CLI session as subagent_antigravity."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OpenCode Subagent",
+    "description": "Delegate one task to an isolated OpenCode CLI session as subagent_opencode."
+  }
+}

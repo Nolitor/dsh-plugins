@@ -1,0 +1,22 @@
+# Bundle layer for @nolit/dsh-subagent-opencode.
+#
+# Provider row plus the shared delegation tool bound to it, mirroring the
+# shipped codex/claude-code bundles.
+- insert:
+    - id: subagent-opencode
+      name: '@nolit/dsh-subagent-opencode'
+      config:
+        providerName: opencode
+        opencodePath: /home/minami/.bun/bin/opencode
+        model: opencode-go/beam-free
+        agent: ''
+        auto: true
+        timeoutMs: 900000
+        disposeGraceMs: 5000
+        env: {}
+    - id: tool-subagent-opencode
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: opencode
+        toolName: subagent_opencode
+        maxDepth: provider-managed

@@ -1,0 +1,23 @@
+# Bundle layer for @nolit/dsh-subagent-antigravity.
+#
+# Two rows, the same seam split the shipped codex/claude-code bundles use:
+# the provider registers on `ctx.subagents`, and the shared delegation tool
+# binds to it under a unique tool name.
+- insert:
+    - id: subagent-antigravity
+      name: '@nolit/dsh-subagent-antigravity'
+      config:
+        providerName: antigravity
+        agyPath: agy
+        model: gemini-3.8-flash-low
+        effort: low
+        mode: accept-edits
+        timeoutMs: 900000
+        disposeGraceMs: 5000
+        env: {}
+    - id: tool-subagent-antigravity
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: antigravity
+        toolName: subagent_antigravity
+        maxDepth: provider-managed

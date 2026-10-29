@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Antigravity 서브에이전트",
+    "description": "하나의 작업을 격리된 Antigravity(agy) CLI 세션에 subagent_antigravity로 위임합니다."
+  }
+}
