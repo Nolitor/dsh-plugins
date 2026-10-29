@@ -1,14 +1,49 @@
-# DSH Plugins — Agent Boot Index
+# DSH Plugins — Agent Entry
+
+<!-- skeleton:
+version: 3.0
+kind: index
+status: active
+updated: 2026-10-29
+summary: Tier-1 auto-loaded entry. Points to detailed rules, the doc skeleton index, and the latest boot card. Keep it tiny.
+-->
+
+**This file is auto-loaded. It is a pointer, not a rulebook — keep it under ~40 lines.**
+
+## Read in this order
+
+| # | Tier | File | When |
+|---|---|---|---|
+| 1 | global rules | `~/.dsh/AGENTS.md` | already loaded, always wins |
+| 2 | project rules | [docs/RULES.md](docs/RULES.md) | **read before acting** |
+| 3 | doc index | [docs/SKELETON.md](docs/SKELETON.md) | to find which doc answers your question |
+| 4 | session card | latest boot card below | current state, active task |
+
+Older boot cards are historical evidence; open them only for a version/policy delta.
+
+## Latest boot card
 
 <!-- LATEST_BOOT_CARD:START -->
-Latest boot card: [bootcards/2026-10-29T0919+0900.md](bootcards/2026-10-29T0919+0900.md)
-Generated: 2026-10-29T0919+0900 (KST)
+Latest boot card: [bootcards/2026-10-29T1007+0900.md](bootcards/2026-10-29T1007+0900.md)
+Generated: 2026-10-29T1007+0900 (KST)
 Read only this latest card by default; older cards are historical evidence.
 <!-- LATEST_BOOT_CARD:END -->
 
-> **CRITICAL — Sidebar Manager drift gate.** The actual installed `@nolit/dsh-sidebar-manager`
-> can differ from the packaged/released tree because UTM may modify it. Before any version-up,
-> optimization, or behavior change, run a baseline measurement and
-> `node scripts/audit-installed-vs-packaged.mjs`; record the resolved path, tree SHA-256,
-> tests, UTM-state routes/UI, and artifact SHA-256. Never assume the live version equals the
-> packaged version.
+## Non-negotiable (full text in docs/RULES.md)
+
+1. **Measure first** — report measured facts before acting.
+2. **Live state is the user's** — no writes to `~/.dsh` or restarts of 3080 without approval.
+3. **Single writer** — write only inside your assigned `dsh-<track>/`; assert `package.json.name`.
+4. **Plugin replacement is 4 steps** — disable → remove → add → verify by **real mount**
+   (`--dump-config` passing does NOT prove a plugin mounts).
+5. **Sidebar Manager drift gate** — run `node scripts/audit-installed-vs-packaged.mjs` before
+   any version-up.
+6. **Docs** — English, and every doc needs a `<!-- skeleton: -->` header; run `npm run docs:index`.
+
+## Commands
+
+```bash
+npm run docs:index    # regenerate INDEX.md + docs/SKELETON.md
+npm run docs:check    # fail on missing skeleton headers or stale indexes
+npm run bootcard -- "session note"   # new dated boot card
+```

@@ -1,4 +1,12 @@
 # DSH Plugins - Promotion Verification Report
+<!-- skeleton:
+version: 1.0
+kind: report
+status: historical
+updated: 2026-10-24
+summary: Post-promotion service verification for the re-homed DSH Plugins workspace.
+-->
+
 
 Generated: 2026-10-24T19:09:53+09:00
 

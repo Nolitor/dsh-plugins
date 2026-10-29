@@ -1,4 +1,12 @@
 # DSH Plugin Runtime Specification
+<!-- skeleton:
+version: 1.0
+kind: spec
+status: active
+updated: 2026-10-29
+summary: DSH plugin runtime specification: manifest, bundle patch, services, lifecycle, client factory.
+-->
+
 
 > Status: active · Last updated: 2026-10-29 · Verified runtime: DSH `0.2.2-alpha.2` · Parent: [DSH Plugins](../) · Scope: Web profile on Pop!_OS
 

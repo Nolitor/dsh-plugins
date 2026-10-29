@@ -1,4 +1,12 @@
 # Verification evidence
+<!-- skeleton:
+version: 1.0
+kind: index
+status: reference
+updated: 2026-10-29
+summary: Index of machine-readable verification evidence files and what each one proves.
+-->
+
 
 | File | What it proves |
 |---|---|

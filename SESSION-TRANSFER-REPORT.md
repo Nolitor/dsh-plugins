@@ -1,4 +1,12 @@
 # DSH Plugins - Session Transfer Report
+<!-- skeleton:
+version: 1.0
+kind: report
+status: historical
+updated: 2026-10-24
+summary: Record of the eight historical DSH sessions re-homed into the DSH Plugins workspace.
+-->
+
 
 Generated: 2026-10-24T19:37:38+09:00
 

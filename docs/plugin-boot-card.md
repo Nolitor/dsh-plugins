@@ -1,4 +1,12 @@
 # DSH Plugin Boot Card
+<!-- skeleton:
+version: 1.0
+kind: spec
+status: reference
+updated: 2026-10-29
+summary: Plugin package baseline: required files, cordis.patch.yml shape, locale/client conventions.
+-->
+
 
 > Status: active · Last updated: 2026-10-29 · Runtime: DSH `0.2.2-alpha.2` (Cordis 4.0.6-alpha.1, Node 24.22.1) · Companion: [dsh-plugin-runtime-spec.md](./dsh-plugin-runtime-spec.md)
 

@@ -1,4 +1,12 @@
 # DSH 0.2.2-alpha.2 런타임 실측 · 최적화 보고서
+<!-- skeleton:
+version: 1.0
+kind: report
+status: completed
+updated: 2026-10-29
+summary: Runtime measurement and optimization report for the three original plugins on DSH 0.2.2-alpha.2.
+-->
+
 
 > 상태: completed · 최종 갱신: 2026-10-29 · 대상: `dsh-korean-locale`, `dsh-sidebar-manager`, `dsh-notify` · 상위: [README](README.md)
 

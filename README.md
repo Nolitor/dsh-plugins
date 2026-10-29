@@ -1,4 +1,12 @@
 # DSH Plugins
+<!-- skeleton:
+version: 1.0
+kind: readme
+status: active
+updated: 2026-10-29
+summary: Workspace entry point: plugin track layout, live profile wiring, agent boot chain.
+-->
+
 
 Unified workspace for the DeepSeek Harness (DSH) plugin ecosystem on this machine.
 This directory is the physical workspace root registered in
@@ -19,12 +27,28 @@ It sits under the standardized unified tree:
 
 ## Agent boot and policy
 
-- `AGENTS.md` is a lightweight index; it points only to the newest timestamped boot card.
-- `bootcards/YYYY-MM-DDTHHmm+0900.md` is the default read target for every agent invocation.
+Fixed reading chain — each tier is small and points at the next:
+
+```
+~/.dsh/AGENTS.md      tier 1  global rules            auto-loaded, always wins
+  AGENTS.md           tier 1  project entry           auto-loaded, thin pointer only
+    docs/RULES.md     tier 2  detailed project rules  read before acting
+      docs/SKELETON.md tier 3 doc index               what exists, one line each
+        bootcards/<ts>.md tier 4 dated session card   latest only by default
+```
+
+- `docs/DSH-HARNESS-POLICY.md` owns version, live-state, single-writer, replacement, release rules.
+- `docs/SKELETON.md` and `INDEX.md` are **generated** — never hand-edit.
+- Every tracked document carries a `<!-- skeleton: -->` header (version, kind, status, updated,
+  summary). New docs are written in English.
 - Older boot cards are historical evidence; read them only for version/policy deltas.
-- `docs/DSH-HARNESS-POLICY.md` owns runtime, release, notification, and UTM policy.
-- `docs/BOOTCARD-POLICY.md` owns generation/read rules.
-- Generate a new card with `node scripts/new-bootcard.mjs "note"`.
+
+```bash
+npm run docs:index                  # regenerate INDEX.md + docs/SKELETON.md
+npm run docs:check                  # fail on missing header / stale index
+npm run docs:new -- docs/X.md --kind spec --summary "one line"
+npm run bootcard -- "session note"  # new dated boot card
+```
 
 ## Layout
 

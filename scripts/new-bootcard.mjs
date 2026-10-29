@@ -26,6 +26,7 @@ const plugins = [
   ['Korean locale', 'dsh-korean-locale/package.json', 'artifacts/nolit-dsh-korean-locale-0.2.3.tgz'],
   ['Sidebar Manager', 'dsh-sidebar-manager/package.json', 'artifacts/nolit-dsh-sidebar-manager-0.1.2.tgz'],
   ['Notify Web', 'dsh-notify/package.json', 'artifacts/nolit-dsh-notify-web-0.1.6.tgz'],
+  ['OpenCode v2', 'dsh-opencode-v2/package.json', 'artifacts/nolit-dsh-opencode-v2-0.1.0.tgz'],
 ]
 const lines = []
 for (const [label, pkgPath, artifact] of plugins) {
@@ -38,8 +39,16 @@ for (const [label, pkgPath, artifact] of plugins) {
 
 const card = `# DSH Plugins — Boot Card ${stamp}
 
+<!-- skeleton:
+version: 1.0
+kind: boot
+status: active
+updated: ${stamp.slice(0, 10)}
+summary: Dated session card (tier 5). State, active task, and handoff for ${stamp}. Older cards are historical.
+-->
+
 > Status: active · Generated: ${stamp} (KST) · Runtime: DSH \`${run('dsh', ['--version'])}\` · Node \`${run('node', ['--version'])}\`
-> Previous cards: [INDEX.md](./INDEX.md) · Policy: [../docs/DSH-HARNESS-POLICY.md](../docs/DSH-HARNESS-POLICY.md)
+> Previous cards: [INDEX.md](./INDEX.md) · Rules: [../docs/RULES.md](../docs/RULES.md) · Doc index: [../docs/SKELETON.md](../docs/SKELETON.md)
 
 ## 0. Read this first
 
@@ -64,6 +73,11 @@ ${note ? `Latest session note: ${note}\n\n` : ''}## 1. Non-negotiable rules
    the in-app toast; use toast/title/sound only as fallback.
 8. **Locale parity.** Korean dictionaries must match both \`en\` and \`zh\` key sets and
    placeholders before release.
+9. **Single writer.** Write only inside your assigned \`dsh-<track>/\`. Never write a sibling
+   track via a bare relative path; assert \`package.json.name\` before replacing a manifest.
+10. **Plugin replacement is 4 steps, never one.** disable incumbent row -> remove incumbent
+   package -> add new package -> verify by **real mount**. A passing \`--dump-config\` does NOT
+   prove a plugin mounts; two plugins registering the same tool/route is a hard mount failure.
 
 ## 2. Runtime snapshot
 

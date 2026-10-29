@@ -1,4 +1,12 @@
 # OpenCode / Antigravity 서브에이전트·모델서빙 실측 정리
+<!-- skeleton:
+version: 1.0
+kind: measurement
+status: measured
+updated: 2026-10-29
+summary: Feasibility of OpenCode and Antigravity CLI as DSH subagents/models: auth, routes, sandbox limits.
+-->
+
 
 측정일: 2026-10-29 (KST)  
 런타임: DSH `0.2.2-alpha.2`, OpenCode CLI `v2.2.0`, Antigravity CLI `agy 1.4.9`

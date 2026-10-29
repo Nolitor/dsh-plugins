@@ -1,4 +1,12 @@
 # UTM 거버넌스 리뷰 — Forge/Worktrees vs Sidebar Manager
+<!-- skeleton:
+version: 1.0
+kind: report
+status: reference
+updated: 2026-10-29
+summary: Read-only review of the Forge/Worktrees vs Sidebar/UTM measurement against UTM authority docs.
+-->
+
 
 > 검토 대상: `FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md` (2026-10-29, 119행)
 > 검토 방식: read-only. UTM 권위 문서 4종과 report/evidence를 교차 확인.

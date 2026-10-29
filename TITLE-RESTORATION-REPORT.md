@@ -1,4 +1,12 @@
 # DSH Plugins - Title Restoration Report
+<!-- skeleton:
+version: 1.0
+kind: report
+status: historical
+updated: 2026-10-24
+summary: Root cause and fix for workspace/session title loss during the Windows-to-Linux migration.
+-->
+
 
 Generated: 2026-10-24T19:22:38+09:00
 

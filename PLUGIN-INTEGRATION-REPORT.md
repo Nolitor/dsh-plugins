@@ -1,4 +1,12 @@
 # 플러그인 통합 감사 보고서 (Plugin A / Plugin B)
+<!-- skeleton:
+version: 1.0
+kind: report
+status: completed
+updated: 2026-10-24
+summary: Integration audit of the sidebar (Plugin A) and notify (Plugin B) plugins on DSH rc.3.
+-->
+
 
 > 상태: completed · 최종 갱신: 2026-10-24 · 상위: [README](README.md) · 관련: [UTM-COMPLIANCE.md](UTM-COMPLIANCE.md)
 

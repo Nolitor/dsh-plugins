@@ -1,14 +1,23 @@
 # DSH Plugin Harness Policy & Version Changelog
+<!-- skeleton:
+version: 2.0
+kind: policy
+status: active
+updated: 2026-10-29
+summary: Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, release rules.
+-->
 
-> Status: active · Last updated: 2026-10-29 · Applies to: DSH `0.2.2-alpha.2` · Boot index: [AGENTS.md](../AGENTS.md)
+
+> Status: active · Last updated: 2026-10-29 (single-writer + replacement rules) · Applies to: DSH `0.2.2-alpha.2` · Boot index: [AGENTS.md](../AGENTS.md)
 
 ## 1. Purpose
 
-This workspace continuously manages three DSH web plugins:
+This workspace continuously manages these DSH web plugins:
 
 - `@nolit/dsh-korean-locale`
 - `@nolit/dsh-sidebar-manager`
 - `@nolit/dsh-notify-web`
+- `@nolit/dsh-opencode-v2` (wraps `@quonaro/dsh-plugin-opencode` as a dependency)
 
 The harness must keep runtime compatibility, release artifacts, policy decisions, and measured
 evidence together. A report is not a measurement unless it names the actual boot/route/browser
@@ -55,6 +64,55 @@ session that touches it must do this **before** changing code or bumping the ver
 6. Only then version-up, regenerate the artifact, record SHA-256, and re-measure.
 
 Skipping this gate is a policy violation even when the code looks unchanged.
+
+### 3.2 Single-writer rule (mandatory, applies to every agent)
+
+A concurrent agent MUST NOT write outside the package directory it was assigned.
+
+1. **One agent, one package track.** Write only under `dsh-<track>/`. Never write a sibling
+   track's files, even "temporarily" or to "fix" something. If another track is broken, report it.
+2. **Relative-path writes into sibling trees are forbidden.** A bare relative write
+   (`package.json`, `lib/`, `test/`) resolves to the *caller's* cwd, which is not necessarily the
+   package you meant. Always write with an absolute path, or `cd` into the track first.
+3. **Assert the target identity before writing a manifest.** Before creating or replacing any
+   `package.json`, confirm the directory's expected `name` and refuse if it does not match.
+   This is enforced repo-side: each track must keep a test asserting
+   `package.json.name === "<expected>"`.
+4. **Containment check after a mis-write.** If a cross-track write is suspected, run
+   `find <other-track> -newermt "<session start>" -type f` and record the result as evidence.
+
+**Why this rule exists (real incident, 2026-10-29):** while building `dsh-opencode-v2`, a
+concurrent agent wrote `dsh-sidebar-manager`'s manifest over `dsh-opencode-v2/package.json`
+(empty deps/peers, `market/`, `icon.svg`, `README.ko.md`, `dsh-package-manifest` devDeps).
+The damage was contained only because a `name` assertion test made the artifact fail loudly
+(7/72 tests failed against the overwritten manifest). A missing assertion would have let it ship.
+
+### 3.3 Plugin replacement procedure (mandatory, not advisory)
+
+Installing a replacement plugin is **never** a single `dsh plugin add`. `dsh plugin add` only
+appends a dependency and a bundle entry; it does **not** disable an existing row that registers
+the same tool or provider route. Two plugins registering the same name is a **hard mount
+failure**, not a shadowing warning (`tool "<name>" is already registered`,
+`an adapter for provider "<route>" is already registered`).
+
+Run these four steps in order and do not skip any:
+
+1. **Disable** — comment out or remove the incumbent plugin's row(s) in
+   `~/.dsh/profiles/web/cordis.patch.yml` (e.g. both `dsh-plugin-opencode` and
+   `dsh-plugin-opencode-provider`).
+2. **Remove** — `dsh plugin --profile <name> remove <incumbent-package>` so the bundle entry and
+   `node_modules` copy are gone. Leftover `node_modules` copies keep resolving and mask the
+   removal.
+3. **Install** — `dsh plugin --profile <name> add <new-package>`, then confirm a row for the new
+   plugin's `name` exists in `cordis.patch.yml`. A bundle entry alone does **not** activate the
+   plugin. If the bundle ships its own `cordis.patch.yml` (`dsh.bundle.patch`), the rows come from
+   that file — verify it applied, or add the rows explicitly.
+4. **Verify by mount, not by dump** — start the profile and confirm the plugin actually activated.
+   `dsh --dump-config` exits 0 even for a configuration that cannot mount (it never imports,
+   never registers, never runs startup audits). A dump is a syntax check, not an install gate.
+
+If step 3 leaves the incumbent's dependency in `package.json`, treat the install as failed and
+finish step 2.
 
 ## 4. Release policy
 

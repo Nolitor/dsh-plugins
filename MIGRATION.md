@@ -1,4 +1,12 @@
 # DSH Plugins — Physical Promotion & Migration Record
+<!-- skeleton:
+version: 1.0
+kind: report
+status: historical
+updated: 2026-10-24
+summary: Physical promotion of the former DSH Notify workspace: zstd frame header rewrite, invariants, rollback.
+-->
+
 
 Date: 2026-10-24 (Asia/Seoul)
 

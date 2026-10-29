@@ -1,4 +1,12 @@
 # Forge Worktree × UTM 정책 — 실제 런타임 실측
+<!-- skeleton:
+version: 1.0
+kind: measurement
+status: measured
+updated: 2026-10-29
+summary: Isolated-DSH_HOME runtime measurement of Forge worktrees x Sidebar Manager v0.1.1 x UTM policy.
+-->
+
 
 > 상태: measured (isolated DSH_HOME) · 일시: 2026-10-29 · 대상: DSH `0.2.2-alpha.2`
 > `@deepseek-ai/dsh-experimental-forge-bundle` + `@nolit/dsh-sidebar-manager` v0.1.1

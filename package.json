@@ -1,0 +1,12 @@
+{
+  "name": "dsh-plugins-workspace",
+  "private": true,
+  "type": "module",
+  "description": "DSH Plugins workspace maintenance scripts (documentation index, boot cards).",
+  "scripts": {
+    "docs:index": "node scripts/doc-index.mjs",
+    "docs:check": "node scripts/doc-index.mjs --check",
+    "bootcard": "node scripts/new-bootcard.mjs",
+    "docs:new": "node scripts/new-doc.mjs"
+  }
+}

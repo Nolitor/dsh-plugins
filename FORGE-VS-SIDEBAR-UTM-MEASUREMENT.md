@@ -1,4 +1,12 @@
 # Change requests & worktrees 실측 · Sidebar Manager / UTM 정책 비교
+<!-- skeleton:
+version: 1.0
+kind: measurement
+status: measured
+updated: 2026-10-29
+summary: Change-requests/worktrees bundle measured against Sidebar Manager and UTM policy; overlap and risk.
+-->
+
 
 > 상태: measured · 최종 갱신: 2026-10-29 · 대상: `@deepseek-ai/dsh-experimental-forge-bundle` v0.2.2-alpha.2 · 런타임: DSH `0.2.2-alpha.2`
 

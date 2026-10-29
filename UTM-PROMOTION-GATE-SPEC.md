@@ -1,4 +1,12 @@
 # UTM Promotion Gate — 핵심 계약 명세 (복원 원본 기반)
+<!-- skeleton:
+version: 1.0
+kind: spec
+status: reference
+updated: 2026-10-24
+summary: Recovered UTM promotion-gate contract: promotion.mjs, G1-G6, 2PC, inheritance rules.
+-->
+
 
 > 상태: reference · 최종 갱신: 2026-10-24 · 근거 원본: `docs/architecture/PROMOTION-GATE.md` (714줄 중 492줄 복원),
 > `packages/provider-dsh/lib/promotion.mjs` (**367줄 전량 복원·구문검사 통과**)

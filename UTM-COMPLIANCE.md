@@ -1,4 +1,12 @@
 # UTM 거버넌스 준수 감사 — 플러그인 통합 사전 검증
+<!-- skeleton:
+version: 1.0
+kind: report
+status: reference
+updated: 2026-10-24
+summary: UTM governance compliance matrix recovered from session logs; UTM itself was lost in migration.
+-->
+
 
 > 상태: active · 최종 갱신: 2026-10-24 · 상위: [README](README.md) · 대상: `dsh-sidebar-manager`, `dsh-notify`
 
