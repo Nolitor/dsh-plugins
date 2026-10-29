@@ -116,9 +116,11 @@ test('tool exports its row id and the worker module keeps its identity', () => {
   assert.equal(provider.inject, undefined, 'the worker backend is not a loadable route')
 })
 
-test('default model is an opencode/... route, never bare', () => {
-  assert.equal(DEFAULT_MODEL, 'opencode/deepseek-v4.1-flash-free')
-  assert.match(DEFAULT_MODEL, /^opencode\//)
+test('default model is a qualified opencode route with a reasoning level, never bare', () => {
+  assert.equal(DEFAULT_MODEL, 'opencode-go/minimax-m3.1-flash#low')
+  assert.match(DEFAULT_MODEL, /^opencode(-go)?\//)
+  // The suffix is the route's lowest advertised reasoning level.
+  assert.match(DEFAULT_MODEL, /#low$/)
 })
 
 test('legacy attach/pure config keys still validate (old profile rows keep loading)', () => {

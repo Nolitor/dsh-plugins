@@ -22,11 +22,11 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 
 | Fact (measured) | Consequence in this plugin |
 |---|---|
-| `opencode models` lists **45 models** — 30 `opencode-go/*`, 15 `opencode/*` | the default route is `opencode/…`; no route is ever assumed to resolve |
+| `opencode models` lists **49 models** — 30 `opencode-go/*`, 19 `opencode/*` | the default route is `opencode-go/minimax-m3.1-flash#low`; no route is ever assumed to resolve |
 | `run --format json` emits no whole-run `step_finish`: a tool-free run emits only `step_start`, `reasoning`, `text`; a tool-using run emits a **per-step** `step_finish` | `run` never carries a whole-run usage total; char/4 heuristics are never emitted, and `session export` is the only authoritative source |
 | `part.text` is a **cumulative snapshot** per part id, not a delta | the parser diffs snapshots into deltas |
 | `--thinking` is required for `reasoning` events | streaming reasoning is opt-in via `thinking: true` (default on) |
-| a route's reasoning levels are its **model variants**: `run --help` documents `-m provider/model#variant`, and `GET /api/model` lists `variants` per model (35 of 45 models on this account) | `resolveModel()` advertises them as `reasoning.efforts` and the selected level becomes `-m provider/model#<variant>` |
+| a route's reasoning levels are its **model variants**: `run --help` documents `-m provider/model#variant`, and `GET /api/model` lists `variants` per model (39 of 49 models on this account) | `resolveModel()` advertises them as `reasoning.efforts` and the selected level becomes `-m provider/model#<variant>` |
 | an unknown variant fails the run: `provider.no-route` "Variant unavailable for <provider>/<model>: <id>" | ids are passed verbatim from discovery; nothing is invented |
 | `reasoning` events exist with a `…_reasoning-N` part id | streamed as `reasoning-delta` on their **own block index** (text stays 0) |
 | `--attach` and `--pure` were **removed** (exit 1, "Unrecognized flag", usage on stdout) | never emitted; stripped from `extraArgs`; old config keys accepted but inert |
@@ -103,7 +103,8 @@ That is not a model-size problem — it is a missing metadata field. This adapte
 | unknown route | conservative `32768` / `8192` floor |
 
 Measured v2.2.0 values: `opencode-go/deepseek-v4.1-flash` = 1,000,000 tokens,
-`opencode/deepseek-v4.1-flash-free` = 200,000, `opencode/beam-free` = 1,048,576.
+`opencode/deepseek-v4.1-flash-free` = 200,000, `opencode/beam-free` = 1,048,576,
+`opencode-go/minimax-m3.1-flash` = 1,000,000.
 
 Discovery starts a short-lived `opencode serve` (1-3 s) and is cached for
 `discoveryCacheMs` (default 5 min). Keep `autoDiscoverModels: true`; even when disabled the
@@ -122,13 +123,13 @@ models had no level choice and an explicit level was rejected with `UNSUPPORTED_
 | wire selection (`GenerateOptions.reasoningEffort`) | `-m provider/model#<variant>` (the variant sets `reasoningEffort` or `thinkingConfig` provider-side) |
 | `reasoning.defaultEffort` | **not set**: omitting a level preserves OpenCode's own default variant |
 
-Measured levels on this account: `low` (29 models), `high` (30), `max` (22), `medium` (20),
-`xhigh` (17), `none` (13), `minimal` (4), `thinking` (1). The host catalog advertises 46 routes
-(45 models plus the `default` pseudo-route) and 35 of them carry levels. A route with no variants
+Measured levels on this account: `low` (31 models), `high` (34), `max` (24), `medium` (21),
+`xhigh` (19), `none` (13), `minimal` (5), `thinking` (1). The host catalog advertises 50 routes
+(49 models plus the `default` pseudo-route) and 39 of them carry levels. A route with no variants
 advertises none, so the host rejects a level instead of silently running at a different one.
 
-Re-measured 2026-10-30 against the live account (`GET /api/model`, 45 entries) and the running
-profile's cached catalog (`~/.dsh/profiles/web/opencode-models.json`): both report the same 35
+Re-measured 2026-10-30 against the live account (`GET /api/model`, 49 entries) and the running
+profile's cached catalog (`~/.dsh/profiles/web/opencode-models.json`): both report the same 39
 routes with levels and the same 10 without — `opencode/big-pickle`,
 `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`,
 `opencode-go/iceman-contributor-free`, `opencode-go/kimi-k2.7-code`, `opencode-go/longcat-2.0`,
@@ -136,6 +137,11 @@ routes with levels and the same 10 without — `opencode/big-pickle`,
 `opencode-go/mimo-v2.6-pro`. Those routes declare no `variants` upstream, so their picker row has
 no level choice; this is an OpenCode catalog fact, not a discovery or mapping failure. `--thinking`
 is independent: a variant-less model can still stream reasoning blocks.
+
+`opencode-go/minimax-m3.1-flash` is the default route: 1,000,000 context, 512,000 output, and the
+levels `low`, `medium`, `high`, `xhigh`, `max`. The default carries `#low` on the CLI route, where
+the variant is part of `-m`; the HTTP route resolves its level from the DSH agent's own level,
+because the route id is split at its first `/` and a `#` suffix would become part of the model id.
 
 `default` has no `/api/model` entry of its own. The HTTP adapter resolves it through the same
 `modelRefFromRoute()` call it uses on the wire (`models[].opencodeModel` for `default`, else
@@ -361,7 +367,7 @@ dsh --profile web --dump-config > /tmp/ocv2-dump.yml   # no duplicate-id / unkno
 ```bash
 # A stale service from another HOME squats port 49374 and breaks every command:
 pgrep -af 'opencode serve --service'      # expect nothing, or kill it
-opencode run --format json --thinking -m opencode/deepseek-v4.1-flash-free -- 'say hi'
+opencode run --format json --thinking -m 'opencode-go/minimax-m3.1-flash#low' -- 'say hi'
 opencode session export <ses_…>           # -> info.tokens.{input,output,reasoning,cache}
 ```
 

@@ -27,8 +27,10 @@
       auto: true
       # Default -m provider/model. MUST be an `opencode/...` route: v2's catalog
       # is opencode/* and opencode-go/*, and the generic default is never
-      # assumed to resolve.
-      model: 'opencode/deepseek-v4.1-flash-free'
+      # assumed to resolve. The `#low` suffix selects the route's lowest
+      # advertised reasoning level; v2 rejects a variant the catalog does not
+      # advertise.
+      model: 'opencode-go/minimax-m3.1-flash#low'
       # Default --agent (e.g. "build", "plan"); empty means the default agent.
       agent: ''
       # --thinking: required for v2 to emit `reasoning` events at all.

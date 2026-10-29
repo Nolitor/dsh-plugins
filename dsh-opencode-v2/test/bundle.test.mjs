@@ -157,7 +157,7 @@ test('every tool-row config key exists in the tool Config schema', () => {
     assert.ok(key in rows[0].config, `tool row must set ${key}`)
   }
   const parsed = tool.Config(rows[0].config)
-  assert.equal(parsed.model.get(), 'opencode/deepseek-v4.1-flash-free')
+  assert.equal(parsed.model.get(), tool.DEFAULT_MODEL)
   assert.equal(parsed.thinking.get(), true)
   assert.equal(parsed.auto.get(), true)
   for (const key of ['PATH', 'HOME', 'USER', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'OPENCODE_CONFIG', 'OPENCODE_SERVER_USERNAME', 'OPENCODE_SERVER_PASSWORD']) {
@@ -194,9 +194,10 @@ test('the patch never configures attach or pure (v2 rejects both flags)', () => 
   assert.match(yml, /Unrecognized flag/)
 })
 
-test('the patch default model is an opencode/ route, never opencode-go/', () => {
+test('the patch default model is a qualified route with a reasoning level', () => {
   const model = rows[0].config.model
-  assert.match(model, /^opencode\/.+/)
-  assert.doesNotMatch(model, /^opencode-go\//)
+  assert.match(model, /^opencode(-go)?\//)
   assert.equal(model, tool.DEFAULT_MODEL)
+  // The suffix is the route's lowest advertised reasoning level.
+  assert.match(model, /#low$/)
 })

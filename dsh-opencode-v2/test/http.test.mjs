@@ -58,6 +58,13 @@ async function startServer(script = {}) {
           data: script.models ?? [
             { providerID: 'opencode', id: 'beam-free', name: 'Beam Free', limit: { context: 200000, output: 8192 }, variants: [{ id: 'low' }, { id: 'high' }] },
             { providerID: 'opencode-go', id: 'deepseek-v4.1-flash', name: 'DeepSeek', limit: { context: 1000000, output: 65536 } },
+            {
+              providerID: 'opencode-go',
+              id: 'minimax-m3.1-flash',
+              name: 'MiniMax M3.1 Flash',
+              limit: { context: 1000000, output: 512000 },
+              variants: [{ id: 'low' }, { id: 'medium' }, { id: 'high' }, { id: 'xhigh' }, { id: 'max' }],
+            },
           ],
         })
       }
@@ -260,8 +267,9 @@ test('resolveModel default route inherits the route it actually runs', async () 
     const adapter = makeAdapter(state)
     const viaConfig = await adapter.resolveModel('opencode-http-agent', 'default')
     assert.equal(viaConfig.id, 'default')
-    assert.equal(viaConfig.context.contextWindow, 200000)
-    assert.deepEqual(viaConfig.reasoning.efforts.map((effort) => effort.id), ['low', 'high'])
+    // `defaultModel` names the route the default actually runs.
+    assert.equal(viaConfig.context.contextWindow, 1000000)
+    assert.deepEqual(viaConfig.reasoning.efforts.map((effort) => effort.id), ['low', 'medium', 'high', 'xhigh', 'max'])
     const viaTable = makeAdapter(state, {
       models: [{ id: 'default', opencodeModel: 'opencode-go/deepseek-v4.1-flash', name: '' }],
     })

@@ -89,8 +89,14 @@ export const Config = Schema.object({
   spawnTimeoutMs: Schema.number().default(30000).volatile(),
   forwardEnv: Schema.array(Schema.string()).default(FORWARD_ENV_DEFAULT).volatile(),
   cwd: Schema.string().default('').volatile(),
-  /** Route id used when the DSH model id is the literal `default`. */
-  defaultModel: Schema.string().default('opencode/beam-free').volatile(),
+  /**
+   * Route id used when the DSH model id is the literal `default`. The value is
+   * a bare `provider/model` pair: the route id is split at the first `/`, so a
+   * `#variant` suffix would become part of the model id. The reasoning level
+   * comes from the DSH agent's own level, which the adapter maps onto this
+   * route's advertised variants.
+   */
+  defaultModel: Schema.string().default('opencode-go/minimax-m3.1-flash').volatile(),
   /** Explicit route table, same shape as the CLI adapter's. */
   models: Schema.array(
     Schema.object({

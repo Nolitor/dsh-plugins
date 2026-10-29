@@ -36,8 +36,12 @@ const FORWARD_ENV_DEFAULT = [
   'OPENCODE_SERVER_PASSWORD',
 ]
 
-/** Default `-m` route. Must be an `opencode/...` route: v2 knows those; never leave it bare. */
-export const DEFAULT_MODEL = 'opencode/deepseek-v4.1-flash-free'
+/**
+ * Default `-m` route. Must be an `opencode/...` route: v2 knows those; never
+ * leave it bare. The `#low` variant is the route's lowest advertised reasoning
+ * level, so a bare `/ocode` run reasons cheaply.
+ */
+export const DEFAULT_MODEL = 'opencode-go/minimax-m3.1-flash#low'
 
 /** Schemastery schema: defaults live here; cordis.yml and GUI edits are validated against it. */
 export const Config = Schema.object({
