@@ -85,8 +85,10 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 12)
+## boot (newest 5 of 13)
 
+- **active** · 2026-10-29T2306+0900.md · [card](../bootcards/2026-10-29T2306+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-10-29T2306+0900. Older cards are historical.
 - **active** · 2026-10-29T2242+0900.md · [card](../bootcards/2026-10-29T2242+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T2242+0900. Older cards are historical.
 - **active** · 2026-10-29T1213+0900.md · [card](../bootcards/2026-10-29T1213+0900.md)
@@ -95,9 +97,7 @@
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T1132+0900. Older cards are historical.
 - **active** · 2026-10-29T1027+0900.md · [card](../bootcards/2026-10-29T1027+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T1027+0900. Older cards are historical.
-- **active** · 2026-10-29T1007+0900.md · [card](../bootcards/2026-10-29T1007+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-10-29T1007+0900. Older cards are historical.
 
 ---
 
-37 indexed (12 boot cards), 0 missing header, 37 total.
+38 indexed (13 boot cards), 0 missing header, 38 total.
