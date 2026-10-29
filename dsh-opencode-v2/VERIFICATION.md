@@ -728,3 +728,239 @@ node /tmp/ocv2-verify/error-paths2.mjs          # OPENCODE_TIMEOUT / OPENCODE_EX
 node /tmp/ocv2-verify/failloud-proof.mjs        # expect: OPENCODE_SPAWN finish, SURVIVED, EXIT CODE: 0
 cd /home/minami/Workspace/projects/dsh-workspace/dsh-plugins/dsh-opencode-v2 && npm test   # expect 71/71
 ```
+
+---
+
+## 12. v0.1.2 — reasoning levels (사고력) on the `opencode-agent` route
+
+**Defect measured before the fix.** The prompt's thinking selector is rendered from
+`model.reasoning` in the Host catalog, and `buildModelCatalog` fills it from
+`llm.resolveModelInfo()` (`dsh-api-session-controller/lib/index.js:473-495`). The route returned
+no `reasoning`, so OpenCode models had no level choices and an explicit level was rejected with
+`UNSUPPORTED_REASONING_EFFORT`. `--thinking` was already passed, but it only controls whether
+reasoning blocks are *streamed*; it cannot select a level.
+
+**Measured OpenCode v2.2.0 surface.**
+
+| Probe | Result |
+|---|---|
+| `opencode run --help` | `--model, -m string  Model to use in the format provider/model#variant` |
+| `GET /api/model` (serve) | 45 models, **35 with `variants`**; ids `low` 29, `high` 30, `max` 22, `medium` 20, `xhigh` 17, `none` 13, `minimal` 4, `thinking` 1 |
+| variant payload | `{ id, settings: { reasoningEffort } }` or `{ id, settings: { thinkingConfig / thinking } }` |
+| unknown variant | `{"type":"error","error":{"type":"provider.no-route","message":"Variant unavailable for opencode/deepseek-v4.1-flash-free: bogus"}}` |
+| `-m opencode/deepseek-v4.1-flash-free#low` vs `#high` | both run; reasoning text 46 vs 4 chars — the variant reaches the provider |
+
+**Fix.** `modelFromApiEntry()` keeps `variants`; `reasoningEffortsFromVariants()` maps them onto
+`LlmModelReasoningInfo.efforts` (canonical order, unknown ids kept); `resolveModel()` publishes
+`reasoning` only for routes that declare variants and sets no `defaultEffort`; `stream()` composes
+`-m provider/model#<reasoningEffort>` via `withVariant()`. Discovery is now single-flight: the
+catalog resolves every route at once, so one probe per cache window replaces one per route.
+
+**Verification (all executed against the real host registry and the real CLI).**
+
+```
+$ node /tmp/opencode/ocv2-measure/e2e-reasoning.mjs
+MEASURED resolveModelInfo().reasoning = {"efforts":[{"id":"low","name":"Low"},{"id":"high","name":"High"},{"id":"max","name":"Max"}]}
+MEASURED context = {"contextWindow":1000000}
+MEASURED catalog = {"routes":46,"withReasoning":35,"levelCounts":{"1":1,"2":4,"3":13,"4":4,"5":6,"6":7},"discoveryProbes":0}
+MEASURED prepareCall(high).config.reasoningEffort = high
+MEASURED unadvertised effort rejected = UNSUPPORTED_REASONING_EFFORT - provider "opencode-agent" model "opencode-go/deepseek-v4.1-flash" does not support reasoning effort "off"
+MEASURED spawns = [
+ "/home/minami/.bun/bin/opencode serve --port 0",
+ "/home/minami/.bun/bin/opencode run -m opencode-go/deepseek-v4.1-flash#high --auto --thinking --format json -- …"
+]
+MEASURED stream = {"types":["block-start","reasoning-delta","text-delta","block-end","finish"],"reasoning":"17*23 = 391…","text":"391","finish":{"kind":"stop"}}
+
+$ npm test
+ℹ tests 99
+ℹ pass 99
+ℹ fail 0
+```
+
+`test/reasoning.test.mjs` (15 tests) pins: variant discovery, canonical ordering, dedupe/unknown
+ids, `reasoning` present only when variants exist, `default` route inheritance, host-normalizer
+validity, `withVariant()` composition, the `-m …#<level>` wire value with and without a level, and
+single-flight discovery for a concurrently resolved catalog.
+
+**Status: applied pending restart.** The live profile's
+`node_modules/@nolit/dsh-opencode-v2` is a symlink to this workspace, but the running `dsh web`
+process still holds the pre-change module; the selector appears after a restart.
+
+### 12.1 Second defect, found while measuring §12 — discovery never read the serve banner
+
+`discoverModelsViaServe()` spawned `opencode serve` with a **collect-mode** stdout
+(`stdout: { maxBytes }`) and then read `handle.stdout`. `dsh-subprocess` documents and enforces
+`readonly stdout: Readable | undefined` — *"present iff spawned with `stdout: 'pipe'`"*
+(`dsh-subprocess/lib/types/types.d.ts:159`) — so the stream was always `undefined` and discovery
+returned `null` before starting the HTTP call. Every route then fell back to the CLI listing:
+the conservative `32768` context floor and **no variants**.
+
+Proof, measured through a real profile mount (`DSH_HOME=/tmp/opencode/ocv2-live-iso`, boot probe
+on the copied live profile, `skippedBundles: 0`, `VERDICT: PASS`):
+
+| Catalog row | Before (v0.1.1 code) | After (v0.1.2) |
+|---|---|---|
+| `opencode-go/deepseek-v4.1-flash` | `levels=- ctx=32768` | `levels=low\|high\|max ctx=1000000` |
+| `opencode-go/kimi-k3.1-pro` | `levels=- ctx=32768` | `levels=low\|high\|max ctx=1048576` |
+| `opencode/flint-40b-free` | `levels=- ctx=32768` | `levels=low\|medium\|high\|xhigh\|max ctx=262144` |
+| routes with levels | 0 / 46 | **35 / 46** (the 11 without are 10 variant-less models + `default`) |
+
+Fix: spawn with `stdout: 'pipe'`, parse the banner with `parseServeBanner()`, and bound the wait
+with an abortable readiness budget so a silent child cannot stall the catalog. `stderr` stays in
+bounded collect mode so serve logs never flood the host.
+
+`test/discovery.test.mjs` (8 tests) pins the spawn disposition (`stdio.stdout === 'pipe'`), banner
+parsing across split chunks, `/api/model` mapping with basic auth, `null` on a missing stream
+(the regression), the readiness budget, and a non-OK HTTP response.
+
+Updated totals: `npm test` → **107/107**.
+
+> This corrects the v0.1.1 claim that real discovery returned 45 models with limits in 1.6 s:
+> that measurement did not run through `dsh-subprocess`, so it could not observe the missing
+> stream. The 32768 floor kept `compaction-basic` working, which is why nothing failed loudly.
+
+### 12.2 GUI-path proof (`sessionController.modelCatalog`)
+
+The Web picker reads `remote.session.modelCatalog()`. Queried on the booted isolated profile:
+
+```
+gui.catalog.default: {"provider":"opencode-agent","model":"opencode-go/deepseek-v4.1-flash"}
+gui.catalog.opencode-agent:
+  {"id":"default", …}                                          # no levels: the model is unknown
+  {"id":"opencode/beam-free", "reasoning":{"efforts":[low,medium,high,"Extra high",max]}}
+  {"id":"opencode-go/deepseek-v4.1-flash", "reasoning":{"efforts":[low,high,max]}}
+```
+
+`opencode/deepseek-v4.1-flash-free` likewise carries `low|high|max`; the 10 variant-less models
+carry no `reasoning`, so the picker offers only "Default" for them instead of a wrong level.
+
+---
+
+## 13. v0.1.3 — prompt on stdin (spawn E2BIG on every long session)
+
+**Defect measured.** Linux caps a single argv string at 128 KiB (`MAX_ARG_STRLEN` = 32 pages);
+`getconf ARG_MAX` is 2,097,152 but that is the whole env+argv block, not one argument.
+
+| Probe | Result |
+|---|---|
+| `spawnSync('echo', ['x'.repeat(140000)])` | `E2BIG` |
+| `spawnSync('echo', ['x'.repeat(120000)])` | exit 0 |
+| LIVE session 10:17 (`session-6b20dd2d`): turn 1-3 | `turn/end` ×3 → `OPENCODE_SPAWN` "spawn E2BIG" |
+| that session's largest message | 369,805-byte assistant message (flattened into one argv string) |
+
+v0.1.2 did `argv.push('--', prompt)` in both `runOpencode()` (`lib/index.js`) and the LLM route
+(`lib/provider.js:592-607`), and spawned with `stdin: 'ignore'` — so any transcript above ~128 KiB
+failed before `opencode` started. Tests could not see it: the fake seam accepted argv of any size.
+
+**Measured replacement surface (v2.2.0).**
+
+```
+$ printf 'say STDINOK' | opencode run -m opencode/beam-free --format json   # → text "STDINOK"
+$ opencode run -m opencode/beam-free --format json < /tmp/bigprompt.txt     # 200 KB → answered
+```
+
+**Fix.** `buildRunArgv(flags)` no longer takes or appends a prompt; `sendPrompt(handle, prompt)`
+writes it to a piped stdin and ends the stream (EPIPE/no-stdin returns `false` instead of
+throwing). Both spawn sites use `stdio.stdin: 'pipe'`. The provider attaches `handle.done`'s
+settlement handler before delivery, so a rejecting `done` is still consumed (P0-2 invariant) and a
+pipe-less seam yields `OPENCODE_SPAWN`, never an unhandled rejection.
+
+**Verification (real CLI, real adapter, 189 KB prompt).**
+
+```
+$ node /tmp/opencode/ocv2-measure/e2e-stdin.mjs
+MEASURED prompt bytes = 189051 (single-arg limit is 131072)
+MEASURED argv chars = 88 | stdin pipe = true
+MEASURED argv tail = ["--auto","--thinking","--format","json"]
+MEASURED stream types = ["block-start","reasoning-delta","block-start","text-delta","block-end","block-end","finish"]
+MEASURED text = "PONG"
+MEASURED finish = {"kind":"stop"}
+
+$ npm test
+ℹ tests 111
+ℹ pass 111
+ℹ fail 0
+```
+
+New/updated tests: `sendPrompt` writes the whole prompt and closes stdin; a 300 KB prompt is
+carried; absent/broken stdin returns `false`; argv never contains the prompt or a `--` marker;
+tool and provider spawns assert the stdin delivery.
+
+**Status: applied pending restart** (same reason as §12: the live 3080 process, PID 267797, was
+started 09:00:48 and holds pre-change modules; v0.1.1/v0.1.2 were written 10:05-10:32).
+
+---
+
+## 14. v0.2.0 — HTTP provider (`opencode-http-agent`) + A/B against the CLI route
+
+Scope: a second LLM route in the same package that drives the OpenCode v2.2.0 HTTP API
+(measured in `../OPENCODE-V2-HTTP-API-MEASUREMENT.md`). The CLI route is unchanged and remains the
+default; the HTTP route is opt-in via its own cordis row.
+
+### 14.1 Implementation map
+
+| Concern | Code |
+|---|---|
+| server resolution (baseUrl / daemon state / spawn `--port 0`) | `lib/http.js` `ServerManager` |
+| banner parse + readiness | `readBanner()` / `parseBanner()` (measured banner) |
+| model catalog | `GET /api/model` → `contextWindow`, `defaultMaxTokens`, `variants` |
+| session mapping | one OpenCode session per `GenerateOptions.sessionId`; only new user text on later calls |
+| streaming | `GET /api/event?types=…` → `block-start` / `text-delta` / `reasoning-delta` / `block-end` |
+| usage | `session.step.ended.tokens` → `usage` (disjoint buckets, cache read/write) |
+| permissions | `permission.asked` → `POST …/permission/{rid}/reply` (config `permissionDecision`) |
+| abort | `signal` → `POST …/interrupt`, finish `OPENCODE_INTERRUPTED` |
+
+### 14.2 Unit tests
+
+`test/http.test.mjs` (15 tests, fake node:http server implementing the measured routes):
+SSE delta mapping, usage mapping, session reuse (one create, second prompt is only the new user
+text), variant on create, permission reply, failed execution, cross-session event filtering,
+ephemeral session delete, local titles, banner/route/usage helpers.
+
+```
+$ npm test        # 126 tests total (111 existing + 15 http)
+ℹ tests 126
+ℹ pass 126
+ℹ fail 0
+```
+
+### 14.3 Isolated profile mount
+
+```
+DSH_HOME=/tmp/opencode/http-poc dsh --profile web --host 127.0.0.1 --port 39321 --no-open
+```
+
+- composed config (`--dump-config`) contains `- id: dsh-opencode-v2-http`,
+  `name: '@nolit/dsh-opencode-v2/http'` (a patch **insert** entry; a plain `- id:` patch only
+  targets existing rows and warns `entry "…" not found`).
+- the profile also drops `@quonaro/dsh-plugin-opencode` from its bundle list, because that
+  bundle registers the same `opencode` tool/`opencode-agent` adapter and produced two
+  "did not activate" warnings. After the drop: **boot log has zero activation warnings** and the
+  web app issues `http://127.0.0.1:39321/?token=…`.
+
+### 14.4 A/B: same real host runtime, same real `opencode` binary/server
+
+Both adapters registered in one real `LlmRuntime`; `opencode/beam-free`; one DSH `sessionId`.
+Adapter `stream()` called directly (the host's `prepared.stream` wrapper rejected a hand-built
+assistant message on the second call with `Cannot read properties of undefined (reading
+'replayState')`; real loop messages carry the host envelope, and both adapters pass the first
+call through the same wrapper).
+
+| Metric | CLI route | HTTP route |
+|---|---|---|
+| `resolveModelInfo().context.contextWindow` | 32,768 (discovery off in this run) | **1,048,576** (live `/api/model`) |
+| turn 1 wall / first token | 1,735 ms / 1,581 ms | 2,152 ms / **946 ms** |
+| turn 1 input / cache read | 2,541 / 1,728 | **45** / 4,224 |
+| turn 2 wall / input / cache read | 1,002 ms / 66 / 4,224 | **739 ms / 2 / 4,288** |
+| turn 2 answer | `42` | `42` |
+| abort (1.5 s) | child killed, no terminal event guarantee | `OPENCODE_INTERRUPTED`, reasoning deltas already streamed |
+
+Turn-2 input of 2 tokens vs 66 is the session-continuity effect: the HTTP route sends only the new
+user text, while the CLI route re-sends the flattened transcript every call. Cache read stays in
+the same range in both because both hit the provider prefix cache.
+
+### 14.5 Status
+
+`applied pending restart` — the package is 0.2.0 and the CLI behaviour is untouched; no live
+`~/.dsh` profile or 3080 process was modified. The HTTP row exists only in the isolated profile
+until the user adds it to a live profile.

@@ -22,17 +22,20 @@ const stamp = `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.g
 const id = `${stamp}`
 const note = process.argv.slice(2).join(' ').trim()
 
+// Artifact file names carry the package version, so the path is derived from
+// package.json instead of being pinned here (a pinned version silently prints
+// "missing" after every bump).
 const plugins = [
-  ['Korean locale', 'dsh-korean-locale/package.json', 'artifacts/nolit-dsh-korean-locale-0.2.3.tgz'],
-  ['Sidebar Manager', 'dsh-sidebar-manager/package.json', 'artifacts/nolit-dsh-sidebar-manager-0.1.2.tgz'],
-  ['Notify Web', 'dsh-notify/package.json', 'artifacts/nolit-dsh-notify-web-0.1.6.tgz'],
-  ['OpenCode v2', 'dsh-opencode-v2/package.json', 'artifacts/nolit-dsh-opencode-v2-0.1.0.tgz'],
+  ['Korean locale', 'dsh-korean-locale/package.json', 'nolit-dsh-korean-locale'],
+  ['Sidebar Manager', 'dsh-sidebar-manager/package.json', 'nolit-dsh-sidebar-manager'],
+  ['Notify Web', 'dsh-notify/package.json', 'nolit-dsh-notify-web'],
+  ['OpenCode v2', 'dsh-opencode-v2/package.json', 'nolit-dsh-opencode-v2'],
 ]
 const lines = []
-for (const [label, pkgPath, artifact] of plugins) {
+for (const [label, pkgPath, artifactName] of plugins) {
   if (!existsSync(join(root, pkgPath))) continue
   const pkg = readJson(pkgPath)
-  const artifactPath = join(root, artifact)
+  const artifactPath = join(root, `artifacts/${artifactName}-${pkg.version}.tgz`)
   const hash = existsSync(artifactPath) ? createHash('sha256').update(readFileSync(artifactPath)).digest('hex') : 'missing'
   lines.push(`| ${label} | \`${pkg.name}@${pkg.version}\` | \`${pkg.engines?.dsh ?? 'n/a'}\` | \`${hash}\` |`)
 }

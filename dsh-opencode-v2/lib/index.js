@@ -13,7 +13,7 @@
  */
 import Schema from '@deepseek-ai/schemastery'
 
-import { JsonRunParser, buildRunArgv, fetchUsage, forwardedEnv, stripUnsupportedFlags } from './shared.js'
+import { JsonRunParser, buildRunArgv, fetchUsage, forwardedEnv, sendPrompt, stripUnsupportedFlags } from './shared.js'
 
 /** Host plugin name; must match package.json `name` and the cordis.patch.yml row id. */
 export const name = 'dsh-opencode-v2'
@@ -67,21 +67,18 @@ export async function runOpencode(ctx, config, options) {
   const timeoutMs = options.timeoutMs ?? config.timeoutMs.get()
   const argv = [
     executable,
-    ...buildRunArgv(
-      {
-        model: options.model ?? config.model.get(),
-        agent: options.agent ?? config.agent.get(),
-        auto: options.auto ?? config.auto.get(),
-        session: options.session,
-        continueLast: options.continueLast,
-        thinking: options.thinking ?? config.thinking.get(),
-        title: options.title ?? config.title.get(),
-        files: options.files,
-        format: 'json',
-        extraArgs: stripUnsupportedFlags(config.extraArgs.get()),
-      },
-      options.prompt,
-    ),
+    ...buildRunArgv({
+      model: options.model ?? config.model.get(),
+      agent: options.agent ?? config.agent.get(),
+      auto: options.auto ?? config.auto.get(),
+      session: options.session,
+      continueLast: options.continueLast,
+      thinking: options.thinking ?? config.thinking.get(),
+      title: options.title ?? config.title.get(),
+      files: options.files,
+      format: 'json',
+      extraArgs: stripUnsupportedFlags(config.extraArgs.get()),
+    }),
   ]
   const timeout = AbortSignal.timeout(timeoutMs)
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
@@ -90,7 +87,9 @@ export async function runOpencode(ctx, config, options) {
     argv,
     cwd: options.cwd,
     stdio: {
-      stdin: 'ignore',
+      // The prompt goes to stdin, never argv: a single argv string is capped at
+      // 128 KiB (MAX_ARG_STRLEN) and a flattened transcript exceeds it.
+      stdin: 'pipe',
       stdout: { maxBytes },
       stderr: { maxBytes },
     },
@@ -98,6 +97,7 @@ export async function runOpencode(ctx, config, options) {
     signal,
     env,
   })
+  const promptDelivered = sendPrompt(handle, options.prompt)
   const outcome = await handle.done
   const rawStdout = handle.collected.stdout?.readFrom(0)
   const stderr = handle.collected.stderr?.readFrom(0)
@@ -105,7 +105,10 @@ export async function runOpencode(ctx, config, options) {
   const parser = new JsonRunParser()
   const summary = parser.finish({ buffer: rawStdout?.text ?? '' })
   const stdout = summary.sawEvents ? summary.text : rawStdout?.text ?? ''
-  const eventErrors = summary.errors.length ? `opencode errors: ${summary.errors.join('; ')}` : ''
+  const deliveryErrors = promptDelivered ? '' : 'prompt could not be delivered: no stdin pipe'
+  const eventErrors = [deliveryErrors, summary.errors.length ? `opencode errors: ${summary.errors.join('; ')}` : '']
+    .filter(Boolean)
+    .join('; ')
   const stderrParts = [stderr?.text ?? '', eventErrors].filter(Boolean)
 
   // v2 emits no usage on the run stream: `session export` is the authoritative
@@ -139,7 +142,7 @@ export async function runOpencode(ctx, config, options) {
   }
 
   return {
-    ok: !timedOut && outcome.exitCode === 0 && summary.errors.length === 0,
+    ok: !timedOut && promptDelivered && outcome.exitCode === 0 && summary.errors.length === 0,
     exitCode: outcome.exitCode ?? -1,
     signal: outcome.signal ?? '',
     timedOut,

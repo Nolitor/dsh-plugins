@@ -64,7 +64,8 @@ function fakeCtx(script = []) {
       },
       spawn(request) {
         const entry = script[next++] ?? { exitCode: 0, stdout: '', stderr: '' }
-        calls.push({ argv: [...request.argv], cwd: request.cwd, env: { ...request.env } })
+        const record = { argv: [...request.argv], cwd: request.cwd, env: { ...request.env }, stdin: entry.stdin ?? null }
+        calls.push(record)
         const collected = {
           stdout: { readFrom: () => ({ text: entry.stdout ?? '', lossy: false }) },
           stderr: { readFrom: () => ({ text: entry.stderr ?? '', lossy: false }) },
@@ -75,6 +76,9 @@ function fakeCtx(script = []) {
           argv: request.argv,
           collected,
           done,
+          stdin: request.stdio?.stdin === 'pipe'
+            ? { end: (text) => { record.stdin = String(text) }, on: () => {} }
+            : undefined,
           stdout: (async function* () {
             for (const chunk of chunks) yield new TextEncoder().encode(chunk)
             await done
@@ -150,10 +154,11 @@ test('provider config defaults keep upstream keys plus exportTimeoutMs', () => {
 // ---------------------------------------------------------------------------
 
 /**
- * Reproduce the exact argv the tool hands to the subprocess, from a config.
+ * Reproduce the exact spawn the tool hands to the subprocess, from a config.
  * Calls runOpencode through the real code path with a fake seam.
+ * Returns `{ argv, stdin }` — the prompt must arrive on stdin, never argv.
  */
-async function toolArgv(configValues, options = {}) {
+async function toolSpawn(configValues, options = {}) {
   const config = fakeConfig({
     opencodePath: 'opencode',
     auto: true,
@@ -172,32 +177,39 @@ async function toolArgv(configValues, options = {}) {
   })
   const ctx = fakeCtx([{ exitCode: 0, stdout: RUN_STREAM }, { exitCode: 0, stdout: EXPORTED }])
   await tool.runOpencode(ctx, config, { prompt: 'hi', cwd: '/tmp', ...options })
-  return ctx.calls[0].argv
+  return ctx.calls[0]
 }
 
 test('tool argv ignores an attach/pure config and emits neither flag', async () => {
-  const argv = await toolArgv({ attach: 'http://127.0.0.1:4096', pure: true })
+  const { argv } = await toolSpawn({ attach: 'http://127.0.0.1:4096', pure: true })
   assert.ok(!argv.includes('--attach'), 'no --attach')
   assert.ok(!argv.includes('--pure'), 'no --pure')
   assert.ok(!argv.includes('http://127.0.0.1:4096'), 'attach value must not leak as a bare arg')
-  assert.deepEqual(argv, ['/fake/bin/opencode', ...buildRunArgv({ model: DEFAULT_MODEL, auto: true, thinking: true, format: 'json' }, 'hi')])
+  assert.deepEqual(argv, ['/fake/bin/opencode', ...buildRunArgv({ model: DEFAULT_MODEL, auto: true, thinking: true, format: 'json' })])
 })
 
 test('tool argv strips attach/pure that a user smuggled into extraArgs', async () => {
-  const argv = await toolArgv({ extraArgs: ['--attach', 'http://x', '--pure', '--log-level', 'warn'] })
+  const { argv } = await toolSpawn({ extraArgs: ['--attach', 'http://x', '--pure', '--log-level', 'warn'] })
   assert.ok(!argv.includes('--attach'))
   assert.ok(!argv.includes('--pure'))
   assert.ok(argv.includes('warn'))
 })
 
 test('tool argv carries thinking/title/files/model overrides', async () => {
-  const argv = await toolArgv({}, { model: 'opencode/other', title: 'T', files: ['/a', '/b'], thinking: false })
+  const { argv } = await toolSpawn({}, { model: 'opencode/other', title: 'T', files: ['/a', '/b'], thinking: false })
   assert.ok(argv.includes('-m') && argv.includes('opencode/other'))
   assert.ok(argv.includes('--title') && argv.includes('T'))
   assert.equal(argv.filter((a) => a === '-f').length, 2)
   assert.ok(!argv.includes('--thinking'))
-  assert.equal(argv.at(-2), '--')
-  assert.equal(argv.at(-1), 'hi')
+  // The prompt is on stdin, so no `--` marker and no message token in argv.
+  assert.ok(!argv.includes('--'))
+  assert.ok(!argv.includes('hi'))
+})
+
+test('tool delivers the prompt on stdin (spawn E2BIG regression)', async () => {
+  const { argv, stdin } = await toolSpawn()
+  assert.equal(stdin, 'hi')
+  assert.ok(!argv.includes('hi'), 'prompt must never be an argv element')
 })
 
 // ---------------------------------------------------------------------------
@@ -421,6 +433,7 @@ test('provider stream maps a timeout to OPENCODE_TIMEOUT', async () => {
         return {
           collected: { stdout: { readFrom: () => ({ text: '' }) }, stderr: { readFrom: () => ({ text: '' }) } },
           done: new Promise((resolve) => setTimeout(() => resolve({ exitCode: 0, signal: null }), 40)),
+          stdin: { on() {}, end() {} },
           stdout: (async function* () {})(),
           terminate() {},
           waitForExit: async () => true,
@@ -508,7 +521,9 @@ test('provider argv: never attach/pure, -m from resolveOpencodeModel, --thinking
   assert.ok(!argv.includes('--pure'))
   assert.ok(argv.includes('--thinking'))
   assert.ok(!argv.includes('-m'), 'default -> config default -> no -m')
-  assert.equal(argv.at(-2), '--')
+  // The flattened transcript rides on stdin; argv ends at the last flag.
+  assert.ok(!argv.includes('--'))
+  assert.ok(ctx.calls[0].stdin.includes('<transcript>'), 'prompt must be written to stdin')
 })
 
 test('resolveOpencodeModel: table hit uses opencodeModel; unknown route passes verbatim', () => {

@@ -6,6 +6,8 @@
  *   - TRUE streaming of reasoning: `reasoning` events stream as
  *     `reasoning-delta` on their OWN block index (host contract
  *     StreamChunk, @deepseek-ai/dsh-llm types.d.ts:429).
+ *   - Advertises each route's reasoning levels and maps the selected one onto
+ *     the wire as `-m provider/model#variant`.
  *   - `usage` comes from `opencode session export <sid>`; when that fails the
  *     chunk is OMITTED rather than filled with a characters/4 guess.
  *   - `exportTimeoutMs` bounds the post-run usage fetch.
@@ -16,7 +18,20 @@
  */
 import Schema from '@deepseek-ai/schemastery'
 
-import { JsonRunParser, buildRunArgv, fetchUsage, forwardedEnv, modelsFromCliOutput, stripUnsupportedFlags } from './shared.js'
+import {
+  DEFAULT_CONTEXT_WINDOW,
+  DEFAULT_MAX_OUTPUT_TOKENS,
+  JsonRunParser,
+  buildRunArgv,
+  fetchUsage,
+  forwardedEnv,
+  modelsFromApiPayload,
+  modelsFromCliOutput,
+  reasoningEffortsFromVariants,
+  sendPrompt,
+  stripUnsupportedFlags,
+  withVariant,
+} from './shared.js'
 
 /** Plugin name; the cordis.patch.yml row uses the `@nolit/dsh-opencode-v2/provider` specifier. */
 export const name = 'dsh-opencode-v2-provider'
@@ -175,6 +190,91 @@ export function sessionTitleText(messages) {
   return 'OpenCode session'
 }
 
+/** Bytes of `opencode serve` banner kept before giving up on a usable port line. */
+const SERVE_BANNER_MAX_BYTES = 65536
+
+/**
+ * Extract the ready facts from the `opencode serve` banner.
+ *
+ * Measured v2.2.0 stdout:
+ *   server listening on http://127.0.0.1:42111
+ *   server password <token>
+ *
+ * @param {string} text - bytes received so far
+ * @returns {{port: number, password: string} | null}
+ */
+export function parseServeBanner(text) {
+  const port = String(text ?? '').match(/server listening on https?:\/\/[^:\s]+:(\d+)/)
+  if (!port) return null
+  const password = String(text).match(/server password (\S+)/)
+  return { port: Number(port[1]), password: password ? password[1] : '' }
+}
+
+/**
+ * Wait for the `opencode serve` banner and capture its port and password.
+ *
+ * `handle.stdout` exists only when the child was spawned with `stdout: 'pipe'`
+ * (`dsh-subprocess` types.d.ts:159); a collect-mode stdout (`{ maxBytes }`)
+ * exposes `collected.stdout` and no stream, so reading it would always return
+ * null. Returns null on timeout, shutdown, or an unusable banner.
+ *
+ * @param {{stdout: AsyncIterable<Uint8Array> | undefined}} handle
+ * @param {number} timeout - readiness budget in milliseconds
+ * @param {AbortSignal} [signal] - caller cancellation
+ * @returns {Promise<{port: number, password: string} | null>}
+ */
+async function waitForServeReady(handle, timeout, signal) {
+  const stdout = handle.stdout
+  if (!stdout) return null
+  const decoder = new TextDecoder()
+  let buffer = ''
+  const timer = AbortSignal.timeout(timeout)
+  const stop = signal ? AbortSignal.any([signal, timer]) : timer
+  const onAbort = () => {
+    try {
+      handle.stdout?.destroy?.()
+    } catch {
+      /* already closed */
+    }
+  }
+  stop.addEventListener('abort', onAbort, { once: true })
+  const aborted = new Promise((resolve) => {
+    if (stop.aborted) resolve({ done: true })
+    else stop.addEventListener('abort', () => resolve({ done: true }), { once: true })
+  })
+  try {
+    const iterator = stdout[Symbol.asyncIterator]()
+    for (;;) {
+      const pending = iterator.next()
+      // A stream destroyed by onAbort would otherwise reject this promise
+      // after the race below has already returned.
+      pending.catch(() => {})
+      const step = await Promise.race([pending, aborted])
+      if (step.done) return stop.aborted ? null : parseServeBanner(buffer)
+      buffer += decoder.decode(step.value, { stream: true })
+      const ready = parseServeBanner(buffer)
+      if (ready) return ready
+      if (buffer.length > SERVE_BANNER_MAX_BYTES) return null
+    }
+  } catch {
+    // A destroyed stream (timeout/abort) rejects the iteration; both mean "not ready".
+    return null
+  } finally {
+    stop.removeEventListener('abort', onAbort)
+  }
+}
+
+/**
+ * GET one JSON document from the local opencode server.
+ * Uses global fetch (Node 18+); basic auth with the printed password.
+ */
+async function fetchJsonOverHttp(url, password, signal) {
+  const headers = password ? { authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}` } : {}
+  const response = await fetch(url, { headers, signal })
+  if (!response.ok) return null
+  return response.json()
+}
+
 /** Discover the model catalog by listing `opencode models`. */
 export async function discoverModels(ctx, opts) {
   const env = forwardedEnv(opts.envNames)
@@ -201,6 +301,66 @@ export async function discoverModels(ctx, opts) {
   } finally {
     handle.terminate()
     await handle.waitForExit(AbortSignal.timeout(6000)).catch(() => false)
+  }
+}
+
+/**
+ * Discover the model catalog **with per-model context limits** via
+ * `opencode serve` -> `GET /api/model`.
+ *
+ * `opencode models` lists ids only, and a route with no context window makes
+ * `compaction-basic` throw ("no context capacity …"). The serve API returns
+ * `limit.context` / `limit.output` per model, which is what the adapter must
+ * publish as `context.contextWindow` and `defaultMaxTokens`.
+ *
+ * Best-effort: returns null on any failure so the caller can fall back.
+ *
+ * @param {*} ctx
+ * @param {{
+ *   opencodePath: string,
+ *   envNames: readonly string[],
+ *   cwd?: string,
+ *   timeoutMs: number,
+ *   stderrMaxBytes?: number,
+ *   signal?: AbortSignal,
+ * }} opts
+ * @returns {Promise<{models: object[]} | null>}
+ */
+export async function discoverModelsViaServe(ctx, opts) {
+  const env = forwardedEnv(opts.envNames)
+  const executable = await ctx.subprocess.resolveExecutable(opts.opencodePath, env, opts.signal)
+  const env_ = { ...env, OPENCODE_SERVER_PASSWORD: env.OPENCODE_SERVER_PASSWORD ?? '' }
+  // `opencode serve` needs a private port; let the OS pick one, learn it from stdout.
+  const timeout = AbortSignal.timeout(opts.timeoutMs)
+  const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout
+  const handle = ctx.subprocess.spawn({
+    argv: [executable, 'serve', '--port', '0'],
+    cwd: opts.cwd,
+    // `stdout` MUST be 'pipe': the ready banner is read from the live stream, and
+    // a collect-mode stdout exposes no stream at all (see waitForServeReady).
+    stdio: {
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: { maxBytes: opts.stderrMaxBytes ?? 65536 },
+    },
+    graceMs: 5000,
+    signal,
+    env: env_,
+  })
+  try {
+    const ready = await waitForServeReady(handle, Math.min(opts.timeoutMs, 20000), opts.signal)
+    if (!ready) return null
+    const payload = await fetchJsonOverHttp(
+      `http://127.0.0.1:${ready.port}/api/model`,
+      ready.password,
+      AbortSignal.timeout(Math.min(opts.timeoutMs, 15000)),
+    )
+    return modelsFromApiPayload(payload)
+  } catch {
+    return null
+  } finally {
+    handle.terminate()
+    await handle.waitForExit?.(AbortSignal.timeout(6000)).catch(() => false)
   }
 }
 
@@ -271,11 +431,45 @@ export class OpencodeLlmAdapter {
 
   imageRequestPricing() {}
 
-  /** List `opencode models` for the real catalog (cached); null on failure/disabled. */
+  /**
+   * List the route catalog once per cache window; null on failure/disabled.
+   *
+   * The host resolves **every** advertised model (`buildModelCatalog` calls
+   * `resolveModelInfo` per route), so concurrent callers must share one probe:
+   * without this single-flight guard a 46-route catalog starts 46 `opencode
+   * serve` children.
+   */
   async discover() {
     if (!this.config.autoDiscoverModels.get()) return null
     const cacheMs = this.config.discoveryCacheMs.get()
     if (this.discovered && Date.now() - this.discovered.at < cacheMs) return this.discovered.result
+    if (!this.discovering) {
+      this.discovering = this.discoverOnce().finally(() => {
+        this.discovering = undefined
+      })
+    }
+    return this.discovering
+  }
+
+  /** One uncached catalog probe: `serve` -> /api/model, then the CLI listing. */
+  async discoverOnce() {
+    // 1) `serve` -> /api/model carries per-model limit.context (needed for compaction)
+    // and the route's reasoning variants.
+    try {
+      const viaServe = await discoverModelsViaServe(this.ctx, {
+        opencodePath: this.config.opencodePath.get(),
+        envNames: this.config.forwardEnv.get(),
+        cwd: this.config.cwd.get() || process.cwd(),
+        timeoutMs: this.config.discoveryTimeoutMs.get(),
+        stderrMaxBytes: this.config.stderrMaxBytes.get(),
+      })
+      if (viaServe?.models?.length) {
+        this.discovered = { at: Date.now(), result: viaServe }
+        return viaServe
+      }
+    } catch {
+      /* fall through to the CLI listing */
+    }
     try {
       const result = await discoverModels(this.ctx, {
         opencodePath: this.config.opencodePath.get(),
@@ -320,8 +514,58 @@ export class OpencodeLlmAdapter {
     }))
   }
 
-  resolveModel(provider, model) {
-    return Promise.resolve({ provider, id: model, name: `OpenCode ${model}`, inputModalities: ['text'] })
+  /**
+   * Resolve one exact route: context capacity, output cap, and the route's
+   * reasoning levels.
+   *
+   * `context.contextWindow` is mandatory in practice: `compaction-basic` throws
+   * `no context capacity for <provider>/<model>` when a resolved model omits it,
+   * which aborts the turn as soon as the session needs compaction (seen on a
+   * fresh section right after selecting an opencode model).
+   *
+   * `reasoning` is what the prompt's thinking selector reads: the host builds
+   * the model catalog from this exact result and offers no levels when it is
+   * absent. Levels are the route's OpenCode variants, selected on the wire with
+   * `-m provider/model#<variant>`; `defaultEffort` stays absent so OpenCode's own
+   * default variant applies until the user picks one.
+   *
+   * Values come from `/api/model` `limit.context` / `limit.output` / `variants`;
+   * a route we have never seen falls back to DEFAULT_CONTEXT_WINDOW rather than
+   * omitting it, and advertises no levels rather than inventing them.
+   */
+  async resolveModel(provider, model, signal) {
+    const found = await this.lookupModel(model, signal)
+    const efforts = found?.variants?.length ? reasoningEffortsFromVariants(found.variants) : []
+    return {
+      provider,
+      id: model,
+      name: found?.name ?? `OpenCode ${model}`,
+      description: 'OpenCode agent, spawned headless per generation',
+      inputModalities: ['text'],
+      context: { contextWindow: found?.contextWindow ?? DEFAULT_CONTEXT_WINDOW },
+      defaultMaxTokens: found?.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+      ...(efforts.length ? { reasoning: { efforts } } : {}),
+    }
+  }
+
+  /**
+   * Find one discovered entry by `provider/model`, `model`, or the `default`
+   * pseudo-route. Returns null when unknown or discovery is disabled.
+   */
+  async lookupModel(model, signal) {
+    if (model === 'default') {
+      const configured = this.config.models.get().find((entry) => entry.id === 'default')
+      const opencodeModel = configured?.opencodeModel || ''
+      if (!opencodeModel) return null
+      return this.lookupModel(opencodeModel, signal)
+    }
+    const discovered = await this.discover()
+    if (!discovered?.models?.length) return null
+    return (
+      discovered.models.find((entry) => entry.id === model) ??
+      discovered.models.find((entry) => entry.id.endsWith(`/${model}`)) ??
+      null
+    )
   }
 
   async prepareCall(provider, model, signal) {
@@ -339,7 +583,7 @@ export class OpencodeLlmAdapter {
     }
 
     const config = this.config
-    let env, executable, handle, timeout, prompt, parser, carry, settled
+    let env, executable, handle, timeout, prompt, parser, carry, settled, promptDelivered
     try {
       env = forwardedEnv(config.forwardEnv.get())
       executable = await this.ctx.subprocess.resolveExecutable(config.opencodePath.get(), env, options.signal)
@@ -348,21 +592,23 @@ export class OpencodeLlmAdapter {
       prompt = buildPrompt(options, config.brief.get())
       const argv = [
         executable,
-        ...buildRunArgv(
-          {
-            model: resolveOpencodeModel(options.model, config.models.get()),
-            auto: config.auto.get(),
-            thinking: config.thinking.get(),
-            format: 'json',
-            extraArgs: stripUnsupportedFlags(config.extraArgs.get()),
-          },
-          prompt,
-        ),
+        ...buildRunArgv({
+          model: withVariant(
+            resolveOpencodeModel(options.model, config.models.get()),
+            options.reasoningEffort,
+          ),
+          auto: config.auto.get(),
+          thinking: config.thinking.get(),
+          format: 'json',
+          extraArgs: stripUnsupportedFlags(config.extraArgs.get()),
+        }),
       ]
       handle = this.ctx.subprocess.spawn({
         argv,
         cwd: config.cwd.get() || process.cwd(),
-        stdio: { stdin: 'ignore', stdout: 'pipe', stderr: { maxBytes: config.stderrMaxBytes.get() } },
+        // The prompt goes to stdin, never argv: a flattened transcript exceeds
+        // the 128 KiB single-argument limit and used to fail with spawn E2BIG.
+        stdio: { stdin: 'pipe', stdout: 'pipe', stderr: { maxBytes: config.stderrMaxBytes.get() } },
         graceMs: 10000,
         signal,
         env,
@@ -375,6 +621,9 @@ export class OpencodeLlmAdapter {
         (value) => ({ ok: true, value }),
         (error) => ({ ok: false, error }),
       )
+      // Deliver the prompt on stdin. A pipe-less fake/host still leaves the
+      // rejection consumed above; the failure is reported at the end.
+      promptDelivered = sendPrompt(handle, prompt)
       parser = new JsonRunParser()
       carry = { buffer: '' }
     } catch (error) {
@@ -452,7 +701,15 @@ export class OpencodeLlmAdapter {
       }
     }
 
-    if (timeout.aborted) {
+    if (!promptDelivered) {
+      yield {
+        type: 'finish',
+        reason: {
+          kind: 'error',
+          failure: { code: 'OPENCODE_SPAWN', message: 'prompt could not be delivered: no stdin pipe' },
+        },
+      }
+    } else if (timeout.aborted) {
       yield {
         type: 'finish',
         reason: {

@@ -13,6 +13,7 @@ import {
   fetchUsage,
   forwardedEnv,
   modelsFromCliOutput,
+  sendPrompt,
   stderrTail,
   stripUnsupportedFlags,
   usageFromSessionExport,
@@ -22,35 +23,40 @@ import {
 // argv
 // ---------------------------------------------------------------------------
 
-test('buildRunArgv emits run + prompt behind -- with no model/agent', () => {
-  assert.deepEqual(buildRunArgv({}, 'do the thing'), ['run', '--', 'do the thing'])
+test('buildRunArgv emits only flags: no prompt, no `--` marker (prompt goes to stdin)', () => {
+  assert.deepEqual(buildRunArgv({}), ['run'])
+})
+
+test('buildRunArgv never puts a prompt-shaped value into argv', () => {
+  const argv = buildRunArgv({ model: 'opencode/x' })
+  assert.ok(!argv.includes('--'))
+  assert.ok(!argv.some((a) => typeof a === 'string' && a.includes(' ')))
+  // Even a flag-looking prompt cannot reach argv: there is no prompt parameter.
+  assert.deepEqual(argv, ['run', '-m', 'opencode/x'])
 })
 
 test('buildRunArgv never emits --attach or --pure, even when the flags are passed', () => {
-  const argv = buildRunArgv({ attach: 'http://127.0.0.1:4096', pure: true, model: 'opencode/x' }, 'hi')
+  const argv = buildRunArgv({ attach: 'http://127.0.0.1:4096', pure: true, model: 'opencode/x' })
   assert.ok(!argv.includes('--attach'))
   assert.ok(!argv.some((a) => a.startsWith('--attach=')))
   assert.ok(!argv.includes('--pure'))
   assert.ok(!argv.includes('http://127.0.0.1:4096'))
-  assert.deepEqual(argv, ['run', '-m', 'opencode/x', '--', 'hi'])
+  assert.deepEqual(argv, ['run', '-m', 'opencode/x'])
 })
 
 test('buildRunArgv carries the v2-only flags in documented order', () => {
-  const argv = buildRunArgv(
-    {
-      model: 'opencode/deepseek-v4.1-flash-free',
-      agent: 'build',
-      auto: true,
-      fork: true,
-      session: 'ses_abc',
-      thinking: true,
-      title: 'a title',
-      files: ['/tmp/a.txt', '/tmp/b.txt'],
-      format: 'json',
-      extraArgs: ['--log-level', 'warn'],
-    },
-    'prompt text',
-  )
+  const argv = buildRunArgv({
+    model: 'opencode/deepseek-v4.1-flash-free',
+    agent: 'build',
+    auto: true,
+    fork: true,
+    session: 'ses_abc',
+    thinking: true,
+    title: 'a title',
+    files: ['/tmp/a.txt', '/tmp/b.txt'],
+    format: 'json',
+    extraArgs: ['--log-level', 'warn'],
+  })
   assert.deepEqual(argv, [
     'run',
     '-m', 'opencode/deepseek-v4.1-flash-free',
@@ -64,32 +70,69 @@ test('buildRunArgv carries the v2-only flags in documented order', () => {
     '-f', '/tmp/b.txt',
     '--format', 'json',
     '--log-level', 'warn',
-    '--', 'prompt text',
   ])
 })
 
 test('buildRunArgv prefers --session over --continue and omits format for "default"', () => {
-  const argv = buildRunArgv({ session: 'ses_1', continueLast: true, format: 'default' }, 'x')
-  assert.deepEqual(argv, ['run', '-s', 'ses_1', '--', 'x'])
-  assert.deepEqual(buildRunArgv({ continueLast: true }, 'x'), ['run', '-c', '--', 'x'])
-})
-
-test('buildRunArgv keeps a prompt that looks like a flag behind --', () => {
-  const argv = buildRunArgv({}, '--attach http://evil')
-  assert.equal(argv.at(-1), '--attach http://evil')
-  assert.equal(argv.at(-2), '--')
+  assert.deepEqual(buildRunArgv({ session: 'ses_1', continueLast: true, format: 'default' }), ['run', '-s', 'ses_1'])
+  assert.deepEqual(buildRunArgv({ continueLast: true }), ['run', '-c'])
 })
 
 test('buildRunArgv itself strips attach/pure from extraArgs (P2-1 regression)', () => {
-  assert.deepEqual(buildRunArgv({ extraArgs: ['--attach', 'http://x', '--pure'] }, 'hi'), ['run', '--', 'hi'])
-  assert.deepEqual(buildRunArgv({ extraArgs: ['--pure=1', '--attach=http://y', '-v'] }, 'hi'), ['run', '-v', '--', 'hi'])
+  assert.deepEqual(buildRunArgv({ extraArgs: ['--attach', 'http://x', '--pure'] }), ['run'])
+  assert.deepEqual(buildRunArgv({ extraArgs: ['--pure=1', '--attach=http://y', '-v'] }), ['run', '-v'])
   // Idempotent: pre-sanitised input gives the same argv as unsanitised input.
   const raw = ['--log-level', 'warn', '--attach', 'http://x', '--pure']
   assert.deepEqual(
-    buildRunArgv({ extraArgs: raw }, 'hi'),
-    buildRunArgv({ extraArgs: stripUnsupportedFlags(raw) }, 'hi'),
+    buildRunArgv({ extraArgs: raw }),
+    buildRunArgv({ extraArgs: stripUnsupportedFlags(raw) }),
   )
 })
+
+// ---------------------------------------------------------------------------
+// stdin prompt delivery (spawn E2BIG regression)
+// ---------------------------------------------------------------------------
+
+test('sendPrompt writes the whole prompt and closes stdin', () => {
+  const written = []
+  let ended = false
+  const handle = {
+    stdin: {
+      on() {},
+      end(text) {
+        ended = true
+        written.push(text)
+      },
+    },
+  }
+  assert.equal(sendPrompt(handle, 'hello'), true)
+  assert.equal(ended, true)
+  assert.deepEqual(written, ['hello'])
+})
+
+test('sendPrompt carries a prompt far beyond the 128 KiB argv limit', () => {
+  const big = 'x'.repeat(300 * 1024)
+  let received = ''
+  const handle = { stdin: { on() {}, end: (text) => { received = text } } }
+  assert.equal(sendPrompt(handle, big), true)
+  assert.equal(received.length, big.length)
+})
+
+test('sendPrompt reports false instead of throwing when stdin is absent or broken', () => {
+  assert.equal(sendPrompt(null, 'x'), false)
+  assert.equal(sendPrompt({}, 'x'), false)
+  assert.equal(sendPrompt({ stdin: {} }, 'x'), false)
+  const broken = {
+    stdin: {
+      on() {},
+      end() {
+        throw new Error('EPIPE')
+      },
+    },
+  }
+  assert.equal(sendPrompt(broken, 'x'), false)
+})
+
 
 test('stripUnsupportedFlags removes stale attach/pure from extraArgs only', () => {
   assert.deepEqual(
@@ -405,10 +448,12 @@ test('fetchUsage spawns nothing when the export JSON lacks tokens', async () => 
 
 test('modelsFromCliOutput parses provider/model lines and skips banners', () => {
   const text = ['Available models:', 'opencode-go/a', '', 'opencode/b#variant', 'warning: x', 'not-a-route'].join('\n')
+  // The CLI lists ids only; every entry now also carries the conservative
+  // context floor so `compaction-basic` never sees a route without a window.
   assert.deepEqual(modelsFromCliOutput(text), {
     models: [
-      { id: 'opencode-go/a', name: 'opencode-go/a' },
-      { id: 'opencode/b#variant', name: 'opencode/b#variant' },
+      { id: 'opencode-go/a', name: 'opencode-go/a', contextWindow: 32768, maxTokens: 8192 },
+      { id: 'opencode/b#variant', name: 'opencode/b#variant', contextWindow: 32768, maxTokens: 8192 },
     ],
   })
   assert.equal(modelsFromCliOutput('nothing here'), null)

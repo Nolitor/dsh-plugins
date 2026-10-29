@@ -7,6 +7,8 @@
  *   - v2 rejects `--attach` and `--pure` ("Unrecognized flag", exit 1, usage on
  *     stdout)       -> never emitted.
  *   - v2 adds `--thinking`, `--title`, `-f/--file` -> exposed here.
+ *   - v2 selects a reasoning level through the model's `variants`:
+ *     `-m provider/model#variant`. `/api/model` lists them per route.
  *   - v2 emits `step_start` / `reasoning` / `text` on a tool-free run, and no
  *     `step_finish` there. A run that USES a tool emits `step_finish` with a
  *     per-step `tokens` object — never a whole-run total.
@@ -56,11 +58,38 @@ export function stripUnsupportedFlags(args) {
 }
 
 /**
+ * Compose the `-m` value for one route at one reasoning level.
+ *
+ * OpenCode selects a model variant with a `#` suffix (`run --help`:
+ * `Model to use in the format provider/model#variant`); a variant carries the
+ * route's `reasoningEffort` or `thinkingConfig`. An omitted level leaves the
+ * route untouched, so OpenCode's own default variant stays in force.
+ *
+ * @param {string} route - `provider/model`, optionally already carrying a variant
+ * @param {string} [effort] - variant id from the route's advertised variants
+ * @returns {string} the route to pass to `-m`
+ */
+export function withVariant(route, effort) {
+  if (!route || !effort) return route
+  const hash = route.indexOf('#')
+  return `${hash === -1 ? route : route.slice(0, hash)}#${effort}`
+}
+
+/**
  * Assemble `opencode run` argv (without the executable itself).
- * The prompt is always last, behind `--`, so it can never parse as a flag.
+ *
+ * The prompt is **not** part of argv: it travels on the child's stdin. A
+ * single argv string is capped at 128 KiB on Linux (`MAX_ARG_STRLEN`, 32
+ * pages) — measured: a 140 KB argument makes `spawn` fail with `E2BIG` while
+ * 120 KB succeeds. A flattened DSH transcript routinely exceeds that, and
+ * v0.1.2 passed it as one `-- <prompt>` argument, so every long session failed
+ * with `OPENCODE_SPAWN` / `spawn E2BIG` before the CLI ever started. Measured
+ * v2.2.0: `opencode run` reads the message from stdin when no positional
+ * message is given (`printf 'say OK' | opencode run -m …` answers "OK"), and a
+ * 200 KB piped prompt is accepted. Use {@link sendPrompt} to deliver it.
  *
  * Flag order mirrors upstream (model, agent, auto, fork, session, then the
- * v2-only additions, then format, extraArgs, prompt).
+ * v2-only additions, then format, extraArgs).
  *
  * `attach` and `pure` are deliberately absent: opencode v2.2.0 does not know
  * them and exits 1 with a usage dump on stdout. Callers may keep passing the
@@ -79,10 +108,9 @@ export function stripUnsupportedFlags(args) {
  *   format?: string,
  *   extraArgs?: readonly string[],
  * }} flags
- * @param {string} prompt
  * @returns {string[]}
  */
-export function buildRunArgv(flags, prompt) {
+export function buildRunArgv(flags) {
   const argv = ['run']
   if (flags.model) argv.push('-m', flags.model)
   if (flags.agent) argv.push('--agent', flags.agent)
@@ -97,8 +125,35 @@ export function buildRunArgv(flags, prompt) {
   // Strip here as well so the invariant is local to the builder: callers are
   // not required to pre-sanitise, and a stale config value can never reach argv.
   if (flags.extraArgs) argv.push(...stripUnsupportedFlags(flags.extraArgs))
-  argv.push('--', prompt)
   return argv
+}
+
+/**
+ * Deliver the run prompt to a child spawned with `stdin: 'pipe'`.
+ *
+ * `opencode run` takes the message from stdin when it has no positional
+ * message argument, so nothing prompt-shaped is ever concatenated into argv
+ * (see {@link buildRunArgv} for the E2BIG limit that motivated this). The
+ * write is fire-and-forget: the caller observes the outcome through
+ * `handle.done`, and a child that exits before consuming the prompt tears the
+ * pipe down — that is an exit fact, not a process-killing exception.
+ *
+ * @param {{stdin?: NodeJS.WritableStream | undefined} | null | undefined} handle
+ * @param {string} prompt
+ * @returns {boolean} true when the prompt was handed to a live stdin
+ */
+export function sendPrompt(handle, prompt) {
+  const stdin = handle?.stdin
+  if (!stdin || typeof stdin.end !== 'function') return false
+  try {
+    // EPIPE on a child that exits early must not surface as an unhandled
+    // 'error' event on the host process.
+    stdin.on?.('error', () => {})
+    stdin.end(String(prompt ?? ''))
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -269,13 +324,127 @@ function errorMessage(event) {
   return 'unknown opencode error'
 }
 
+
+/**
+ * Fallback context window when opencode discloses nothing for a route.
+ *
+ * `compaction-basic` THROWS when a resolved model has no `context`:
+ *   "no context capacity for <provider>/<model>; configure contextWindow on
+ *    that adapter model"
+ * so a missing value breaks compaction for every opencode model. This floor is
+ * deliberately conservative (smallest common modern window) — understating the
+ * window only compacts earlier; omitting it breaks the session.
+ */
+export const DEFAULT_CONTEXT_WINDOW = 32768
+
+/** Default output cap used when opencode discloses no `limit.output`. */
+export const DEFAULT_MAX_OUTPUT_TOKENS = 8192
+
+/**
+ * Variant display names and ascending reasoning order.
+ *
+ * OpenCode names the levels itself; ids are an external spec and stay fixed, so
+ * only the labels live here. Ids outside this table keep their raw id and are
+ * appended in payload order rather than dropped.
+ */
+const VARIANT_ORDER = Object.freeze(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'])
+
+const VARIANT_NAMES = Object.freeze({
+  none: 'None',
+  minimal: 'Minimal',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'Extra high',
+  max: 'Max',
+  thinking: 'Thinking',
+})
+
+/**
+ * Map a route's `/api/model` variants onto the host reasoning-effort metadata
+ * (`LlmModelReasoningInfo.efforts`), least to greatest selectable effort.
+ *
+ * The host rejects empty or duplicate effort lists, so a route with no variants
+ * must advertise none at all rather than an empty one.
+ *
+ * @param {readonly string[]} variants - variant ids in payload order
+ * @returns {{id: string, name: string}[]} efforts for `resolveModel().reasoning`
+ */
+export function reasoningEffortsFromVariants(variants) {
+  const ids = [...new Set((variants ?? []).filter((id) => typeof id === 'string' && id.length > 0))]
+  const rank = (id) => {
+    const at = VARIANT_ORDER.indexOf(id)
+    return at === -1 ? VARIANT_ORDER.length : at
+  }
+  return ids
+    .sort((a, b) => rank(a) - rank(b))
+    .map((id) => ({ id, name: VARIANT_NAMES[id] ?? id }))
+}
+
+/**
+ * Map one `/api/model` entry from `opencode serve` onto the host catalog shape.
+ *
+ * Measured v2.2.0 payload: { id, modelID, providerID, name, limit:
+ * { context, output, input? }, variants: [{ id, settings }], capabilities, cost,
+ * ... }. `limit.context` is the combined request+response window, which is
+ * exactly `LlmModelContext.contextWindow`. `variants` are the route's reasoning
+ * levels, selected with `-m provider/model#<variant>`.
+ *
+ * @param {unknown} entry
+ * @returns {{id: string, name: string, contextWindow: number, maxTokens: number,
+ *   variants?: string[]} | null}
+ */
+export function modelFromApiEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null
+  const providerID = typeof entry.providerID === 'string' ? entry.providerID : ''
+  const modelID = typeof entry.id === 'string' ? entry.id : typeof entry.modelID === 'string' ? entry.modelID : ''
+  if (!providerID || !modelID) return null
+  const limit = entry.limit && typeof entry.limit === 'object' ? entry.limit : {}
+  const positive = (value) => {
+    const n = Number(value)
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : undefined
+  }
+  const variants = Array.isArray(entry.variants)
+    ? [...new Set(entry.variants.map((variant) => variant?.id).filter((id) => typeof id === 'string' && id.length > 0))]
+    : []
+  return {
+    id: `${providerID}/${modelID}`,
+    name: typeof entry.name === 'string' && entry.name ? entry.name : `${providerID}/${modelID}`,
+    contextWindow: positive(limit.context) ?? DEFAULT_CONTEXT_WINDOW,
+    maxTokens: positive(limit.output) ?? DEFAULT_MAX_OUTPUT_TOKENS,
+    ...(variants.length ? { variants } : {}),
+  }
+}
+
+/**
+ * Parse the `/api/model` response body: `{ location, data: [entry…] }`.
+ * Returns null when the payload is not the expected shape or is empty.
+ *
+ * @param {unknown} payload
+ * @returns {{models: object[]} | null}
+ */
+export function modelsFromApiPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null
+  const data = Array.isArray(payload.data) ? payload.data : Array.isArray(payload) ? payload : null
+  if (!data) return null
+  const models = []
+  for (const entry of data) {
+    const model = modelFromApiEntry(entry)
+    if (model) models.push(model)
+  }
+  return models.length ? { models } : null
+}
+
 /** Parse `opencode models`: one `provider/model` id per line; banners skipped. */
 export function modelsFromCliOutput(text) {
   const models = []
   for (const raw of String(text ?? '').split('\n')) {
     const id = raw.trim()
     if (!/^[^\s/]+\/\S+$/.test(id)) continue
-    models.push({ id, name: id })
+    // The CLI lists ids only: attach the conservative floor so compaction works.
+    // It also discloses no variants, so this fallback advertises no reasoning
+    // levels — only the `serve` discovery path can.
+    models.push({ id, name: id, contextWindow: DEFAULT_CONTEXT_WINDOW, maxTokens: DEFAULT_MAX_OUTPUT_TOKENS })
   }
   return models.length ? { models } : null
 }

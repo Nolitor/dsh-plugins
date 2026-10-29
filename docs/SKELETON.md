@@ -48,14 +48,18 @@
 
 ## measurement
 
+- **1.0** · measured · 2026-10-29 · [DSH-PARENT-CAPABILITY-MEASUREMENT.md](../DSH-PARENT-CAPABILITY-MEASUREMENT.md)
+  Measured whether usage, a cluster host controller, and cache nesting can be added as one DSH plugin, and whether the DeepSeek API supplies them; verified by isolated mount.
 - **1.0** · measured · 2026-10-29 · [FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md](../FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md)
   Change-requests/worktrees bundle measured against Sidebar Manager and UTM policy; overlap and risk.
 - **1.0** · measured · 2026-10-29 · [FORGE-VS-SIDEBAR-UTM-RUNTIME-MEASUREMENT.md](../FORGE-VS-SIDEBAR-UTM-RUNTIME-MEASUREMENT.md)
   Isolated-DSH_HOME runtime measurement of Forge worktrees x Sidebar Manager v0.1.1 x UTM policy.
 - **1.0** · measured · 2026-10-29 · [OPENCODE-ANTIGRAVITY-FEASIBILITY.md](../OPENCODE-ANTIGRAVITY-FEASIBILITY.md)
   Feasibility of OpenCode and Antigravity CLI as DSH subagents/models: auth, routes, sandbox limits.
-- **1.0** · measured · 2026-10-29 · [OPENCODE-V2-SURFACE-MEASUREMENT.md](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
-  Measured opencode v2.2.0 CLI surface: event schema, session-export tokens, removed flags; corrects the 0919 boot card.
+- **1.0** · measured · 2026-10-29 · [OPENCODE-V2-HTTP-API-MEASUREMENT.md](../OPENCODE-V2-HTTP-API-MEASUREMENT.md)
+  Measured the OpenCode v2.2.0 HTTP server (130 endpoints, SSE event stream) as a DSH-controlled transport instead of per-turn `opencode run` subprocesses; auth, sessions, streaming, usage/cache, permissions, variants, and lifecycle.
+- **1.1** · measured · 2026-10-29 · [OPENCODE-V2-SURFACE-MEASUREMENT.md](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
+  Measured opencode v2.2.0 CLI surface: event schema, session-export tokens, removed flags, and per-model reasoning variants; corrects the 0919 boot card.
 
 ## policy
 
@@ -76,19 +80,19 @@
 - **1.0** · reference · 2026-10-29 · [verification/README.md](../verification/README.md)
   Index of machine-readable verification evidence files and what each one proves.
 
-## boot (newest 5 of 8)
+## boot (newest 5 of 11)
 
+- **active** · 2026-10-29T1213+0900.md · [card](../bootcards/2026-10-29T1213+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-10-29T1213+0900, including the off-peak isolated A/B plan for the OpenCode v2 HTTP provider (real workloads). Older cards are historical.
+- **active** · 2026-10-29T1132+0900.md · [card](../bootcards/2026-10-29T1132+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-10-29T1132+0900. Older cards are historical.
+- **active** · 2026-10-29T1027+0900.md · [card](../bootcards/2026-10-29T1027+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-10-29T1027+0900. Older cards are historical.
 - **active** · 2026-10-29T1007+0900.md · [card](../bootcards/2026-10-29T1007+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T1007+0900. Older cards are historical.
 - **historical** · 2026-10-29T0959+0900.md · [card](../bootcards/2026-10-29T0959+0900.md)
   Boot card: policy hardening (single writer, 4-step replacement), @quonaro residue removed.
-- **historical** · 2026-10-29T0946+0900.md · [card](../bootcards/2026-10-29T0946+0900.md)
-  Boot card: dsh-opencode-v2 built, verified 18/18, packaged.
-- **historical** · 2026-10-29T0919+0900.md · [card](../bootcards/2026-10-29T0919+0900.md)
-  Boot card: handoff of the dsh-opencode-v2 task with measured v2.2.0 facts.
-- **historical** · 2026-10-29T0439+0900.md · [card](../bootcards/2026-10-29T0439+0900.md)
-  Boot card: sidebar drift gate and release baseline.
 
 ---
 
-30 indexed (8 boot cards), 0 missing header, 30 total.
+35 indexed (11 boot cards), 0 missing header, 35 total.

@@ -88,8 +88,12 @@
         opencodeModel: ''
         name: 'OpenCode (config default)'
       localSessionTitles: true
-      # List `opencode models` for the agent's real model catalog;
-      # falls back to the static `models` table on failure.
+      # Discover the model catalog WITH per-model context limits:
+      # `opencode serve` -> GET /api/model returns limit.context / limit.output,
+      # which become context.contextWindow / defaultMaxTokens on resolveModel().
+      # Compaction REQUIRES a context window (without it: "no context capacity
+      # for opencode-agent/<model>"), so this must stay enabled.
+      # Falls back to `opencode models` ids + a conservative 32768 floor.
       autoDiscoverModels: true
       discoveryTimeoutMs: 60000
       # Cache a successful probe this long before re-probing.

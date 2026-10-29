@@ -1,4 +1,12 @@
 # @nolit/dsh-opencode-v2
+<!-- skeleton:
+version: 1.4
+kind: readme
+status: active
+updated: 2026-10-29
+summary: OpenCode v2.2.0 managed plugin: tool + /opencode + opencode-agent route, real token usage, per-model contextWindow, per-route reasoning levels (variants), stdin prompt delivery that survives the 128 KiB argv limit, and an HTTP provider that drives the OpenCode v2 server API with persistent sessions.
+-->
+
 
 OpenCode inside DeepSeek Harness, aligned with the **OpenCode v2.2.0** CLI surface.
 
@@ -18,6 +26,8 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 | `run --format json` emits no whole-run `step_finish`: a tool-free run emits only `step_start`, `reasoning`, `text`; a tool-using run emits a **per-step** `step_finish` | `run` never carries a whole-run usage total; char/4 heuristics are never emitted, and `session export` is the only authoritative source |
 | `part.text` is a **cumulative snapshot** per part id, not a delta | the parser diffs snapshots into deltas |
 | `--thinking` is required for `reasoning` events | streaming reasoning is opt-in via `thinking: true` (default on) |
+| a route's reasoning levels are its **model variants**: `run --help` documents `-m provider/model#variant`, and `GET /api/model` lists `variants` per model (35 of 45 models on this account) | `resolveModel()` advertises them as `reasoning.efforts` and the selected level becomes `-m provider/model#<variant>` |
+| an unknown variant fails the run: `provider.no-route` "Variant unavailable for <provider>/<model>: <id>" | ids are passed verbatim from discovery; nothing is invented |
 | `reasoning` events exist with a `…_reasoning-N` part id | streamed as `reasoning-delta` on their **own block index** (text stays 0) |
 | `--attach` and `--pure` were **removed** (exit 1, "Unrecognized flag", usage on stdout) | never emitted; stripped from `extraArgs`; old config keys accepted but inert |
 | `--title` and `-f/--file` exist | exposed as tool params `title` / `files` |
@@ -56,7 +66,9 @@ Parameters: `prompt` (required), `cwd`, `model`, `agent`, `session`,
 **`lib/provider.js` → `@nolit/dsh-opencode-v2/provider`** (row id `dsh-opencode-v2-provider`)
 - the **`opencode-agent` LLM route** — flattens the transcript into one run and
   **true-streams** it: `text-delta` on block index `0`, `reasoning-delta` on
-  block index `1`, `block-end` for each, then `usage`, then `finish`.
+  block index `1`, `block-end` for each, then `usage`, then `finish`;
+- per-route **reasoning levels** — advertised from `variants` and applied as
+  `-m provider/model#<variant>` (see §2b).
 
 Errors never crash the host: a timeout finishes with
 `{kind:'error', failure:{code:'OPENCODE_TIMEOUT'}}`, a non-zero exit with
@@ -68,6 +80,101 @@ Errors never crash the host: a timeout finishes with
 > (`ok`, `exitCode`, `signal`, `timedOut`, `truncated`, `sessionId`,
 > `inputTokens`, `outputTokens`, `stdout`, `stderr`). Extra detail such as the
 > `usage:` line is rendered as text only.
+
+## 2a. Context window (required for compaction) — v0.1.1
+
+DSH `compaction-basic` **throws** when a resolved model has no context capacity:
+
+```
+compaction-basic: no context capacity for opencode-agent/<model>;
+configure contextWindow on that adapter model
+```
+
+That is not a model-size problem — it is a missing metadata field. This adapter therefore
+**always** publishes a positive `context.contextWindow` (and `defaultMaxTokens`) from
+`resolveModel()`:
+
+| Source | Used for |
+|---|---|
+| `opencode serve` -> `GET /api/model` -> `limit.context` / `limit.output` | real per-model values |
+| `opencode models` (ids only) | ids + conservative `32768` / `8192` floor |
+| unknown route | conservative `32768` / `8192` floor |
+
+Measured v2.2.0 values: `opencode-go/deepseek-v4.1-flash` = 1,000,000 tokens,
+`opencode/deepseek-v4.1-flash-free` = 200,000, `opencode/beam-free` = 1,048,576.
+
+Discovery starts a short-lived `opencode serve` (1-3 s) and is cached for
+`discoveryCacheMs` (default 5 min). Keep `autoDiscoverModels: true`; even when disabled the
+adapter publishes a safe floor rather than a broken session.
+
+## 2b. Reasoning levels (thinking selector) — v0.1.2
+
+The prompt's model selector shows a thinking-level choice only for a model whose **exact**
+resolution returns `reasoning` (`buildModelCatalog` -> `llm.resolveModelInfo()`; absent means
+"provider default" only). Before v0.1.2 the `opencode-agent` route returned none, so OpenCode
+models had no level choice and an explicit level was rejected with `UNSUPPORTED_REASONING_EFFORT`.
+
+| Host contract | Source in OpenCode v2.2.0 |
+|---|---|
+| `reasoning.efforts[].id` / `.name` | `GET /api/model` -> `variants[].id`, ordered none -> minimal -> low -> medium -> high -> xhigh -> max, then any unknown id |
+| wire selection (`GenerateOptions.reasoningEffort`) | `-m provider/model#<variant>` (the variant sets `reasoningEffort` or `thinkingConfig` provider-side) |
+| `reasoning.defaultEffort` | **not set**: omitting a level preserves OpenCode's own default variant |
+
+Measured levels on this account: `low` (29 models), `high` (30), `max` (22), `medium` (20),
+`xhigh` (17), `none` (13), `minimal` (4), `thinking` (1). The host catalog advertises 46 routes
+(45 models plus the `default` pseudo-route) and 35 of them carry levels. A route with no variants
+advertises none, so the host rejects a level instead of silently running at a different one.
+
+The catalog resolves every route at once, so discovery is **single-flight**: one `opencode serve`
+per cache window, not one per route (measured: 0 extra probes for a 46-route catalog build).
+
+The ready banner is read from a **piped** stdout: `dsh-subprocess` exposes `handle.stdout` only for
+`stdout: 'pipe'`, so a collect-mode (`{ maxBytes }`) spawn yields no stream and silently degrades
+every route to the 32768 floor with no levels. That is what v0.1.1 did; v0.1.2 spawns serve piped
+and bounds the readiness wait.
+
+The `opencode models` fallback discloses ids only, so it advertises no levels; only the
+`serve` discovery path can. `--thinking` stays independent: it controls whether OpenCode
+*streams* reasoning blocks, not how much reasoning the model does.
+
+## 2c. Prompt delivery on stdin — v0.1.3
+
+The flattened transcript is **not** an argv element. Linux caps one argument string at 128 KiB
+(`MAX_ARG_STRLEN`, 32 pages); measured: `spawn` with a 140 KB argument fails `E2BIG`, 120 KB
+succeeds. A DSH transcript routinely exceeds that, and v0.1.2 passed the prompt as one
+`-- <prompt>` argument, so every long session died with `OPENCODE_SPAWN` / `spawn E2BIG` before
+the CLI started. The tool path (`opencode` tool) had the same defect.
+
+Measured v2.2.0 surface: `opencode run` reads the message from stdin when no positional message
+is given (`printf 'say OK' | opencode run -m opencode/beam-free` answers `OK`), and accepts a
+200 KB piped prompt. v0.1.3 therefore spawns with `stdin: 'pipe'`, drops the prompt from argv,
+and closes stdin through `sendPrompt()`; argv now ends at the last flag.
+
+Proof through the real adapter and the real CLI: a 189,051-byte prompt delivered on stdin
+produced an 88-character argv and a `finish{kind:'stop'}` with `text:"PONG"`.
+
+## 2d. HTTP provider (`opencode-http-agent`) — v0.2.0
+
+A second route, same package, no CLI child per generation. It drives the measured OpenCode
+v2.2.0 HTTP API instead:
+
+| Concern | CLI route (`opencode-agent`) | HTTP route (`opencode-http-agent`) |
+|---|---|---|
+| Transport | `opencode run` child per call, prompt on stdin | `POST /api/session/{id}/prompt` + `GET /api/event` SSE |
+| History | full transcript re-sent every call | persistent OpenCode session; only new user text is sent |
+| Usage | `opencode session export` second child | inline `session.step.ended.tokens` (input/output/reasoning/cache) |
+| Interrupt | child signal | `POST /api/session/{id}/interrupt` (measured 1.5 s abort) |
+| Permissions | OpenCode's own policy | `permission.asked` → `reply {once|always|reject}` |
+| Server | one process per generation | one `serve` per adapter (attach to the CLI daemon or spawn `--port 0`) |
+
+Server resolution order: explicit `baseUrl` → the CLI daemon's
+`~/.local/state/opencode/service.json` (`url`/`pid`/`password`, verified with `/api/info`) →
+`opencode serve --port 0` owned by the adapter. Auth is Basic `opencode:<password>`.
+
+The route publishes `contextWindow`/`defaultMaxTokens`/`reasoning.efforts` from `GET /api/model`
+(`limit.context`, `limit.output`, `variants[]`). One DSH `sessionId` maps to one OpenCode session;
+a reasoning effort is applied as the session model `variant`. `purpose: 'session-title'` stays
+local, and an ephemeral call (no `sessionId`) deletes its OpenCode session afterwards.
 
 ## 3. Bundle layer
 

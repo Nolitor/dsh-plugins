@@ -1,10 +1,10 @@
 # OpenCode v2.2.0 CLI surface — measured 2026-10-29 (post-bootcard 0919)
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: measurement
 status: measured
 updated: 2026-10-29
-summary: Measured opencode v2.2.0 CLI surface: event schema, session-export tokens, removed flags; corrects the 0919 boot card.
+summary: Measured opencode v2.2.0 CLI surface: event schema, session-export tokens, removed flags, and per-model reasoning variants; corrects the 0919 boot card.
 -->
 
 
@@ -88,3 +88,56 @@ Session continuation with a **different** `-m` on an existing `-s` session works
 4. Fetch usage from `session export <sid>` **after** the run; fall back to the existing
    char-heuristic only when the export fails.
 5. Timeout/permission: `--auto` mapping unchanged; `title` should be passed for `/opencode`.
+
+## 5. Reasoning levels — model `variants` (measured 2026-10-29T1027+0900)
+
+The `-m provider/model#variant` form in §3 is the **reasoning-level selector**, and the level list
+is discoverable per route. Measured with `opencode serve --port 0` -> `GET /api/model`:
+
+| Fact | Value |
+|---|---|
+| models | 45 |
+| models with non-empty `variants` | **35** |
+| variant ids | `high` 30, `low` 29, `max` 22, `medium` 20, `xhigh` 17, `none` 13, `minimal` 4, `thinking` 1 |
+| entry shape | `{ id: "low", settings: { reasoningEffort: "low" } }`; Gemini-style routes use `settings.thinkingConfig.thinkingLevel`; `minimax-m3` uses `settings.thinking` |
+| example | `opencode-go/deepseek-v4.1-flash` → `low`, `high`, `max`; `opencode/beam-free` → `low`,`medium`,`high`,`xhigh`,`max` |
+| routes without variants | `opencode/big-pickle`, `opencode-go/longcat-2.0`, `opencode-go/mimo-v2.6-*`, `opencode-go/kimi-k2.7-code`, … (10) |
+
+Behaviour:
+
+* `-m opencode/deepseek-v4.1-flash-free#low` and `#high` both exit 0; same prompt, reasoning text
+  46 vs 4 chars — the variant reaches the provider, it is not cosmetic.
+* An unknown variant fails the run without a model call:
+  `{"type":"error","error":{"type":"provider.no-route","message":"Variant unavailable for opencode/deepseek-v4.1-flash-free: bogus"}}`
+* `--thinking` is orthogonal: it makes OpenCode stream `reasoning` blocks; the variant decides how
+  much reasoning the model does.
+
+Host mapping (`@deepseek-ai/dsh-llm` `LlmModelReasoningInfo`):
+
+| Host field | OpenCode source |
+|---|---|
+| `reasoning.efforts[].id` / `.name` | variant id + display name (canonical order none→minimal→low→medium→high→xhigh→max, unknown ids appended) |
+| `GenerateOptions.reasoningEffort` | `-m provider/model#<variant>` |
+| `reasoning.defaultEffort` | not set — OpenCode's own default variant applies |
+
+`opencode models` (the CLI fallback) lists ids only and therefore yields **no** levels; only the
+`serve` discovery path can. Implemented and verified in `dsh-opencode-v2@0.1.2` (§12 of its
+`VERIFICATION.md`).
+
+### 5.1 Reading the banner requires a piped stdout
+
+`dsh-subprocess` exposes a raw `Readable` only when the child is spawned with `stdout: 'pipe'`;
+a collect-mode stdout (`{ maxBytes }`) exposes `collected.stdout` and `handle.stdout === undefined`
+(`dsh-subprocess/lib/types/types.d.ts:159`). The v0.1.1 discovery probe spawned serve in collect
+mode and read `handle.stdout`, so it returned null before the HTTP call: every route silently used
+the conservative 32768-token floor and had no variants. Measured through a real profile mount,
+before → after the v0.1.2 fix:
+
+| Route | Before | After |
+|---|---|---|
+| `opencode-go/deepseek-v4.1-flash` | `ctx=32768`, no levels | `ctx=1000000`, `low\|high\|max` |
+| `opencode-go/kimi-k3.1-pro` | `ctx=32768`, no levels | `ctx=1048576`, `low\|high\|max` |
+| routes with levels | 0 / 46 | 35 / 46 |
+
+The floor kept `compaction-basic` from throwing, so the degradation was invisible without
+measuring the catalog itself.
