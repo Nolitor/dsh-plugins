@@ -1,4 +1,8 @@
 {
+  "meta": {
+    "title": "Antigravity subagent",
+    "description": "CLI worker tool using the official agy CLI for simple tasks with gemini-3.8-flash-low."
+  },
   "tool.agy_worker.name": "Antigravity Worker",
   "tool.agy_worker.description": "Run a one-shot Antigravity (agy) CLI worker for simple isolated tasks using gemini-3.8-flash-low."
 }
