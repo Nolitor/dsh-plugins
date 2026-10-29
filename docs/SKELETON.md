@@ -50,6 +50,8 @@
 
 - **1.3** · measured · 2026-10-30 · [OPENCODE-V2-SURFACE-MEASUREMENT.md](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
   Measured opencode v2.2.0 CLI surface: event schema, session-export tokens, removed flags, and per-model reasoning variants (re-measured 2026-10-30, preflight rules); corrects the 0919 boot card.
+- **1.1** · measured · 2026-10-30 · [TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md](../TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md)
+  Measured what the installed DSH TokenEconomizer bridge actually saved (nothing), why each lever is dark, the tool-event routing check that withdrew the earlier defect claim, and the tiered-memory and usage-ledger fixes built from it.
 - **1.0** · measured · 2026-10-29 · [DSH-PARENT-CAPABILITY-MEASUREMENT.md](../DSH-PARENT-CAPABILITY-MEASUREMENT.md)
   Measured whether usage, a cluster host controller, and cache nesting can be added as one DSH plugin, and whether the DeepSeek API supplies them; verified by isolated mount.
 - **1.0** · measured · 2026-10-29 · [FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md](../FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md)
@@ -98,6 +100,11 @@
 - **active** · 2026-10-29T1213+0900.md · [card](../bootcards/2026-10-29T1213+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T1213+0900, including the off-peak isolated A/B plan for the OpenCode v2 HTTP provider (real workloads). Older cards are historical.
 
+## MISSING HEADER (2) — fix before release
+
+- [CLI-WORKER-STANDARD.md](../CLI-WORKER-STANDARD.md) — missing: entire skeleton block
+- [docs/cli-worker-standard.md](cli-worker-standard.md) — missing: entire skeleton block
+
 ---
 
-40 indexed (15 boot cards), 0 missing header, 40 total.
+41 indexed (15 boot cards), 2 missing header, 43 total.
