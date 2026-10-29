@@ -3,10 +3,10 @@
  *
  * Antigravity (agy) CLI worker tool plugin for DeepSeek Harness.
  * Provides a dedicated CLI worker that uses the official agy CLI
- * (gemini-3.8-flash with low thinking by default) for simple tasks.
+ * (gemini-3.8-flash with low thinking) by default.
  */
-import * as Schemas from '@deepseek-ai/schemastery'
-const Schema = Schemas.default || Schemas.Schema || Schemas
+import Schemastery from '@deepseek-ai/schemastery'
+const Schema = Schemastery.default ?? Schemastery.Schema ?? Schemastery
 import { runAgyWorker } from './worker.js'
 import { DEFAULT_MODEL, DEFAULT_EFFORT } from './backends.js'
 
