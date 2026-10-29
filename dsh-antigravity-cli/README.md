@@ -1,4 +1,4 @@
-# @nolit/dsh-antigravity-cli-worker
+# @nolit/dsh-antigravity-cli
 
 Antigravity (`agy`) CLI worker tool for DeepSeek Harness — the "Antigravity subagent" plugin.
 
@@ -26,7 +26,7 @@ Result keys: `ok`, `exitCode`, `signal`, `timedOut`, `truncated`, `summary`, `co
 ```yaml
 - insert:
     - id: dsh-antigravity-cli-worker
-      name: '@nolit/dsh-antigravity-cli-worker'
+      name: '@nolit/dsh-antigravity-cli'
       config:
         agyPath: agy
         model: gemini-3.8-flash-low
@@ -67,7 +67,7 @@ cd ~/.dsh/profiles/<profile>
 pnpm add link:/absolute/path/to/dsh-antigravity-cli-worker
 ```
 
-then add `@nolit/dsh-antigravity-cli-worker` to `dsh.profile.bundles` in that profile's `package.json`.
+then add `@nolit/dsh-antigravity-cli` to `dsh.profile.bundles` in that profile's `package.json`.
 
 Using `link:` (not `file:`) keeps the profile entry a symlink, so the plugin's own `node_modules` — where `@deepseek-ai/schemastery` and friends resolve — is used exactly as for the other `@nolit` plugins.
 

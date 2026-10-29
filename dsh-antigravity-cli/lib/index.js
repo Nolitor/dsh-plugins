@@ -1,5 +1,5 @@
 /**
- * `@nolit/dsh-antigravity-cli-worker`
+ * `@nolit/dsh-antigravity-cli`
  *
  * Two surfaces over the official `agy` CLI:
  *   - `/agy <task>` — the user-run command (primary surface).
@@ -15,7 +15,7 @@ import { readSelection, writeSelection } from './selection.js'
 import { listAgyModels, runAgyWorker } from './worker.js'
 
 /** Host plugin name; must match package.json `name` and the bundle row id. */
-export const name = '@nolit/dsh-antigravity-cli-worker'
+export const name = '@nolit/dsh-antigravity-cli'
 
 /** Services required before load: the tool registry and a subprocess provider. */
 export const inject = ['tools', 'subprocess']

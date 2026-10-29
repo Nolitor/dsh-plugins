@@ -1,7 +1,7 @@
 {
   "meta": {
-    "title": "Antigravity 서브에이전트",
-    "description": "공식 agy CLI를 사용하여 gemini-3.8-flash-low로 간단한 작업을 처리하는 CLI 워커 도구입니다."
+    "title": "Antigravity Agent",
+    "description": "채팅에서 Antigravity(agy) CLI를 실행합니다: /agy 명령과 agy_worker 도구."
   },
   "tool.agy_worker.name": "안티그래비티 워커",
   "tool.agy_worker.description": "gemini-3.8-flash-low를 사용하여 간단한 작업을 위한 원샷 Antigravity(agy) CLI 워커를 실행합니다."

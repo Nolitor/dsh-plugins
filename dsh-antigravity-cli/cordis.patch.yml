@@ -1,10 +1,10 @@
-# Bundle config layer for @nolit/dsh-antigravity-cli-worker — Antigravity CLI worker tool.
+# Bundle config layer for @nolit/dsh-antigravity-cli — Antigravity CLI worker tool.
 #
 # Registers one tool, `agy_worker`, that runs a single isolated `agy` call per
 # invocation. The row id must match the package name's plugin id.
 - insert:
-    - id: dsh-antigravity-cli-worker
-      name: '@nolit/dsh-antigravity-cli-worker'
+    - id: dsh-antigravity-cli
+      name: '@nolit/dsh-antigravity-cli'
       config:
         # Path or PATH-resolved name of the agy executable.
         agyPath: agy

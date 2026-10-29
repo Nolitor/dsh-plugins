@@ -1,8 +1,8 @@
 {
-  "name": "@nolit/dsh-antigravity-cli-worker",
+  "name": "@nolit/dsh-antigravity-cli",
   "version": "0.1.0",
   "private": false,
-  "description": "Antigravity (agy) CLI worker tool for DeepSeek Harness: one isolated CLI call per invocation, defaulting to gemini-3.8-flash-low with low thinking effort.",
+  "description": "Antigravity (agy) CLI worker for DeepSeek Harness: the /agy command and the agy_worker tool.",
   "keywords": [
     "dsh",
     "deepseek-harness",
