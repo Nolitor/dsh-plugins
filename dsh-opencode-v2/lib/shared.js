@@ -429,11 +429,23 @@ export function modelsFromApiPayload(payload) {
   if (!data) return null
   const models = []
   for (const entry of data) {
+    // A route the server marks disabled cannot serve a generation; listing it
+    // would offer a model that fails on the first prompt.
+    if (entry?.enabled === false || entry?.status === 'disabled') continue
     const model = modelFromApiEntry(entry)
     if (model) models.push(model)
   }
   return models.length ? { models: disambiguateModelNames(models) } : null
 }
+
+/**
+ * Display suffix for a colliding provider id.
+ *
+ * OpenCode's two route namespaces are `opencode` (Zen) and `opencode-go` (Go);
+ * the ids are an external spec and stay unchanged, only the picker copy differs.
+ * Unknown providers keep their raw id.
+ */
+const PROVIDER_SUFFIX_LABELS = Object.freeze({ opencode: 'Zen', 'opencode-go': 'Go' })
 
 /**
  * Split colliding display names by provider.
@@ -443,8 +455,8 @@ export function modelsFromApiPayload(payload) {
  * `opencode` (Zen) and `opencode-go` providers, e.g.
  * `opencode/deepseek-v4.1-flash` and `opencode-go/deepseek-v4.1-flash` are both
  * named "DeepSeek V4.1 Flash". A picker that renders `name` shows them twice
- * with no way to tell them apart, so a collision takes the provider id as a
- * suffix. Unique names are left untouched.
+ * with no way to tell them apart, so a collision takes the provider's display
+ * label as a suffix. Unique names are left untouched.
  *
  * @param {{id: string, name: string}[]} models
  * @returns {{id: string, name: string}[]}
@@ -452,11 +464,11 @@ export function modelsFromApiPayload(payload) {
 export function disambiguateModelNames(models) {
   const counts = new Map()
   for (const model of models) counts.set(model.name, (counts.get(model.name) ?? 0) + 1)
-  return models.map((model) =>
-    counts.get(model.name) > 1
-      ? { ...model, name: `${model.name} (${model.id.split('/')[0]})` }
-      : model,
-  )
+  return models.map((model) => {
+    if (counts.get(model.name) <= 1) return model
+    const provider = model.id.split('/')[0]
+    return { ...model, name: `${model.name} (${PROVIDER_SUFFIX_LABELS[provider] ?? provider})` }
+  })
 }
 
 /** Parse `opencode models`: one `provider/model` id per line; banners skipped. */

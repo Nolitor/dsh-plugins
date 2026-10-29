@@ -109,11 +109,11 @@ const EXPORTED = JSON.stringify({
 // Config / schema surface
 // ---------------------------------------------------------------------------
 
-test('tool and provider export the row-id plugin names', () => {
+test('tool exports its row id and the worker module keeps its identity', () => {
   assert.equal(tool.name, 'dsh-opencode-v2')
   assert.equal(provider.name, 'dsh-opencode-v2-provider')
   assert.deepEqual(tool.inject, ['tools', 'subprocess'])
-  assert.deepEqual(provider.inject, ['llm', 'subprocess'])
+  assert.equal(provider.inject, undefined, 'the worker backend is not a loadable route')
 })
 
 test('default model is an opencode/... route, never bare', () => {
@@ -558,19 +558,8 @@ test('sessionTitleText unwraps the host title-request JSON framing', () => {
   assert.equal(provider.sessionTitleText([]), 'OpenCode session')
 })
 
-test('provider apply registers the route and its settings namespace', () => {
-  const registered = []
-  const providers = []
-  const ctx = {
-    llm: {
-      registerAdapter(names, adapter) { registered.push({ names, adapter }) },
-      registerConfigurableProviders(list) { providers.push(...list) },
-    },
-  }
-  provider.apply(ctx, fakeConfig({}))
-  assert.deepEqual(registered[0].names, ['opencode-agent'])
-  assert.equal(providers[0].provider, 'opencode-agent')
-  assert.equal(providers[0].settingsNs, 'dsh-opencode-v2-provider')
+test('the worker backend exports no conversation route', () => {
+  assert.equal(typeof provider.apply, 'undefined', 'provider.js must not register an LLM adapter')
 })
 
 test('tool apply registers the opencode tool and the /opencode command', async () => {

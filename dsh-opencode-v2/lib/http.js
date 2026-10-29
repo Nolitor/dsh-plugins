@@ -29,8 +29,6 @@ import { readFileSync } from 'node:fs'
 import Schema from '@deepseek-ai/schemastery'
 
 import {
-  Config as CliLlmConfig,
-  OpencodeLlmAdapter as CliLlmAdapter,
   blocksToText,
   buildPrompt,
   sessionTitleText,
@@ -41,6 +39,8 @@ import {
   modelsFromApiPayload,
   reasoningEffortsFromVariants,
 } from './shared.js'
+import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
+import { SessionMap } from './session-map.js'
 
 /** Plugin name; the cordis row uses the `@nolit/dsh-opencode-v2/http` specifier. */
 export const name = 'dsh-opencode-v2-http'
@@ -70,9 +70,6 @@ const FORWARD_ENV_DEFAULT = [
 /** Content block index of the first reasoning/text block (odd/even split). */
 const TEXT_INDEX_BASE = 0
 const REASONING_INDEX_BASE = 1
-
-/** Finish codes that mean "the HTTP transport could not be used at all". */
-const TRANSPORT_FAILURES = new Set(['OPENCODE_HTTP', 'OPENCODE_SPAWN'])
 
 export const Config = Schema.object({
   /** Explicit server URL; when empty the adapter attaches to the CLI daemon or spawns one. */
@@ -124,20 +121,16 @@ export const Config = Schema.object({
   requestTimeoutMs: Schema.number().default(30000).volatile(),
   discoveryCacheMs: Schema.number().default(300000).volatile(),
   autoDiscoverModels: Schema.boolean().default(true).volatile(),
+  /** Snapshot file holding the last good catalog; empty resolves under the active profile. */
+  catalogPath: Schema.string().default('').volatile(),
+  /** Background catalog sync period in ms; 0 keeps refreshes demand-driven only. */
+  catalogSyncMs: Schema.number().default(300000).volatile(),
   /**
-   * When the HTTP server cannot be used at all (attach/spawn/request failure),
-   * run the same generation through the CLI route instead. Model-level failures
-   * (upstream quota, tool errors) do NOT trigger it: both transports share the
-   * same upstream. HTTP remains the only path when it succeeds.
+   * DSH-session → OpenCode-session map persisted next to the catalog. A
+   * resumed DSH session reuses its OpenCode session instead of replaying the
+   * whole transcript; empty resolves under the active profile.
    */
-  fallbackToCli: Schema.boolean().default(true).volatile(),
-  /**
-   * Also register the CLI adapter as its own `opencode-agent` provider so the
-   * picker shows two transport groups. Off by default: the package exposes one
-   * OpenCode group (HTTP) and uses the CLI internally only as a fallback, so a
-   * model is never listed twice.
-   */
-  registerCliProvider: Schema.boolean().default(false).volatile(),
+  sessionMapPath: Schema.string().default('').volatile(),
   /** Local session titles avoid a second model call for the title. */
   localSessionTitles: Schema.boolean().default(true).volatile(),
 })
@@ -270,12 +263,9 @@ export class ServerManager {
     this.state = null
   }
 
-  /** Absolute path of the CLI daemon's state file. */
+  /** Absolute path of the CLI daemon's state file (explicit configuration). */
   stateFilePath() {
-    const configured = this.config.serviceStatePath.get()
-    if (configured) return configured
-    const home = process.env.HOME ?? ''
-    return `${home}/.local/state/opencode/service.json`
+    return this.config.serviceStatePath.get()
   }
 
   /** Headers for one request to the resolved server. */
@@ -393,10 +383,24 @@ export class ServerManager {
    */
   async attach() {
     this.attachReason = null
+    const failures = []
+    for (const path of serviceStateCandidates(this.stateFilePath())) {
+      const attached = await this.attachCandidate(path)
+      if (attached) return attached
+      if (this.attachReason) failures.push(`${path}: ${this.attachReason}`)
+    }
+    this.attachReason = failures.length
+      ? `no reachable daemon state (${failures.join('; ')})`
+      : 'no daemon state candidate'
+    return null
+  }
+
+  /** Attach to the daemon described by one descriptor file. */
+  async attachCandidate(path) {
     let state
     try {
-      const raw = readFileSync(this.stateFilePath(), 'utf8')
-      if (!raw) throw new Error('state file is empty')
+      const raw = readFileSync(path, 'utf8')
+      if (!raw) throw new Error('file is empty')
       state = JSON.parse(raw)
     } catch (error) {
       this.attachReason = `daemon state unreadable (${error instanceof Error ? error.message : String(error)})`
@@ -472,6 +476,28 @@ export class ServerManager {
 }
 
 /**
+ * Descriptor files that may name an already-running OpenCode server, most
+ * specific first. `opencode service` (v2) keeps its descriptor under the XDG
+ * state or config root; older installs used `~/.local/state`. Attaching instead
+ * of spawning keeps one daemon per user and preserves its sessions.
+ *
+ * @param {string} [configured] Explicit `serviceStatePath` from config.
+ * @returns {string[]} De-duplicated candidate paths.
+ */
+export function serviceStateCandidates(configured = '') {
+  const home = process.env.HOME ?? ''
+  const stateHome = process.env.XDG_STATE_HOME || `${home}/.local/state`
+  const configHome = process.env.XDG_CONFIG_HOME || `${home}/.config`
+  const candidates = [
+    configured,
+    process.env.OPENCODE_SERVICE_STATE ?? '',
+    `${stateHome}/opencode/service.json`,
+    `${configHome}/opencode/service.json`,
+  ]
+  return [...new Set(candidates.filter((path) => typeof path === 'string' && path.length > 0))]
+}
+
+/**
  * Health probe for one server endpoint.
  *
  * `/api/info` is the measured liveness surface (`{"version","pid","urls"}`).
@@ -535,17 +561,68 @@ export function parseBanner(text) {
 
 /** The HTTP-backed adapter. */
 export class OpencodeHttpAdapter {
-  constructor(ctx, config) {
+  /**
+   * @param {*} ctx Host context (llm registry, subprocess, events).
+   * @param {*} config Validated plugin configuration.
+   * @param {{ providerId?: string, catalogFileName?: string }} [options]
+   *   Route name announced on catalog changes and the snapshot file name.
+   */
+  constructor(ctx, config, options = {}) {
     this.ctx = ctx
     this.config = config
+    this.providerId = options.providerId ?? 'opencode-http-agent'
     this.server = new ServerManager(ctx, config)
     this.sessions = new Map()
-    this.discovered = null
-    this.discovering = null
+    this.sessionMap = new SessionMap(
+      resolveCatalogPath({
+        explicit: config.sessionMapPath.get(),
+        profileDir: ctx?.get?.('profileContext')?.dir,
+        dshHome: process.env.DSH_HOME,
+        fileName: 'opencode-sessions.json',
+      }),
+    )
+    this.catalogStore = new CatalogStore(
+      resolveCatalogPath({
+        explicit: config.catalogPath.get(),
+        profileDir: ctx?.get?.('profileContext')?.dir,
+        dshHome: process.env.DSH_HOME,
+        fileName: options.catalogFileName ?? 'opencode-models.json',
+      }),
+    )
+    this.catalog = new CatalogLifecycle({
+      probe: () => this.discoverOnce(),
+      store: this.catalogStore,
+      cacheMs: () => this.config.discoveryCacheMs.get(),
+      syncMs: () => this.config.catalogSyncMs.get(),
+      onChanged: () => this.announce(),
+      warn: (message) => ctx?.logger?.warn?.(message),
+    })
   }
 
+  /**
+   * Load the durable catalog and start the background sync.
+   *
+   * The Web catalog read that follows boot answers from memory; the probe
+   * replaces the snapshot when OpenCode's own list moved on.
+   */
+  warmStart() {
+    this.catalog.seed()
+    this.catalog.start()
+  }
+
+  /** Stop the background sync timer and the owned server. */
   dispose() {
+    this.catalog.stop()
     this.server.dispose()
+  }
+
+  /** Tell connected clients that this provider's model list changed. */
+  announce() {
+    try {
+      this.ctx?.emit?.('llm/models-updated', this.providerId)
+    } catch (error) {
+      this.ctx?.logger?.warn?.(`model catalog announcement failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   providerInfo(provider) {
@@ -556,17 +633,13 @@ export class OpencodeHttpAdapter {
 
   imageRequestPricing() {}
 
-  /** Discover the route catalog from `/api/model` (single-flight + cached). */
+  /**
+   * Current route catalog without blocking on the daemon when a snapshot or a
+   * previous result exists; stale reads revalidate in the background.
+   */
   async discover() {
     if (!this.config.autoDiscoverModels.get()) return null
-    const cacheMs = this.config.discoveryCacheMs.get()
-    if (this.discovered && Date.now() - this.discovered.at < cacheMs) return this.discovered.result
-    if (!this.discovering) {
-      this.discovering = this.discoverOnce().finally(() => {
-        this.discovering = undefined
-      })
-    }
-    return this.discovering
+    return this.catalog.read()
   }
 
   async discoverOnce() {
@@ -574,7 +647,6 @@ export class OpencodeHttpAdapter {
       const payload = await this.server.request('GET', '/api/model')
       const result = modelsFromApiPayload(payload)
       if (result) {
-        this.discovered = { at: Date.now(), result }
         this.discoveryError = null
         return result
       }
@@ -582,7 +654,7 @@ export class OpencodeHttpAdapter {
       return null
     } catch (error) {
       this.discoveryError = error instanceof Error ? error : new Error(String(error))
-      return null
+      throw this.discoveryError
     }
   }
 
@@ -619,7 +691,6 @@ export class OpencodeHttpAdapter {
     }
     if (this.config.autoDiscoverModels.get()) {
       const reason = this.discoveryError?.message ?? 'the server returned no models'
-      if (this.config.fallbackToCli.get()) return this.cli().listModels(provider)
       throw new Error(`OpenCode model catalog unavailable: ${reason}`)
     }
     return this.config.models.get().map((entry) => ({
@@ -633,6 +704,9 @@ export class OpencodeHttpAdapter {
 
   async resolveModel(provider, model) {
     const found = await this.lookupModel(model)
+    if (!found && model !== 'default' && this.config.autoDiscoverModels.get()) {
+      this.ctx?.logger?.warn?.(`OpenCode route "${model}" is not in the served catalog`)
+    }
     const efforts = found?.variants?.length ? reasoningEffortsFromVariants(found.variants) : []
     return {
       provider,
@@ -662,16 +736,46 @@ export class OpencodeHttpAdapter {
   }
 
   /** Resolve or create the OpenCode session that backs one DSH session. */
+  /** Drop an in-memory and persisted mapping after a 404 or a failed switch. */
+  forget(key) {
+    if (!key) return
+    this.sessions.delete(key)
+    this.sessionMap.delete(key)
+  }
+
   async sessionFor(key, ref, variant, directory) {
-    const existing = key ? this.sessions.get(key) : null
     const wanted = modelKey(ref, variant)
+    // A resumed DSH session may still own its OpenCode session even though this
+    // adapter instance is new: adopt the persisted id after the server confirms
+    // it, so the first turn sends only the new user text instead of replaying
+    // the transcript. A dead id (new daemon) is dropped and creation follows.
+    if (key && !this.sessions.has(key)) {
+      const persisted = this.sessionMap.get(key)
+      if (persisted) {
+        const directoryMatches = !persisted.directory || !directory || persisted.directory === directory
+        if (directoryMatches) {
+          try {
+            await this.server.request('GET', `/api/session/${persisted.sessionID}`)
+            this.sessions.set(key, {
+              sessionID: persisted.sessionID,
+              modelKey: persisted.modelKey ?? wanted,
+              sent: true,
+            })
+          } catch (error) {
+            if (error.status === 404) this.sessionMap.delete(key)
+            else throw error
+          }
+        }
+      }
+    }
+    const existing = key ? this.sessions.get(key) : null
     if (existing) {
       // A server restart (or an external delete) invalidates our mapping.
       if (existing.sent) {
         try {
           await this.server.request('GET', `/api/session/${existing.sessionID}`)
         } catch (error) {
-          if (error.status === 404) this.sessions.delete(key)
+          if (error.status === 404) this.forget(key)
           else throw error
         }
       }
@@ -683,9 +787,14 @@ export class OpencodeHttpAdapter {
             model: { ...ref, ...(variant ? { variant } : {}) },
           })
           existing.modelKey = wanted
+          this.sessionMap.set(key, {
+            sessionID: existing.sessionID,
+            modelKey: wanted,
+            directory,
+          })
         } catch (error) {
           if (error.status === 404) {
-            this.sessions.delete(key)
+            this.forget(key)
           } else {
             throw error
           }
@@ -704,81 +813,20 @@ export class OpencodeHttpAdapter {
         : {}),
     })
     const session = { sessionID: created.data.id, modelKey: wanted, sent: false }
-    if (key) this.sessions.set(key, session)
+    if (key) {
+      this.sessions.set(key, session)
+      this.sessionMap.set(key, { sessionID: session.sessionID, modelKey: wanted, directory })
+    }
     return session
   }
 
   /**
-   * Stream one generation. Text/reasoning arrive as deltas; `session.step.ended`
-   * supplies exact tokens; permission prompts are answered by config.
-   */
-  /**
-   * HTTP-first generation. The CLI route is reached only when the HTTP transport
-   * itself is unusable and nothing has been streamed yet; a model-level failure
-   * is reported as-is (the CLI would hit the same upstream).
+   * Stream one generation over HTTP. Text/reasoning arrive as deltas;
+   * `session.step.ended` supplies exact tokens; permission prompts are answered
+   * by config. This is the only conversation pipeline: the CLI adapter is a
+   * worker backend, not a fallback route.
    */
   async *stream(options) {
-    if (!this.config.fallbackToCli.get() || this._inFallback) {
-      yield* this.streamHttp(options)
-      return
-    }
-    let content = false
-    try {
-      for await (const chunk of this.streamHttp(options)) {
-        if (
-          chunk.type === 'finish' &&
-          !content &&
-          TRANSPORT_FAILURES.has(chunk.reason?.failure?.code)
-        ) {
-          yield* this.fallbackStream(options)
-          return
-        }
-        if (chunk.type === 'block-start' || chunk.type === 'text-delta' || chunk.type === 'reasoning-delta' || chunk.type === 'usage') {
-          content = true
-        }
-        yield chunk
-      }
-    } catch (error) {
-      if (content) throw error
-      yield* this.fallbackStream(options)
-    }
-  }
-
-  /** Stream the fallback through the CLI adapter, guarding against recursion. */
-  async *fallbackStream(options) {
-    this._inFallback = true
-    try {
-      yield* this.cli().stream(options)
-    } finally {
-      this._inFallback = false
-    }
-  }
-
-  /** Lazily build the CLI adapter; it is never started while HTTP works. */
-  cli() {
-    if (!this._cli) {
-      const config = this.config
-      this._cli = new CliLlmAdapter(
-        this.ctx,
-        new CliLlmConfig({
-          opencodePath: config.opencodePath.get(),
-          cwd: config.cwd.get(),
-          timeoutMs: config.timeoutMs.get(),
-          forwardEnv: config.forwardEnv.get(),
-          models: config.models.get(),
-          brief: config.brief.get(),
-          localSessionTitles: config.localSessionTitles.get(),
-          autoDiscoverModels: true,
-          discoveryTimeoutMs: 60000,
-          discoveryCacheMs: config.discoveryCacheMs.get(),
-          exportTimeoutMs: 60000,
-        }),
-      )
-    }
-    return this._cli
-  }
-
-  async *streamHttp(options) {
     if (options.purpose === 'session-title' && this.config.localSessionTitles.get()) {
       const text = sessionTitleText(options.messages).slice(0, 80)
       yield { type: 'block-start', index: 0, blockType: 'text' }
@@ -918,7 +966,10 @@ export class OpencodeHttpAdapter {
           case 'session.step.ended': {
             const tokens = event.data?.tokens
             if (tokens) {
-              usage = usageFromTokens(tokens)
+              // One DSH generation may contain many OpenCode steps (each an
+              // upstream call). The host keeps the LAST `usage` chunk, so emit a
+              // running total: the final chunk then carries the whole generation.
+              usage = addUsage(usage, usageFromTokens(tokens))
               yield { type: 'usage', usage }
             }
             break
@@ -1018,6 +1069,30 @@ export function usageFromTokens(tokens) {
   return usage
 }
 
+/**
+ * Sum two usage records bucket by bucket.
+ *
+ * One DSH generation spans many OpenCode steps, each reporting its own usage;
+ * the host persists only the last chunk, so the adapter accumulates and yields
+ * the running total instead of letting the final upstream call overwrite it.
+ *
+ * @param {{inputTokens:number,outputTokens:number,reasoningTokens:number,cacheReadTokens:number,cacheWriteTokens:number,totalTokens:number}|undefined} previous Running total so far.
+ * @param {{inputTokens:number,outputTokens:number,reasoningTokens:number,cacheReadTokens:number,cacheWriteTokens:number,totalTokens:number}} next One step's usage.
+ * @returns Summed usage over both records.
+ */
+export function addUsage(previous, next) {
+  if (!previous) return next
+  const sum = {
+    inputTokens: previous.inputTokens + next.inputTokens,
+    outputTokens: previous.outputTokens + next.outputTokens,
+    reasoningTokens: (previous.reasoningTokens ?? 0) + (next.reasoningTokens ?? 0),
+    cacheReadTokens: previous.cacheReadTokens + next.cacheReadTokens,
+    cacheWriteTokens: previous.cacheWriteTokens + next.cacheWriteTokens,
+  }
+  sum.totalTokens = sum.inputTokens + sum.outputTokens + sum.reasoningTokens + sum.cacheReadTokens + sum.cacheWriteTokens
+  return sum
+}
+
 /** Close any block indexes left open by an aborted stream (mirrors provider.js). */
 function closeBlocks(state) {
   const chunks = []
@@ -1034,12 +1109,8 @@ function closeBlocks(state) {
  * configurable-provider directory so the Web Models page sees it.
  */
 export function apply(ctx, config) {
-  const adapter = new OpencodeHttpAdapter(ctx, config)
+  const adapter = new OpencodeHttpAdapter(ctx, config, { providerId: 'opencode-http-agent' })
   const registration = ctx.llm.registerAdapter(['opencode-http-agent'], adapter)
-  let cliRegistration = null
-  if (config.registerCliProvider.get()) {
-    cliRegistration = ctx.llm.registerAdapter(['opencode-agent'], adapter.cli())
-  }
   ctx.llm.registerConfigurableProviders([
     {
       provider: 'opencode-http-agent',
@@ -1051,11 +1122,6 @@ export function apply(ctx, config) {
   if (typeof ctx.effect === 'function') {
     ctx.effect(() => () => {
       try {
-        cliRegistration?.()
-      } catch {
-        /* already disposed */
-      }
-      try {
         registration()
       } catch {
         /* already disposed */
@@ -1063,5 +1129,6 @@ export function apply(ctx, config) {
       adapter.dispose()
     }, 'dsh-opencode-v2-http: dispose adapter and owned server')
   }
+  adapter.warmStart()
   return () => adapter.dispose()
 }

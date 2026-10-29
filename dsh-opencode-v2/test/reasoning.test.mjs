@@ -104,7 +104,7 @@ function makeAdapter(discovered, overrides = {}) {
   })
   const ctx = fakeCtx([{ exitCode: 0, stdout: RUN_STREAM }])
   const adapter = new OpencodeLlmAdapter(ctx, config)
-  if (discovered) adapter.discovered = { at: Date.now(), result: { models: discovered } }
+  if (discovered) adapter.catalog.prime({ models: discovered })
   return { adapter, ctx, config }
 }
 
@@ -279,8 +279,8 @@ test('concurrent route resolution shares one discovery probe', async () => {
     probes += 1
     await new Promise((resolve) => setTimeout(resolve, 5))
     // Mirrors the real probe: it caches its own result.
-    adapter.discovered = { at: Date.now(), result: { models: [FLASH] } }
-    return adapter.discovered.result
+    adapter.catalog.prime({ models: [FLASH] })
+    return adapter.catalog.current().result
   }
   const infos = await Promise.all(
     Array.from({ length: 8 }, () => adapter.resolveModel('opencode-agent', FLASH.id)),

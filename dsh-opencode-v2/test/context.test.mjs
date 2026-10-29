@@ -25,7 +25,7 @@ const makeConfig = (overrides = {}) => new Config(overrides)
 function adapterWith(models, overrides = {}) {
   const fakeCtx = { subprocess: {} }
   const adapter = new OpencodeLlmAdapter(fakeCtx, makeConfig(overrides))
-  adapter.discovered = { at: Date.now(), result: { models } }
+  adapter.catalog.prime({ models })
   return adapter
 }
 

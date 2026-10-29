@@ -118,7 +118,7 @@ test('every declared file pattern exists on disk', () => {
   assert.ok(readdirSync(new URL('lib/', root)).length >= 3)
 })
 
-test('the bundle ships exactly one row (the delegation tool); the HTTP route is profile-level', () => {
+test('the bundle ships exactly one row (the delegation tool); the HTTP route is profile-level', async () => {
   assert.ok(Array.isArray(doc), 'top-level must be an array of loader patch entries')
   assert.equal(doc.length, 1)
   assert.deepEqual(Object.keys(doc[0]), ['insert'])
@@ -126,9 +126,12 @@ test('the bundle ships exactly one row (the delegation tool); the HTTP route is 
     rows.map((r) => [r.id, r.name]),
     [['dsh-opencode-v2', '@nolit/dsh-opencode-v2']],
   )
-  // The LLM routes stay exported so a profile can insert them explicitly.
+  // The HTTP route is the only conversation pipeline. `./provider` stays
+  // exported as the batch-worker backend, but it registers no LLM adapter.
   assert.ok('./provider' in pkg.exports)
   assert.ok('./http' in pkg.exports)
+  const worker = await import('../lib/provider.js')
+  assert.equal(typeof worker.apply, 'undefined', './provider must not be mountable as a route')
 })
 
 test('row ids equal the exported plugin names (loader settings namespace)', () => {
@@ -170,15 +173,15 @@ test('the HTTP route config parses with the http Config schema', () => {
     opencodePath: '/home/minami/.bun/bin/opencode',
     defaultModel: 'opencode/beam-free',
     permissionDecision: 'once',
-    fallbackToCli: true,
+    sessionMapPath: '',
   }
   for (const key of Object.keys(profileRowConfig)) {
     assert.ok(known.has(key), `HTTP profile row sets unknown key ${key}`)
   }
   const parsed = http.Config(profileRowConfig)
-  assert.equal(parsed.fallbackToCli.get(), true)
-  assert.equal(parsed.registerCliProvider.get(), false)
   assert.equal(parsed.defaultModel.get(), 'opencode/beam-free')
+  assert.equal(known.has('fallbackToCli'), false, 'the CLI is not a conversation fallback')
+  assert.equal(known.has('registerCliProvider'), false, 'the CLI is not a conversation provider')
 })
 
 test('the patch never configures attach or pure (v2 rejects both flags)', () => {

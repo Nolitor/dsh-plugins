@@ -24,6 +24,10 @@ const config = {
   brief: get('brief'),
   localSessionTitles: get(false),
   autoDiscoverModels: get(false),
+  discoveryTimeoutMs: get(60000),
+  discoveryCacheMs: get(300000),
+  catalogPath: get(''),
+  catalogSyncMs: get(0),
   exportTimeoutMs: get(0),
 }
 

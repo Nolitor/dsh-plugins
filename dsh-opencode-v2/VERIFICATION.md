@@ -1125,3 +1125,382 @@ remains an error with its real message (the `[object Object]` formatting was fix
 
 `npm test` → **136/136**. Status: **applied pending restart** (the live service predates this tree
 and the profile row change).
+
+## 18. v0.3.0 — catalog snapshot: 0 ms cold start, background revalidation
+
+Problem measured in §17's design: `listModels()` awaited a live probe whenever the 5-minute cache
+was cold, so every host boot and every post-TTL catalog read paid a `GET /api/model` round trip (or
+a `opencode serve`/`opencode models` child), and a daemon that was down left the picker with no
+OpenCode rows at all.
+
+Design: `lib/catalog-cache.js` owns a `CatalogLifecycle` per adapter.
+
+| Phase | Behaviour | Measured |
+|---|---|---|
+| Activation | `opencode-models.json` read synchronously from the profile dir (`profileContext.dir`), `$DSH_HOME/cache` fallback, in-memory when neither exists | snapshot written: 45 routes, 6261 bytes |
+| First read | snapshot answers; no probe on the read path | 31.5 ms first `session/modelCatalog`, 11.1 ms next |
+| Revalidation | background probe once stale (`discoveryCacheMs`, default 300 s), single-flight; `catalogSyncMs` timer (default 300 s) keeps it warm | one probe for 8 concurrent `resolveModel` calls |
+| Change | catalog signature differs → snapshot rewritten atomically, `llm/models-updated` emitted with the provider id | emitted once per changed catalog, never for identical lists |
+| Failure | last good catalog survives; probe error logged, `lastError` exposed | dead `baseUrl` + `spawnServer:false` + `fallbackToCli:false` still listed 46 models; snapshot mtime unchanged |
+
+A/B-ready: `catalogPath` (explicit file), `catalogSyncMs: 0` (no timer), `discoveryCacheMs`
+(freshness). The CLI fallback keeps its own `opencode-models-cli.json`.
+
+`npm test` → **146/146** (10 new cases in `test/catalog.test.mjs`). Status: **applied pending
+restart** for the live service.
+
+## 19. v0.3.1 — status-bar speed counted wall time and dropped nested usage
+
+Measured on a live 3-turn session (`session-bfeb1eaa…`, OpenCode HTTP route):
+
+| Turn | upstream calls in the step | tokens persisted | wall decode | displayed |
+|---|---|---|---|---|
+| 1 | 91 | 891 (+449 reasoning) | 606 s | 1.5 tok/s |
+| 2 | 44 | 1,319 (+357) | 622 s | 2.1 tok/s |
+| 3 | 96 | 1,861 (+551) | 790 s | 2.4 tok/s |
+
+Two defects, both structural:
+
+1. **Usage was last-wins.** One DSH generation contains many OpenCode steps
+   (`session.step.ended` per internal upstream call). `lib/http.js` assigned
+   `usage = usageFromTokens(tokens)`, so the settled message kept only the final
+   call's tokens: 4,071 of the real 108,611 generated tokens survived (3.7 %).
+   Fix: accumulate a running total (`addUsage`) before each `usage` chunk.
+2. **The denominator was wall clock.** `dsh-session-stats` measured
+   `assistant/message time − first token`; with ~96 nested calls per step that
+   span is mostly queueing and per-call TTFT (790 s vs 113 s of token flow).
+   Fix (local patch, `scripts/patch-session-stats.mjs`): sum the packed delta-run
+   delays (`dt` of `text-chunks`/`reasoning-chunks`/`tool-call-chunks`) for the
+   pure generation span, count `outputTokens + reasoningTokens`, and bump
+   `stateVersion` to 2 so cached projections recompute.
+
+Result on the same log: **2.0 → 363.6 tok/s** (108,611 tokens over 298.7 s of
+token flow). Sessions from single-call providers are unaffected in magnitude
+(the measured DeepSeek session moved 189.3 → 192.2 tok/s); only the small
+assembly gap and reasoning tokens change.
+
+Also in this version: colliding OpenCode model labels read `(Go)` and `(Zen)`
+instead of the raw `opencode-go` / `opencode` route ids.
+
+`npm test` → **147/147**. Status: **applied pending restart**; the stats patch is
+local to this install and must be re-applied after a `dsh` upgrade.
+
+## 19. v0.3.2 — A/B (HTTP vs CLI), official-docs delta, durable session map
+
+### 19.1 Setup
+
+Isolated `DSH_HOME` with the shipped `headless` profile and two `--patch` overlays that differ
+only in the provider row and `agent-default-model`: `@nolit/dsh-opencode-v2/http`
+(`opencode-http-agent`) versus `@nolit/dsh-opencode-v2/provider` (`opencode-agent`). Same model,
+same prompts; one session per route: turn 1 `Reply with exactly: OK`, turn 2 a bash-tool task.
+Metrics are folded from `session.v4.jsonl.zstd` (`turn/start`→`turn/end`, first stream record,
+packed `dt` sums, `assistant/message` usage), not from wall-clock process time alone.
+
+### 19.2 Measured
+
+Same model `opencode-go/deepseek-v4.1-flash`, one session per route:
+
+| Metric | HTTP route | CLI route |
+|---|---|---|
+| process wall (turn 1 / turn 2) | 7.33 s / 12.23 s | 7.65 s / 7.53 s |
+| turn wall | 5.39 s / 10.28 s | 5.34 s / 5.26 s |
+| TTFT | 5.05 s / 6.09 s | 5.09 s / 5.00 s |
+| streamed deltas | yes (packed `dt` 230 / 485 ms) | **none** (one block per message) |
+| generated tokens (out + reasoning) | 73 / 256 | 3 / 82 |
+| input tokens | 6,019 / 12,497 | 259 / 4,377 |
+| cache read | 0 / 0 | 5,760 / 7,808 |
+| tool task completed | yes (`live-http.txt`) | yes (`live-cli.txt`) |
+
+Secondary sample, `opencode/beam-free`, two sessions per route, chat only:
+
+| Metric | HTTP route | CLI route |
+|---|---|---|
+| process wall | 5.10 s / 6.17 s | 5.06 s / 6.90 s; 6.36 s / 7.25 s |
+| turn 2 wall | 4.17 s / 4.19 s | 5.00 s / 4.69 s |
+| turn 2 TTFT | 3.28 s / 2.87 s | 4.4 s (block delivery) |
+| turn 2 decode | 0.83 s / 1.14 s | n/a |
+| turn 2 generated tokens | 544 / 533 | 530 / 495 |
+
+### 19.3 Findings
+
+- **CLI does not stream.** `opencode run --format json` emits one event per block
+  (`dt` arrays are empty), so TTFT equals the full generation and the UI shows nothing until the
+  message settles. The HTTP SSE path emits real per-token deltas.
+- **Cross-process resume replays the transcript.** A new adapter instance has no OpenCode session,
+  so the first turn sends `buildPrompt()` (full flattened history): 12,497 input tokens and a
+  10.3 s turn for the tool task versus 4,377 input tokens and 5.3 s through the CLI prompt path.
+  Inside one host process the HTTP route sends only the new user text (§14.4: turn-2 input 2 vs
+  66), so HTTP remains the better transport while the process lives.
+- Neither route used DSH tools: the model backend is OpenCode itself, which ran its own bash tool
+  inside the daemon/child. DSH observed only text, which is why `tool/call` events are absent.
+
+### 19.4 Official-docs delta (opencode.ai, measured against v2.2.0)
+
+| Fact | Official docs | Internal measurement docs | Measured 2026-10-29 |
+|---|---|---|---|
+| API document | v1 `/docs/server` links `/doc`; v2 links "API reference `/api`" | `GET /openapi.json`: OpenAPI 3.1.0, 130 paths, 337 schemas | exact match: 318,080 B, 130 paths, **337** schemas; `/doc` is the 9,610 B HTML UI |
+| Auth | `OPENCODE_SERVER_PASSWORD`, Basic user `opencode` | same, password from banner or `service.json` | 401 without, 200 with |
+| Server lifecycle | v2: one **shared background service** per user; `--standalone` / `--server`; `opencode service set disabled true` | §15 "the daemon is not a service" (v2 `serve --service` gone; daemon died on restart) | `opencode service` **does** exist (start/restart/status/stop/get/set/unset); here `status=stopped`, `get={}` — DSH spawns a private daemon, so the wording in §15 needs the shared-service nuance |
+| `opencode run` flags | v1: `--attach`, `--password`, `--username`, `--dir`, `--port`, `--auto`, global `--pure` | v2 rejects `--attach` / `--pure` | v2.2.0 has `--session`, `--model provider/model#variant`, `--format`, `--thinking`, `--fork`, `--file`; global `--standalone` / `--server`; no `--attach` / `--pure` / `--password` |
+| CLI docs coverage | v2 page documents only intro, `run`, `mini`, `service`, `paths`, `uninstall` | internal docs cover `serve`, `/api/model`, `/api/event`, limits | internal measurement remains the only source for the `/api/*` surface |
+| Model cache | `opencode models --refresh`; `OPENCODE_MODELS_PATH` loads a local catalog | DSH-side `opencode-models.json` snapshot | consistent at a different layer; no conflict |
+| Connection reuse | Node `fetch` is undici with keep-alive (default `keepAliveTimeout` 4 s, `keepAliveMaxTimeout` 600 s) | adapter reuses the global dispatcher; SSE holds one connection per generation | no per-request handshake measured; `/api/model` warm calls ~10–13 ms |
+
+### 19.5 Optimization — durable session map
+
+`lib/session-map.js` persists `{DSH session id → OpenCode session id, modelKey, directory}` in
+`<profile>/opencode-sessions.json` (`sessionMapPath` overrides). `sessionFor()` adopts a persisted
+id only after `GET /api/session/{id}` confirms it, switches the model when it differs, and drops a
+404 instead of replaying blindly.
+
+Unit proof: a second adapter instance over the same map reuses `ses_1` (`state.creates === 1`) and
+the second prompt is exactly `two`, i.e. only the new user text. Limit: the current live profile
+spawns a private daemon that dies with the host, so after a host restart the id 404s and the
+transcript is replayed; the map pays off under attach / shared-service mode (`opencode service`).
+
+`npm test` → **150/150**. Status: **applied pending restart** (workspace source; the live service
+still runs the 0.3.0 adapter in memory).
+
+## 20. v0.3.3 — HTTP-only conversation pipeline; CLI becomes a batch worker
+
+### 20.1 Decision
+
+§19 measured two facts that settle the transport split: `opencode run --format json` delivers whole
+blocks (empty `dt` runs, so TTFT equals the full generation) and spawns one process per generation.
+Chat/streaming/reasoning therefore belong to the HTTP adapter alone; the CLI is a one-shot worker.
+Design: `docs/CLI-WORKER-PLUGIN-DESIGN.md` (tool `cli_worker`, backends `opencode`/`codex`/`claude`,
+artifact collection, isolation, no LLM registration).
+
+### 20.2 Code changes
+
+| Concern | Change |
+|---|---|
+| Fallback | Removed `fallbackToCli`, `registerCliProvider`, `TRANSPORT_FAILURES`, `stream()/streamHttp()` wrapper, `fallbackStream()`, `cli()`. A transport failure is the turn failure. |
+| CLI route | `lib/provider.js` exports no `apply`/`inject`: it cannot be mounted as a conversation provider and registers no adapter. `./provider` stays exported as the worker backend. |
+| Availability | `modelsFromApiPayload()` drops `enabled === false` or `status === "disabled"`; `resolveModel()` warns when a configured route is absent from the served catalog. |
+| Attach | `serviceStateCandidates()` + `attachCandidate()`: `serviceStatePath`, `$OPENCODE_SERVICE_STATE`, `$XDG_STATE_HOME/opencode/service.json`, `$XDG_CONFIG_HOME/opencode/service.json`; each validated with `/api/info` before adoption. |
+
+### 20.3 Measurements
+
+| Fact | Measured |
+|---|---|
+| Raw `/api/model` availability | 45 routes, **45 × `{enabled:true, status:"active"}`**, 0 disabled |
+| Earlier "unavailable free model" | `opencode-go/deepseek-v4.1-flash-free` is **absent from the catalog** (the served free route is `opencode/deepseek-v4.1-flash-free`); it was an A/B overlay config, not a disabled entry |
+| Attach candidates | `serviceStateCandidates('/explicit.json')` → 3 paths (explicit, `~/.local/state/…`, `~/.config/…`) |
+| Live attach outcome | `~/.config/opencode/service.json` holds `{password}` only → rejected (`no url/password`) → spawn path, unchanged |
+| HTTP-only smoke (headless, new tree) | `Reply with exactly: OK` → text `OK`, usage input 6,019 / output 3 / reasoning 66 |
+
+### 20.4 Status
+
+`npm test` → **151/151**, `npm run check` pass, `npm run docs:index` → 36 docs, `docs:check` OK.
+Status: **applied pending restart** (the live service still runs the 0.3.0 adapter; session-map and
+this split load on the next restart).
+
+## 21. v0.3.4–v0.3.5 — cumulative usage correction; CLI worker folded in and verified live
+
+### 21.1 Restart evidence (21:05 service, 21:11 first write)
+
+| Fact | Measured |
+|---|---|
+| Host process | `node …/dsh --profile web … --port 3080`, PID 734846, started 21:05 |
+| OpenCode daemon | `opencode serve --hostname 127.0.0.1 --port 0`, PID 734883, listening `127.0.0.1:46255` |
+| Session map | `/home/minami/.dsh/profiles/web/opencode-sessions.json`, `version: 1`, one entry `session-bfeb1eaa-40a7-45ef-9f54-35ea1bec4f47` → `ses_e786d3789ffek922Dzbt58VCLH`, `modelKey: opencode-go/deepseek-v4.1-flash`, `directory: /home/minami/.local/share/dsh` |
+| Catalog snapshot | `opencode-models.json`, 6,163 B, rewritten 21:11 |
+
+The map file proves the 0.3.3 write path: adoption happened during the first turn
+after restart, and the entry is keyed by the **DSH** session id while carrying the
+OpenCode id in `sessionID`.
+
+### 21.2 The 5,680 tok/s freeze was double-counted cumulative usage
+
+The composer read `5,680.3 tok/s`. Replaying `session.v4.jsonl.zstd` reproduced
+the exact figure: `decodeTokens / decodeMs = 4,385,897 / 772,118 ms`.
+
+Cause: `addUsage()` in `lib/http.js` emits the **running total of one generation**
+after every OpenCode step (`session.step.ended`). The v0.3.1 projection patch
+summed every `usage` chunk of the step, so a cumulative snapshot was counted once
+per step:
+
+| Settled step | usage chunks | v2 sum (reported) | real generation total | tok/s (v2 → v3) |
+|---|---|---|---|---|
+| 1 (old adapter, per-call chunks) | 91 | 38,936 | 38,936 | 354.7 → 354.7 |
+| 4 (old adapter) | 55 | 39,705 | 39,705 | 321.2 → 321.2 |
+| 6 (running-total chunks) | 96 | **3,241,713** | 72,421 | 12,517 → 279.6 |
+| 7 (running-total chunks) | 54 | **994,433** | 33,425 | 12,021 → 404.1 |
+
+Steps 1–4 came from the 0.3.0 adapter still in memory before the 21:05 restart
+(one `usage` chunk per upstream call, oscillating sequence); steps 6–7 came from
+the running-total adapter (non-decreasing sequence). One log therefore contains
+both semantics, so the fix cannot assume either.
+
+`streamGeneratedTokens()` now classifies the sequence: a non-decreasing token
+series is a cumulative snapshot and contributes its **last** value; an oscillating
+series is per-call and contributes the **sum**. Aggregate on the same log:
+**5,680.3 → 331.0 tok/s** (255,597 tokens / 772,118 ms), and each new turn moves
+it (no more freeze).
+
+### 21.3 Denominator exceptions
+
+`streamDecodeSpan()` uses the packed `dt` sum only when it is positive; an
+all-zero gap run (a provider that coalesces a burst into one record) or an
+unpacked stream falls back to `settled − firstToken`. The projection adds a step
+only when `generatedTokens !== null && decodeSpan > 0`, so a zero-span step can
+neither divide by zero nor invent a speed. `stateVersion` is **3**; the cached
+projection recomputes from the log on the next start.
+
+### 21.4 CLI worker is an internal module, not a package
+
+`docs/CLI-WORKER-PLUGIN-DESIGN.md` described a second package
+(`@nolit/dsh-cli-workers`). That split was cancelled: the worker tracks the same
+OpenCode surface and version as the conversation route, and a second package adds
+a profile row, an install dependency, and a version pair to keep in sync.
+
+| Concern | Location |
+|---|---|
+| Backends (`argv` + parser) | `lib/workers/backends.js` |
+| Artifacts (glob, sha256, limits) | `lib/workers/artifacts.js` |
+| Spawn, stdin, timeout, result | `lib/workers/run.js` |
+| Tool + `/worker` registration | `lib/workers/index.js` |
+| Config | `lib/index.js` row: `workerEnabled`, `workerBackend`, `workerTimeoutMs`, `workerMaxOutputBytes`, `workerArtifactLimit` |
+
+`apply()` registers `cli_worker` from the same row that provides the `opencode`
+tool, so one install and one profile row enable the chat route, the delegation
+tool, and isolated batch work.
+
+### 21.5 Status
+
+`npm test` → **164/164** (13 new worker tests), `npm run check` pass.
+Status: **applied** (plugin 0.3.4 on disk; the running host keeps 0.3.3 in memory
+until its next restart). Stats patch: **applied to the installed
+`dsh-session-stats`**, effective after a restart.
+
+### 21.6 Live `cli_worker` call (v0.3.5)
+
+Real `opencode` binary (`/home/minami/.bun/bin/opencode`), real argv/stdin/parse/artifact path,
+`opencode-go/deepseek-v4.1-flash`, one temp `cwd` per run.
+
+| Run | Result | Evidence |
+|---|---|---|
+| First call (no `--standalone`, no `PWD` pin) | `ok:true`, `summary:"DONE"`, 17.3 s, tokens 11,882/126 | `report.txt` (`worker-ok`, 10 B) was written to `/home/minami/Workspace/.../dsh-opencode-v2/`, not to the requested `cwd`; `collect:["*.txt"]` returned `missing` |
+| `pwd` probe through the same tool | `summary:"/home/minami/Workspace/projects/dsh-workspace/dsh-plugins/dsh-opencode-v2"` | proves the child resolved its session directory from the inherited `PWD`, not from `spawn.cwd` |
+| After pinning `PWD` | `ok:true`, `exitCode:0`, `summary:"DONE"`, 5.99 s, tokens 3,479/46 | `artifacts:[{path:"report.txt", bytes:10, sha256:"9ff7c64c60288482b00b78cf3ff813788bd5fb9ae8c4db6492f1f06a7181e522"}]`, `missing:[]`, file content `worker-ok\n` |
+| Negative (`opencode/beam-free`) | `ok:false`, `exitCode:1`, 2.3 s | `stderrTail:"Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models."` (HTTP 429 `provider.free-limit`) |
+
+Two defects the live call exposed, both fixed:
+
+1. **`opencode run` used the shared service.** The default CLI path connects to, and if absent
+   starts, `opencode service` (`opencode.exe serve --service`, pid 759394, `127.0.0.1:49374`,
+   state file `~/.local/state/opencode/service.json` at 21:43:25). That startup interrupted the
+   conversation route's live stream. The worker now passes `--standalone` (private server) so a
+   batch run can never start, restart, or contend with the conversation daemon.
+2. **`cwd` was advisory.** `opencode` resolves its session directory from `$PWD`, which the spawn
+   inherits from the host. `runWorker()` now merges `PWD: cwd` into the child environment.
+
+Also: a provider failure arrives as a stdout `{"type":"error"}` event, so the earlier empty
+`stderrTail` hid a 429. `parseOpencode()` now returns `errors`, and `runWorker()` folds them into
+`stderrTail`, which also sets `ok:false` even when the process exits 0.
+
+Harness: `test/live/cli-worker-live.mjs` (manual; `WORKER_BACKEND`/`WORKER_MODEL`/`WORKER_TASK`
+overrides, `{cwd}` placeholder). Unit suite: **165/165**, `npm run check` pass.
+
+`sessionStats` on the live session after the restart: `ver: 3`, `decodeTokens 311,156`,
+`decodeMs 956,802` → **325.2 tok/s** (was the frozen 5,680.3). `toolMs` stays 0 on this route
+because the OpenCode HTTP adapter emits no `tool/call` events — DSH sees only text/usage, so tool
+time is not separable in the projection yet.
+
+## 22. v0.3.5 — `toolMs` mapping for provider-side agent loops (projection v4)
+
+### 22.1 Why `toolMs` was always 0
+
+`sessionStats` pairs `tool/call` with `tool/result` (`dsh-session-stats/lib/index.js`,
+`case "tool/result"`). On the OpenCode HTTP route DSH never logs those events: the model's
+tool calls execute inside the OpenCode session, so a whole agentic step (up to 96 upstream
+calls plus their tool work) looks like one silent DSH step. The status-bar dialog therefore
+showed `Tool time 0` for every OpenCode session while `LLM time` absorbed everything.
+
+Live evidence: the session projection carried `toolMs: 0` with `llmMs: 4,174,053` — and the
+session log contains **0 `tool/call` and 0 `tool/result` events** (grep over
+`session.v4.jsonl.zstd`), while the adapter already subscribes to the provider's
+`session.tool.called|success|failed` SSE events (`lib/http.js`, `TOOL_EVENTS` list) and drops them.
+
+### 22.2 Mapping
+
+`scripts/patch-session-stats.mjs` v4 (stateVersion **4**) attributes, for steps whose settled
+message source provider is `opencode-http-agent`:
+
+```
+toolMs += max(0, stepWall - ttft - decodeSpan)
+```
+
+`stepWall` is `assistant/message.time − step/start.time`, `ttft` is first token − step start, and
+`decodeSpan` is the packed `dt` sum. DSH tool pairing still contributes for native tools, so the
+two sources add up rather than replace each other.
+
+Replay of the live session `session-bfeb1eaa…` (11 settled steps) through the new rule:
+
+| Metric | Value |
+|---|---|
+| `llmMs` | 4,966,794 ms |
+| `ttftMs` | 40,935 ms (11 steps) |
+| `decodeMs` | 1,163,143 ms |
+| `decodeTokens` | 361,116 (310.5 tok/s) |
+| `toolMs` | **3,762,716 ms** (was 0) |
+
+Semantics: the attributed figure is an **upper bound** — it covers OpenCode's tool execution plus
+the upstream queue time between its internal calls, which the log cannot separate. It is reported
+as tool/background time, never as model generation time.
+
+All three upgrade paths of the patch (stock v1 → v4, v2 → v4, v3 → v4) were reconstructed and
+verified byte-identical to the installed v4 output.
+
+## 23. v0.3.5 — context gauge and Korean tooltip corrections
+
+### 23.1 Double percent in the tooltip
+
+`ContextMeter` builds `reading = `${percent}%`` and passes it to
+`t("context.aria", { percent: reading })` (`dsh-client-ui-conversation/lib/client.js:21492-21493`).
+The Korean dictionary supplied its own trailing `%`:
+
+- `/home/minami/Workspace/projects/dsh-workspace/dsh-plugins/dsh-korean-locale/data/ko.json`
+  `conversation["context.aria"]` was `"컨텍스트 {percent}% 사용됨"` → rendered `컨텍스트 100%% 사용됨`.
+- Fixed to `"컨텍스트 {percent} 사용됨"` in both `data/ko.json` and `lib/client.js`.
+
+### 23.2 Gauge pinned at 100%
+
+`contextOccupancy()` (`dsh-client-ui-conversation/lib/client.js:21379-21385`) divides
+`pressure.projectedTokens ?? pressure.pressureTokens` by `pressure.contextWindow`.
+`contextPressure` (`dsh-token-meter/lib/index.js:450`) fed it `pressureFrom(usage) = inputTokens +
+cacheReadTokens + cacheWriteTokens` of the **settled** message.
+
+On this route the settled usage is the generation running total (`addUsage()`), so one step reports
+the sum of ~96 prompt reads. Live proof from the session projection:
+
+| Before | Value |
+|---|---|
+| `contextWindow` | 1,000,000 |
+| `pressureTokens` | **9,493,863** (950 % → clamped 100 %) |
+| `surfaceTokens` / `sampledSurfaceTokens` | 132,807 / 120,453 |
+
+Fix in `scripts/patch-session-stats.mjs` (`patchTokenMeter`): `requestPressureUsage(event)` scans the
+settled stream's usage chunks, requires a non-decreasing prompt sequence (the cumulative adapter
+signature), and returns the **last sample minus the previous one** — the prompt size of the final
+upstream request. Per-call adapters keep oscillating samples and fall through to the settled usage.
+`contextPressure` `stateVersion` 5 → **6**.
+
+Replaying the 12 settlements of `session-bfeb1eaa…`:
+
+| Step | settled prompt | corrected cursor | gauge |
+|---|---|---|---|
+| 1 | 125,548 | 878 | 0.1 % |
+| 6 | 14,931,372 | 208,650 | 20.9 % |
+| 10 | 12,819,198 | 226,255 | 22.6 % |
+| 11 | 9,441,486 | 281,194 | 28.1 % |
+| 12 | 9,493,863 | 317,986 | **31.8 %** |
+
+### 23.3 Also re-checked
+
+- `toolMs` v4 is live after the 22:12 restart: `sessionStats` `ver: 4` with `toolMs 3,918,297`
+  (was 0), `decodeTokens 383,237`, `decodeMs 1,248,943` → 306.8 tok/s.
+- `contextWindow` 1,000,000 is correct for `opencode-go/deepseek-v4.1-flash`; the window was never
+  the bug.
+- `(Go)` / `(Zen)` model labels and the catalog snapshot path are unaffected by this patch.

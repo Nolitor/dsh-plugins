@@ -6,6 +6,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import {
   Config,
@@ -18,7 +21,9 @@ import {
   parseBanner,
   probeServer,
   readBanner,
+  serviceStateCandidates,
   usageFromTokens,
+  addUsage,
 } from '../lib/http.js'
 
 const json = (res, status, body) => {
@@ -478,7 +483,7 @@ test('an unreachable server is reported instead of an empty model list', async (
   const state = await startServer()
   const deadUrl = state.url
   await state.close()
-  const adapter = makeAdapter({ url: deadUrl }, { fallbackToCli: false })
+  const adapter = makeAdapter({ url: deadUrl })
   await assert.rejects(
     () => adapter.listModels('opencode-http-agent'),
     /OpenCode model catalog unavailable/,
@@ -486,21 +491,40 @@ test('an unreachable server is reported instead of an empty model list', async (
 })
 
 test('a missing daemon state file names the reason in the failure', async () => {
-  const config = new Config({
-    baseUrl: '',
-    attachToDaemon: true,
-    spawnServer: false,
-    serviceStatePath: '/nonexistent/opencode-service.json',
-    autoDiscoverModels: true,
-    fallbackToCli: false,
-    localSessionTitles: false,
-    timeoutMs: 8000,
-  })
-  const adapter = new OpencodeHttpAdapter({}, config)
-  await assert.rejects(
-    () => adapter.listModels('opencode-http-agent'),
-    /daemon state unreadable/,
-  )
+  // The candidate list also reads the XDG roots, where a real `opencode
+  // service` may have published a live daemon. Isolate them so the test asserts
+  // the missing-state path on any machine.
+  const saved = {
+    XDG_STATE_HOME: process.env.XDG_STATE_HOME,
+    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+    OPENCODE_SERVICE_STATE: process.env.OPENCODE_SERVICE_STATE,
+  }
+  const emptyHome = await mkdtemp(join(tmpdir(), 'no-daemon-state-'))
+  process.env.XDG_STATE_HOME = emptyHome
+  process.env.XDG_CONFIG_HOME = emptyHome
+  delete process.env.OPENCODE_SERVICE_STATE
+  try {
+    const config = new Config({
+      baseUrl: '',
+      attachToDaemon: true,
+      spawnServer: false,
+      serviceStatePath: '/nonexistent/opencode-service.json',
+      autoDiscoverModels: true,
+      localSessionTitles: false,
+      timeoutMs: 8000,
+    })
+    const adapter = new OpencodeHttpAdapter({}, config)
+    await assert.rejects(
+      () => adapter.listModels('opencode-http-agent'),
+      /daemon state unreadable/,
+    )
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+    await rm(emptyHome, { recursive: true, force: true })
+  }
 })
 
 test('the provider name states the transport', () => {
@@ -518,36 +542,15 @@ test('errorText renders structured execution errors instead of [object Object]',
 })
 
 
-test('HTTP transport failure falls back to the CLI adapter', async () => {
-  const config = new Config({ baseUrl: 'http://127.0.0.1:1', password: 'x', fallbackToCli: true, localSessionTitles: false, timeoutMs: 5000 })
+test('HTTP transport failure is reported; there is no CLI conversation fallback', async () => {
+  const config = new Config({ baseUrl: 'http://127.0.0.1:1', password: 'x', localSessionTitles: false, timeoutMs: 5000 })
   const adapter = new OpencodeHttpAdapter({}, config)
-  const seen = []
-  adapter.cli = () => ({
-    async *stream(options) {
-      seen.push(options.model)
-      yield { type: 'block-start', index: 0, blockType: 'text' }
-      yield { type: 'text-delta', index: 0, text: 'from-cli' }
-      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'from-cli' } }
-      yield { type: 'finish', reason: { kind: 'stop' } }
-    },
-  })
+  assert.equal(typeof adapter.cli, 'undefined', 'the CLI adapter is not a conversation path')
   const chunks = await collect(adapter.stream({ provider: 'opencode-http-agent', model: 'opencode/beam-free', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }))
-  assert.deepEqual(seen, ['opencode/beam-free'])
-  assert.equal(chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join(''), 'from-cli')
-  assert.deepEqual(chunks.at(-1).reason, { kind: 'stop' })
-})
-
-test('fallbackToCli=false reports the HTTP transport error instead', async () => {
-  const config = new Config({ baseUrl: 'http://127.0.0.1:1', password: 'x', fallbackToCli: false, localSessionTitles: false, timeoutMs: 5000 })
-  const adapter = new OpencodeHttpAdapter({}, config)
-  let cliCalls = 0
-  adapter.cli = () => { cliCalls += 1; return { stream: async function* () {} } }
-  const chunks = await collect(adapter.stream({ provider: 'opencode-http-agent', model: 'opencode/beam-free', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }))
-  assert.equal(cliCalls, 0)
   assert.equal(chunks.at(-1).reason.failure.code, 'OPENCODE_HTTP')
 })
 
-test('a model-level execution failure does not fall back to the CLI', async () => {
+test('a model-level execution failure is reported as-is', async () => {
   const state = await startServer({
     events: [
       { type: 'session.execution.started', data: {} },
@@ -556,13 +559,32 @@ test('a model-level execution failure does not fall back to the CLI', async () =
   })
   try {
     const adapter = makeAdapter(state)
-    let cliCalls = 0
-    adapter.cli = () => { cliCalls += 1; return { stream: async function* () {} } }
     const chunks = await collect(adapter.stream({ provider: 'opencode-http-agent', model: 'opencode/beam-free', sessionId: 'dsh-fb', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }))
-    assert.equal(cliCalls, 0)
     assert.equal(chunks.at(-1).reason.failure.code, 'OPENCODE_HTTP_FAILED')
     assert.match(chunks.at(-1).reason.failure.message, /Insufficient account funds/)
   } finally {
     await state.close()
   }
+})
+
+test('a generation spanning many OpenCode steps reports the summed usage', async () => {
+  const first = usageFromTokens({ input: 10, output: 4, reasoning: 3, cache: { read: 100, write: 0 } })
+  const second = usageFromTokens({ input: 20, output: 5, reasoning: 1, cache: { read: 200, write: 2 } })
+  assert.deepEqual(addUsage(first, second), {
+    inputTokens: 30,
+    outputTokens: 9,
+    reasoningTokens: 4,
+    cacheReadTokens: 300,
+    cacheWriteTokens: 2,
+    totalTokens: 345,
+  })
+  const only = usageFromTokens({ input: 1, output: 2 })
+  assert.equal(addUsage(undefined, only), only, 'the first step seeds the running total')
+})
+
+test('serviceStateCandidates covers the explicit row, v2 roots, and legacy state', () => {
+  const candidates = serviceStateCandidates('/explicit/service.json')
+  assert.equal(candidates[0], '/explicit/service.json')
+  assert.ok(candidates.some((path) => path.endsWith('/opencode/service.json')), 'state root candidate')
+  assert.equal(new Set(candidates).size, candidates.length, 'de-duplicated')
 })

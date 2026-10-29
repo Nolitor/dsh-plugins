@@ -1,8 +1,8 @@
 {
   "name": "@nolit/dsh-opencode-v2",
-  "version": "0.2.4",
+  "version": "0.3.5",
   "private": false,
-  "description": "OpenCode CLI (v2.2.0 surface) inside DeepSeek Harness: an `opencode` delegation tool, a /opencode command, an `opencode-agent` CLI-backed LLM route with per-route reasoning levels and stdin prompt delivery, and an `opencode-http-agent` route that drives the OpenCode v2 HTTP API (sessions, SSE deltas, inline usage, permission bridge) \u2014 wrapping @quonaro/dsh-plugin-opencode over ctx.subprocess.",
+  "description": "OpenCode CLI (v2.2.0 surface) inside DeepSeek Harness: an `opencode` delegation tool, a /opencode command, an `opencode-agent` CLI-backed LLM route with per-route reasoning levels and stdin prompt delivery, an `opencode-http-agent` route that drives the OpenCode v2 HTTP API (sessions, SSE deltas, inline usage, permission bridge), and the built-in `cli_worker` tool for isolated one-shot OpenCode/Codex/Claude batch work — wrapping @quonaro/dsh-plugin-opencode over ctx.subprocess.",
   "keywords": [
     "dsh",
     "deepseek-harness",
@@ -45,7 +45,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/provider.js && node --check lib/shared.js"
+    "check": "node --check lib/index.js && node --check lib/provider.js && node --check lib/http.js && node --check lib/shared.js && node --check lib/catalog-cache.js && node --check lib/session-map.js && node --check lib/workers/index.js && node --check lib/workers/run.js && node --check lib/workers/backends.js && node --check lib/workers/artifacts.js"
   },
   "dependencies": {
     "@quonaro/dsh-plugin-opencode": "^0.1.2"

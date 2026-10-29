@@ -14,6 +14,8 @@
 import Schema from '@deepseek-ai/schemastery'
 
 import { JsonRunParser, buildRunArgv, fetchUsage, forwardedEnv, sendPrompt, stripUnsupportedFlags } from './shared.js'
+import { WORKER_BACKENDS } from './workers/backends.js'
+import { registerCliWorker } from './workers/index.js'
 
 /** Host plugin name; must match package.json `name` and the cordis.patch.yml row id. */
 export const name = 'dsh-opencode-v2'
@@ -55,6 +57,14 @@ export const Config = Schema.object({
   extraArgs: Schema.array(Schema.string()).default([]).volatile(),
   // Budget for the post-run `session export` usage fetch; 0 disables it.
   exportTimeoutMs: Schema.number().default(60000).volatile(),
+  // Built-in `cli_worker` tool (isolated one-shot CLI batch work). The tool is
+  // packaged here rather than in a second plugin because it tracks the same
+  // OpenCode surface and must version with the conversation route.
+  workerEnabled: Schema.boolean().default(true).volatile(),
+  workerBackend: Schema.union(WORKER_BACKENDS).default('opencode').volatile(),
+  workerTimeoutMs: Schema.number().default(900000).volatile(),
+  workerMaxOutputBytes: Schema.number().default(262144).volatile(),
+  workerArtifactLimit: Schema.number().default(100).volatile(),
 })
 
 /**
@@ -343,4 +353,8 @@ export async function apply(ctx, config) {
       },
     })
   })
+
+  // The isolated batch worker ships with the same plugin: one install enables
+  // the chat route, the `opencode` delegation tool, and `cli_worker` together.
+  await registerCliWorker(ctx, config)
 }

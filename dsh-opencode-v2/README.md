@@ -58,7 +58,9 @@ Both halves are plain hand-written ESM — there is **no build step**.
 **`lib/index.js` → `@nolit/dsh-opencode-v2`** (row id `dsh-opencode-v2`)
 - the **`opencode` tool** — delegates a task to `opencode run`, bounded capture,
   then over-fetches `session export` to fill real token counts;
-- the **`/opencode` command** — registered when a `commands` service is composed.
+- the **`/opencode` command** — registered when a `commands` service is composed;
+- the **`cli_worker` tool** — one-shot isolated `opencode`/`codex`/`claude` batch
+  runs with artifact collection (§2f), plus `/worker`.
 
 Parameters: `prompt` (required), `cwd`, `model`, `agent`, `session`,
 `continueLast`, `auto`, **`thinking`**, **`title`**, **`files`**, `timeoutMs`.
@@ -182,31 +184,111 @@ Two operational facts the measurements forced:
   resolved). Without it the spawn fallback fails and the route has no models.
 
 When no catalog can be fetched, `listModels` throws with the concrete reason; the host turns that
-into a visible provider failure, so an empty list is never silent. The route names carry the
-transport (`OpenCode (CLI)`, `OpenCode (HTTP)`) and the advertised model description names
-the serving build (`OpenCode v2 server 2.2.0 via HTTP API`).
+into a visible provider failure, so an empty list is never silent. The route name carries the
+transport (`OpenCode (HTTP)`) and the advertised model description names the serving build
+(`OpenCode v2 server 2.2.0 via HTTP API`).
 
-**Single group (v0.2.4):** the package bundle registers only the delegation tool, not the CLI
-LLM route. One `OpenCode (HTTP)` provider is advertised; the CLI adapter exists solely as the
-transport fallback, so a model is never listed twice. Set `registerCliProvider: true` (or insert
-`@nolit/dsh-opencode-v2/provider` as a profile row) to bring back the separate CLI group.
+**HTTP-only conversation (v0.3.3):** the HTTP adapter is the only conversation pipeline — chat,
+streaming, reasoning, and model serving. The CLI adapter is no longer a route or a fallback: it is a
+batch-worker backend (`lib/provider.js`) that registers no LLM adapter, and the `opencode` tool
+(`lib/index.js`) already performs one-shot isolated runs. A transport failure is reported as the
+turn failure (`OPENCODE_HTTP` / `OPENCODE_SPAWN`); there is no replay through the CLI. Rationale:
+the A/B measured that `opencode run --format json` delivers whole blocks (no deltas, TTFT equals the
+full generation) and spawns a process per generation — correct for a batch worker, wrong for chat.
 
-**Routing policy (v0.2.3):** the HTTP route is the only path while it works. When the HTTP
-transport itself is unusable (no attachable daemon, spawn failure, request/event-stream failure) and
-nothing has streamed yet, the generation is retried through the CLI route — the CLI adapter is built
-lazily and never started while HTTP succeeds. Model-level failures (upstream quota, tool errors) do
-not fall back, because both transports share the same upstream. `fallbackToCli: false` disables it.
+Server discovery: candidate descriptor files are tried in order (`serviceStatePath`, then
+`$OPENCODE_SERVICE_STATE`, `$XDG_STATE_HOME/opencode/service.json`,
+`$XDG_CONFIG_HOME/opencode/service.json`) so an `opencode service` shared server is attached instead
+of duplicated; each candidate is validated with `/api/info` before it is adopted, and spawning
+remains the last resort.
+
+Model availability: routes the server reports as `enabled: false` or `status: "disabled"` are
+dropped from the catalog, and a configured route that is absent from the served catalog logs a
+warning at resolution time instead of failing silently.
+
 Cancellation (model switch or user stop) is reported as a `finish{kind:'aborted'}` chunk, so the
 host records an aborted turn instead of an error.
 
 Model names: when two providers serve the same display name (measured: `opencode/*` Zen and
 `opencode-go/*` both name "DeepSeek V4.1 Flash"), the catalog appends the provider id
-(`DeepSeek V4.1 Flash (opencode-go)`) so the picker does not show two indistinguishable rows.
+(`DeepSeek V4.1 Flash (Go)` / `(Zen)` — the OpenCode Go and Zen route namespaces) so the picker
+does not show two indistinguishable rows.
 
 The route publishes `contextWindow`/`defaultMaxTokens`/`reasoning.efforts` from `GET /api/model`
 (`limit.context`, `limit.output`, `variants[]`). One DSH `sessionId` maps to one OpenCode session;
 a reasoning effort is applied as the session model `variant`. `purpose: 'session-title'` stays
 local, and an ephemeral call (no `sessionId`) deletes its OpenCode session afterwards.
+
+## 2e. Model catalog lifecycle — v0.3.0
+
+The catalog the Web model picker reads is served from a durable snapshot, not from a live probe
+on the read path:
+
+| Phase | Behaviour |
+|---|---|
+| Activation | `opencode-models.json` is read **synchronously** from the profile directory; the first `listModels()` answers from memory |
+| Cold probe | Runs in the background right after activation (and on the `catalogSyncMs` timer, default 5 min) |
+| Stale read | A snapshot older than `discoveryCacheMs` still answers immediately and revalidates in the background (single-flight) |
+| Change | A different catalog rewrites the snapshot atomically and emits `llm/models-updated`, so connected clients refetch |
+| Failure | The last good catalog survives; the probe error is logged and surfaced to operators instead of emptying the picker |
+
+### Status-bar speed
+
+The composer's `tok/s` pill is computed by DSH's `sessionStats` projection, not by
+this plugin. Its stock formula counts only the settled message usage over the
+wall-clock span from first token to settlement, which on this route (many nested
+OpenCode calls per DSH step) reads 2 tok/s for a 400 tok/s model. Two changes make
+it truthful: this adapter now emits a running usage total across nested steps, and
+`scripts/patch-session-stats.mjs` (repo root of this workspace) rewrites that
+projection to keep the generation total (the last cumulative snapshot, or the sum
+when an adapter emits per-call deltas), to divide by packed delta-run time, and to
+attribute `wall − TTFT − decode` of an `opencode-http-agent` step to `toolMs`
+(OpenCode runs its tools inside the step, so DSH logs no `tool/call` for them).
+Run it after every `dsh` upgrade:
+
+```bash
+node scripts/patch-session-stats.mjs "$(dirname "$(readlink -f "$(which dsh)")")/.."
+```
+
+The projection caches its state, so the patch bumps `stateVersion`; a service
+restart is required before the new numbers appear (see VERIFICATION §21).
+
+`models.json` lives at `<profile>/opencode-models.json` (the worker backend keeps its own
+`opencode-models-cli.json` when it is constructed as a library). `catalogPath` overrides the
+location, `catalogSyncMs: 0` disables the background timer, and `discoveryCacheMs` remains the
+freshness window. Without a profile and without `DSH_HOME`, the cache stays in memory and nothing
+is written to disk.
+
+The DSH-session → OpenCode-session map is persisted the same way in
+`<profile>/opencode-sessions.json` (`sessionMapPath` overrides). It lets a resumed DSH session
+adopt its existing OpenCode session instead of replaying the transcript; adoption re-validates the
+id with `GET /api/session/{id}` and drops a stale one. A private daemon that dies with the host
+invalidates every id, so the benefit appears under attach / shared-service mode.
+
+## 2f. Built-in CLI worker tool (`cli_worker`) — v0.3.4
+
+The isolated batch worker ships **inside this package**; there is no second
+plugin to install, patch, or version. `lib/index.js` registers a second tool
+when `workerEnabled` is true (default):
+
+| Concern | Behaviour |
+|---|---|
+| Backends | `opencode` (`run --format json --thinking --auto --standalone`), `codex` (`exec --json`), `claude` (`-p --output-format json`) |
+| Daemon isolation | `--standalone` keeps a worker on a private server: it never starts, restarts, or contends with the shared `opencode service` the conversation route attaches to |
+| Directory | the child's `PWD` is pinned to the validated `cwd`, because the OpenCode CLI resolves its session directory from `PWD`, not from the spawn cwd |
+| Input | `task` (required, delivered on **stdin**, never argv), `backend`, `cwd` (required, absolute), `model`, `timeoutMs`, `collect` |
+| Isolation | one process per call through `ctx.subprocess`; credential-shaped env names are scrubbed by the service; the child only sees the forwarded allow-list |
+| Output | `{ok, backend, exitCode, timedOut, truncated, summary, artifacts:[{path,bytes,sha256}], missing, skipped, inputTokens, outputTokens, stderrTail}` |
+| Artifacts | globs resolve strictly inside `cwd`; an unmatched glob is reported in `missing`, never dropped |
+| Cancellation | the tool `signal` aborts the child; a cancelled call returns `ok:false, timedOut` and exit code `-1` |
+| Failure | a non-zero exit is an exit fact (`ok:false`); provider errors arrive as stdout JSON events (e.g. a 429 free-limit) and are folded into `stderrTail` so the failure is readable |
+
+It never registers an LLM route and never appears in the model picker. Config:
+`workerEnabled`, `workerBackend` (default `opencode`), `workerTimeoutMs`
+(default 900000), `workerMaxOutputBytes` (default 262144), `workerArtifactLimit`
+(default 100). A `/worker <task>` command runs the configured backend in the
+host's working directory.
+
 
 ## 3. Bundle layer
 

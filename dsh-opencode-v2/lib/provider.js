@@ -1,20 +1,22 @@
 /**
- * The `opencode-agent` LLM route for OpenCode v2.2.0.
+ * Batch-worker backend for OpenCode v2.2.0.
  *
- * Diff vs @quonaro/dsh-plugin-opencode/lib/provider.js:
+ * This module is NOT a conversation route. Chat, streaming, and model serving
+ * are owned by `lib/http.js` (`opencode-http-agent`); the CLI adapter here is a
+ * one-shot worker that a subagent/batch tool drives and whose artifacts the host
+ * collects. It therefore registers no LLM adapter and exports no `apply`.
+ *
+ * Behaviour kept from the earlier route implementation:
  *   - v2 argv (no --attach/--pure, `--thinking` on) via shared.js.
- *   - TRUE streaming of reasoning: `reasoning` events stream as
- *     `reasoning-delta` on their OWN block index (host contract
- *     StreamChunk, @deepseek-ai/dsh-llm types.d.ts:429).
- *   - Advertises each route's reasoning levels and maps the selected one onto
- *     the wire as `-m provider/model#variant`.
+ *   - reasoning events stream as `reasoning-delta` on their own block index.
+ *   - route context/variants come from `/api/model`; `-m provider/model#variant`
+ *     selects the reasoning level on the wire.
  *   - `usage` comes from `opencode session export <sid>`; when that fails the
- *     chunk is OMITTED rather than filled with a characters/4 guess.
+ *     chunk is omitted rather than estimated.
  *   - `exportTimeoutMs` bounds the post-run usage fetch.
  *
- * The adapter is duck-typed against the documented LlmAdapter surface (the
- * registry validates behavior, not inheritance), so this module carries no
- * runtime import of @deepseek-ai/dsh-llm.
+ * The adapter is duck-typed against the documented LlmAdapter surface, so this
+ * module carries no runtime import of @deepseek-ai/dsh-llm.
  */
 import Schema from '@deepseek-ai/schemastery'
 
@@ -32,12 +34,10 @@ import {
   stripUnsupportedFlags,
   withVariant,
 } from './shared.js'
+import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
 
-/** Plugin name; the cordis.patch.yml row uses the `@nolit/dsh-opencode-v2/provider` specifier. */
+/** Row id kept for the worker package's identity and settings namespace. */
 export const name = 'dsh-opencode-v2-provider'
-
-/** Services this plugin needs: the llm adapter registry and a subprocess provider. */
-export const inject = ['llm', 'subprocess']
 
 const FORWARD_ENV_DEFAULT = [
   'PATH',
@@ -82,6 +82,10 @@ export const Config = Schema.object({
   autoDiscoverModels: Schema.boolean().default(true).volatile(),
   discoveryTimeoutMs: Schema.number().default(60000).volatile(),
   discoveryCacheMs: Schema.number().default(300000).volatile(),
+  /** Snapshot file holding the last good catalog; empty resolves under the active profile. */
+  catalogPath: Schema.string().default('').volatile(),
+  /** Background catalog sync period in ms; 0 keeps refreshes demand-driven only. */
+  catalogSyncMs: Schema.number().default(300000).volatile(),
   /** Budget for the post-run `session export` usage fetch; 0 disables it. */
   exportTimeoutMs: Schema.number().default(60000).volatile(),
 })
@@ -418,9 +422,32 @@ export function eventsToFullChunks(events) {
 
 /** The provider-wire adapter. */
 export class OpencodeLlmAdapter {
-  constructor(ctx, config) {
+  /**
+   * @param {*} ctx Host context (llm registry, subprocess, events).
+   * @param {*} config Validated plugin configuration.
+   * @param {{ providerId?: string, catalogFileName?: string }} [options]
+   *   Route name announced on catalog changes and the snapshot file name.
+   */
+  constructor(ctx, config, options = {}) {
     this.ctx = ctx
     this.config = config
+    this.providerId = options.providerId ?? 'opencode-agent'
+    this.catalogStore = new CatalogStore(
+      resolveCatalogPath({
+        explicit: config.catalogPath.get(),
+        profileDir: ctx?.get?.('profileContext')?.dir,
+        dshHome: process.env.DSH_HOME,
+        fileName: options.catalogFileName ?? 'opencode-models.json',
+      }),
+    )
+    this.catalog = new CatalogLifecycle({
+      probe: (signal) => this.discoverOnce(signal),
+      store: this.catalogStore,
+      cacheMs: () => this.config.discoveryCacheMs.get(),
+      syncMs: () => this.config.catalogSyncMs.get(),
+      onChanged: () => this.announce(),
+      warn: (message) => ctx?.logger?.warn?.(message),
+    })
   }
 
   providerInfo(provider) {
@@ -432,27 +459,46 @@ export class OpencodeLlmAdapter {
   imageRequestPricing() {}
 
   /**
-   * List the route catalog once per cache window; null on failure/disabled.
+   * Load the durable catalog and start the background sync.
+   *
+   * Runs after registration so the first Web catalog read already answers from
+   * memory; the probe that follows replaces the snapshot without blocking boot.
+   */
+  warmStart() {
+    this.catalog.seed()
+    this.catalog.start()
+  }
+
+  /** Stop the background sync timer. */
+  stop() {
+    this.catalog.stop()
+  }
+
+  /** Tell connected clients that this provider's model list changed. */
+  announce() {
+    try {
+      this.ctx?.emit?.('llm/models-updated', this.providerId)
+    } catch (error) {
+      this.ctx?.logger?.warn?.(`model catalog announcement failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  /**
+   * List the route catalog without blocking on a live probe when a snapshot or a
+   * previous result exists. Stale reads revalidate in the background.
    *
    * The host resolves **every** advertised model (`buildModelCatalog` calls
-   * `resolveModelInfo` per route), so concurrent callers must share one probe:
-   * without this single-flight guard a 46-route catalog starts 46 `opencode
-   * serve` children.
+   * `resolveModelInfo` per route), so concurrent callers share one probe through
+   * the lifecycle's single-flight guard; without it a 46-route catalog starts 46
+   * `opencode serve` children.
    */
-  async discover() {
+  async discover(signal) {
     if (!this.config.autoDiscoverModels.get()) return null
-    const cacheMs = this.config.discoveryCacheMs.get()
-    if (this.discovered && Date.now() - this.discovered.at < cacheMs) return this.discovered.result
-    if (!this.discovering) {
-      this.discovering = this.discoverOnce().finally(() => {
-        this.discovering = undefined
-      })
-    }
-    return this.discovering
+    return this.catalog.read(signal)
   }
 
   /** One uncached catalog probe: `serve` -> /api/model, then the CLI listing. */
-  async discoverOnce() {
+  async discoverOnce(signal) {
     // 1) `serve` -> /api/model carries per-model limit.context (needed for compaction)
     // and the route's reasoning variants.
     try {
@@ -462,24 +508,21 @@ export class OpencodeLlmAdapter {
         cwd: this.config.cwd.get() || process.cwd(),
         timeoutMs: this.config.discoveryTimeoutMs.get(),
         stderrMaxBytes: this.config.stderrMaxBytes.get(),
+        signal,
       })
-      if (viaServe?.models?.length) {
-        this.discovered = { at: Date.now(), result: viaServe }
-        return viaServe
-      }
+      if (viaServe?.models?.length) return viaServe
     } catch {
       /* fall through to the CLI listing */
     }
     try {
-      const result = await discoverModels(this.ctx, {
+      return await discoverModels(this.ctx, {
         opencodePath: this.config.opencodePath.get(),
         envNames: this.config.forwardEnv.get(),
         cwd: this.config.cwd.get() || process.cwd(),
         timeoutMs: this.config.discoveryTimeoutMs.get(),
         stderrMaxBytes: this.config.stderrMaxBytes.get(),
+        signal,
       })
-      if (result) this.discovered = { at: Date.now(), result }
-      return result
     } catch {
       return null
     }
@@ -746,20 +789,4 @@ function messageOf(error) {
 function tailOf(text, max) {
   const clean = String(text ?? '').trim()
   return clean.length > max ? clean.slice(-max) : clean
-}
-
-/**
- * Plugin body: register the `opencode-agent` provider route and declare it in
- * the configurable-provider directory so the web Models page can see it.
- */
-export function apply(ctx, config) {
-  ctx.llm.registerAdapter(['opencode-agent'], new OpencodeLlmAdapter(ctx, config))
-  ctx.llm.registerConfigurableProviders([
-    {
-      provider: 'opencode-agent',
-      displayName: 'OpenCode (CLI)',
-      settingsNs: name,
-      settingsPath: [],
-    },
-  ])
 }

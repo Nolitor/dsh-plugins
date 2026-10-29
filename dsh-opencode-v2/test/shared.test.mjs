@@ -484,7 +484,19 @@ test('modelsFromApiPayload disambiguates identical names served by two providers
   const { models } = modelsFromApiPayload(payload)
   assert.deepEqual(
     models.map((model) => model.name),
-    ['DeepSeek V4.1 Flash (opencode)', 'DeepSeek V4.1 Flash (opencode-go)', 'Beam Free'],
+    ['DeepSeek V4.1 Flash (Zen)', 'DeepSeek V4.1 Flash (Go)', 'Beam Free'],
   )
   assert.deepEqual(disambiguateModelNames([{ id: 'a/x', name: 'X' }]), [{ id: 'a/x', name: 'X' }])
+})
+
+test('modelsFromApiPayload drops routes the server marks disabled', () => {
+  const payload = {
+    data: [
+      { providerID: 'opencode', id: 'live', name: 'Live', enabled: true, status: 'active' },
+      { providerID: 'opencode', id: 'off', name: 'Off', enabled: false, status: 'active' },
+      { providerID: 'opencode', id: 'gone', name: 'Gone', enabled: true, status: 'disabled' },
+    ],
+  }
+  const { models } = modelsFromApiPayload(payload)
+  assert.deepEqual(models.map((model) => model.id), ['opencode/live'])
 })
