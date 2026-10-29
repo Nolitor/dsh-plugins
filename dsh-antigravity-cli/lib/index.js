@@ -62,6 +62,8 @@ const USAGE = [
   '  --mode <mode>       accept-edits | auto | plan (default: accept-edits)',
   '  --timeout <ms>      hard budget for this call',
   '  --json              append the raw JSON envelope',
+  '  --models            list the agy models available to this account',
+  '  --help              show this usage',
 ].join('\n')
 
 /**
@@ -78,7 +80,7 @@ export function parseCommandInput(raw) {
   const unknown = []
   let rest = text
   const valueFlags = new Set(['model', 'effort', 'mode', 'timeout'])
-  const boolFlags = new Set(['json', 'help'])
+  const boolFlags = new Set(['json', 'help', 'models'])
 
   while (rest.startsWith('--')) {
     const match = /^--([a-zA-Z-]+)(?:=(\S*))?\s*/.exec(rest)
@@ -277,8 +279,8 @@ export async function registerAgyCommand(ctx, config) {
           return { kind: 'error', text: `Unknown option: --${unknown[0]}\n\n${USAGE}` }
         }
 
-        if (task === '' || task === 'models' || options.help) {
-          if (task === 'models') {
+        if (task === '' || task === 'models' || options.models || options.help) {
+          if (task === 'models' || options.models) {
             const listing = await listAgyModels(ctx, config, process.cwd())
             return { kind: listing.ok ? 'success' : 'error', text: listing.text || '(no models reported)' }
           }
