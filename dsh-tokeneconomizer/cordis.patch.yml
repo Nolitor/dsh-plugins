@@ -1,0 +1,38 @@
+# Bundle layer for @nolit/dsh-tokeneconomizer.
+#
+# Listing this package in a profile's `dsh.profile.bundles` applies this row. The row id is also
+# the settings namespace the loader derives for volatile Config fields, so it MUST equal the
+# plugin `name` exported by lib/index.js.
+#
+# Nothing here touches another plugin's row: the tool mask is an agent-scoped `restrict()` the
+# plugin registers at run time, not a configuration override.
+- insert:
+    - id: tokeneconomizer-dsh
+      name: '@nolit/dsh-tokeneconomizer'
+      config:
+        # Empty paths resolve to <state root>/bin/te and <state root>/bin/te-hook, which
+        # `node scripts/bootstrap.mjs` writes.
+        tePath: ''
+        hookPath: ''
+        stateHome: ''
+        # The engine's own config decides what micro-skills learns; these switches decide only
+        # whether this plugin applies each answer.
+        microskills: true
+        toolprune: true
+        loopguard: true
+        # Host-local, in-memory features. They call no engine and write no state.
+        dedup: true
+        dedupMinChars: 200
+        dedupMaxEntries: 512
+        pinnedRules: ''
+        pinnedRulesOrder: 50
+        loopBreaker: true
+        loopBreakerThreshold: 3
+        loopBreakerWindow: 5
+        watchdog: true
+        watchdogThresholdMs: 180000
+        watchdogAction: 'interrupt'
+        watchdogProgress: 'any'
+        hookTimeoutMs: 8000
+        cliTimeoutMs: 20000
+        headless: auto

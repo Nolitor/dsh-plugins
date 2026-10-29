@@ -1,0 +1,55 @@
+{
+  "name": "@nolit/dsh-tokeneconomizer",
+  "version": "0.1.0",
+  "description": "TokenEconomizer for the DeepSeek Harness: session micro-skills, evidence-based tool pruning applied as an in-memory restriction, and a tool-loop guard, bridged to the stdlib-only Python engine through its own te/te-hook launchers, plus three host-local in-memory features: tool-result hash deduplication, a KV-cache-safe prompt slot, and a loop breaker with a thinking watchdog. Zero runtime imports outside node: builtins.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "cordis",
+    "tokeneconomizer",
+    "cost",
+    "tokens"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "bin": {
+    "te-dsh": "./bin/te-dsh.mjs"
+  },
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./bridge": "./lib/bridge.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/en.json": "./locale/en.json",
+    "./locale/ko.json": "./locale/ko.json"
+  },
+  "files": [
+    "lib/",
+    "bin/",
+    "scripts/",
+    "patch/",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.2-alpha.2 <0.3.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check lib/index.js && node --check lib/bridge.js && node --check lib/dedup.js && node --check lib/prefix.js && node --check lib/watchdog.js && node --check bin/te-dsh.mjs && node --check scripts/bootstrap.mjs",
+    "bootstrap": "node scripts/bootstrap.mjs",
+    "cold-start": "node bin/te-dsh.mjs cold-start"
+  }
+}

@@ -1,0 +1,777 @@
+diff --git a/tests/test_dsh_trace.py b/tests/test_dsh_trace.py
+new file mode 100644
+index 0000000..396591d
+--- /dev/null
++++ b/tests/test_dsh_trace.py
+@@ -0,0 +1,109 @@
++"""The DSH reader: one exported session log -> calls, usage, prompts, Claude transcript."""
++import json
++import os
++import tempfile
++import unittest
++
++from tokeneconomizer import trace
++
++
++def _export(path, events, header=None, sid="session-1"):
++    lines = [json.dumps(header or {"type": "session", "version": 4, "id": sid,
++                                   "createdAt": 1792, "cwd": "/repo"})]
++    lines.extend(json.dumps(ev) for ev in events)
++    with open(path, "w", encoding="utf-8") as fh:
++        fh.write("\n".join(lines) + "\n")
++    return path
++
++
++def _events():
++    return [
++        {"type": "turn/start", "seq": 0, "time": 1, "data": {"turn": 1}},
++        {"type": "user/message", "seq": 1, "time": 2, "data": {
++            "id": "u1", "role": "user", "content": [{"type": "text", "text": "fix it"}],
++            "source": {"kind": "user"}}},
++        {"type": "user/message", "seq": 2, "time": 3, "data": {
++            "id": "u2", "role": "user", "content": [{"type": "text", "text": "injected"}],
++            "source": {"kind": "system-prompt"}}},
++        {"type": "assistant/message", "seq": 3, "time": 4, "data": {
++            "turn": 1, "step": 1,
++            "message": {"id": "a1", "role": "assistant",
++                        "content": [{"type": "text", "text": "running"},
++                                    {"type": "reasoning", "text": "why"}],
++                        "source": {"kind": "model", "provider": "deepseek-account",
++                                   "model": "deepseek-v4.1-flash"}},
++            "usage": {"inputTokens": 1000, "outputTokens": 50, "totalTokens": 1163,
++                      "cacheReadTokens": 113}}},
++        {"type": "tool/call", "seq": 4, "time": 5, "data": {
++            "turn": 1, "step": 1, "callId": "c1", "name": "bash",
++            "arguments": json.dumps({"command": "python -m pytest -q"})}},
++        {"type": "tool/result", "seq": 5, "time": 6, "data": {
++            "turn": 1, "step": 1,
++            "message": {"id": "t1", "role": "tool", "toolCallId": "c1", "isError": True,
++                        "content": [{"type": "text", "text": "1 failed"}],
++                        "source": {"kind": "tool", "callId": "c1"}}}},
++    ]
++
++
++class DshTraceTest(unittest.TestCase):
++    def test_conversion_pairs_calls_and_results(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            src = _export(os.path.join(tmp, "s.jsonl"), _events())
++            out = os.path.join(tmp, "trace.jsonl")
++            self.assertEqual(trace.dsh_session_to_claude(src, out), 1)
++            with open(out, encoding="utf-8") as fh:
++                lines = [json.loads(line) for line in fh]
++            kinds = [line["type"] for line in lines]
++            self.assertEqual(kinds, ["user", "user", "assistant", "user"])
++            assistant = lines[2]["message"]
++            self.assertEqual(assistant["model"], "deepseek-v4.1-flash")
++            self.assertEqual(assistant["content"][-1]["name"], "bash")
++            self.assertEqual(assistant["content"][-1]["input"], {"command": "python -m pytest -q"})
++            self.assertEqual(lines[3]["message"]["content"][0]["tool_use_id"], "c1")
++            self.assertTrue(lines[3]["message"]["content"][0]["is_error"])
++            # The mechanisms read the converted file with the Claude reader.
++            calls = trace.load_trajectory(out)
++            self.assertEqual(calls[0][0], "bash")
++            self.assertEqual(calls[0][1], {"command": "python -m pytest -q"})
++            self.assertEqual(calls[0][2], "1 failed")
++            self.assertFalse(calls[0][3])
++
++    def test_usage_and_prompts(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            src = _export(os.path.join(tmp, "s.jsonl"), _events())
++            usage = trace.dsh_session_usage(src)
++            self.assertEqual(usage["input_tokens"], 1000)
++            self.assertEqual(usage["cache_read_input_tokens"], 113)
++            self.assertEqual(usage["output_tokens"], 50)
++            self.assertEqual(usage["requests"], 1)
++            self.assertEqual(usage["model"], "deepseek-v4.1-flash")
++            self.assertEqual(trace.dsh_prompt_count(src), 1)
++
++    def test_usage_deduplicates_a_repeated_message(self):
++        events = _events()
++        events.append(dict(events[3], seq=9))
++        with tempfile.TemporaryDirectory() as tmp:
++            src = _export(os.path.join(tmp, "s.jsonl"), events)
++            self.assertEqual(trace.dsh_session_usage(src)["requests"], 1)
++            self.assertEqual(trace.dsh_session_usage(src)["input_tokens"], 1000)
++
++    def test_header_and_missing_file(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            src = _export(os.path.join(tmp, "s.jsonl"), _events(), sid="session-9")
++            self.assertEqual(trace.dsh_export_header(trace.dsh_session_header(src))[0], "session-9")
++            self.assertIsNone(trace.dsh_session_to_claude(os.path.join(tmp, "nope"),
++                                                         os.path.join(tmp, "out")))
++
++
++class DshProtectionTest(unittest.TestCase):
++    def test_a_person_s_tools_are_protected_under_dsh_names(self):
++        from tokeneconomizer.plugin.adapter import LiveAdapter
++        from tokeneconomizer.plugin.hosts import DSH
++        protected = LiveAdapter(DSH(), "/repo").protected_tools()
++        for name in ("ask_user_question", "todo_write", "web_search", "web_fetch",
++                     "subagent", "send_message", "team_task_create", "exit_plan_mode",
++                     "present", "job_output"):
++            self.assertIn(name, protected)
++        # Work-surface tools of every ecosystem stay prunable candidates only when never used;
++        # nothing here denies the category, it only protects a person's controls.
++        self.assertNotIn("cordis_inspect_query", protected)
+diff --git a/tokeneconomizer/plugin/adapter.py b/tokeneconomizer/plugin/adapter.py
+index b75b502..6d7e9b0 100644
+--- a/tokeneconomizer/plugin/adapter.py
++++ b/tokeneconomizer/plugin/adapter.py
+@@ -57,6 +57,19 @@ COPILOT_PROTECTED = frozenset({
+ })
+ # Rarely used, but expensive to lose when a task needs them: proposed only after
+ # HIGH_RISK_FACTOR times the usual evidence.
++# DSH registers model-facing tool names in lowercase (`bash`, `read`, `edit`, `write`,
++# `todo_write`, `ask_user_question`, `web_search`, `subagent`, `send_message`, `team_task_*`).
++# The sets above are Claude Code's spellings, so a DSH session would leave a person's tools
++# unprotected and could prune them. These are the same tools under the names DSH reports.
++DSH_PROTECTED = frozenset({
++    "bash", "read", "read_image", "edit", "write", "grep", "glob", "str_replace_editor",
++    "ask_user_question", "enter_plan_mode", "exit_plan_mode", "todo_write", "present",
++    "skill", "web_search", "web_fetch",
++    "subagent", "spawn_teammate", "list_agents", "send_message", "wait_agent",
++    "team_task_create", "team_task_get", "team_task_list", "team_task_update",
++    "job_list", "job_output", "job_kill", "opencode",
++})
++
+ HIGH_RISK = frozenset({"NotebookEdit"})
+ HIGH_RISK_FACTOR = 3
+ 
+@@ -142,7 +155,11 @@ class LiveAdapter:
+ 
+     # ---- tool pruning ----
+     def protected_tools(self):
+-        extra = COPILOT_PROTECTED if self.host.name == "copilot" else frozenset()
++        extra = frozenset()
++        if self.host.name == "copilot":
++            extra = COPILOT_PROTECTED
++        elif self.host.name == "dsh":
++            extra = DSH_PROTECTED
+         return _Protected(PROTECTED_TOOLS | INTERACTIVE_PROTECTED | extra, self.protect)
+ 
+     def inapplicable_tools(self):
+diff --git a/tokeneconomizer/plugin/cli.py b/tokeneconomizer/plugin/cli.py
+index 7f8fb75..21db07e 100644
+--- a/tokeneconomizer/plugin/cli.py
++++ b/tokeneconomizer/plugin/cli.py
+@@ -41,8 +41,9 @@ import os
+ import sys
+ import time
+ 
+-from .. import loopguard
++from .. import loopguard, trace
+ from . import accounting, denylist, fold, hosts, paths, repomap, repos, sidecall, toolcheck
++from . import adapter as live_adapter
+ from .config import canonical, unset_config, write_config
+ from .context import LiveContext
+ from .paths import state_root
+@@ -195,6 +196,82 @@ def cmd_microskills(args):
+     return 0
+ 
+ 
++# ---- DSH bridge ----------------------------------------------------------------------------
++def cmd_dsh_session(args):
++    """The one call the DSH plugin makes at session start: one JSON object with what to inject,
++    which tools to leave out, and whether the guard is live. Fails open like a hook: a missing
++    state file is an empty answer, not an error."""
++    ctx = _ctx(args)
++    cfg = ctx.config
++    if args.tools:
++        # The plugin reports the model-facing tools this DSH assembly registers, so evidence
++        # pruning has the full catalog, not only the tools a session happened to call. Written
++        # only when it changes; no model call, no probe process.
++        tools = sorted({t.strip() for t in args.tools.split(",") if t.strip()})
++        path = live_adapter.catalog_path(ctx.root, ctx.host.name)
++        try:
++            prior = (json.load(open(path, encoding="utf-8")) or {}).get("tools")
++        except (OSError, ValueError):
++            prior = None
++        if tools and tools != prior:
++            denylist.write_json(path, {"tools": tools, "probed_by": "dsh-plugin",
++                                       "probed_at": time.time()})
++    out = {"host": ctx.host.name, "shadow": bool(cfg.shadow),
++           "repo": {"label": ctx.repo.label, "root": ctx.repo.root, "key": ctx.repo.key},
++           "microskills": {"profile": cfg.microskills, "text": "", "facts": 0},
++           "toolprune": {"mode": cfg.toolprune, "proposal": []},
++           "loopguard": {"mode": cfg.loopguard, "envelope": None}}
++    inj = ctx.store.read("injection.json") or {}
++    if cfg.microskills != "off" and not cfg.shadow:
++        text = inj.get("rendered") or ""
++        out["microskills"]["text"] = text
++        out["microskills"]["facts"] = sum(1 for ln in text.splitlines() if ln.startswith("- "))
++    unt = ctx.store.read("untool.json") or {}
++    out["toolprune"]["proposal"] = list(unt.get("proposal") or [])
++    try:
++        out["loopguard"]["envelope"] = loopguard.load_envelope(
++            ctx.store, cfg.loopguard_aggr, cfg.loopguard_thresholds).envelope
++    except (OSError, ValueError):
++        out["loopguard"]["envelope"] = None
++    print(json.dumps(out, default=str))
++    return 0
++
++
++def cmd_dsh_import(args):
++    """Record and fold one finished DSH session from its decompressed log.
++
++    The plugin's cold-start pass walks the harness's stored sessions, decompresses each one and
++    calls this command once per session, so what a person's earlier DSH sessions taught is in
++    the state before the first new one runs. A session already folded is not folded again
++    (`fold_session` keys by id).
++    """
++    path = os.path.abspath(args.export)
++    if not os.path.exists(path):
++        print(json.dumps({"error": f"no such export: {path}"}))
++        return 1
++    header = trace.dsh_session_header(path)
++    sid, cwd, created = trace.dsh_export_header(header)
++    sid = args.session or sid
++    if not sid:
++        print(json.dumps({"error": f"{path} carries no session id; pass --session"}))
++        return 1
++    cwd = cwd or args.cwd
++    ctx = LiveContext.build(hosts.DSH(), cwd, os.environ, session_id=sid)
++    started = (float(created) / 1000.0) if created else time.time()
++    ctx.store.write(os.path.join("sessions", f"{sid}.json"), {
++        "session_id": sid, "host": ctx.host.name, "started": started, "cwd": cwd,
++        "transcript": path, "ended": time.time(), "imported": True,
++        "turns": [], "nudges": 0, "aborts": 0, "judge_tokens": 0, "writer_tokens": 0})
++    rec = fold.fold_session(ctx, sid, transcript_path=path)
++    print(json.dumps({"session": sid, "repo": ctx.repo.label, "root": ctx.repo.root,
++                      "folded": rec is not None,
++                      "record": ({k: rec.get(k) for k in (
++                          "error", "prompts", "turns", "injection", "untool",
++                          "effective_tokens", "priced_by", "model")} if rec else None)},
++                     default=str))
++    return 0
++
++
+ # ---- toolprune -----------------------------------------------------------------------------
+ def _toolprune_show(ctx, unt):
+     host = ctx.host.name
+@@ -719,6 +796,13 @@ def build_parser():
+     p = add("status")
+     p.add_argument("--json", action="store_true")
+     p.set_defaults(fn=cmd_status)
++    p = add("dsh-session")
++    p.add_argument("--tools", default="")
++    p.set_defaults(fn=cmd_dsh_session)
++    p = add("dsh-import")
++    p.add_argument("export")
++    p.add_argument("--session")
++    p.set_defaults(fn=cmd_dsh_import)
+     add("microskills", "facts").set_defaults(fn=cmd_microskills)
+     p = add("toolprune", "untool")
+     p.add_argument("action", nargs="?", default="show",
+diff --git a/tokeneconomizer/plugin/context.py b/tokeneconomizer/plugin/context.py
+index 85865d3..2cd4e7b 100644
+--- a/tokeneconomizer/plugin/context.py
++++ b/tokeneconomizer/plugin/context.py
+@@ -51,9 +51,16 @@ class LiveContext:
+             repo = repo_identity(cwd, env)
+             unsettled = (cwd, session_id)
+         base = repo_state_dir(repo, host.name, env)
++        cfg = load_config(root, repo_dir=os.path.dirname(base), env=env)
++        if host.name == "dsh" and cfg.toolprune == "auto":
++            # DSH's plugin applies a tool mask in memory and writes no settings file, so `auto`
++            # would only leave a proposal per fold and a refused write behind. The evidence is
++            # the same either way; the mask is the DSH plugin's decision.
++            cfg.toolprune = "propose"
++            cfg.warnings.append("toolprune=auto reads as propose on dsh: its plugin applies the "
++                                "mask in memory, there is no settings file to write")
+         ctx = cls(host=host, repo=repo, root=root, store=Store(base),
+-                  config=load_config(root, repo_dir=os.path.dirname(base), env=env), env=env,
+-                  unsettled=unsettled)
++                  config=cfg, env=env, unsettled=unsettled)
+         if settle:
+             ctx.settle()
+         return ctx
+diff --git a/tokeneconomizer/plugin/denylist.py b/tokeneconomizer/plugin/denylist.py
+index ad2b62c..371d69d 100644
+--- a/tokeneconomizer/plugin/denylist.py
++++ b/tokeneconomizer/plugin/denylist.py
+@@ -54,7 +54,7 @@ CODEX_CONFIG_REL = os.path.join(".codex", "config.toml")
+ COPILOT_SETTINGS_REL = os.path.join(".github", "copilot", "settings.local.json")
+ 
+ _SETTINGS = {"claude": SETTINGS_REL, "codex": CODEX_CONFIG_REL, "copilot": COPILOT_SETTINGS_REL}
+-_UNITS = {"claude": "tool", "codex": "capability", "copilot": "MCP server"}
++_UNITS = {"claude": "tool", "codex": "capability", "copilot": "MCP server", "dsh": "tool"}
+ 
+ # Codex capability -> (table or None for top level, key, TOML value). Each probed project-local
+ # on 0.153.1 (see the module docstring); `te_harness.codex` holds the launch-time superset.
+@@ -74,7 +74,10 @@ MARK = "# tokeneconomizer"
+ 
+ 
+ def supports(host):
+-    return host in _SETTINGS
++    """Whether this host has a tool-pruning lever. DSH has one, but not a settings file: its
++    plugin applies the proposal as an in-memory tool restriction, so the evidence is computed
++    and `toolprune` is read as `propose` on that host (see `cli.cmd_dsh_session`)."""
++    return host in _SETTINGS or host == "dsh"
+ 
+ 
+ def unit(host, plural=False):
+@@ -83,7 +86,13 @@ def unit(host, plural=False):
+ 
+ 
+ def settings_path(repo_root, host="claude"):
+-    return os.path.join(repo_root, _SETTINGS.get(host, SETTINGS_REL))
++    """The repository settings file this host reads. Empty for a host with no file (DSH), which
++    never falls back to another agent's path: writing a Claude Code file from a DSH session would
++    change a different agent's configuration."""
++    rel = _SETTINGS.get(host)
++    if host == "dsh":
++        return ""
++    return os.path.join(repo_root, rel if rel is not None else SETTINGS_REL)
+ 
+ 
+ def _read_settings(path):
+@@ -218,6 +227,8 @@ def set_kept(store, repo_root, host, add=(), remove=()):
+ 
+ def applied(store, path=None):
+     """What the plugin added to the settings file at `path`; without one, to any checkout's."""
++    if path == "":
++        return []
+     by = applied_by_path(store.read(APPLIED) or {})
+     if path is None:
+         return sorted(set().union(*by.values())) if by else []
+@@ -521,6 +532,9 @@ def codex_project_trusted(repo_root, env=None):
+ # ---- dispatch ------------------------------------------------------------------------------
+ def apply(repo_root, tools, store, host="claude"):
+     """Write `tools` (tools, capabilities or MCP servers, by host). Returns those newly added."""
++    if host == "dsh":
++        raise RuntimeError("DSH has no tool-settings file: its plugin applies the proposal as "
++                           "an in-memory restriction, so there is nothing to write")
+     if host == "codex":
+         return _apply_codex(repo_root, tools, store)
+     return _apply_json_list(repo_root, tools, store, host)
+@@ -528,6 +542,9 @@ def apply(repo_root, tools, store, host="claude"):
+ 
+ def restore(repo_root, store, tools=None, host="claude"):
+     """Remove entries this plugin added (all of them, or just `tools`). Returns removed."""
++    if host == "dsh":
++        raise RuntimeError("DSH has no tool-settings file: giving a tool back is dropping it "
++                           "from the plugin's mask, which its own command does")
+     if host == "codex":
+         return _restore_codex(repo_root, store, tools)
+     return _restore_json_list(repo_root, store, tools, host)
+diff --git a/tokeneconomizer/plugin/hosts.py b/tokeneconomizer/plugin/hosts.py
+index 94e2ef0..c656cf7 100644
+--- a/tokeneconomizer/plugin/hosts.py
++++ b/tokeneconomizer/plugin/hosts.py
+@@ -389,6 +389,52 @@ class OpenCode(Host):
+         return trace.opencode_session_usage(transcript_path)
+ 
+ 
++class DSH(Host):
++    """DeepSeek Harness (`dsh`), through the plugin in `plugin/` of this repository's DSH port.
++
++    DSH has no hook protocol of its own: its plugins are Cordis plugins with scoped
++    registrations, so `@nolit/dsh-tokeneconomizer` speaks THIS one on DSH's behalf, as the
++    opencode and Pi integrations do. It calls the same dispatcher with a Claude-shaped payload
++    per lifecycle event and applies the answer with DSH's own levers (a scoped system-prompt
++    context, an injected user message, an in-memory tool restriction). What it sends:
++
++      * `prompt_id`, numbered by the plugin, because DSH stamps `turn` but not a prompt id;
++      * `transcript_path`, a decompressed copy of the session log written at each turn end and
++        at disposal (`trace/dsh.py` reads it);
++      * `tool_response = {content, isError, exit_code}`, where `isError` is the tool result's
++        own flag and `exit_code` is read from the rendered result when it names one;
++      * DSH's mode in `TE_DSH_MODE`: `headless` for `dsh headless …`, else `interactive`.
++    """
++    name = "dsh"
++    prompt_context = True              # the plugin supplies the learned facts as prompt context
++    interrupt = "Press Esc to interrupt the turn."
++    end_run = "Press Ctrl+C to end the run."
++
++    def turn_key(self, p):
++        return str(p.get("prompt_id") or "")
++
++    def headless(self, env, transcript=None):
++        return str(env.get("TE_DSH_MODE", "")).strip() == "headless"
++
++    def tool_call(self, p):
++        name, args, text, code = super().tool_call(p)
++        if name == "str_replace_editor":
++            # DSH keeps a str_replace-style editor beside `edit`; the guard counts edits.
++            return "str_replace", args, text, code
++        return name, args, text, code
++
++    def mechanism_trace(self, transcript_path, workdir):
++        out = os.path.join(workdir, "dsh_trace.jsonl")
++        n = trace.dsh_session_to_claude(transcript_path, out)
++        return out if n is not None else None
++
++    def prompt_count(self, transcript_path):
++        return trace.dsh_prompt_count(transcript_path)
++
++    def session_usage(self, transcript_path):
++        return trace.dsh_session_usage(transcript_path)
++
++
+ def copilot_home(env=None):
+     env = os.environ if env is None else env
+     return env.get("COPILOT_HOME") or os.path.join(os.path.expanduser("~"), ".copilot")
+@@ -481,14 +527,14 @@ def _ancestor_args(limit=4):
+ 
+ 
+ HOSTS = {"claude": ClaudeCode, "codex": Codex, "copilot": Copilot, "opencode": OpenCode,
+-         "pi": Pi}
++         "pi": Pi, "dsh": DSH}
+ 
+ 
+ def default_host(env=None, recent=None):
+     """The host a `te` command run without `--host` is about: `TE_HOST`, else the agent whose
+-    shell it runs in (Claude Code marks its shell `CLAUDECODE=1`, Copilot `COPILOT_CLI=1`),
+-    else -- a plain terminal -- `recent`, the agent that last worked in this repository (see
+-    `cli`), else Claude Code."""
++    shell it runs in (Claude Code marks its shell `CLAUDECODE=1`, Copilot `COPILOT_CLI=1`,
++    DSH's plugin exports `TE_DSH=1`), else -- a plain terminal -- `recent`, the agent that last
++    worked in this repository (see `cli`), else Claude Code."""
+     env = os.environ if env is None else env
+     if env.get("TE_HOST") in HOSTS:
+         return env["TE_HOST"]
+@@ -496,6 +542,8 @@ def default_host(env=None, recent=None):
+         return "claude"
+     if env.get("COPILOT_CLI") == "1":
+         return "copilot"
++    if env.get("TE_DSH") == "1":
++        return "dsh"
+     return recent if recent in HOSTS else "claude"
+ 
+ 
+diff --git a/tokeneconomizer/plugin/sidecall.py b/tokeneconomizer/plugin/sidecall.py
+index 3594a3e..8a19e61 100644
+--- a/tokeneconomizer/plugin/sidecall.py
++++ b/tokeneconomizer/plugin/sidecall.py
+@@ -331,6 +331,55 @@ def copilot_call(prompt, model="", cli="copilot", timeout=TIMEOUT_S):
+     return text, eff
+ 
+ 
++def dsh_call(prompt, model="", cli="dsh", profile="headless", timeout=TIMEOUT_S):
++    """A side call through DSH's own headless profile, in a throwaway directory.
++
++    `dsh --profile headless --json <prompt>` writes newline-delimited run events; its terminal
++    `final` event carries the answer, and each `status` event of phase `step_end` carries that
++    step's `usage` in DSH's own counters (`inputTokens`, `outputTokens`, `cacheReadTokens`,
++    `cacheWriteTokens`). The call exports `TE_DISABLE=1` so the DSH TokenEconomizer plugin does
++    nothing inside it, and `TE_SIDECALL=1` like every other side call.
++
++    A model override is not passed: DSH chooses the agent preset's route, which is the person's
++    own default. The call is billed where the person's DSH is billed; the ledger charges the
++    tokens DSH reports.
++    """
++    cmd = [cli, "--profile", profile, "--json", prompt]
++    out_usage = None
++    text = ""
++    with tempfile.TemporaryDirectory(prefix="te-side-") as cwd:
++        out = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace",
++                             timeout=timeout, env=dict(_env(), TE_DISABLE="1"), cwd=cwd,
++                             stdin=subprocess.DEVNULL)
++        for line in (out.stdout or "").splitlines():
++            try:
++                ev = json.loads(line)
++            except ValueError:
++                continue
++            if not isinstance(ev, dict):
++                continue
++            if ev.get("type") == "final" and isinstance(ev.get("text"), str):
++                text = ev["text"]
++            elif ev.get("type") == "status" and ev.get("phase") == "step_end":
++                u = ev.get("usage") or {}
++                if isinstance(u, dict) and u.get("inputTokens") is not None:
++                    out_usage = out_usage or {"input_tokens": 0, "cache_read_input_tokens": 0,
++                                              "cache_creation_input_tokens": 0,
++                                              "output_tokens": 0}
++                    out_usage["input_tokens"] += int(u.get("inputTokens") or 0)
++                    out_usage["cache_read_input_tokens"] += int(u.get("cacheReadTokens") or 0)
++                    out_usage["cache_creation_input_tokens"] += int(
++                        u.get("cacheWriteTokens") or 0)
++                    out_usage["output_tokens"] += int(u.get("outputTokens") or 0)
++    if not text:
++        _no_reply("dsh", out)
++    eff = None
++    if out_usage:
++        out_usage["model"] = model or "dsh"
++        eff, _ = accounting.effective(out_usage)
++    return text, eff
++
++
+ def runner_for(host_name, config):
+     """The optimizer callable for this host. Each host's calls go through that host's own CLI,
+     never another agent's. The caller decides whether a call is allowed: micro-skills' proposer
+@@ -344,4 +393,6 @@ def runner_for(host_name, config):
+         return lambda prompt, _m="agent": codex_call(prompt, model=model)
+     if host_name == "copilot":
+         return lambda prompt, _m="agent": copilot_call(prompt, model=model)
++    if host_name == "dsh":
++        return lambda prompt, _m="agent": dsh_call(prompt, model=model)
+     return lambda prompt, _m="agent": claude_call(prompt, model=model or "haiku")
+diff --git a/tokeneconomizer/trace/__init__.py b/tokeneconomizer/trace/__init__.py
+index b8993c5..0761fc9 100644
+--- a/tokeneconomizer/trace/__init__.py
++++ b/tokeneconomizer/trace/__init__.py
+@@ -6,9 +6,9 @@ here and nowhere else:
+   * `calls`    -- `load_trajectory`: any agent's log as ordered `(name, args, result, ok)` calls;
+                   `call_cwds`, `tool_usage`, `strip_rtk_prefix`;
+   * `catalog`  -- the tool list a session loaded, from whichever source the agent publishes;
+-  * `claude`, `codex`, `copilot`, `opencode`, `pi` -- each agent's own session file: usage,
+-                  metadata, prompt-turns, and the conversions that let the readers above handle
+-                  it.
++  * `claude`, `codex`, `copilot`, `opencode`, `pi`, `dsh` -- each agent's own session file:
++                  usage, metadata, prompt-turns, and the conversions that let the readers above
++                  handle it.
+ 
+ Stdlib only.
+ """
+@@ -26,6 +26,8 @@ from .copilot import (copilot_event_calls, copilot_mcp_servers, copilot_prompt_c
+                       mcp_server_of)
+ from .opencode import (opencode_prompt_count, opencode_run_reply, opencode_session_info,
+                        opencode_session_to_claude, opencode_session_usage)
++from .dsh import (dsh_export_header, dsh_prompt_count, dsh_session_header,
++                  dsh_session_to_claude, dsh_session_usage)
+ from .pi import (pi_active_branch, pi_json_reply, pi_prompt_count, pi_session_header,
+                  pi_session_to_claude, pi_session_usage)
+ 
+@@ -42,6 +44,8 @@ __all__ = [
+     "copilot_session_usage", "copilot_turns", "mcp_server_of",
+     "opencode_prompt_count", "opencode_run_reply", "opencode_session_info",
+     "opencode_session_to_claude", "opencode_session_usage",
++    "dsh_export_header", "dsh_prompt_count", "dsh_session_header", "dsh_session_to_claude",
++    "dsh_session_usage",
+     "pi_active_branch", "pi_json_reply", "pi_prompt_count", "pi_session_header",
+     "pi_session_to_claude", "pi_session_usage",
+ ]
+diff --git a/tokeneconomizer/trace/dsh.py b/tokeneconomizer/trace/dsh.py
+new file mode 100644
+index 0000000..28eb768
+--- /dev/null
++++ b/tokeneconomizer/trace/dsh.py
+@@ -0,0 +1,228 @@
++"""DeepSeek Harness (DSH, `dsh`): a session exported as JSONL.
++
++DSH keeps each session as a compressed append-only log, `session.v<N>.jsonl.zstd` under
++`$DSH_HOME/sessions/<project>/<session>/`. The compression moves between format generations, and
++the file is private to the harness, so the DSH plugin writes a *decompressed* copy of that log
++beside the other state when a session ends (`$TOKENECONOMIZER_HOME/dsh-sessions/<id>.jsonl`) and
++this module reads the copy. A decompressed native log reads the same way, which is what the
++plugin's cold-start import uses.
++
++The export is the harness's own JSONL: one header line, then one event per line.
++
++    {"type": "session", "version": 4, "id": "session-…", "createdAt": 1792…, "cwd": "/repo"}
++    {"type": "user/message", "seq": 7, "time": 1792…, "data": {…}}
++    {"type": "assistant/message", …, "data": {"turn": 1, "step": 1,
++        "message": {"id": "…", "role": "assistant",
++                    "content": [{"type": "text", …}, {"type": "reasoning", …}],
++                    "source": {"kind": "model", "provider": "…", "model": "…"}},
++        "usage": {"inputTokens": 16832, "outputTokens": 94, "totalTokens": 17039,
++                  "cacheReadTokens": 113}}}
++    {"type": "tool/call", …, "data": {"turn": 1, "step": 1, "callId": "…",
++                                      "name": "bash", "arguments": "{\\"command\\": \\"…\\"}"}}
++    {"type": "tool/result", …, "data": {"turn": 1, "step": 1,
++        "message": {"role": "tool", "toolCallId": "…",
++                    "content": [{"type": "text", "text": "…"}], "isError": false}}}
++
++What the mechanisms read, by event:
++
++  * `tool_name` — `tool/call.data.name` (the registered model-facing name: `bash`, `read`,
++    `write`, `edit`, `grep`, `glob`, an MCP tool's name, …);
++  * `status` — `tool/result.data.message.isError` (absent means success);
++  * `tokens` — `assistant/message.data.usage`, one per model request. DSH counts a cached read
++    in `cacheReadTokens` and a cache write in `cacheWriteTokens`, never inside `inputTokens`, so
++    the four ledger fields map one to one. `outputTokens` is used as recorded; a separate
++    `reasoningTokens` counter is not added, because the harness already reports it inside the
++    provider's output total when the provider does.
++
++Usage is keyed by assistant message id: a resumed or compacted log can repeat a request's
++message envelope, and summing lines would price that request twice.
++
++`dsh_session_to_claude` writes the conversation as the Claude Code envelope the other readers
++already handle, so no mechanism needs a DSH branch.
++"""
++import json
++import os
++
++
++def _events(path):
++    """(header, [event]) of an export; ({}, []) when it cannot be read."""
++    header, events = {}, []
++    try:
++        fh = open(path, encoding="utf-8", errors="replace")
++    except OSError:
++        return header, events
++    with fh:
++        for line in fh:
++            line = line.strip()
++            if not line:
++                continue
++            try:
++                ev = json.loads(line)
++            except ValueError:
++                continue
++            if not isinstance(ev, dict):
++                continue
++            if ev.get("type") == "session" and not events and not header:
++                header = ev
++                continue
++            if isinstance(ev.get("data"), dict) and ev.get("type"):
++                events.append(ev)
++    return header, events
++
++
++def dsh_session_header(path):
++    """The `{"type": "session", …}` header of an export, {} when it carries none."""
++    return _events(path)[0]
++
++
++def _text_of(content):
++    """The text blocks of a message's content, joined; non-text blocks are ignored."""
++    if isinstance(content, str):
++        return content
++    if not isinstance(content, list):
++        return ""
++    return "\n".join(b.get("text", "") for b in content
++                     if isinstance(b, dict) and b.get("type") == "text" and b.get("text"))
++
++
++def dsh_prompt_count(path):
++    """How many prompts the person gave the session: `user/message` events from the person.
++
++    DSH writes injected context as user-role messages too (`source.kind` names the producer);
++    only `{"kind": "user"}` is a prompt the person typed.
++    """
++    return sum(1 for ev in _events(path)[1]
++               if ev["type"] == "user/message"
++               and (ev["data"].get("source") or {}).get("kind") == "user"
++               and _text_of(ev["data"].get("content")).strip())
++
++
++def _assistant_usage(usage):
++    """The four ledger fields of one DSH `usage` record, or None without input tokens."""
++    if not isinstance(usage, dict) or usage.get("inputTokens") is None:
++        return None
++    return {"input_tokens": int(usage.get("inputTokens") or 0),
++            "cache_read_input_tokens": int(usage.get("cacheReadTokens") or 0),
++            "cache_creation_input_tokens": int(usage.get("cacheWriteTokens") or 0),
++            "output_tokens": int(usage.get("outputTokens") or 0)}
++
++
++def dsh_session_usage(path):
++    """Token breakdown of a DSH session, plus the model and the request count.
++
++    One request is one `assistant/message` carrying usage, de-duplicated by message id.
++    """
++    totals = {"input_tokens": 0, "cache_read_input_tokens": 0,
++              "cache_creation_input_tokens": 0, "output_tokens": 0}
++    models, seen, requests = {}, set(), 0
++    for ev in _events(path)[1]:
++        if ev["type"] != "assistant/message":
++            continue
++        data = ev["data"]
++        u = _assistant_usage(data.get("usage"))
++        if u is None:
++            continue
++        msg_id = (data.get("message") or {}).get("id")
++        if msg_id is not None:
++            if msg_id in seen:
++                continue
++            seen.add(msg_id)
++        requests += 1
++        for k in totals:
++            totals[k] += u[k]
++        model = ((data.get("message") or {}).get("source") or {}).get("model")
++        if model:
++            models[model] = models.get(model, 0) + 1
++    totals.update(requests=requests,
++                  model=max(models, key=models.get) if models else None)
++    return totals
++
++
++def dsh_session_to_claude(path, out_path):
++    """Write a DSH export as Claude Code transcript lines.
++
++    Returns the number of tool calls written, or None when the file is missing or holds no
++    messages. Tool calls are grouped by their step, so each assistant line carries the calls
++    the model requested there and each call's result follows as the next user line.
++    """
++    if not path or not os.path.exists(path):
++        return None
++    _, events = _events(path)
++    if not events:
++        return None
++
++    calls, results = {}, {}
++    for ev in events:
++        data = ev["data"]
++        if ev["type"] == "tool/call":
++            calls.setdefault(data.get("callId"), {
++                "turn": data.get("turn"), "step": data.get("step"),
++                "name": data.get("name"), "args": data.get("arguments")})
++        elif ev["type"] == "tool/result":
++            msg = data.get("message") or {}
++            results.setdefault(msg.get("toolCallId") or data.get("callId"), {
++                "text": _text_of(msg.get("content")),
++                "is_error": bool(msg.get("isError"))})
++
++    n = 0
++    with open(out_path, "w", encoding="utf-8") as out:
++        pending = None            # {turn, step, call ids} of the assistant line just written
++
++        def flush():
++            """Write the results of the calls the previous assistant line requested."""
++            nonlocal pending
++            if not pending:
++                return
++            for call_id in pending["ids"]:
++                res = results.get(call_id) or {"text": "", "is_error": False}
++                out.write(json.dumps({"type": "user", "message": {
++                    "role": "user", "content": [{
++                        "type": "tool_result", "tool_use_id": call_id,
++                        "content": res["text"], "is_error": res["is_error"]}]}}) + "\n")
++            pending = None
++
++        for ev in events:
++            data = ev["data"]
++            if ev["type"] == "user/message":
++                text = _text_of(data.get("content"))
++                if text.strip():
++                    flush()
++                    out.write(json.dumps({"type": "user", "message": {
++                        "role": "user", "content": text}}) + "\n")
++            elif ev["type"] == "assistant/message":
++                flush()
++                msg = data.get("message") or {}
++                ids = [cid for cid, c in calls.items()
++                       if c["turn"] == data.get("turn") and c["step"] == data.get("step")]
++                blocks = []
++                text = _text_of(msg.get("content"))
++                if text:
++                    blocks.append({"type": "text", "text": text})
++                for call_id in ids:
++                    c = calls[call_id]
++                    try:
++                        args = json.loads(c["args"] or "{}")
++                    except (TypeError, ValueError):
++                        args = {}
++                    blocks.append({"type": "tool_use", "id": call_id,
++                                   "name": c["name"], "input": args})
++                    n += 1
++                entry = {"id": msg.get("id"), "role": "assistant", "content": blocks,
++                         "model": (msg.get("source") or {}).get("model")}
++                usage = _assistant_usage(data.get("usage"))
++                if usage:
++                    entry["usage"] = usage
++                line = {"type": "assistant", "message": entry}
++                cwd = (data.get("cwd") or (msg.get("source") or {}).get("cwd"))
++                if isinstance(cwd, str) and cwd:
++                    line["cwd"] = cwd
++                out.write(json.dumps(line) + "\n")
++                pending = {"turn": data.get("turn"), "step": data.get("step"), "ids": ids}
++        flush()
++    return n
++
++
++def dsh_export_header(header):
++    """(session id, cwd, created-at) of an export header, for the plugin's cold-start import."""
++    return (str(header.get("id") or ""), header.get("cwd") or "",
++            header.get("createdAt"))
