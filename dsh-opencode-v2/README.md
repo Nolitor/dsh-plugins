@@ -183,7 +183,7 @@ Two operational facts the measurements forced:
 
 When no catalog can be fetched, `listModels` throws with the concrete reason; the host turns that
 into a visible provider failure, so an empty list is never silent. The route names carry the
-transport (`OpenCode v2 (CLI)`, `OpenCode v2 (HTTP)`) and the advertised model description names
+transport (`OpenCode (CLI)`, `OpenCode (HTTP)`) and the advertised model description names
 the serving build (`OpenCode v2 server 2.2.0 via HTTP API`).
 
 The route publishes `contextWindow`/`defaultMaxTokens`/`reasoning.efforts` from `GET /api/model`

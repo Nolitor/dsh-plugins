@@ -1022,3 +1022,29 @@ BOOT PASS
 **Unit tests.** `npm test` → **131/131** (20 in `test/http.test.mjs`): health probe, version in
 the description, unreachable server reported, missing daemon state named, transport in the
 provider name.
+
+---
+
+## 15. v0.2.2 — route names without a version, readable execution errors
+
+Two UI/observability corrections after the 0.2.1 model-serving fix:
+
+1. **Route names.** The provider display names carried the protocol version
+   (`OpenCode v2 (CLI)` / `OpenCode v2 (HTTP)`). The version belongs to the build, not the route
+   label, so the names are now `OpenCode (CLI)` and `OpenCode (HTTP)`. The model descriptions
+   still state the serving build (`OpenCode server 2.2.0 via HTTP API`).
+2. **Structured execution errors.** An OpenCode `session.execution.failed` event can carry an
+   object (`{"type":"provider.quota","message":"…","status":402}`), which was stringified to
+   `[object Object]` in the finish failure. `errorText()` now prefers `.message` /
+   `.error.message` and falls back to JSON, so a 402 shows "Upstream request failed: Insufficient
+   account funds" instead of an opaque token.
+
+Both routes still advertise the **same** OpenCode model catalog: `/api/model` is the single source
+(measured: 46 routes), so every model id offered under `OpenCode (CLI)` is offered under
+`OpenCode (HTTP)`; only the transport differs.
+
+`npm test` → **132/132**.
+
+**Status: applied pending restart.** The live service was started 12:32:43, before the profile row
+gained the pinned `opencodePath` (12:34:34) and before this 0.2.2 tree; it still advertises the HTTP
+provider with an unavailable catalog. One restart applies both.

@@ -9,6 +9,7 @@ import http from 'node:http'
 
 import {
   Config,
+  errorText,
   OpencodeHttpAdapter,
   authHeader,
   modelKey,
@@ -503,5 +504,14 @@ test('a missing daemon state file names the reason in the failure', async () => 
 
 test('the provider name states the transport', () => {
   const adapter = makeAdapter({ url: 'http://127.0.0.1:1' })
-  assert.equal(adapter.providerInfo('opencode-http-agent').name, 'OpenCode v2 (HTTP)')
+  assert.equal(adapter.providerInfo('opencode-http-agent').name, 'OpenCode (HTTP)')
+})
+
+
+test('errorText renders structured execution errors instead of [object Object]', () => {
+  assert.equal(errorText('plain'), 'plain')
+  assert.equal(errorText({ message: 'Insufficient account funds' }), 'Insufficient account funds')
+  assert.equal(errorText({ error: { message: 'quota exceeded' } }), 'quota exceeded')
+  assert.match(errorText({ type: 'provider.quota', status: 402 }), /provider\.quota/)
+  assert.equal(errorText(undefined), 'opencode execution failed')
 })

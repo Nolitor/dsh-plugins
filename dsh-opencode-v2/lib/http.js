@@ -526,7 +526,7 @@ export class OpencodeHttpAdapter {
   }
 
   providerInfo(provider) {
-    return { id: provider, name: 'OpenCode v2 (HTTP)' }
+    return { id: provider, name: 'OpenCode (HTTP)' }
   }
 
   providerRetryPolicy() {}
@@ -576,7 +576,7 @@ export class OpencodeHttpAdapter {
    */
   describe() {
     const version = this.server.resolved?.version
-    return version ? `OpenCode v2 server ${version} via HTTP API` : 'OpenCode v2 via HTTP API'
+    return version ? `OpenCode server ${version} via HTTP API` : 'OpenCode via HTTP API'
   }
 
   async listModels(provider) {
@@ -837,7 +837,7 @@ export class OpencodeHttpAdapter {
               kind: 'error',
               failure: {
                 code: 'OPENCODE_HTTP_FAILED',
-                message: String(event.data?.error ?? event.data?.message ?? 'opencode execution failed'),
+                message: errorText(event.data?.error ?? event.data?.message),
               },
             }
             break
@@ -891,6 +891,21 @@ export class OpencodeHttpAdapter {
   }
 }
 
+/** Human text for a string, an Error-shaped object, or an arbitrary payload. */
+export function errorText(value) {
+  if (typeof value === 'string') return value
+  const message = value && typeof value === 'object' ? value.message ?? value.error?.message : undefined
+  if (typeof message === 'string') return message
+  if (value && typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
+  return 'opencode execution failed'
+}
+
 /** Map OpenCode `tokens` onto the host's disjoint TokenUsage buckets. */
 export function usageFromTokens(tokens) {
   const usage = {
@@ -926,7 +941,7 @@ export function apply(ctx, config) {
   ctx.llm.registerConfigurableProviders([
     {
       provider: 'opencode-http-agent',
-      displayName: 'OpenCode v2 (HTTP)',
+      displayName: 'OpenCode (HTTP)',
       settingsNs: name,
       settingsPath: [],
     },

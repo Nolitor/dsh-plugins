@@ -424,7 +424,7 @@ export class OpencodeLlmAdapter {
   }
 
   providerInfo(provider) {
-    return { id: provider, name: 'OpenCode v2 (CLI)' }
+    return { id: provider, name: 'OpenCode (CLI)' }
   }
 
   providerRetryPolicy() {}
@@ -757,7 +757,7 @@ export function apply(ctx, config) {
   ctx.llm.registerConfigurableProviders([
     {
       provider: 'opencode-agent',
-      displayName: 'OpenCode v2 (CLI)',
+      displayName: 'OpenCode (CLI)',
       settingsNs: name,
       settingsPath: [],
     },
