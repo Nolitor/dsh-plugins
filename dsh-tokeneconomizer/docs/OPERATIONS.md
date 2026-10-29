@@ -1,7 +1,7 @@
 # Operations
 
 <!-- skeleton:
-version: 1.1
+version: 1.2
 kind: spec
 status: active
 updated: 2026-10-30
@@ -122,6 +122,22 @@ model call:
 | `watchdogThresholdMs` | `180000` | progress-free budget of one step |
 | `watchdogAction` | `interrupt` | `warn` only writes a notice |
 | `watchdogProgress` | `any` | `committed` counts only committed session events as progress |
+
+The turn-based tiered memory has its own switches. They grade old tool outputs by turn and
+never touch the newest ones:
+
+| Switch | Default | Effect |
+|---|---|---|
+| `tiering` | `true` | grade the session's tool outputs by turn |
+| `tierHotTurns` | `5` | turns kept at full fidelity, byte-identical |
+| `tierWarmTurns` | `15` | turns kept as a structural summary (head, tail, and an index of files and status codes) |
+| `tierHeadChars` | `2000` | characters kept from the head of a warm-tier output |
+| `tierTailChars` | `600` | characters kept from the tail of a warm-tier output |
+| `tierMinChars` | `1200` | shortest output worth grading |
+
+`TE_DIAG=1` writes the tool-event delivery counters to `<state root>/diagnostics.json`. It is
+the routing check: a route that runs its tool calls outside the harness never delivers a
+`tools/result` event to this plugin, and the plugin says so at the end of such a session.
 
 Their behavior is described in [IN_MEMORY_FEATURES.md](IN_MEMORY_FEATURES.md). Their notices go
 to stderr, with the `[tokeneconomizer]` prefix, and the agent's scope carries their state, so

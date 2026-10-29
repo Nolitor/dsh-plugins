@@ -33,6 +33,15 @@
         watchdogThresholdMs: 180000
         watchdogAction: 'interrupt'
         watchdogProgress: 'any'
+        # Turn-based hierarchical memory for tool outputs: the newest turns keep
+        # full fidelity, the middle turns keep their structure, the old turns
+        # leave the model context and stay in the session log.
+        tiering: true
+        tierHotTurns: 5
+        tierWarmTurns: 15
+        tierHeadChars: 2000
+        tierTailChars: 600
+        tierMinChars: 1200
         hookTimeoutMs: 8000
         cliTimeoutMs: 20000
         headless: auto

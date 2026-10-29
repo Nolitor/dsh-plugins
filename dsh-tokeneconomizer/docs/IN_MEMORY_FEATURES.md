@@ -1,17 +1,17 @@
 # Host-Local In-Memory Features
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: spec
 status: active
 updated: 2026-10-30
-summary: Architecture of the three host-local, in-memory features of the DSH bridge: tool-result hash deduplication, the KV-cache-safe prompt slot, and the loop breaker with its thinking watchdog.
+summary: Architecture of the four host-local, in-memory features of the DSH bridge: tool-result hash deduplication, the KV-cache-safe prompt slot, the loop breaker with its thinking watchdog, and the turn-based tiered memory for tool outputs.
 -->
 
 ## 1. What this document answers
 
 This bridge is a DSH-side adapter for the `tokeneconomizer` Python engine: the engine decides, and
-this plugin applies the answer with DSH's own levers. Three features do not need the engine, do
+this plugin applies the answer with DSH's own levers. Four features do not need the engine, do
 not need a model call, and must not wait for a subprocess: they run in the Host process, in
 memory, with `node:crypto` and timers only.
 
@@ -20,6 +20,7 @@ memory, with `node:crypto` and timers only.
 | `ToolResultDedup` | the same tool output was shown twice; can the second copy be a pointer? | `lib/dedup.js` |
 | `KVSafePrefixSlot` | where do pinned instructions live, and did the cached prefix survive? | `lib/prefix.js` |
 | `LoopWatchdog` | is the turn stuck, and does the person get a chance to steer it? | `lib/watchdog.js` |
+| `TieredMemory` | which old tool outputs may leave the model context, and how? | `lib/tiering.js` |
 
 They share one rule: **no storage**. No SQLite, no vector index, no file, no engine call. Every
 piece of state lives in the plugin's per-agent record and disappears with the agent's scope.
@@ -184,7 +185,36 @@ committed message instead.
 The timer is `unref()`'d, so a pending watchdog never keeps the process alive, and it is
 disarmed when the agent is disposed.
 
-## 6. Configuration
+## 6. `TieredMemory`
+
+A session's context is re-sent on every request, so an old tool output is paid for again and
+again. Truncating it blindly destroys the working context: the model loses the file it just
+read, starts guessing, and costs more than the tokens that were saved. The policy grades every
+tool output by two things and then acts:
+
+| Grading | Rule |
+|---|---|
+| Age | the turn the output belongs to, against the turn in progress |
+| Kind | code (a file read, an edit, a diff) or log (a run's output) |
+
+| Tier | Turns | What happens to a log | What happens to code |
+|---|---|---|---|
+| hot | the newest `tierHotTurns` (5) | untouched, byte-identical | untouched, byte-identical |
+| warm | up to `tierWarmTurns` (15) | replaced by a structural summary: the head, the tail, and an index of file names, status codes, schema keys, error and warning counts | kept whole: it is the work, not noise |
+| cold | older than that | evicted: the model context keeps a pointer to the turn and step | evicted: the model context keeps a pointer to the turn and step |
+
+The durable session log keeps the original output in every case. The replacement is a surface
+rewrite, the same mechanism the harness's own tool-result pruner uses: a `compaction/prune`
+shadow-price event, then a `tool/result` event with `surfaceOp: {op: 'replace'}`. The shadowed
+node stays in the log, so the session query (full-text search) can still find the output by its
+turn and step.
+
+The pass runs when a turn starts, because that is the moment the age of every output changes.
+It is skipped when the harness has no token meter, because the shadow price is what lets a
+consumer subtract the replaced node's cost.
+
+
+## 7. Configuration
 
 Every setting is a validated field of the plugin's config. An unknown key, a wrong type, a
 non-positive number, an out-of-range order, or an unknown enum value fails the row at load.
@@ -203,10 +233,16 @@ non-positive number, an out-of-range order, or an unknown enum value fails the r
 | `watchdogThresholdMs` | number > 0 | `180000` | progress-free budget of one step |
 | `watchdogAction` | `warn` \| `interrupt` | `interrupt` | what the watchdog does when the budget is exhausted |
 | `watchdogProgress` | `any` \| `committed` | `any` | whether assistant stream frames count as progress |
+| `tiering` | boolean | `true` | grade old tool outputs by turn and evict the cold ones |
+| `tierHotTurns` | number > 0 | `5` | turns kept at full fidelity |
+| `tierWarmTurns` | number > `tierHotTurns` | `15` | turns kept as a structural summary |
+| `tierHeadChars` | number > 0 | `2000` | characters kept from the head of a warm-tier output |
+| `tierTailChars` | number > 0 | `600` | characters kept from the tail of a warm-tier output |
+| `tierMinChars` | number > 0 | `1200` | shortest output worth grading |
 
 The bundle row in `cordis.patch.yml` carries the same keys with the same defaults.
 
-## 7. Registration order and disposal
+## 8. Registration order and disposal
 
 Every observer is registered in `agent/created`, **before** the first `await`:
 
@@ -223,7 +259,7 @@ All registrations live on the agent's own scope, so disposal unwinds them with t
 watchdog timer is cleared on disposal, and the per-session digest map, ring buffer, call index
 and prefix guard are dropped with the record. No module-level state, no global registry.
 
-## 8. Diagnostic lines
+## 9. Diagnostic lines
 
 Every host-local event writes one structured line to stderr, prefixed with `[tokeneconomizer]`.
 The lines carry the fields a runtime trace needs, and nothing is written on the quiet path.
@@ -238,7 +274,7 @@ The lines carry the fields a runtime trace needs, and nothing is written on the 
 The error signature in the breaker line is truncated to 120 characters. A line is written once per
 event, so the cost on the quiet path is one comparison and no write.
 
-## 9. Failure behavior
+## 10. Failure behavior
 
 | Failure | Behavior |
 |---|---|
@@ -248,10 +284,10 @@ event, so the cost on the quiet path is one comparison and no write.
 | The agent scope rejects an injection or a cancel | the failure is contained and the notice is still written |
 | The watchdog fires on a closed agent | nothing happens |
 
-## 10. Verification
+## 11. Verification
 
-`node --test test/*.test.mjs` covers the three modules and the plugin's registration contract:
-58 tests, 57 passing and one skipped. The engine-backed end-to-end test stays skipped unless
+`node --test test/*.test.mjs` covers the four modules and the plugin's registration contract:
+71 tests, 70 passing and one skipped. The engine-backed end-to-end test stays skipped unless
 `TE_DSH_TEST_HOME` names a bootstrapped state root.
 
 | File | Covers |
@@ -259,6 +295,8 @@ event, so the cost on the quiet path is one comparison and no write.
 | `test/dedup.test.mjs` | first sighting kept, pointer text and format, the first step is cited, different output, minimum length, digest stability, bounded map, no raw text kept |
 | `test/prefix.test.mjs` | the pinned rules are a section, the guard's baseline, an unchanged message, a changed message |
 | `test/watchdog.test.mjs` | trip count, error signature, chain breaks, argument canonicalization, ring bound, reset, watchdog expiry, progress, disarm |
+| `test/tiering.test.mjs` | the tier boundaries, the hot tier untouched, the warm summary keeping head, tail and index, the warm code read kept whole, the cold eviction pointer, the code/log classification, the index contents |
+| `test/tiering-mount.test.mjs` | the plugin's pass replaces a cold node on the session surface, prices the shadowed node, and leaves a hot node alone |
 | `test/mount.test.mjs` | config validation, registration before the brief, the pinned section, the pointer through the pipeline, failed results, a canonical value, a blocked call, the loop breaker trip and reset, the watchdog interrupt and warn modes, the prefix report, the diagnostic line of every event, disposal |
 
 Not covered by these tests, and not claimed:
@@ -268,7 +306,7 @@ Not covered by these tests, and not claimed:
   system node changed;
 * the deduplicated output inside a real `bash` or `read` call.
 
-## 11. Related documents
+## 12. Related documents
 
 * [ARCHITECTURE.md](ARCHITECTURE.md) — the bridge's isolation boundary, the lifecycle contract,
   and the engine-backed mechanisms.

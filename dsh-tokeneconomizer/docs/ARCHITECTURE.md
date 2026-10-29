@@ -1,11 +1,11 @@
 # DSH bridge architecture
 
 <!-- skeleton:
-version: 1.1
+version: 1.2
 kind: spec
 status: active
 updated: 2026-10-30
-summary: Measured DSH 0.2.2 extension points, per-event lifecycle contract, tool-mask semantics, DSH trace reader schema, host-local in-memory features, state and ledger formats, and verified limits.
+summary: Measured DSH 0.2.2 extension points, per-event lifecycle contract, tool-mask semantics, DSH trace reader schema, host-local in-memory features, tiered memory for tool outputs, state and ledger formats, and verified limits.
 -->
 
 ## 1. Isolation boundary
@@ -179,7 +179,7 @@ effective-token weighting is an approximation until the id is added to `pricing.
 
 ## 8. Host-local, in-memory features
 
-Three features do not use the engine: they need no evidence, no model call, and no storage. They
+Four features do not use the engine: they need no evidence, no model call, and no storage. They
 run in the Host process, in memory, with `node:crypto` and timers only. The full design is in
 [IN_MEMORY_FEATURES.md](IN_MEMORY_FEATURES.md); the seams they occupy are listed here.
 
@@ -188,12 +188,16 @@ run in the Host process, in memory, with `node:crypto` and timers only. The full
 | tool-result dedup | `tools/post-execute` on the agent's scope | a repeated successful output is replaced by a pointer to the step that produced it |
 | KV-cache-safe prefix slot | `systemPrompt.section()` on the agent's scope | the pinned rules live in the request's first message, and the committed system node is checked for a mid-session change |
 | loop breaker and thinking watchdog | `agent.cancel()` and `agent.inject()` | consecutive identical failures stop the turn, and a step without progress trips a timer |
+| tiered memory for tool outputs | a surface rewrite of the session (`compaction/prune` plus a replaced `tool/result`) | the newest turns keep full fidelity, the middle turns keep their structure, the old turns leave the model context and stay in the durable log |
 
 Two properties keep them compatible with the engine-backed half:
 
 * the pinned rules are a **section**, so they join the single system message; the learned facts
   stay a **context**, so they stay in the runtime-context snapshot, whose bytes never change
   inside a session;
+* the tiered memory rewrites the session's **surface**, not its log: the original output stays
+  in the log and is reachable through the session query, while the model context carries the
+  summary or the pointer;
 * every host-local injection is an `agent.inject()`, which appends to the tail of the transcript
   and never shifts the cached prefix.
 
@@ -222,9 +226,14 @@ Verified on 2026-10-29 (Linux, Node 24.22.1, Python 3):
 
 Verified on 2026-10-30 (Linux, Node 24.22.1) for the host-local features:
 
-- `npm test` (58 tests, 57 passed and 1 skipped without `TE_DSH_TEST_HOME`) passes: the dedup
-  store, the prefix guard, the loop breaker, the watchdog, the new configuration validation, and
-  the registration contract of the plugin scope.
+- `npm test` (71 tests, 70 passed and 1 skipped without `TE_DSH_TEST_HOME`) passes: the dedup
+  store, the prefix guard, the loop breaker, the watchdog, the tiering policy and its surface
+  pass, the new configuration validation, and the registration contract of the plugin scope.
+- the tool-event routing was measured on an isolated mount with the web profile's bundle set
+  (`TE_DIAG=1`): the agent-scoped `tools/result` and `tools/post-execute` listeners are
+  delivered, the `PostToolUse` hook reaches the engine, and the engine records the call
+  (`tool_calls: 1` per turn). A route that runs its tool calls outside the harness delivers
+  nothing; the plugin reports that at the end of such a session.
 
 Not verified here:
 

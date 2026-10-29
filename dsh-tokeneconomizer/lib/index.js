@@ -42,6 +42,7 @@
  * call fails open: `{}` changes nothing, and a session keeps working without the engine.
  */
 import { randomUUID } from 'node:crypto'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 
@@ -60,6 +61,13 @@ import {
 import { createDedupStore, SHORT_HASH_CHARS } from './dedup.js'
 import { createPrefixGuard, pinnedSection } from './prefix.js'
 import { createLoopBreaker, createWatchdog } from './watchdog.js'
+import {
+  classifyTool,
+  TIER_HOT,
+  tierContent,
+  tierForTurn,
+  TIER_DEFAULTS,
+} from './tiering.js'
 
 /** Cordis plugin name; must equal package.json `name` and the cordis.patch.yml row id. */
 export const name = 'dsh-tokeneconomizer'
@@ -116,6 +124,18 @@ export const DEFAULTS = Object.freeze({
   watchdogAction: 'interrupt',
   /** Whether assistant stream frames count as progress. */
   watchdogProgress: 'any',
+  /** Grade old tool outputs by turn: hot (full), warm (structure), cold (evicted). */
+  tiering: true,
+  /** Turns kept at full fidelity. */
+  tierHotTurns: TIER_DEFAULTS.hotTurns,
+  /** Turns kept as a structural summary; older turns are evicted. */
+  tierWarmTurns: TIER_DEFAULTS.warmTurns,
+  /** Characters kept from the head of a warm-tier output. */
+  tierHeadChars: TIER_DEFAULTS.headChars,
+  /** Characters kept from the tail of a warm-tier output. */
+  tierTailChars: TIER_DEFAULTS.tailChars,
+  /** Shortest output worth grading; below this the summary costs more than it saves. */
+  tierMinChars: TIER_DEFAULTS.minChars,
 })
 
 /** Names a config object may carry; anything else is a typo, not a setting. */
@@ -203,6 +223,11 @@ export function resolveConfig(config = {}) {
     }
     resolved[key] = value
   }
+  if (resolved.tierWarmTurns <= resolved.tierHotTurns) {
+    throw new TypeError(
+      `tokeneconomizer: tierWarmTurns (${resolved.tierWarmTurns}) must be greater than tierHotTurns (${resolved.tierHotTurns})`,
+    )
+  }
   return resolved
 }
 
@@ -211,6 +236,12 @@ export const MICROSKILLS_CONTEXT_ORDER = 180
 
 /** Number of logged tool calls kept per session, so a step number is always available. */
 export const CALL_INDEX_LIMIT = 64
+
+/**
+ * Number of tool calls whose name and arguments are kept, so an old output can
+ * still be graded as code or as a log when it falls out of the working window.
+ */
+export const META_INDEX_LIMIT = 4096
 
 /**
  * Whether this process runs DSH headless, which decides how a still-stuck notice is phrased.
@@ -230,6 +261,41 @@ export function isHeadless(mode, argv = process.argv) {
  * and each producer declares its own kind, so the log says where the text came from.
  */
 export const MESSAGE_SOURCE = Object.freeze({ kind: 'tokeneconomizer' })
+
+/**
+ * Tool-event delivery counters, one per registration path.
+ *
+ * The harness dispatches `tools/result` and `tools/post-execute` through a scope carrier, so a
+ * listener registered on an agent scope and one registered on the plugin's root context can see
+ * different numbers. `TE_DIAG=1` writes these counters to `<state root>/diagnostics.json`;
+ * without it the counters are still counted but nothing is written. The object is mutable on
+ * purpose: a counter that cannot be written must never break the tool call it counts.
+ */
+export const DELIVERY = {
+  agentResult: 0, agentPost: 0, rootResult: 0, rootPost: 0, hookCalls: 0, hookEmpty: 0,
+}
+
+/**
+ * Write the delivery counters to the state root, for the routing verification.
+ * @param {string} root - the TokenEconomizer state root.
+ * @returns {void}
+ */
+export function writeDelivery(root) {
+  try {
+    writeFileSync(join(root, 'diagnostics.json'), `${JSON.stringify(DELIVERY, null, 1)}\n`, { mode: 0o600 })
+  } catch {
+    /* fail open: a diagnostic never breaks a session */
+  }
+}
+
+/**
+ * Whether the diagnostic file is written at all.
+ * @param {Record<string, string | undefined>} [env] - environment to read.
+ * @returns {boolean} true when `TE_DIAG` is on.
+ */
+export function diagnosticsEnabled(env = process.env) {
+  return ['1', 'true', 'yes', 'on'].includes(String(env.TE_DIAG ?? '').trim().toLowerCase())
+}
 
 /**
  * Construct one identified user-role message. The identity is minted here, and the source kind
@@ -272,6 +338,23 @@ export function apply(ctx, config) {
   }
 
   const sessions = new Map()
+  const diagOn = diagnosticsEnabled()
+  const diagRoot = stateRoot({ ...process.env, TOKENECONOMIZER_HOME: bins.root })
+
+  // The harness dispatches the tool events through a scope carrier. These two root-level
+  // listeners are the routing verification: they count what a listener on the plugin's own
+  // context receives, next to the counts of the agent-scoped listeners above.
+  if (diagOn) {
+    ctx.on('tools/result', () => {
+      DELIVERY.rootResult += 1
+      writeDelivery(diagRoot)
+    })
+    ctx.on('tools/post-execute', async (_exec, _result, next) => {
+      DELIVERY.rootPost += 1
+      writeDelivery(diagRoot)
+      return next()
+    })
+  }
 
   ctx.on('agent/created', async ({ agent, source }) => {
     if (agent.session.header.origin === 'subagent') return
@@ -299,6 +382,9 @@ export function apply(ctx, config) {
       }),
       prefix: createPrefixGuard(),
       calls: new Map(),
+      meta: new Map(),
+      tiered: 0,
+      requests: 0,
     }
     sessions.set(sid, state)
     // Every observer is registered before the first await: `agent/created` is awaited before the
@@ -344,6 +430,7 @@ export function apply(ctx, config) {
       state.agent.ctx.systemPrompt.section(pinnedSection(rules, config.pinnedRulesOrder))
     }
     state.agent.ctx.on('tools/post-execute', async (exec, result, next) => {
+      DELIVERY.agentPost += 1
       const decision = await next()
       if (state.closed) return decision
       if (exec.agent && String(exec.agent.id) !== state.sid) return decision
@@ -354,7 +441,10 @@ export function apply(ctx, config) {
       return decision
     })
     state.agent.ctx.on('session/event', (session, event) => onEvent(state, session, event))
-    state.agent.ctx.on('tools/result', (exec, result) => onToolResult(state, exec, result))
+    state.agent.ctx.on('tools/result', (exec, result) => {
+      DELIVERY.agentResult += 1
+      onToolResult(state, exec, result)
+    })
   }
 
   /**
@@ -424,6 +514,9 @@ export function apply(ctx, config) {
     observeMemory(state, event)
     if (event.type === 'turn/start') {
       state.turn = event.data.turn
+      // A new turn changes what is "recent": the outputs that fell out of the
+      // working window are graded now, before the turn's first request.
+      applyTiering(state)
       if (!state.started) return
       void hook(bins, {
         session_id: state.sid,
@@ -453,6 +546,88 @@ export function apply(ctx, config) {
   }
 
   /**
+   * Grade this session's tool outputs and replace the ones that fell out of the
+   * working window.
+   *
+   * Tier 1 (the newest turns) keeps every output byte-identical. Tier 2
+   * replaces a log with its structure. Tier 3 evicts the output from the model
+   * context and leaves a pointer; the durable session log keeps the original, so
+   * the session query can still find it. Code reads are never summarized in
+   * tier 2: they are the work, not noise.
+   *
+   * @param {object} state - per-agent state.
+   * @returns {void}
+   */
+  function applyTiering(state) {
+    if (!config.tiering || state.closed) return
+    const session = state.agent.session
+    const currentTurn = state.turn
+    if (!currentTurn) return
+    const meter = ctx.tokenMeter
+    if (!meter?.estimateMessage) return
+    const policy = {
+      hotTurns: config.tierHotTurns,
+      warmTurns: config.tierWarmTurns,
+      headChars: config.tierHeadChars,
+      tailChars: config.tierTailChars,
+      minChars: config.tierMinChars,
+    }
+    const nodes = session.surface?.nodes
+    if (!nodes) return
+    for (const seq of [...nodes]) {
+      let event
+      try {
+        event = session.eventAt(seq)
+      } catch {
+        continue
+      }
+      if (event?.type !== 'tool/result') continue
+      const turn = event.data?.turn ?? 0
+      const tier = tierForTurn(turn, currentTurn, policy)
+      if (tier === TIER_HOT) continue
+      let original
+      try {
+        original = session.deriveEventMessage(event)
+      } catch {
+        continue
+      }
+      const text = contentText(original?.content)
+      if (!text || text.startsWith('[tokeneconomizer]')) continue
+      const callId = event.data?.message?.source?.callId ?? event.data?.message?.toolCallId
+      const meta = state.meta.get(String(callId))
+      const kind = classifyTool(meta?.name, meta?.arguments)
+      const replacement = tierContent({
+        text,
+        kind,
+        tier,
+        turn,
+        step: event.data?.step ?? 0,
+        name: meta?.name ?? 'tool',
+        policy,
+      })
+      if (replacement === undefined) continue
+      const message = Object.freeze({
+        ...original,
+        content: Object.freeze([{ type: 'text', text: replacement }]),
+      })
+      try {
+        session.append('compaction/prune', {
+          shadowedRange: { start: seq, end: seq },
+          shadowedSeqs: [seq],
+          shadowedTokenCount: meter.estimateMessage(original),
+        })
+        session.append('tool/result', { ...event.data, message }, {
+          surfaceOp: { op: 'replace', startSeq: seq, endSeq: seq },
+          sourceEventSeqs: [seq],
+        })
+        state.tiered += 1
+      } catch {
+        /* fail open: a session that cannot be re-tiered keeps its context */
+      }
+    }
+  }
+
+  /**
    * Fold one committed session event into the in-memory detectors.
    *
    * The tool-call index gives every tool result the step that produced it, the prefix guard
@@ -468,6 +643,15 @@ export function apply(ctx, config) {
       while (state.calls.size > CALL_INDEX_LIMIT) {
         state.calls.delete(state.calls.keys().next().value)
       }
+      // The tiering grades an old output by what produced it, so the call's
+      // name and arguments are kept per call id.
+      state.meta.set(String(event.data.callId), {
+        name: event.data.name,
+        arguments: event.data.arguments,
+      })
+      while (state.meta.size > META_INDEX_LIMIT) {
+        state.meta.delete(state.meta.keys().next().value)
+      }
       state.watchdog.progress()
       return
     }
@@ -477,6 +661,10 @@ export function apply(ctx, config) {
       if (state.prefix.observe(text).changed) {
         notice(state, 'prefix: the system prompt changed mid-session, the cached prompt prefix was reset')
       }
+      return
+    }
+    if (event.type === 'assistant/message') {
+      state.requests += 1
       return
     }
     if (event.type === 'turn/start') {
@@ -595,6 +783,7 @@ export function apply(ctx, config) {
   function onToolResult(state, exec, result) {
     if (isInert() || !config.loopguard) return
     if (exec.agent && String(exec.agent.id) !== state.sid) return
+    DELIVERY.hookCalls += 1
     const payload = {
       session_id: state.sid,
       cwd: state.cwd,
@@ -611,6 +800,7 @@ export function apply(ctx, config) {
         env: createEnv(),
         cwd: state.cwd,
       })
+      if (Object.keys(out).length === 0) DELIVERY.hookEmpty += 1
       const redirect = out?.hookSpecificOutput?.additionalContext
       if (redirect) {
         try {
@@ -620,6 +810,7 @@ export function apply(ctx, config) {
         }
       }
       report(state, out)
+      if (diagOn) writeDelivery(diagRoot)
     })()
   }
 
@@ -667,6 +858,12 @@ export function apply(ctx, config) {
    * @returns {Promise<void>} resolves after the hook call settles.
    */
   async function finish(state) {
+    // A route that runs its tool calls outside the harness (an HTTP model route
+    // that owns its own agent loop) leaves the bridge with nothing to observe.
+    // Say so once, at the end of the session, instead of silently saving nothing.
+    if (state.requests > 5 && DELIVERY.agentResult === 0) {
+      notice(state, `route: no tool event reached the bridge in ${state.requests} requests — this route runs its tool calls outside DSH, so the tool-result levers (dedup, loop guard, watchdog, tiering) cannot observe them`)
+    }
     let transcript = ''
     try {
       transcript = writeSession(state)
