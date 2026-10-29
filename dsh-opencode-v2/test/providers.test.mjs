@@ -232,6 +232,7 @@ test('runOpencode returns exactly the schema key set (additionalProperties:false
   const allowed = new Set(['ok', 'exitCode', 'signal', 'timedOut', 'truncated', 'sessionId', 'inputTokens', 'outputTokens', 'stdout', 'stderr'])
   for (const key of Object.keys(result)) {
     if (key === 'usage') continue // internal; toOutput() strips it
+    if (key === 'reasoning') continue // presentation-only, used by /ocode
     assert.ok(allowed.has(key), `unexpected result key ${key}`)
   }
   const canonical = tool.toOutput(result)
@@ -562,7 +563,7 @@ test('the worker backend exports no conversation route', () => {
   assert.equal(typeof provider.apply, 'undefined', 'provider.js must not register an LLM adapter')
 })
 
-test('tool apply registers the opencode tool and the /opencode command', async () => {
+test('tool apply registers the opencode tool and the /ocode command', async () => {
   const tools = []
   const commands = []
   const ctx = {
@@ -576,8 +577,10 @@ test('tool apply registers the opencode tool and the /opencode command', async (
   await tool.apply(ctx, fakeConfig({}))
   assert.equal(tools.length, 1)
   assert.equal(tools[0].name, 'opencode')
-  assert.ok(tools[0].parameters.prompt.required)
-  for (const added of ['thinking', 'title', 'files']) assert.ok(tools[0].parameters[added], `missing param ${added}`)
+  // `defineTool` compiles the parameter spec into JSON Schema at definition time.
+  assert.ok(tools[0].parameters.required.includes('prompt'))
+  for (const added of ['thinking', 'title', 'files']) assert.ok(tools[0].parameters.properties[added], `missing param ${added}`)
   assert.equal(commands.length, 1)
-  assert.equal(commands[0].name, 'opencode')
+  assert.equal(commands[0].name, 'ocode')
+  assert.match(commands[0].description, /\/ocode/)
 })

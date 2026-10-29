@@ -14,6 +14,7 @@
 import Schema from '@deepseek-ai/schemastery'
 
 import { JsonRunParser, buildRunArgv, fetchUsage, forwardedEnv, sendPrompt, stripUnsupportedFlags } from './shared.js'
+import { readSelection, writeSelection } from './selection.js'
 import { WORKER_BACKENDS } from './workers/backends.js'
 import { registerCliWorker } from './workers/index.js'
 
@@ -164,7 +165,59 @@ export async function runOpencode(ctx, config, options) {
     stderr: stderrParts.filter(Boolean).join('\n'),
     // Presentation-only extras; NOT part of the output schema (see renderResult).
     usage,
+    // Reasoning text shown by `/ocode`; the tool output schema keeps it out.
+    reasoning: summary.reasoning ?? '',
   }
+}
+
+/** Usage text for the user-run `/ocode` command. */
+const OCODE_USAGE = [
+  'Usage: /ocode [options] <task>',
+  '',
+  'Options:',
+  '  --model <route>     provider/model#variant (default: the last selected route)',
+  '  --timeout <ms>      hard budget for this call',
+  '  --json              append the raw result',
+].join('\n')
+
+/**
+ * Split a command input into leading options and the remaining task text.
+ * @param {string} raw - text after the command name.
+ * @returns {{options: Record<string, string|boolean>, task: string, unknown: string[]}} parsed input.
+ */
+export function parseOcodeInput(raw) {
+  const text = String(raw ?? '').trim()
+  const options = {}
+  const unknown = []
+  let rest = text
+  const valueFlags = new Set(['model', 'timeout'])
+  const boolFlags = new Set(['json', 'help'])
+
+  while (rest.startsWith('--')) {
+    const match = /^--([a-zA-Z-]+)(?:=(\S*))?\s*/.exec(rest)
+    if (!match) break
+    const [, flag, inline] = match
+    rest = rest.slice(match[0].length)
+    if (boolFlags.has(flag)) {
+      options[flag] = true
+      continue
+    }
+    if (!valueFlags.has(flag)) {
+      unknown.push(flag)
+      rest = `--${flag}${inline === undefined ? '' : `=${inline}`} ${rest}`.trim()
+      break
+    }
+    if (inline !== undefined) {
+      options[flag] = inline
+      continue
+    }
+    const valueMatch = /^(\S+)\s*/.exec(rest)
+    if (!valueMatch) break
+    options[flag] = valueMatch[1]
+    rest = rest.slice(valueMatch[0].length)
+  }
+
+  return { options, task: rest.trim(), unknown }
 }
 
 /** One-line token summary. */
@@ -343,13 +396,37 @@ export async function apply(ctx, config) {
 
   ctx.inject(['commands'], (commandCtx) => {
     commandCtx.commands.register({
-      name: 'opencode',
-      description: 'Delegate a task to the OpenCode agent (opencode run). Usage: /opencode <task>',
+      name: 'ocode',
+      description:
+        'Run the OpenCode CLI worker. Usage: /ocode [--model <provider/model#variant>] [--timeout <ms>] <task>. Bare /ocode reuses the last selected model.',
       handler: async ({ rawInput }) => {
-        const prompt = rawInput.trim()
-        if (!prompt) return { kind: 'error', text: 'Usage: /opencode <task for OpenCode>' }
-        const result = await runOpencode(ctx, config, { prompt, cwd: process.cwd() })
-        return { kind: result.ok ? 'success' : 'error', text: renderResult(result) }
+        const { options, task, unknown } = parseOcodeInput(rawInput)
+        if (unknown.length > 0) return { kind: 'error', text: `Unknown option: --${unknown[0]}\n\n${OCODE_USAGE}` }
+        if (task === '' || options.help) {
+          const saved = await readSelection('ocode')
+          const model = saved.model ?? config.model.get()
+          return {
+            kind: 'success',
+            text: `${OCODE_USAGE}\n\nCurrent: model ${model}\nModel list: \`opencode models\``,
+          }
+        }
+        const saved = await readSelection('ocode')
+        const model = String(options.model ?? saved.model ?? config.model.get())
+        const timeoutMs = options.timeout === undefined ? undefined : Number(options.timeout)
+        if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+          return { kind: 'error', text: `Invalid --timeout "${options.timeout}". Use milliseconds.` }
+        }
+        const result = await runOpencode(ctx, config, {
+          prompt: task,
+          cwd: process.cwd(),
+          model,
+          timeoutMs,
+        })
+        if (result.exitCode >= 0) await writeSelection('ocode', { model }).catch(() => {})
+        const body = renderResult(result)
+        const reasoning = result.reasoning ? `\n\n--- reasoning ---\n${result.reasoning}` : ''
+        const raw = options.json ? `\n\n--- raw ---\n${JSON.stringify(result, null, 2)}` : ''
+        return { kind: result.ok ? 'success' : 'error', text: `${body}${reasoning}${raw}` }
       },
     })
   })

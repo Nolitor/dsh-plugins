@@ -1,8 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { DEFAULT_EFFORT, DEFAULT_MODEL, buildAgyArgv, parseAgyOutput } from '../lib/backends.js'
+import {
+  DEFAULT_EFFORT,
+  DEFAULT_MODE,
+  DEFAULT_MODEL,
+  effortOfModel,
+  buildAgyArgv,
+  parseAgyOutput,
+} from '../lib/backends.js'
 import { globToRegExp } from '../lib/artifacts.js'
+import { parseCommandInput } from '../lib/index.js'
 
 test('argv carries the prompt beside -p and the measured flag order', () => {
   const argv = buildAgyArgv({ executable: 'agy', prompt: 'do the thing' })
@@ -12,35 +20,55 @@ test('argv carries the prompt beside -p and the measured flag order', () => {
     'do the thing',
     '--model',
     DEFAULT_MODEL,
-    '--effort',
-    DEFAULT_EFFORT,
+    '--mode',
+    DEFAULT_MODE,
     '--output-format',
     'json',
   ])
 })
 
-test('argv honours model, effort, and extra args', () => {
+test('a model id that encodes its level emits no --effort', () => {
+  const argv = buildAgyArgv({ executable: 'agy', prompt: 'x', model: 'gemini-3.8-flash-high', effort: 'high' })
+  assert.equal(argv.includes('--effort'), false)
+  assert.equal(effortOfModel('gemini-3.8-flash-high'), 'high')
+})
+
+test('a conflicting --effort is rejected before the CLI runs', () => {
+  assert.throws(
+    () => buildAgyArgv({ executable: 'agy', prompt: 'x', model: 'gemini-3.8-flash-low', effort: 'high' }),
+    RangeError,
+  )
+})
+
+test('a base model id keeps --effort and extra args stay verbatim', () => {
   const argv = buildAgyArgv({
     executable: '/usr/bin/agy',
     prompt: 'x',
-    model: 'gemini-3.8-pro',
+    model: 'gemini-3.8-flash',
     effort: 'high',
-    extraArgs: ['--mode', 'plan'],
+    mode: 'plan',
+    extraArgs: ['--sandbox'],
   })
   assert.deepEqual(argv.slice(3), [
     '--model',
-    'gemini-3.8-pro',
+    'gemini-3.8-flash',
     '--effort',
     'high',
-    '--output-format',
-    'json',
     '--mode',
     'plan',
+    '--output-format',
+    'json',
+    '--sandbox',
   ])
 })
 
 test('argv never emits an empty -p', () => {
   assert.throws(() => buildAgyArgv({ executable: 'agy', prompt: undefined }), TypeError)
+})
+
+test('a task above the single-argument limit is rejected with guidance', () => {
+  const huge = 'a'.repeat(131072)
+  assert.throws(() => buildAgyArgv({ executable: 'agy', prompt: huge }), RangeError)
 })
 
 test('parses the JSON envelope including usage', () => {
@@ -70,10 +98,16 @@ test('degrades to raw text when the envelope is not JSON', () => {
   assert.equal(parsed.usage.inputTokens, 0)
 })
 
-test('empty stdout yields an empty result', () => {
-  const parsed = parseAgyOutput('   ')
-  assert.equal(parsed.summary, '')
-  assert.equal(parsed.parsed, false)
+test('command input keeps a task that contains flag-like text', () => {
+  const parsed = parseCommandInput('--model gemini-3.8-flash-high explain --strict mode')
+  assert.equal(parsed.options.model, 'gemini-3.8-flash-high')
+  assert.equal(parsed.task, 'explain --strict mode')
+  assert.deepEqual(parsed.unknown, [])
+})
+
+test('command input reports an unknown leading option', () => {
+  const parsed = parseCommandInput('--nope value')
+  assert.deepEqual(parsed.unknown, ['nope'])
 })
 
 test('glob translation handles recursive, single-segment, and literal paths', () => {
@@ -82,4 +116,8 @@ test('glob translation handles recursive, single-segment, and literal paths', ()
   assert.ok(globToRegExp('*.md').test('README.md'))
   assert.equal(globToRegExp('*.md').test('docs/README.md'), false)
   assert.ok(globToRegExp('a+b.txt').test('a+b.txt'))
+})
+
+test('default effort is the level encoded by the default model', () => {
+  assert.equal(effortOfModel(DEFAULT_MODEL), DEFAULT_EFFORT)
 })

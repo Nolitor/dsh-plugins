@@ -153,20 +153,4 @@ export async function registerCliWorker(ctx, config) {
     }),
   )
 
-  ctx.inject(['commands'], (commandCtx) => {
-    commandCtx.commands.register({
-      name: 'worker',
-      description: `Run a one-shot CLI worker (default: ${config.workerBackend.get()}). Usage: /worker <task>`,
-      handler: async ({ rawInput }) => {
-        const task = rawInput.trim()
-        if (!task) return { kind: 'error', text: 'Usage: /worker <task for the configured backend>' }
-        const result = await runWorker(ctx, config, {
-          backend: config.workerBackend.get(),
-          task,
-          cwd: process.cwd(),
-        })
-        return { kind: result.ok ? 'success' : 'error', text: renderWorkerResult(result) }
-      },
-    })
-  })
 }
