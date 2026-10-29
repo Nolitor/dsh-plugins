@@ -80,6 +80,11 @@
 - **1.0** · reference · 2026-10-29 · [verification/README.md](../verification/README.md)
   Index of machine-readable verification evidence files and what each one proves.
 
+## other
+
+- **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
+  The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
+
 ## boot (newest 5 of 11)
 
 - **active** · 2026-10-29T1213+0900.md · [card](../bootcards/2026-10-29T1213+0900.md)
@@ -95,4 +100,4 @@
 
 ---
 
-35 indexed (11 boot cards), 0 missing header, 35 total.
+36 indexed (11 boot cards), 0 missing header, 36 total.
