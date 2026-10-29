@@ -20,7 +20,12 @@ export const DEFAULT_EFFORT = 'low'
  */
 export function buildAgyArgv(options) {
   const argv = [options.executable]
-  argv.push('-p')
+  const prompt = options.prompt
+  if (prompt) {
+    argv.push('-p', prompt)
+  } else {
+    argv.push('-p')
+  }
   if (options.model || DEFAULT_MODEL) {
     argv.push('--model', options.model || DEFAULT_MODEL)
   }

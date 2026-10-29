@@ -48,7 +48,7 @@ export async function runAgyWorker(ctx, config, options) {
   const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : (config.timeoutMs ?? 600000)
   const maxOutputBytes = Number.isFinite(config.maxOutputBytes) ? config.maxOutputBytes : 262144
 
-  const argv = buildAgyArgv({ executable, model, effort, extraArgs: config.extraArgs })
+  const argv = buildAgyArgv({ executable, model, effort, extraArgs: config.extraArgs, prompt: options.prompt })
 
   let stdout = Buffer.alloc(0)
   let stderr = Buffer.alloc(0)
@@ -56,7 +56,7 @@ export async function runAgyWorker(ctx, config, options) {
 
   const result = await ctx.subprocess.run(argv, {
     cwd,
-    stdin: options.prompt ?? '',
+    stdin: options.prompt ? '' : (options.prompt ?? ''),
     env: forwardEnv(config),
     timeoutMs,
     onStdout: (chunk) => {
