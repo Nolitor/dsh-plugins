@@ -28,7 +28,13 @@ import { readFileSync } from 'node:fs'
 
 import Schema from '@deepseek-ai/schemastery'
 
-import { buildPrompt, blocksToText, sessionTitleText } from './provider.js'
+import {
+  Config as CliLlmConfig,
+  OpencodeLlmAdapter as CliLlmAdapter,
+  blocksToText,
+  buildPrompt,
+  sessionTitleText,
+} from './provider.js'
 import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_MAX_OUTPUT_TOKENS,
@@ -64,6 +70,9 @@ const FORWARD_ENV_DEFAULT = [
 /** Content block index of the first reasoning/text block (odd/even split). */
 const TEXT_INDEX_BASE = 0
 const REASONING_INDEX_BASE = 1
+
+/** Finish codes that mean "the HTTP transport could not be used at all". */
+const TRANSPORT_FAILURES = new Set(['OPENCODE_HTTP', 'OPENCODE_SPAWN'])
 
 export const Config = Schema.object({
   /** Explicit server URL; when empty the adapter attaches to the CLI daemon or spawns one. */
@@ -115,6 +124,13 @@ export const Config = Schema.object({
   requestTimeoutMs: Schema.number().default(30000).volatile(),
   discoveryCacheMs: Schema.number().default(300000).volatile(),
   autoDiscoverModels: Schema.boolean().default(true).volatile(),
+  /**
+   * When the HTTP server cannot be used at all (attach/spawn/request failure),
+   * run the same generation through the CLI route instead. Model-level failures
+   * (upstream quota, tool errors) do NOT trigger it: both transports share the
+   * same upstream. HTTP remains the only path when it succeeds.
+   */
+  fallbackToCli: Schema.boolean().default(true).volatile(),
   /** Local session titles avoid a second model call for the title. */
   localSessionTitles: Schema.boolean().default(true).volatile(),
 })
@@ -596,6 +612,7 @@ export class OpencodeHttpAdapter {
     }
     if (this.config.autoDiscoverModels.get()) {
       const reason = this.discoveryError?.message ?? 'the server returned no models'
+      if (this.config.fallbackToCli.get()) return this.cli().listModels(provider)
       throw new Error(`OpenCode model catalog unavailable: ${reason}`)
     }
     return this.config.models.get().map((entry) => ({
@@ -688,7 +705,73 @@ export class OpencodeHttpAdapter {
    * Stream one generation. Text/reasoning arrive as deltas; `session.step.ended`
    * supplies exact tokens; permission prompts are answered by config.
    */
+  /**
+   * HTTP-first generation. The CLI route is reached only when the HTTP transport
+   * itself is unusable and nothing has been streamed yet; a model-level failure
+   * is reported as-is (the CLI would hit the same upstream).
+   */
   async *stream(options) {
+    if (!this.config.fallbackToCli.get() || this._inFallback) {
+      yield* this.streamHttp(options)
+      return
+    }
+    let content = false
+    try {
+      for await (const chunk of this.streamHttp(options)) {
+        if (
+          chunk.type === 'finish' &&
+          !content &&
+          TRANSPORT_FAILURES.has(chunk.reason?.failure?.code)
+        ) {
+          yield* this.fallbackStream(options)
+          return
+        }
+        if (chunk.type === 'block-start' || chunk.type === 'text-delta' || chunk.type === 'reasoning-delta' || chunk.type === 'usage') {
+          content = true
+        }
+        yield chunk
+      }
+    } catch (error) {
+      if (content) throw error
+      yield* this.fallbackStream(options)
+    }
+  }
+
+  /** Stream the fallback through the CLI adapter, guarding against recursion. */
+  async *fallbackStream(options) {
+    this._inFallback = true
+    try {
+      yield* this.cli().stream(options)
+    } finally {
+      this._inFallback = false
+    }
+  }
+
+  /** Lazily build the CLI adapter; it is never started while HTTP works. */
+  cli() {
+    if (!this._cli) {
+      const config = this.config
+      this._cli = new CliLlmAdapter(
+        this.ctx,
+        new CliLlmConfig({
+          opencodePath: config.opencodePath.get(),
+          cwd: config.cwd.get(),
+          timeoutMs: config.timeoutMs.get(),
+          forwardEnv: config.forwardEnv.get(),
+          models: config.models.get(),
+          brief: config.brief.get(),
+          localSessionTitles: config.localSessionTitles.get(),
+          autoDiscoverModels: true,
+          discoveryTimeoutMs: 60000,
+          discoveryCacheMs: config.discoveryCacheMs.get(),
+          exportTimeoutMs: 60000,
+        }),
+      )
+    }
+    return this._cli
+  }
+
+  async *streamHttp(options) {
     if (options.purpose === 'session-title' && this.config.localSessionTitles.get()) {
       const text = sessionTitleText(options.messages).slice(0, 80)
       yield { type: 'block-start', index: 0, blockType: 'text' }

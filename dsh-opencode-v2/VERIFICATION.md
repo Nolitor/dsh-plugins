@@ -1048,3 +1048,46 @@ Both routes still advertise the **same** OpenCode model catalog: `/api/model` is
 **Status: applied pending restart.** The live service was started 12:32:43, before the profile row
 gained the pinned `opencodePath` (12:34:34) and before this 0.2.2 tree; it still advertises the HTTP
 provider with an unavailable catalog. One restart applies both.
+
+
+---
+
+## 16. v0.2.3 — HTTP-primary with CLI fallback; unique model labels
+
+### 16.1 Requirements
+
+- HTTP must be used when it works ("CLI off" for that turn), and the CLI route must take over when
+  HTTP cannot be used at all.
+- A model label must not appear twice for different routes.
+
+### 16.2 Fallback (implemented)
+
+`OpencodeHttpAdapter.stream()` is now an HTTP-first wrapper over `streamHttp()`:
+
+| Situation | Behaviour |
+|---|---|
+| HTTP request/attach/spawn fails before any chunk | re-run the generation through the lazily built CLI adapter (`fallbackStream`) |
+| HTTP streams content, then fails | error is reported; no replay (avoids duplicate output) |
+| model-level `execution.failed` (e.g. 402 quota) | reported as-is; **no** CLI fallback (same upstream) |
+| `fallbackToCli: false` | transport error is reported (`OPENCODE_HTTP` / `OPENCODE_SPAWN`) |
+| `listModels()` with an unreachable server | falls back to the CLI catalog when enabled, else throws the measured reason |
+
+The CLI adapter is constructed on first fallback only; no CLI child exists while HTTP is healthy.
+
+### 16.3 Duplicate model rows (measured)
+
+`GET /api/model` returns **45 entries with 0 duplicate route ids**, but **7 display names appear
+twice** because the same model is offered by both the `opencode` (Zen) and `opencode-go` providers:
+
+```
+"DeepSeek V4.1 Flash" -> opencode/deepseek-v4.1-flash, opencode-go/deepseek-v4.1-flash
+"Beam Free"           -> opencode/beam-free,           opencode-go/beam-free
+… (Gemini 4 Argon, Claude Haiku 5.5, GPT-6 Luna, Qwen3.8 Flash, GLM-5.3-Flash)
+```
+
+Reasoning variants are **not** the cause: a route's `variants[]` are one entry with an efforts list
+(the UI renders a separate thinking selector), not extra model rows. `modelsFromApiPayload()` now
+appends the provider id to colliding names only (`DeepSeek V4.1 Flash (opencode-go)`), leaving unique
+names untouched.
+
+**Status: applied pending restart.** `npm test` → 136/136.

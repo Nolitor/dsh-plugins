@@ -12,6 +12,8 @@ import {
   buildRunArgv,
   fetchUsage,
   forwardedEnv,
+  disambiguateModelNames,
+  modelsFromApiPayload,
   modelsFromCliOutput,
   sendPrompt,
   stderrTail,
@@ -468,4 +470,21 @@ test('forwardedEnv skips unset names and stderrTail clamps', () => {
   }
   assert.equal(stderrTail('  abc  '), 'abc')
   assert.equal(stderrTail('x'.repeat(500), 10), 'x'.repeat(10))
+})
+
+
+test('modelsFromApiPayload disambiguates identical names served by two providers', () => {
+  const payload = {
+    data: [
+      { providerID: 'opencode', id: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash', limit: { context: 200000 } },
+      { providerID: 'opencode-go', id: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash', limit: { context: 1000000 } },
+      { providerID: 'opencode', id: 'beam-free', name: 'Beam Free', limit: { context: 200000 } },
+    ],
+  }
+  const { models } = modelsFromApiPayload(payload)
+  assert.deepEqual(
+    models.map((model) => model.name),
+    ['DeepSeek V4.1 Flash (opencode)', 'DeepSeek V4.1 Flash (opencode-go)', 'Beam Free'],
+  )
+  assert.deepEqual(disambiguateModelNames([{ id: 'a/x', name: 'X' }]), [{ id: 'a/x', name: 'X' }])
 })

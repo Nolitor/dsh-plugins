@@ -432,7 +432,31 @@ export function modelsFromApiPayload(payload) {
     const model = modelFromApiEntry(entry)
     if (model) models.push(model)
   }
-  return models.length ? { models } : null
+  return models.length ? { models: disambiguateModelNames(models) } : null
+}
+
+/**
+ * Split colliding display names by provider.
+ *
+ * Measured v2.2.0: `/api/model` has 45 entries and no duplicate route ids, but
+ * seven display names appear twice because the same model is served by both the
+ * `opencode` (Zen) and `opencode-go` providers, e.g.
+ * `opencode/deepseek-v4.1-flash` and `opencode-go/deepseek-v4.1-flash` are both
+ * named "DeepSeek V4.1 Flash". A picker that renders `name` shows them twice
+ * with no way to tell them apart, so a collision takes the provider id as a
+ * suffix. Unique names are left untouched.
+ *
+ * @param {{id: string, name: string}[]} models
+ * @returns {{id: string, name: string}[]}
+ */
+export function disambiguateModelNames(models) {
+  const counts = new Map()
+  for (const model of models) counts.set(model.name, (counts.get(model.name) ?? 0) + 1)
+  return models.map((model) =>
+    counts.get(model.name) > 1
+      ? { ...model, name: `${model.name} (${model.id.split('/')[0]})` }
+      : model,
+  )
 }
 
 /** Parse `opencode models`: one `provider/model` id per line; banners skipped. */

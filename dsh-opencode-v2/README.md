@@ -186,6 +186,16 @@ into a visible provider failure, so an empty list is never silent. The route nam
 transport (`OpenCode (CLI)`, `OpenCode (HTTP)`) and the advertised model description names
 the serving build (`OpenCode v2 server 2.2.0 via HTTP API`).
 
+**Routing policy (v0.2.3):** the HTTP route is the only path while it works. When the HTTP
+transport itself is unusable (no attachable daemon, spawn failure, request/event-stream failure) and
+nothing has streamed yet, the generation is retried through the CLI route — the CLI adapter is built
+lazily and never started while HTTP succeeds. Model-level failures (upstream quota, tool errors) do
+not fall back, because both transports share the same upstream. `fallbackToCli: false` disables it.
+
+Model names: when two providers serve the same display name (measured: `opencode/*` Zen and
+`opencode-go/*` both name "DeepSeek V4.1 Flash"), the catalog appends the provider id
+(`DeepSeek V4.1 Flash (opencode-go)`) so the picker does not show two indistinguishable rows.
+
 The route publishes `contextWindow`/`defaultMaxTokens`/`reasoning.efforts` from `GET /api/model`
 (`limit.context`, `limit.output`, `variants[]`). One DSH `sessionId` maps to one OpenCode session;
 a reasoning effort is applied as the session model `variant`. `purpose: 'session-title'` stays

@@ -478,7 +478,7 @@ test('an unreachable server is reported instead of an empty model list', async (
   const state = await startServer()
   const deadUrl = state.url
   await state.close()
-  const adapter = makeAdapter({ url: deadUrl })
+  const adapter = makeAdapter({ url: deadUrl }, { fallbackToCli: false })
   await assert.rejects(
     () => adapter.listModels('opencode-http-agent'),
     /OpenCode model catalog unavailable/,
@@ -492,6 +492,7 @@ test('a missing daemon state file names the reason in the failure', async () => 
     spawnServer: false,
     serviceStatePath: '/nonexistent/opencode-service.json',
     autoDiscoverModels: true,
+    fallbackToCli: false,
     localSessionTitles: false,
     timeoutMs: 8000,
   })
@@ -514,4 +515,54 @@ test('errorText renders structured execution errors instead of [object Object]',
   assert.equal(errorText({ error: { message: 'quota exceeded' } }), 'quota exceeded')
   assert.match(errorText({ type: 'provider.quota', status: 402 }), /provider\.quota/)
   assert.equal(errorText(undefined), 'opencode execution failed')
+})
+
+
+test('HTTP transport failure falls back to the CLI adapter', async () => {
+  const config = new Config({ baseUrl: 'http://127.0.0.1:1', password: 'x', fallbackToCli: true, localSessionTitles: false, timeoutMs: 5000 })
+  const adapter = new OpencodeHttpAdapter({}, config)
+  const seen = []
+  adapter.cli = () => ({
+    async *stream(options) {
+      seen.push(options.model)
+      yield { type: 'block-start', index: 0, blockType: 'text' }
+      yield { type: 'text-delta', index: 0, text: 'from-cli' }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'from-cli' } }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    },
+  })
+  const chunks = await collect(adapter.stream({ provider: 'opencode-http-agent', model: 'opencode/beam-free', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }))
+  assert.deepEqual(seen, ['opencode/beam-free'])
+  assert.equal(chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join(''), 'from-cli')
+  assert.deepEqual(chunks.at(-1).reason, { kind: 'stop' })
+})
+
+test('fallbackToCli=false reports the HTTP transport error instead', async () => {
+  const config = new Config({ baseUrl: 'http://127.0.0.1:1', password: 'x', fallbackToCli: false, localSessionTitles: false, timeoutMs: 5000 })
+  const adapter = new OpencodeHttpAdapter({}, config)
+  let cliCalls = 0
+  adapter.cli = () => { cliCalls += 1; return { stream: async function* () {} } }
+  const chunks = await collect(adapter.stream({ provider: 'opencode-http-agent', model: 'opencode/beam-free', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }))
+  assert.equal(cliCalls, 0)
+  assert.equal(chunks.at(-1).reason.failure.code, 'OPENCODE_HTTP')
+})
+
+test('a model-level execution failure does not fall back to the CLI', async () => {
+  const state = await startServer({
+    events: [
+      { type: 'session.execution.started', data: {} },
+      { type: 'session.execution.failed', data: { error: { type: 'provider.quota', message: 'Insufficient account funds', status: 402 } } },
+    ],
+  })
+  try {
+    const adapter = makeAdapter(state)
+    let cliCalls = 0
+    adapter.cli = () => { cliCalls += 1; return { stream: async function* () {} } }
+    const chunks = await collect(adapter.stream({ provider: 'opencode-http-agent', model: 'opencode/beam-free', sessionId: 'dsh-fb', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }))
+    assert.equal(cliCalls, 0)
+    assert.equal(chunks.at(-1).reason.failure.code, 'OPENCODE_HTTP_FAILED')
+    assert.match(chunks.at(-1).reason.failure.message, /Insufficient account funds/)
+  } finally {
+    await state.close()
+  }
 })
