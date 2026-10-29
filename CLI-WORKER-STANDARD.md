@@ -76,7 +76,27 @@ agy 상한 초과 시 동작 규칙(제안):
 
 옵션 없는 `/agy <task>`는 설정의 기본 모델(`gemini-3.8-flash-low`)을 쓴다.
 
-## 5. 모델 선택 방식 — 3안 비교
+## 5. 명령 현황 (구현 완료)
+
+| 명령 | 상태 |
+|---|---|
+| `/agy <task>` | 등록됨 (Antigravity) |
+| `/ocode <task>` | 등록됨 (OpenCode) |
+| `/opencode`, `/worker` | **삭제됨** |
+
+공통 옵션: `--model`, `--timeout`, `--json`
+`/agy` 전용: `--effort`, `--mode`
+`/ocode` 전용: `--model`에 `#variant`(추론 레벨) 포함
+
+마지막 선택값은 `$DSH_HOME/cli-worker-selection.json`에 저장되어 다음 호출의 기본값이 된다.
+
+### 추론 표기 차이 (실측)
+- `ocode`: `reasoning` 이벤트를 실제 텍스트로 출력 → `--- reasoning ---` 섹션
+- `agy`: 추론 **텍스트를 내보내지 않음**. `thinking_tokens` 개수만 제공하므로 "agy reported N thinking tokens but does not emit reasoning text"로 명시
+
+### plan 모드
+`/agy --mode plan`은 실패가 아니다. 파일은 반영되지 않지만 계획/응답 전체를 출력하고 `[PLAN_ONLY — 파일 미반영]` 메타데이터를 붙인다.
+
 
 | 안 | 동작 | 장점 | 비용 |
 |---|---|---|---|
