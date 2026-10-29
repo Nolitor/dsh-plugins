@@ -964,3 +964,61 @@ the same range in both because both hit the provider prefix cache.
 `applied pending restart` — the package is 0.2.0 and the CLI behaviour is untouched; no live
 `~/.dsh` profile or 3080 process was modified. The HTTP row exists only in the isolated profile
 until the user adds it to a live profile.
+
+---
+
+## 15. v0.2.1 — "provider present, no models" after the live restart
+
+**Symptom (user-reported).** After the live restart the Models page showed the new provider
+`OpenCode v2 (HTTP)` but no models under it, while the CLI route still listed its routes.
+
+**Measured cause.** Two independent facts, both reproduced in an isolated mirror of the live
+profile (`DSH_HOME=/tmp/opencode/live-mirror`, in-process boot probe):
+
+| Fact | Measurement |
+|---|---|
+| The OpenCode daemon is **not** a service | `serve --service` PID 280829 (started 09:23) was gone after the live restart; the next daemon (PID 460200) only started at **12:20:11**, five minutes *after* the host booted at 12:15:06 |
+| The host PATH cannot resolve a bare `opencode` | `dsh-web-start.sh` exports `PATH=/home/minami/.local/nodejs/bin:/home/minami/.local/bin:$PATH` — **no `~/.bun/bin`**, and the OpenCode binary lives at `/home/minami/.bun/bin/opencode` |
+
+So at first catalog fetch: the daemon state file named a dead pid → attach failed → the spawn
+fallback ran `opencode serve` with the unresolved bare name → that failed too → the adapter
+silently degraded to the `default` pseudo-route only.
+
+Reproduced exactly, with the row pointed at a dead daemon and an unresolvable binary:
+
+```
+listModels(opencode-agent)     = 46 ["default","opencode-go/iceman-contributor-free", …]
+listModels(opencode-http-agent) = 1  ["default"]
+catalog.group opencode-http-agent "OpenCode v2 (HTTP)" models=1 ["default"]
+```
+
+**Fixes.**
+
+1. `attach()` now verifies the endpoint with `GET /api/info` (a live pid whose port is gone is
+   not a server) and records *why* it could not attach.
+2. `resolve()` falls back to spawning `opencode serve --port 0` and, when both paths fail,
+   throws one message carrying both reasons.
+3. `request()` re-resolves the endpoint and retries once when a network failure hits a daemon we
+   merely attached to (the daemon is replaced by a new one as the CLI restarts it).
+4. `listModels` **throws** with the concrete reason instead of degrading to a one-entry list, so
+   the host renders a provider failure with the cause.
+5. The live profile row pins `opencodePath: /home/minami/.bun/bin/opencode`.
+6. Route names carry the transport: `OpenCode v2 (CLI)` / `OpenCode v2 (HTTP)`; the advertised
+   model description names the serving build (`OpenCode v2 server 2.2.0 via HTTP API`).
+
+**Verification (isolated mirror, no daemon available).** With `serviceStatePath` pointed at a
+missing file and `opencodePath` set to the absolute binary, the adapter spawns its own server and
+the catalog is complete:
+
+```
+listModels(opencode-agent)     = 46
+listModels(opencode-http-agent) = 46
+catalog.group opencode-agent     "OpenCode v2 (CLI)"  models=46
+catalog.group opencode-http-agent "OpenCode v2 (HTTP)" models=46
+BOOT PASS
+# after shutdown: no orphan `opencode serve` child
+```
+
+**Unit tests.** `npm test` → **131/131** (20 in `test/http.test.mjs`): health probe, version in
+the description, unreachable server reported, missing daemon state named, transport in the
+provider name.

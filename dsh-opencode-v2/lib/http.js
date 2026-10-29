@@ -260,9 +260,27 @@ export class ServerManager {
     return { ...attributionHeaders(), authorization: authHeader(this.resolved?.password ?? '') }
   }
 
-  /** Fetch `path` and parse JSON; throws on a non-2xx answer. */
+  /**
+   * Fetch `path` and parse JSON; throws on a non-2xx answer.
+   *
+   * A daemon we merely attached to can disappear (it is spawned on demand by
+   * the CLI and dies with its parent). One network-level failure re-resolves
+   * the endpoint and retries once, so the adapter picks up a new daemon or
+   * spawns its own server instead of failing the turn.
+   */
   async request(method, path, body, { signal, timeoutMs } = {}) {
     const endpoint = await this.ensure()
+    try {
+      return await this.requestOnce(endpoint, method, path, body, { signal, timeoutMs })
+    } catch (error) {
+      if (endpoint.owned || error.status || signal?.aborted) throw error
+      this.resolved = null
+      const refreshed = await this.ensure()
+      return this.requestOnce(refreshed, method, path, body, { signal, timeoutMs })
+    }
+  }
+
+  async requestOnce(endpoint, method, path, body, { signal, timeoutMs } = {}) {
     const controller = new AbortController()
     const timeout = AbortSignal.timeout(timeoutMs ?? this.config.requestTimeoutMs.get())
     const stop = signal ? AbortSignal.any([signal, timeout]) : timeout
@@ -314,42 +332,74 @@ export class ServerManager {
     const baseUrl = this.config.baseUrl.get()
     if (baseUrl) {
       const password = this.config.password.get()
-      this.resolved = { url: baseUrl.replace(/\/+$/, ''), password, owned: false }
+      const url = baseUrl.replace(/\/+$/, '')
+      const info = await probeServer(url, password)
+      this.resolved = { url, password, owned: false, version: info?.version }
       return this.resolved
     }
+    const reasons = []
     if (this.config.attachToDaemon.get()) {
-      const attached = this.attach()
+      const attached = await this.attach()
       if (attached) {
         this.resolved = attached
         return attached
       }
+      reasons.push(this.attachReason ?? 'the CLI daemon state file did not yield a reachable server')
     }
     if (!this.config.spawnServer.get()) {
-      throw new Error('no OpenCode server: baseUrl is empty, the daemon is not alive, and spawnServer is disabled')
+      throw new Error(`no OpenCode server: ${reasons.join('; ') || 'baseUrl is empty'} and spawnServer is disabled`)
     }
-    this.resolved = await this.spawn()
-    return this.resolved
+    try {
+      this.resolved = await this.spawn()
+      return this.resolved
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(
+        `OpenCode server unavailable: ${[...reasons, `spawn failed (${detail})`].join('; ')}. ` +
+          'Set opencodePath to an absolute executable path, or keep a daemon running.',
+      )
+    }
   }
 
-  /** Read the CLI daemon state file and verify it is alive. */
-  attach() {
+  /**
+   * Read the CLI daemon state file and verify that the server answers.
+   *
+   * A pid check alone is not enough: the daemon is spawned on demand by the
+   * CLI and dies with its parent, so the state file can name a live pid whose
+   * port is already gone. `/api/info` is the measured health probe.
+   */
+  async attach() {
+    this.attachReason = null
+    let state
     try {
       const raw = readFileSync(this.stateFilePath(), 'utf8')
-      if (!raw) return null
-      const state = JSON.parse(raw)
-      if (!state?.url || !state?.password) return null
-      if (state.pid) {
-        try {
-          process.kill(state.pid, 0)
-        } catch {
-          return null
-        }
-      }
-      this.state = state
-      return { url: String(state.url).replace(/\/+$/, ''), password: String(state.password), owned: false }
-    } catch {
+      if (!raw) throw new Error('state file is empty')
+      state = JSON.parse(raw)
+    } catch (error) {
+      this.attachReason = `daemon state unreadable (${error instanceof Error ? error.message : String(error)})`
       return null
     }
+    if (!state?.url || !state?.password) {
+      this.attachReason = 'daemon state file has no url/password'
+      return null
+    }
+    const url = String(state.url).replace(/\/+$/, '')
+    const password = String(state.password)
+    if (state.pid) {
+      try {
+        process.kill(state.pid, 0)
+      } catch {
+        this.attachReason = `daemon pid ${state.pid} is not running`
+        return null
+      }
+    }
+    const info = await probeServer(url, password)
+    if (!info) {
+      this.attachReason = `daemon at ${url} did not answer /api/info`
+      return null
+    }
+    this.state = state
+    return { url, password, owned: false, version: info.version }
   }
 
 
@@ -375,10 +425,8 @@ export class ServerManager {
       this.child = null
       throw new Error('opencode serve did not print a usable banner')
     }
-    const info = await fetch(joinUrl(banner.url, '/api/info'), {
-      headers: { ...attributionHeaders(), authorization: authHeader(banner.password) },
-    }).then((response) => (response.ok ? response.json() : null))
-    if (!info?.version) {
+    const info = await probeServer(banner.url, banner.password)
+    if (!info) {
       handle.terminate?.()
       this.child = null
       throw new Error('opencode serve banner did not answer /api/info')
@@ -397,6 +445,35 @@ export class ServerManager {
       this.child = null
     }
     this.resolved = null
+  }
+}
+
+/**
+ * Health probe for one server endpoint.
+ *
+ * `/api/info` is the measured liveness surface (`{"version","pid","urls"}`).
+ * Returns the parsed info, or null when the server does not answer.
+ *
+ * @param {string} url - server base URL
+ * @param {string} password - basic-auth password
+ * @param {number} [timeoutMs] - probe budget
+ * @returns {Promise<{version: string} | null>}
+ */
+export async function probeServer(url, password, timeoutMs = 3000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(joinUrl(url, '/api/info'), {
+      headers: { ...attributionHeaders(), authorization: authHeader(password) },
+      signal: controller.signal,
+    })
+    if (!response.ok) return null
+    const info = await response.json()
+    return info?.version ? info : null
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -473,32 +550,59 @@ export class OpencodeHttpAdapter {
     try {
       const payload = await this.server.request('GET', '/api/model')
       const result = modelsFromApiPayload(payload)
-      if (result) this.discovered = { at: Date.now(), result }
-      return result
-    } catch {
+      if (result) {
+        this.discovered = { at: Date.now(), result }
+        this.discoveryError = null
+        return result
+      }
+      this.discoveryError = new Error('GET /api/model returned an unexpected payload')
+      return null
+    } catch (error) {
+      this.discoveryError = error instanceof Error ? error : new Error(String(error))
       return null
     }
   }
 
+  /**
+   * Advertise the routes this server can serve.
+   *
+   * A failed catalog fetch is reported instead of silently degrading to the
+   * bare `default` pseudo-route: the host turns a thrown error into a visible
+   * provider failure, so an operator sees *why* the list is empty.
+   */
+  /**
+   * Human description of the transport and the serving build, so the model
+   * list states which OpenCode version answers.
+   */
+  describe() {
+    const version = this.server.resolved?.version
+    return version ? `OpenCode v2 server ${version} via HTTP API` : 'OpenCode v2 via HTTP API'
+  }
+
   async listModels(provider) {
     const discovered = await this.discover()
+    const description = this.describe()
     if (discovered?.models?.length) {
       return [
-        { provider, id: 'default', name: 'OpenCode (config default)', description: 'OpenCode via HTTP API', inputModalities: ['text'] },
+        { provider, id: 'default', name: 'OpenCode (config default)', description, inputModalities: ['text'] },
         ...discovered.models.map((model) => ({
           provider,
           id: model.id,
           name: model.name,
-          description: 'OpenCode via HTTP API',
+          description,
           inputModalities: ['text'],
         })),
       ]
+    }
+    if (this.config.autoDiscoverModels.get()) {
+      const reason = this.discoveryError?.message ?? 'the server returned no models'
+      throw new Error(`OpenCode model catalog unavailable: ${reason}`)
     }
     return this.config.models.get().map((entry) => ({
       provider,
       id: entry.id,
       name: entry.name || `OpenCode ${entry.id}`,
-      description: 'OpenCode via HTTP API',
+      description,
       inputModalities: ['text'],
     }))
   }
@@ -510,7 +614,7 @@ export class OpencodeHttpAdapter {
       provider,
       id: model,
       name: found?.name ?? `OpenCode ${model}`,
-      description: 'OpenCode via HTTP API',
+      description: this.describe(),
       inputModalities: ['text'],
       context: { contextWindow: found?.contextWindow ?? DEFAULT_CONTEXT_WINDOW },
       defaultMaxTokens: found?.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,

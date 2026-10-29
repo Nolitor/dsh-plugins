@@ -197,3 +197,17 @@ config is the missing piece; DSH currently ships only an MCP client.
 - Blockers to keep in mind: two histories (delta sync implemented for the PoC), two compactors
   (pick one owner per route), tool execution stays inside OpenCode unless a permission bridge is
   wired, and the global SSE stream must be demultiplexed by `sessionID`.
+
+## 14. Post-restart symptom and fix (v0.2.1)
+
+After the live restart the provider appeared but listed no models. Measured cause: the OpenCode
+`serve --service` daemon is spawned on demand by the CLI and dies with its parent (the old daemon
+was gone; the next one started at 12:20:11, five minutes after the host booted at 12:15:06), and
+the `dsh-web.service` PATH has no `~/.bun/bin`, so the spawn fallback could not resolve the bare
+`opencode` name. The adapter therefore degraded to the `default` pseudo-route with no message.
+
+Fixed by verifying the endpoint with `/api/info` before attaching, falling back to a spawned
+server, pinning `opencodePath` to the absolute binary in the profile, retrying once when an
+attached daemon disappears, and throwing a provider failure (instead of an empty list) when the
+catalog cannot be fetched. With a daemon absent the route now lists all 46 routes by owning its
+own server. Details: `dsh-opencode-v2/VERIFICATION.md` §15.

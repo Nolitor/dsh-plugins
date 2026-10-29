@@ -15,6 +15,7 @@ import {
   modelRefFromRoute,
   newUserText,
   parseBanner,
+  probeServer,
   readBanner,
   usageFromTokens,
 } from '../lib/http.js'
@@ -42,6 +43,9 @@ async function startServer(script = {}) {
     req.on('data', (chunk) => chunks.push(chunk))
     req.on('end', () => {
       const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : undefined
+      if (url.pathname === '/api/info') {
+        return json(res, 200, { version: '2.2.0', pid: 1, hostname: 'test', urls: ['http://127.0.0.1'] })
+      }
       if (url.pathname === '/api/model') {
         return json(res, 200, {
           location: { directory: '/tmp' },
@@ -439,4 +443,65 @@ test('local session titles answer without any HTTP call', async () => {
   } finally {
     await state.close()
   }
+})
+
+// ---------------------------------------------------------------------------
+// Server discovery: an unreachable server must be visible, not silently empty
+// ---------------------------------------------------------------------------
+
+test('probeServer reports the serving version and null for a dead port', async () => {
+  const state = await startServer()
+  try {
+    const info = await probeServer(state.url, 'test-password')
+    assert.equal(info.version, '2.2.0')
+  } finally {
+    await state.close()
+  }
+  const dead = await probeServer('http://127.0.0.1:1', 'x', 500)
+  assert.equal(dead, null)
+})
+
+test('the advertised model list names the serving OpenCode build', async () => {
+  const state = await startServer()
+  try {
+    const adapter = makeAdapter(state)
+    const models = await adapter.listModels('opencode-http-agent')
+    assert.match(models[0].description, /2\.2\.0/)
+    assert.match(models[0].description, /HTTP API/)
+  } finally {
+    await state.close()
+  }
+})
+
+test('an unreachable server is reported instead of an empty model list', async () => {
+  const state = await startServer()
+  const deadUrl = state.url
+  await state.close()
+  const adapter = makeAdapter({ url: deadUrl })
+  await assert.rejects(
+    () => adapter.listModels('opencode-http-agent'),
+    /OpenCode model catalog unavailable/,
+  )
+})
+
+test('a missing daemon state file names the reason in the failure', async () => {
+  const config = new Config({
+    baseUrl: '',
+    attachToDaemon: true,
+    spawnServer: false,
+    serviceStatePath: '/nonexistent/opencode-service.json',
+    autoDiscoverModels: true,
+    localSessionTitles: false,
+    timeoutMs: 8000,
+  })
+  const adapter = new OpencodeHttpAdapter({}, config)
+  await assert.rejects(
+    () => adapter.listModels('opencode-http-agent'),
+    /daemon state unreadable/,
+  )
+})
+
+test('the provider name states the transport', () => {
+  const adapter = makeAdapter({ url: 'http://127.0.0.1:1' })
+  assert.equal(adapter.providerInfo('opencode-http-agent').name, 'OpenCode v2 (HTTP)')
 })

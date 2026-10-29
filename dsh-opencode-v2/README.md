@@ -1,10 +1,10 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 1.4
+version: 1.5
 kind: readme
 status: active
 updated: 2026-10-29
-summary: OpenCode v2.2.0 managed plugin: tool + /opencode + opencode-agent route, real token usage, per-model contextWindow, per-route reasoning levels (variants), stdin prompt delivery that survives the 128 KiB argv limit, and an HTTP provider that drives the OpenCode v2 server API with persistent sessions.
+summary: OpenCode v2.2.0 managed plugin: tool + /opencode + opencode-agent route, real token usage, per-model contextWindow, per-route reasoning levels (variants), stdin prompt delivery that survives the 128 KiB argv limit, and an HTTP provider that drives the OpenCode v2 server API with persistent sessions, a verified server endpoint, and visible discovery failures.
 -->
 
 
@@ -170,6 +170,21 @@ v2.2.0 HTTP API instead:
 Server resolution order: explicit `baseUrl` → the CLI daemon's
 `~/.local/state/opencode/service.json` (`url`/`pid`/`password`, verified with `/api/info`) →
 `opencode serve --port 0` owned by the adapter. Auth is Basic `opencode:<password>`.
+
+Two operational facts the measurements forced:
+
+- **The daemon is not a service.** The OpenCode CLI spawns `opencode serve --service` on demand
+  and it dies with the process that spawned it, so at a fresh host boot there is usually no
+  daemon to attach to. The adapter therefore verifies the endpoint with `/api/info` (a live pid
+  whose port is gone is not enough) and falls back to spawning its own server.
+- **`opencodePath` must be an absolute path** in a profile whose host PATH lacks the OpenCode
+  install (the `dsh-web.service` PATH has no `~/.bun/bin`, so a bare `opencode` cannot be
+  resolved). Without it the spawn fallback fails and the route has no models.
+
+When no catalog can be fetched, `listModels` throws with the concrete reason; the host turns that
+into a visible provider failure, so an empty list is never silent. The route names carry the
+transport (`OpenCode v2 (CLI)`, `OpenCode v2 (HTTP)`) and the advertised model description names
+the serving build (`OpenCode v2 server 2.2.0 via HTTP API`).
 
 The route publishes `contextWindow`/`defaultMaxTokens`/`reasoning.efforts` from `GET /api/model`
 (`limit.context`, `limit.output`, `variants[]`). One DSH `sessionId` maps to one OpenCode session;
