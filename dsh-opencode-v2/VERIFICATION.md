@@ -1091,3 +1091,37 @@ appends the provider id to colliding names only (`DeepSeek V4.1 Flash (opencode-
 names untouched.
 
 **Status: applied pending restart.** `npm test` → 136/136.
+
+
+---
+
+## 17. v0.2.4 — one OpenCode model group, and cancellations are "aborted" not "error"
+
+### 17.1 Duplicate model rows
+
+Measured cause: the bundle inserted **both** rows (`dsh-opencode-v2-provider` and the HTTP row that
+the live profile inserts), and both adapters advertise the same `/api/model` catalog. The picker
+therefore rendered every model twice, once per transport group (and the seven cross-provider name
+collisions made it look even worse).
+
+Fix: the package bundle now inserts **only the delegation tool**. The live profile keeps a single
+`dsh-opencode-v2-http` insert row, so exactly one `OpenCode (HTTP)` group is shown; the CLI adapter
+is constructed lazily for the fallback and never registered as a provider. `registerCliProvider:
+true` restores the second group for A/B. The live profile's `allowedModels` were migrated from
+`opencode-agent` to `opencode-http-agent` (14 entries, one provider).
+
+### 17.2 Model switch mid-turn produced a turn error
+
+Measured: when a model switch (or a user stop) cancels the in-flight generation, both adapters
+yielded `finish{kind:'error', failure:{code:'OPENCODE_TIMEOUT'|'OPENCODE_INTERRUPTED'|…}}`. The
+host records a cancel as `turn/end{kind:'aborted'}` only for `finish.kind === 'aborted'`
+(`FinishReasonMap`, `dsh-llm/lib/types/types.d.ts:138-156`; adapter throws are classified by
+`adapterFailureChunk()` in `dsh-llm/lib/index.js:2404-2418`), so the cancelled turn was persisted as
+an error instead.
+
+Fix: both adapters now yield `{kind:'aborted', failure:{code:'ABORTED'}}` when
+`options.signal.aborted` is true. A timeout remains `{kind:'error'}`; a model-level failure (402)
+remains an error with its real message (the `[object Object]` formatting was fixed in §15).
+
+`npm test` → **136/136**. Status: **applied pending restart** (the live service predates this tree
+and the profile row change).

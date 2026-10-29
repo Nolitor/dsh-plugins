@@ -186,11 +186,18 @@ into a visible provider failure, so an empty list is never silent. The route nam
 transport (`OpenCode (CLI)`, `OpenCode (HTTP)`) and the advertised model description names
 the serving build (`OpenCode v2 server 2.2.0 via HTTP API`).
 
+**Single group (v0.2.4):** the package bundle registers only the delegation tool, not the CLI
+LLM route. One `OpenCode (HTTP)` provider is advertised; the CLI adapter exists solely as the
+transport fallback, so a model is never listed twice. Set `registerCliProvider: true` (or insert
+`@nolit/dsh-opencode-v2/provider` as a profile row) to bring back the separate CLI group.
+
 **Routing policy (v0.2.3):** the HTTP route is the only path while it works. When the HTTP
 transport itself is unusable (no attachable daemon, spawn failure, request/event-stream failure) and
 nothing has streamed yet, the generation is retried through the CLI route — the CLI adapter is built
 lazily and never started while HTTP succeeds. Model-level failures (upstream quota, tool errors) do
 not fall back, because both transports share the same upstream. `fallbackToCli: false` disables it.
+Cancellation (model switch or user stop) is reported as a `finish{kind:'aborted'}` chunk, so the
+host records an aborted turn instead of an error.
 
 Model names: when two providers serve the same display name (measured: `opencode/*` Zen and
 `opencode-go/*` both name "DeepSeek V4.1 Flash"), the catalog appends the provider id

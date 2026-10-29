@@ -1,6 +1,6 @@
 {
   "name": "@nolit/dsh-opencode-v2",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": false,
   "description": "OpenCode CLI (v2.2.0 surface) inside DeepSeek Harness: an `opencode` delegation tool, a /opencode command, an `opencode-agent` CLI-backed LLM route with per-route reasoning levels and stdin prompt delivery, and an `opencode-http-agent` route that drives the OpenCode v2 HTTP API (sessions, SSE deltas, inline usage, permission bridge) \u2014 wrapping @quonaro/dsh-plugin-opencode over ctx.subprocess.",
   "keywords": [

@@ -131,6 +131,13 @@ export const Config = Schema.object({
    * same upstream. HTTP remains the only path when it succeeds.
    */
   fallbackToCli: Schema.boolean().default(true).volatile(),
+  /**
+   * Also register the CLI adapter as its own `opencode-agent` provider so the
+   * picker shows two transport groups. Off by default: the package exposes one
+   * OpenCode group (HTTP) and uses the CLI internally only as a fallback, so a
+   * model is never listed twice.
+   */
+  registerCliProvider: Schema.boolean().default(false).volatile(),
   /** Local session titles avoid a second model call for the title. */
   localSessionTitles: Schema.boolean().default(true).volatile(),
 })
@@ -856,6 +863,10 @@ export class OpencodeHttpAdapter {
       for (;;) {
         const step = await pending
         if (step.done) break
+        if (options.signal?.aborted) {
+          terminal = { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } }
+          break
+        }
         const event = step.value
         pending = events.next()
         pending.catch(() => {})
@@ -935,7 +946,9 @@ export class OpencodeHttpAdapter {
 
       for (const chunk of closeAll()) yield chunk
 
-      if (!terminal) {
+      if (options.signal?.aborted) {
+        terminal = { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } }
+      } else if (!terminal) {
         terminal = timeout.aborted
           ? { kind: 'error', failure: { code: 'OPENCODE_TIMEOUT', message: `opencode exceeded timeoutMs=${config.timeoutMs.get()}` } }
           : { kind: 'error', failure: { code: 'OPENCODE_HTTP_FAILED', message: 'event stream ended before a terminal execution event' } }
@@ -956,13 +969,15 @@ export class OpencodeHttpAdapter {
       for (const chunk of closeAll()) yield chunk
       yield {
         type: 'finish',
-        reason: {
-          kind: 'error',
-          failure: {
-            code: signal.aborted ? 'OPENCODE_INTERRUPTED' : 'OPENCODE_HTTP',
-            message: error instanceof Error ? error.message : String(error),
-          },
-        },
+        reason: options.signal?.aborted
+          ? { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } }
+          : {
+              kind: 'error',
+              failure: {
+                code: 'OPENCODE_HTTP',
+                message: error instanceof Error ? error.message : String(error),
+              },
+            },
       }
     } finally {
       signal.removeEventListener('abort', onAbort)
@@ -1021,6 +1036,10 @@ function closeBlocks(state) {
 export function apply(ctx, config) {
   const adapter = new OpencodeHttpAdapter(ctx, config)
   const registration = ctx.llm.registerAdapter(['opencode-http-agent'], adapter)
+  let cliRegistration = null
+  if (config.registerCliProvider.get()) {
+    cliRegistration = ctx.llm.registerAdapter(['opencode-agent'], adapter.cli())
+  }
   ctx.llm.registerConfigurableProviders([
     {
       provider: 'opencode-http-agent',
@@ -1031,6 +1050,11 @@ export function apply(ctx, config) {
   ])
   if (typeof ctx.effect === 'function') {
     ctx.effect(() => () => {
+      try {
+        cliRegistration?.()
+      } catch {
+        /* already disposed */
+      }
       try {
         registration()
       } catch {

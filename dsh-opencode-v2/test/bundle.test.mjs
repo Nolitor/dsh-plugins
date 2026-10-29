@@ -33,6 +33,7 @@ const yml = readFileSync(new URL('cordis.patch.yml', root), 'utf8')
 
 const tool = await import('../lib/index.js')
 const provider = await import('../lib/provider.js')
+const http = await import('../lib/http.js')
 
 /** Load the patch with a real YAML parser (js-yaml, as the host ecosystem uses). */
 const doc = yaml.load(yml)
@@ -117,27 +118,26 @@ test('every declared file pattern exists on disk', () => {
   assert.ok(readdirSync(new URL('lib/', root)).length >= 3)
 })
 
-test('the patch is a top-level array of insert entries with exactly two rows', () => {
+test('the bundle ships exactly one row (the delegation tool); the HTTP route is profile-level', () => {
   assert.ok(Array.isArray(doc), 'top-level must be an array of loader patch entries')
   assert.equal(doc.length, 1)
   assert.deepEqual(Object.keys(doc[0]), ['insert'])
   assert.deepEqual(
     rows.map((r) => [r.id, r.name]),
-    [
-      ['dsh-opencode-v2', '@nolit/dsh-opencode-v2'],
-      ['dsh-opencode-v2-provider', '@nolit/dsh-opencode-v2/provider'],
-    ],
+    [['dsh-opencode-v2', '@nolit/dsh-opencode-v2']],
   )
+  // The LLM routes stay exported so a profile can insert them explicitly.
+  assert.ok('./provider' in pkg.exports)
+  assert.ok('./http' in pkg.exports)
 })
 
 test('row ids equal the exported plugin names (loader settings namespace)', () => {
   assert.equal(rows[0].id, tool.name)
-  assert.equal(rows[1].id, provider.name)
+  assert.equal(http.name, 'dsh-opencode-v2-http')
 })
 
 test('row plugin names match package.json exports keys', () => {
   assert.equal(rows[0].name, pkg.name)
-  assert.equal(rows[1].name, `${pkg.name}/provider`)
   for (const row of rows) {
     const subpath = row.name === pkg.name ? '.' : `.${row.name.slice(pkg.name.length)}`
     assert.ok(subpath in pkg.exports, `${subpath} must be exported`)
@@ -162,19 +162,23 @@ test('every tool-row config key exists in the tool Config schema', () => {
   }
 })
 
-test('every provider-row config key exists in the provider Config schema', () => {
-  const known = new Set(Object.keys(provider.Config({})))
-  for (const key of Object.keys(rows[1].config)) {
-    assert.ok(known.has(key), `cordis.patch.yml provider row sets unknown key ${key}`)
+test('the HTTP route config parses with the http Config schema', () => {
+  const known = new Set(Object.keys(http.Config({})))
+  const profileRowConfig = {
+    attachToDaemon: true,
+    spawnServer: true,
+    opencodePath: '/home/minami/.bun/bin/opencode',
+    defaultModel: 'opencode/beam-free',
+    permissionDecision: 'once',
+    fallbackToCli: true,
   }
-  for (const key of ['opencodePath', 'auto', 'cwd', 'timeoutMs', 'stderrMaxBytes', 'forwardEnv', 'extraArgs', 'models', 'localSessionTitles', 'autoDiscoverModels', 'discoveryTimeoutMs', 'discoveryCacheMs', 'exportTimeoutMs']) {
-    assert.ok(key in rows[1].config, `provider row must set ${key}`)
+  for (const key of Object.keys(profileRowConfig)) {
+    assert.ok(known.has(key), `HTTP profile row sets unknown key ${key}`)
   }
-  const parsed = provider.Config(rows[1].config)
-  assert.deepEqual(parsed.models.get(), [{ id: 'default', opencodeModel: '', name: 'OpenCode (config default)' }])
-  assert.equal(parsed.localSessionTitles.get(), true)
-  assert.equal(parsed.autoDiscoverModels.get(), true)
-  assert.equal(parsed.exportTimeoutMs.get(), 60000)
+  const parsed = http.Config(profileRowConfig)
+  assert.equal(parsed.fallbackToCli.get(), true)
+  assert.equal(parsed.registerCliProvider.get(), false)
+  assert.equal(parsed.defaultModel.get(), 'opencode/beam-free')
 })
 
 test('the patch never configures attach or pure (v2 rejects both flags)', () => {
