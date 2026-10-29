@@ -5,7 +5,7 @@
  * Provides a dedicated CLI worker that uses the official agy CLI
  * (gemini-3.8-flash with low thinking by default) for simple tasks.
  */
-import { Schema } from '@deepseek-ai/schemastery'
+import Schema from '@deepseek-ai/schemastery'
 import { runAgyWorker } from './worker.js'
 import { DEFAULT_MODEL, DEFAULT_EFFORT } from './backends.js'
 
