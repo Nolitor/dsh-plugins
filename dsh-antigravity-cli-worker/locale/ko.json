@@ -1,0 +1,4 @@
+{
+  "tool.agy_worker.name": "안티그래비티 워커",
+  "tool.agy_worker.description": "gemini-3.8-flash-low를 사용하여 간단한 작업을 위한 원샷 Antigravity(agy) CLI 워커를 실행합니다."
+}
