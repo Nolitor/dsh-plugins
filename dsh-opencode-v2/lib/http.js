@@ -42,6 +42,7 @@ import {
 } from './shared.js'
 import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
 import { SessionMap } from './session-map.js'
+import { createUsageLedger } from './usage-ledger.js'
 
 /** Plugin name; the cordis row uses the `@nolit/dsh-opencode-v2/http` specifier. */
 export const name = 'dsh-opencode-v2-http'
@@ -580,6 +581,7 @@ export class OpencodeHttpAdapter {
     this.providerId = options.providerId ?? 'opencode-http-agent'
     this.server = new ServerManager(ctx, config)
     this.sessions = new Map()
+    this.usage = createUsageLedger()
     this.sessionMap = new SessionMap(
       resolveCatalogPath({
         explicit: config.sessionMapPath.get(),
@@ -1032,6 +1034,10 @@ export class OpencodeHttpAdapter {
 
       for (const chunk of closeAll()) yield chunk
 
+      // The generation's own usage, measured by its steps. The ledger advances by
+      // the same amount, so a later cumulative snapshot yields only the growth.
+      if (usage && session?.sessionID) this.usage.steps(session.sessionID, usage)
+
       if (options.signal?.aborted) {
         terminal = { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } }
       } else if (!terminal) {
@@ -1043,7 +1049,9 @@ export class OpencodeHttpAdapter {
         try {
           const info = await this.server.request('GET', `/api/session/${session.sessionID}`)
           if (info?.data?.tokens) {
-            usage = usageFromTokens(info.data.tokens)
+            // The session's counters are cumulative; report only their growth
+            // since this session's last report, never the whole session again.
+            usage = this.usage.cumulative(session.sessionID, usageFromTokens(info.data.tokens))
             yield { type: 'usage', usage }
           }
         } catch {

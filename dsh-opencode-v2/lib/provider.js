@@ -36,6 +36,7 @@ import {
   withVariant,
 } from './shared.js'
 import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
+import { createUsageLedger } from './usage-ledger.js'
 
 /** Row id kept for the worker package's identity and settings namespace. */
 export const name = 'dsh-opencode-v2-provider'
@@ -433,6 +434,7 @@ export class OpencodeLlmAdapter {
     this.ctx = ctx
     this.config = config
     this.providerId = options.providerId ?? 'opencode-agent'
+    this.usage = createUsageLedger()
     this.catalogStore = new CatalogStore(
       resolveCatalogPath({
         explicit: config.catalogPath.get(),
@@ -761,12 +763,11 @@ export class OpencodeLlmAdapter {
         yield {
           type: 'usage',
           usage: {
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            reasoningTokens: usage.reasoningTokens,
-            cacheReadTokens: usage.cacheReadTokens,
-            cacheWriteTokens: usage.cacheWriteTokens,
-            totalTokens: usage.totalTokens,
+            // `session export` reports the session's cumulative counters; the
+            // ledger turns them into this generation's growth, so a later
+            // generation of a long-lived session does not re-report the
+            // earlier ones.
+            ...this.usage.cumulative(remainder.sessionId, usage),
           },
         }
       }
