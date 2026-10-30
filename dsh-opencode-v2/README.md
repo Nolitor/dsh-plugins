@@ -249,24 +249,35 @@ The OpenCode console documents the requirement (Go: "Send a stable session ID in
 `x-opencode-session` for each conversation") and lists DeepSeek Harness under *known
 problematic clients* for exactly this gap.
 
-### Model allow-list and the settings tab (v0.6.0 — measured 2026-10-30)
+### Plans, model allow-list and the settings tab (v0.7.0 — measured 2026-10-31)
 
-The catalog serves 49 routes, but only **35** are usable on this account (12 `Model is
-unavailable.`, 2 deprecated — measured by a one-shot sweep, see
-[`../OPENCODE-MODEL-SERVING-PLAN.md`](../OPENCODE-MODEL-SERVING-PLAN.md) §5.2). `status`/`enabled` in
-`/api/model` are uniformly `active`/`true` and carry no entitlement, and the account limits endpoint
-has no per-model data, so the backend's own answer is the only reliable signal.
+OpenCode exposes two providers under one account, and the provider id *is* the plan:
+
+| Provider | Plan | Routes measured 2026-10-31 |
+|---|---|---|
+| `opencode-go` | **Go subscription** | 30 (28 usable, 2 deprecated) |
+| `opencode` | **Zen pay-as-you-go** | 19 (7 usable, 12 `Model is unavailable.`) |
+
+The settings tab used to answer "which routes work" by probing every route — one real completion
+each, 49 per sweep. The account counts **requests**, so that was the wrong shape. Availability is now
+decided from the catalog's provider id plus the plan the operator selects; probing is gone entirely.
+The backend's own refusals still get through, but they are recorded for free from real turns.
 
 | Piece | Behaviour |
 |---|---|
-| `enabledModels: string[]` | Route allow-list for the picker. **Empty = unrestricted**, which is the default, so clearing it restores the old behaviour. |
-| `listModels()` | Keeps the `default` row, then only allow-listed catalog ids. Nothing else changes: sessions that already selected a hidden route keep running (display-only requirement). |
-| `measureEntitlement()` | One minimal request per route, classified by `classifyProbe()` (`usable` / `unavailable` / `deprecated` / `auth` / `forbidden` / `error`); retries once at 16 tokens for providers with an output floor. 49 routes ≈ 20 s. |
-| `lib/client.js` | Adds an **OpenCode v2** settings section (`settings.section`, order 60): a checklist of routes — **sorted usable → unchecked → rejected**, with the verdict badge immediately beside the checkbox — a *Check usable models* button, *Select all (usable)*, *Clear all*, and *Save*. The nav label follows the UI locale (`오픈코드 V2` / `OpenCode V2`). |
-| `opencode-model-verdicts.json` | The last sweep (`{verdicts, measuredAt}`), written by `measure` and read by `model-settings`. Opening the tab never re-runs the 20 s sweep; the button is the only refresh. Lives in the profile dir (`verdictPath` overrides). |
-| `/api/local/opencode-v2/model-settings` | Catalog, current allow-list, and what the picker currently shows. |
-| `/api/local/opencode-v2/model-settings/apply` | Persists the allow-list through `ctx.settings.update('dsh-opencode-v2-http', …)`. |
-| `/api/local/opencode-v2/model-settings/measure` | Runs the sweep — only when the operator presses the button, never during a conversation. |
+| `activePlan: 'go' \| 'zen'` | Which plan's routes are usable. Saved through `ctx.settings.update`, so the prompt picker and the checklist never disagree. |
+| `enabledModels: string[]` | Allow-list for the picker. **Empty = every route the active plan offers.** Checked models are the only ones the prompt picker shows; sessions that already selected a hidden route keep running (display-only requirement). |
+| `listModels()` | Keeps the `default` row, then `active plan ∩ allow-list`. No backend request is made to decide this. |
+| `lib/plans.js` | `planOfRoute()`, `availabilityOf()`, `orderModels()`: usable first, then by public usage rank, then by name; the other plan's routes stay visible but disabled. |
+| `lib/client.js` | **OpenCode V2** settings section (`settings.section`, order 60): a Go/Zen plan switch, the checklist with the state badge beside the checkbox, *Select all usable*, *Clear all*, *Save*, *Refresh usage ranking*. Nav label follows the UI locale (`오픈코드 V2` / `OpenCode V2`). |
+| `opencode-model-verdicts.json` | Refusals the backend reported during real traffic (`{verdicts, measuredAt}`), written only when a state changes. Empty is the normal case. |
+| `opencode-data-ranking.json` | Cached `opencode.ai/data/index.json` ranking (`{byModel, updatedAt, fetchedAt}`), refreshed at most once per `rankingTtlMs` (24 h). |
+| `/api/local/opencode-v2/model-settings` | Catalog (annotated + ordered), active plan, allow-list, visible routes, observed refusals, ranking metadata. |
+| `/api/local/opencode-v2/model-settings/apply` | Persists `{enabled?, activePlan?}` through `ctx.settings.update('dsh-opencode-v2-http', …)`. |
+| `/api/local/opencode-v2/model-settings/ranking/refresh` | One GET against `opencode.ai/data/index.json` — unrelated to the model request quota. |
+
+The per-route sweep (`measureEntitlement`, `model-settings/measure`) was **removed** in 0.7.0: it cost
+one backend request per route per press.
 
 `inject` now includes `connection` and `settings`: reading an undeclared service throws and takes
 the whole plugin entry down (measured in an isolated boot). A host without them still boots; the

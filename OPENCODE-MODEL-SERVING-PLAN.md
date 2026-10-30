@@ -1,7 +1,7 @@
 # OpenCode Model Serving — Incident Post-Mortem, Autonomous Router Policy, and Decommission Record
 
 <!-- skeleton:
-version: 2.5
+version: 2.6
 kind: report
 status: active
 updated: 2026-10-31
@@ -329,6 +329,32 @@ persisted as a verdict — distinguish it before automating the sweep.
 `dsh-notify-web@0.1.7` in the same pass: its settings section moved from order 20 to 50 (below
 에이전트 프리셋, above this tab) and its label is now locale-aware (`알림` / `Notifications`) instead
 of a hardcoded Korean string.
+
+### 5.2.10 Sweep removed: availability is the plan (0.7.0)
+
+The sweep was the wrong shape for this account. One press = one real completion per catalog route
+(49), and the quota counts requests, not tokens. The search for a cheaper truthful signal came up
+empty: provider `GET {baseURL}/models` → 404; `/api/model` → `status: active` / `enabled: true` for
+all 49; `opencode models` → the same static catalog (it lists the unusable routes too); the provider
+payload → `models: 0`; the OpenAPI document (130 paths) → no per-model availability route; the
+console → login wall.
+
+What the data does show is that **the provider id is the plan**: `opencode-go` = Go subscription
+(30 routes, 28 usable), `opencode` = Zen pay-as-you-go (19 routes, 7 usable). That is decidable from
+the catalog alone, so `0.7.0`:
+
+- adds `activePlan: 'go' | 'zen'`, chosen in the tab and persisted through `ctx.settings.update`;
+- marks the active plan's routes usable and the other plan's routes `다른 플랜` (visible, disabled);
+- orders usable first, then by the public `opencode.ai/data` weekly usage rank (one cached GET per
+  24 h), then by name;
+- records refusals the backend reports during real turns (`observe()`), so exceptions surface over
+  time without any probe;
+- **deletes** `measureEntitlement`, `model-settings/measure` and the sweep button.
+
+Measured live 2026-10-31: 49 rows = 28 usable / 7 other-plan / 12 unavailable / 2 deprecated, ranking
+refresh = one GET, plan switch flips 28↔7 and keeps `activePlan: go`, picker shows the 12 checked
+routes (all Go), suite 208/208. Trade accepted by the owner: a plan-offered route the backend would
+refuse reads `사용 가능` until something actually uses it.
 
 ## 6. Rules restated for the next session
 

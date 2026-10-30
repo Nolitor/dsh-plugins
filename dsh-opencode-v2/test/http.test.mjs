@@ -532,33 +532,47 @@ test('listModels hides routes outside enabledModels but keeps the default row', 
   }
 })
 
-test('listModels offers every catalog route when enabledModels is empty', async () => {
+test('listModels offers only the active plan, and falls back to a plan-free catalog when unrestricted', async () => {
   const { state, close } = await startServer()
   try {
     const adapter = adapterFor(state, { baseUrl: controlURL(state) })
-    const ids = (await adapter.listModels('opencode-http-agent')).map((model) => model.id)
-    assert.ok(ids.includes('opencode-go/minimax-m3.1-flash'))
-    assert.ok(ids.includes('opencode/beam-free'))
+    const goIds = (await adapter.listModels('opencode-http-agent')).map((model) => model.id)
+    assert.ok(goIds.includes('opencode-go/minimax-m3.1-flash'))
+    assert.ok(!goIds.includes('opencode/beam-free'), 'the other plan is not offered while it is inactive')
+
+    // Switching the plan swaps the offered set without any backend request.
+    adapter.config.activePlan = { get: () => 'zen' }
+    const zenIds = (await adapter.listModels('opencode-http-agent')).map((model) => model.id)
+    assert.ok(zenIds.includes('opencode/beam-free'))
+    assert.ok(!zenIds.includes('opencode-go/minimax-m3.1-flash'))
   } finally {
     await close()
   }
 })
 
-test('measureEntitlement classifies every catalog route', async () => {
-  const { state, close } = await startServer({
-    events: [],
-    entitlement: true,
-  })
+test('observe() persists a refusal and clears it when the route serves', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ocv2-observe-'))
+  const { state, close } = await startServer()
   try {
     const adapter = adapterFor(state, { baseUrl: controlURL(state) })
-    const results = await adapter.measureEntitlement({ concurrency: 2 })
-    assert.ok(results.length > 0)
-    for (const result of results) {
-      assert.ok(['usable', 'unavailable', 'deprecated', 'auth', 'forbidden', 'error'].includes(result.state))
-      assert.match(result.route, /^opencode(-go)?\//)
-    }
+    adapter.config.verdictPath = { get: () => join(dir, 'verdicts.json') }
+
+    // The backend refuses the route during a real turn: recorded for free.
+    assert.equal(adapter.observe('opencode-go/minimax-m3.1-flash', 'unavailable'), true)
+    assert.deepEqual(adapter.verdicts().verdicts, { 'opencode-go/minimax-m3.1-flash': 'unavailable' })
+
+    // Same state again is a no-op (no write on the common path).
+    assert.equal(adapter.observe('opencode-go/minimax-m3.1-flash', 'unavailable'), false)
+
+    // A served route clears the stale refusal.
+    assert.equal(adapter.observe('opencode-go/minimax-m3.1-flash', 'usable'), true)
+    assert.deepEqual(adapter.verdicts().verdicts, {})
+
+    // `default` is a pseudo-row, never a route.
+    assert.equal(adapter.observe('default', 'unavailable'), false)
   } finally {
     await close()
+    await rm(dir, { recursive: true, force: true })
   }
 })
 

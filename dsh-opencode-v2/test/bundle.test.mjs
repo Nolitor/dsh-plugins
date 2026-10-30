@@ -293,31 +293,17 @@ function loadClientExports() {
 }
 
 /**
- * Requirement (2026-10-31): the checklist is sorted by the last known verdict —
- * usable on top, unchecked next, everything the sweep rejected at the bottom —
- * so the operator does not re-scan 49 rows after every sweep.
+ * Requirement (2026-10-31): availability is plan-based, so the section must expose
+ * a Go/Zen plan choice and must not carry a per-model sweep button any more.
  */
-test('client half sorts usable routes to the top and rejected ones to the bottom', () => {
-  const { exportsObj } = loadClientExports()
-  assert.equal(typeof exportsObj.sortModels, 'function')
-
-  const models = [
-    { route: 'opencode-go/unavailable-b', name: 'Beta' },
-    { route: 'opencode-go/usable-z', name: 'Zeta' },
-    { route: 'opencode-go/unmeasured-m', name: 'Mu' },
-    { route: 'opencode-go/deprecated-a', name: 'Alpha' },
-  ]
-  const verdicts = {
-    'opencode-go/usable-z': 'usable',
-    'opencode-go/unavailable-b': 'unavailable',
-    'opencode-go/deprecated-a': 'deprecated',
-  }
-  assert.deepEqual(
-    exportsObj.sortModels(models, verdicts).map((model) => model.route),
-    ['opencode-go/usable-z', 'opencode-go/unmeasured-m', 'opencode-go/deprecated-a', 'opencode-go/unavailable-b'],
-  )
-  // Every route is still present: sorting must never drop a row.
-  assert.equal(exportsObj.sortModels(models, verdicts).length, models.length)
+test('client half offers the plan choice and no model sweep', () => {
+  const { source, exportsObj } = loadClientExports()
+  assert.match(source, /planGo/)
+  assert.match(source, /planZen/)
+  assert.match(source, /model-settings\/apply/)
+  assert.ok(!/model-settings\/measure/.test(source), 'the per-model sweep button must stay removed')
+  assert.ok(!/사용 가능 모델 확인|Check usable models/.test(source), 'no sweep label should remain')
+  assert.equal(typeof exportsObj.OpenCodeModelSection, 'function')
 })
 
 /** Menu names follow the UI language: 오픈코드 V2 (ko) / OpenCode V2 (en). */

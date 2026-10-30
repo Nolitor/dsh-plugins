@@ -26,7 +26,8 @@
  *   - persona `brief` strings or `[note: the caller declared ...]`
  *   - static `cwd` overrides for model context
  */
-import { readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 
 import Schema from '@deepseek-ai/schemastery'
 
@@ -41,7 +42,8 @@ import {
   unsupportedEffortMessage,
 } from './shared.js'
 import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
-import { createVerdictStore, verdictsFromResults } from './verdict-store.js'
+import { createVerdictStore } from './verdict-store.js'
+import { PLANS, PLAN_PROVIDERS, orderModels, planOfRoute, rankingForRoutes, rankingFromDataIndex } from './plans.js'
 import {
   decideRouterConflict,
   detectRouterConflicts,
@@ -152,9 +154,22 @@ export const Config = Schema.object({
    */
   verdictPath: Schema.string().default('').volatile(),
   /**
+   * Which plan the account is on. `go` = the OpenCode Go subscription
+   * (`opencode-go/*` routes), `zen` = pay-as-you-go (`opencode/*`). The catalog
+   * provider id is the plan, so availability needs no per-model request.
+   */
+  activePlan: Schema.union(PLANS).default('go').volatile(),
+  /** Public usage ranking used to order the checklist inside each group. */
+  rankingUrl: Schema.string().default('https://opencode.ai/data/index.json').volatile(),
+  /** Where the ranking snapshot is cached; empty follows the catalog rule. */
+  rankingPath: Schema.string().default('').volatile(),
+  /** How long the cached ranking stays fresh before a refresh fetches again. */
+  rankingTtlMs: Schema.number().default(86400000).volatile(),
+  /**
    * Route allow-list for the prompt model picker. Empty means "every route the
-   * catalog serves". A non-empty list hides every other route from `listModels`,
-   * which is what the settings tab writes; running sessions are unaffected.
+   * active plan offers". A non-empty list hides every other route from
+   * `listModels`, which is what the settings tab writes; running sessions are
+   * unaffected.
    */
   enabledModels: Schema.array(Schema.string()).default([]).volatile(),
 })
@@ -686,12 +701,17 @@ export class OpencodeHttpAdapter {
     const discovered = await this.discover()
     const description = this.describe()
     const enabled = enabledRouteFilter(this.config.enabledModels.get().map((entry) => String(entry)))
+    // The prompt picker only offers routes the active plan can use. Availability
+    // is decided from the provider id alone (no per-model request), so this is a
+    // pure filter and never touches the backend.
+    const activePlan = this.config.activePlan.get()
+    const allowsPlan = (route) => planOfRoute(route) === activePlan
     if (discovered?.models?.length) {
       return [
         { provider, id: 'default', name: 'OpenCode (config default)', description, inputModalities: ['text'] },
         ...discovered.models
           // Catalog ids are already `provider/model` (measured: no separate providerID field).
-          .filter((model) => enabled === null || enabled.has(String(model.id)))
+          .filter((model) => allowsPlan(String(model.id)) && (enabled === null || enabled.has(String(model.id))))
           .map((model) => ({
             provider,
             id: model.id,
@@ -707,7 +727,7 @@ export class OpencodeHttpAdapter {
     }
     return this.config.models
       .get()
-      .filter((entry) => enabled === null || enabled.has(String(entry.id)))
+      .filter((entry) => allowsPlan(String(entry.id)) && (enabled === null || enabled.has(String(entry.id))))
       .map((entry) => ({
         provider,
         id: entry.id,
@@ -841,58 +861,110 @@ export class OpencodeHttpAdapter {
   }
 
   /**
-   * Measure which catalog routes this account can actually use.
+   * Persist what the backend already said about a route during real traffic.
    *
-   * One `max_tokens`-minimal request per route, classified by the backend's own
-   * answer (`classifyProbe`). This runs only when the settings tab asks for it —
-   * never inside a conversation — so the prompt path pays nothing for it.
+   * There is deliberately no probe routine: one request per route per sweep cost
+   * 49 requests against a per-request quota. A real turn that the backend refuses
+   * (`unavailable`, `deprecated`, 401, 403) is the same evidence for free, and a
+   * success clears a stale refusal. Written only when the state changes, so the
+   * common path performs no I/O.
    *
-   * @param options - concurrency cap and an abort signal.
-   * @returns one entry per probed route, in catalog order.
+   * @param route - `provider/model` catalog id.
+   * @param state - `classifyProbe()` result.
+   * @returns true when the snapshot changed on disk.
    */
-  async measureEntitlement({ concurrency = 6, signal } = {}) {
-    const backend = await this.resolveBackend(signal)
-    const discovered = await this.discover()
-    const routes = (discovered?.models ?? []).map((model) => String(model.id))
-    const results = []
-    let next = 0
-    const probe = async (route) => {
-      const model = route.slice(route.indexOf('/') + 1)
-      const send = (maxTokens) => fetch(joinUrl(backend.baseURL, this.config.chatPath.get()), {
-        method: 'POST',
-        headers: sessionHeaders(backend.headers, { sessionId: 'dsh-entitlement-sweep' }, this.config),
-        body: JSON.stringify({ model, messages: [{ role: 'user', content: 'x' }], max_tokens: maxTokens, stream: false }),
-        signal: signal ?? AbortSignal.timeout(this.config.requestTimeoutMs.get()),
-        redirect: 'error',
-      })
+  observe(route, state) {
+    const key = String(route ?? '')
+    // Only real `provider/model` routes are recorded; `default` is a pseudo-row.
+    if (key.length === 0 || !key.includes('/')) return false
+    const store = (this.verdictStore ??= createVerdictStore({
+      explicit: this.config.verdictPath.get(),
+      profileDir: this.ctx?.get?.('profileContext')?.dir,
+      dshHome: process.env.DSH_HOME,
+    }))
+    const snapshot = store.read()
+    if (state === 'usable') {
+      // Plan availability already says "usable"; drop a stale refusal instead of
+      // storing a second source of truth.
+      if (snapshot.verdicts[key] === undefined) return false
+      delete snapshot.verdicts[key]
+    } else {
+      if (snapshot.verdicts[key] === state) return false
+      snapshot.verdicts[key] = state
+    }
+    store.write({ verdicts: snapshot.verdicts, measuredAt: new Date().toISOString() })
+    return true
+  }
+
+  /** Current refusal snapshot (`route -> state`) for the settings tab. */
+  verdicts() {
+    const store = (this.verdictStore ??= createVerdictStore({
+      explicit: this.config.verdictPath.get(),
+      profileDir: this.ctx?.get?.('profileContext')?.dir,
+      dshHome: process.env.DSH_HOME,
+    }))
+    return store.read()
+  }
+
+  /** Where the public usage ranking is cached. */
+  rankingFile() {
+    return resolveCatalogPath({
+      explicit: this.config.rankingPath.get(),
+      profileDir: this.ctx?.get?.('profileContext')?.dir,
+      dshHome: process.env.DSH_HOME,
+      fileName: 'opencode-data-ranking.json',
+    })
+  }
+
+  /** Cached `{ byModel, updatedAt, fetchedAt }`; never performs network I/O. */
+  readRanking() {
+    if (this.rankingValue) return this.rankingValue
+    const path = this.rankingFile()
+    let snapshot = { byModel: {}, updatedAt: null, fetchedAt: 0 }
+    if (path) {
       try {
-        // Some providers enforce a >= 16 output floor; start minimal, then retry once.
-        let response = await send(4)
-        let text = await response.text()
-        if (!response.ok && /minimum|>= 16/i.test(text)) {
-          response = await send(16)
-          text = await response.text()
+        const raw = JSON.parse(readFileSync(path, 'utf8'))
+        snapshot = {
+          byModel: raw?.byModel && typeof raw.byModel === 'object' ? raw.byModel : {},
+          updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : null,
+          fetchedAt: typeof raw?.fetchedAt === 'number' ? raw.fetchedAt : 0,
         }
-        let message = ''
-        try {
-          message = JSON.parse(text)?.error?.message ?? ''
-        } catch {
-          /* non-JSON body: classify by status alone */
-        }
-        return { route, status: response.status, state: classifyProbe(response.status, message), message: message.slice(0, 200) }
-      } catch (error) {
-        return { route, status: 0, state: 'error', message: String(error?.message ?? error).slice(0, 200) }
+      } catch {
+        /* no cache yet */
       }
     }
-    const worker = async () => {
-      while (next < routes.length) {
-        const route = routes[next]
-        next += 1
-        results.push(await probe(route))
+    this.rankingValue = snapshot
+    return snapshot
+  }
+
+  /**
+   * Refresh the usage ranking from `opencode.ai/data/index.json`.
+   *
+   * One GET, unrelated to the model quota; cached for `rankingTtlMs` so the tab
+   * can sort without a network call on every open.
+   *
+   * @param force - fetch even when the cache is still fresh.
+   */
+  async refreshRanking(force = false) {
+    const current = this.readRanking()
+    if (!force && current.fetchedAt > 0 && Date.now() - current.fetchedAt < this.config.rankingTtlMs.get()) {
+      return current
+    }
+    const response = await fetch(this.config.rankingUrl.get(), { headers: { accept: 'application/json' }, redirect: 'error' })
+    if (!response.ok) throw new Error(`usage ranking fetch failed: HTTP ${response.status}`)
+    const parsed = rankingFromDataIndex(await response.json())
+    const snapshot = { byModel: parsed.ranking, updatedAt: parsed.updatedAt, fetchedAt: Date.now() }
+    this.rankingValue = snapshot
+    const path = this.rankingFile()
+    if (path) {
+      try {
+        mkdirSync(dirname(path), { recursive: true })
+        writeFileSync(path, `${JSON.stringify(snapshot, null, 2)}\n`)
+      } catch {
+        /* the cache is best effort */
       }
     }
-    await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, routes.length)) }, worker))
-    return results.sort((left, right) => routes.indexOf(left.route) - routes.indexOf(right.route))
+    return snapshot
   }
 
   async *stream(options) {
@@ -980,6 +1052,10 @@ export class OpencodeHttpAdapter {
       }
       if (!response.ok) {
         const text = await response.text().catch(() => '')
+        // Free entitlement evidence: the backend just answered for this route, so
+        // a refusal is recorded without spending another request on a probe.
+        const observed = classifyProbe(response.status, text)
+        if (String(options.model ?? '').includes('/')) this.observe(options.model, observed)
         yield {
           type: 'finish',
           reason: {
@@ -996,6 +1072,8 @@ export class OpencodeHttpAdapter {
         yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_BACKEND_EMPTY', message: 'backend returned no response body' } } }
         return
       }
+      // A served route clears any stale refusal recorded for it.
+      if (String(options.model ?? '').includes('/')) this.observe(options.model, 'usable')
 
       let usage = null
       let finishReason = null
@@ -1356,54 +1434,84 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
     }
   }
 
-  // The sweep costs ~20 s, so its result is persisted and served back: opening
-  // the tab must never re-run it, and the checklist can be sorted by the last
-  // known verdict without touching the backend (measured requirement 2026-10-31).
-  const verdictStore = createVerdictStore({
-    explicit: config?.verdictPath?.get?.() ?? '',
-    profileDir: ctx?.get?.('profileContext')?.dir,
-    dshHome: process.env.DSH_HOME,
-  })
+  /** Annotate and order the served catalog for the settings checklist. */
+  const describeModels = async () => {
+    const discovered = await adapter.discover().catch(() => null)
+    const rows = (discovered?.models ?? []).map((model) => ({ route: String(model.id), name: model.name ?? String(model.id) }))
+    const ranking = adapter.readRanking()
+    const snapshot = adapter.verdicts()
+    const models = orderModels(rows, {
+      activePlan: config.activePlan?.get?.() ?? 'go',
+      verdicts: snapshot.verdicts,
+      ranking: rankingForRoutes(rows.map((row) => row.route), ranking.byModel),
+    })
+    return { models, verdicts: snapshot.verdicts, observedAt: snapshot.measuredAt, ranking }
+  }
+
+  const visibleRoutes = async () =>
+    adapter
+      .listModels()
+      .then((list) => list.map((model) => model.id).filter((id) => id !== 'default'))
+      .catch(() => [])
 
   const routes = {
     'model-settings': async () => {
-      const models = await adapter.listModels()
-      const discovered = await adapter.discover().catch(() => null)
-      const snapshot = verdictStore.read()
+      const state = await describeModels()
       return respond({
+        activePlan: config.activePlan?.get?.() ?? 'go',
+        plans: PLANS,
         enabled: config.enabledModels?.get?.() ?? [],
-        models: (discovered?.models ?? []).map((model) => ({ route: String(model.id), name: model.name ?? String(model.id) })),
-        visible: models.map((model) => model.id).filter((id) => id !== 'default'),
-        verdicts: snapshot.verdicts,
-        measuredAt: snapshot.measuredAt,
+        models: state.models,
+        visible: await visibleRoutes(),
+        verdicts: state.verdicts,
+        observedAt: state.observedAt,
+        ranking: {
+          updatedAt: state.ranking.updatedAt,
+          fetchedAt: state.ranking.fetchedAt,
+          covered: Object.keys(state.ranking.byModel ?? {}).length,
+        },
       })
     },
-    'model-settings/measure': async () => {
-      const results = await adapter.measureEntitlement()
-      const verdicts = verdictsFromResults(results)
-      const measuredAt = new Date().toISOString()
-      const persisted = verdictStore.write({ verdicts, measuredAt })
-      if (!persisted) log('dsh-opencode-v2-http: measured verdicts could not be persisted (no writable path)')
-      return respond({ results, verdicts, measuredAt, persisted })
+    'model-settings/ranking/refresh': async () => {
+      const snapshot = await adapter.refreshRanking(true)
+      return respond({
+        updatedAt: snapshot.updatedAt,
+        fetchedAt: snapshot.fetchedAt,
+        covered: Object.keys(snapshot.byModel ?? {}).length,
+      })
     },
     'model-settings/apply': async (request) => {
       const payload = await readJson(request)
-      if (payload === null || !Array.isArray(payload.enabled)) {
-        return respond({ error: 'expected { enabled: string[] }' }, 400)
+      if (payload === null) return respond({ error: 'expected JSON' }, 400)
+      const wantsEnabled = Array.isArray(payload.enabled)
+      const wantsPlan = typeof payload.activePlan === 'string'
+      if (!wantsEnabled && !wantsPlan) {
+        return respond({ error: 'expected { enabled?: string[], activePlan?: "go"|"zen" }' }, 400)
       }
-      const next = payload.enabled
-        .filter((route) => typeof route === 'string' && route.trim().length > 0)
-        .map((route) => route.trim())
       const settings = ctx?.settings
       if (typeof settings?.update !== 'function') {
-        return respond({ error: 'this host exposes no settings service; set enabledModels in the profile patch' }, 409)
+        return respond({ error: 'this host exposes no settings service; set enabledModels / activePlan in the profile patch' }, 409)
       }
-      const ns = settingsNs(config)
-      await settings.update(ns, { enabledModels: next })
-      // The row config object is live: the host re-reads the persisted value, so
-      // the very next listModels() call reflects what was saved.
-      const models = await adapter.listModels()
-      return respond({ enabled: next, visible: models.map((model) => model.id).filter((id) => id !== 'default') })
+      const patch = {}
+      if (wantsEnabled) {
+        patch.enabledModels = payload.enabled
+          .filter((route) => typeof route === 'string' && route.trim().length > 0)
+          .map((route) => route.trim())
+      }
+      if (wantsPlan) {
+        if (!PLANS.includes(payload.activePlan)) {
+          return respond({ error: `activePlan must be one of ${PLANS.join(', ')}` }, 400)
+        }
+        patch.activePlan = payload.activePlan
+      }
+      await settings.update(settingsNs(config), patch)
+      const state = await describeModels()
+      return respond({
+        activePlan: config.activePlan?.get?.() ?? 'go',
+        enabled: config.enabledModels?.get?.() ?? [],
+        models: state.models,
+        visible: await visibleRoutes(),
+      })
     },
   }
 

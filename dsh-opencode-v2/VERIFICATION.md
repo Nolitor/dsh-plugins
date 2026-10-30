@@ -1949,6 +1949,41 @@ New files: `lib/verdict-store.js` (path rule shared with the catalog: explicit �
 - DOM shape of a row: `input:checkbox → span (verdict) → label (name) → code (route)`.
 - Developer-console errors: 0. Suite: 202/202 including the new sort and label tests.
 
-`dsh-notify-web@0.1.7` in the same release: settings section order 20 → 50 (below 에이전트 프리셋)
-and a locale-aware label (`알림` / `Notifications`). English rendering was verified by unit source
-assertion and code path, not by switching the live UI language.
+## 30. v0.7.0 — plan-based availability, sweep removed (measured 2026-10-31)
+
+### 30.1 Why the sweep went
+
+One press cost **one real completion per catalog route** — 49 requests against an account whose
+quota counts requests. No cheaper truthful surface exists: `GET {baseURL}/models` → 404,
+`/api/model` reports `status: active` / `enabled: true` for all 49, `opencode models` lists the same
+49 (it is the static catalog, not entitlement), `/api/provider/opencode-go` carries `models: 0`, and
+the OpenAPI document (130 paths) has no per-model availability route. The console is login-walled.
+
+### 30.2 What replaced it
+
+| Piece | Behaviour |
+|---|---|
+| Plan | `activePlan: 'go' \| 'zen'`; `opencode-go` = subscription, `opencode` = pay-as-you-go. Availability = provider id, so it costs nothing. |
+| Order | usable → other plan / refused, then by `opencode.ai/data` weekly usage rank, then name. |
+| Refusals | Recorded from real turns (`observe()`), written only when a state changes. |
+| Ranking | One GET to `opencode.ai/data/index.json`, cached 24 h (`opencode-data-ranking.json`). |
+
+### 30.3 Proof (live service, 3080, 2026-10-31 01:33–01:40 KST)
+
+- Boot: no `web boot:` verdict; service active since 01:32:53; live profile resolves `0.7.0`.
+- Tab renders 49 rows with `사용 가능 28 / 다른 플랜 7 / 사용 불가 12 / 지원 중단 2` — exactly the
+  plan split plus the two refusals the earlier sweep had measured.
+- No sweep button; `사용 가능 모델 확인` string absent from the served client module.
+- `사용량 순위 갱신`: one GET → `사용량 순위 2026. 10. 31. 오전 1:31:51 기준`, rows re-ordered by
+  rank (`#1` DeepSeek V4.1 Flash (Go), `#2` Muse Spark 1.3 Contributor, `#3` GLM-5.3-Flash (Go)).
+- Plan switch Go → Zen → Go: badges flip `사용 가능 28 ↔ 7`, `다른 플랜 7 ↔ 28`, notice `저장했습니다.`,
+  and the live patch keeps `activePlan: go`.
+- Picker gating: `model-settings.visible` = the 12 routes the operator had checked, all
+  `opencode-go/*`, no Zen route — the plan filter and the allow-list compose.
+- Suites: **208/208** (new `test/plans.test.mjs`, `observe()` test, plan-filter test).
+
+### 30.4 What is deliberately not known any more
+
+Per-account exceptions that never reach a turn stay invisible: a route the plan offers but the
+backend would refuse shows as `사용 가능` until something actually uses it. That is the trade the
+owner chose over 49 probing requests per refresh; `observe()` closes the gap as usage accumulates.

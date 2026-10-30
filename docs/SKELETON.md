@@ -33,7 +33,7 @@
 
 ## report
 
-- **2.5** · active · 2026-10-31 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
+- **2.6** · active · 2026-10-31 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
   Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, and the 0.6.0 client-half activation defect that killed the web shell.
 - **1.0** · completed · 2026-10-29 · [DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](../DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
   Runtime measurement and optimization report for the three original plugins on DSH 0.2.2-alpha.2.
@@ -71,7 +71,7 @@
 
 ## policy
 
-- **2.5** · active · 2026-10-31 · [docs/DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md)
+- **2.6** · active · 2026-10-31 · [docs/DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md)
   Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules, and the browser-boot verification gate.
 - **2.0** · active · 2026-10-29 · [docs/BOOTCARD-POLICY.md](BOOTCARD-POLICY.md)
   Boot card generation and read rules; AGENTS.md stays a thin pointer to the newest card, rules live in docs/RULES.md.
@@ -93,8 +93,10 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 20)
+## boot (newest 5 of 21)
 
+- **active** · 2026-10-31T0137+0900.md · [card](../bootcards/2026-10-31T0137+0900.md)
+  opencode-v2 0.7.0 removes the per-model entitlement sweep (49 requests/press) in favour of plan-based availability (Go subscription / Zen pay-as-you-go), public usage ranking for ordering, and free refusal capture from real turns.
 - **active** · 2026-10-31T0042+0900.md · [card](../bootcards/2026-10-31T0042+0900.md)
   Settings-tab usability release: sorted checklist, persisted entitlement sweep, locale-aware tab labels (opencode-v2 0.6.2), notify section order/label fix (0.1.7), and the U1 credential correction (the opencode-go key was NOT deleted — it works).
 - **active** · 2026-10-31T0021+0900.md · [card](../bootcards/2026-10-31T0021+0900.md)
@@ -103,9 +105,7 @@
   Dated session card (tier 5). State, active task, handoff for 2026-10-30T2330+0900, plus the measured unresolved issues carried out of the OpenCode v2 0.5.1/0.6.0 work.
 - **active** · 2026-10-30T2045+0900.md · [card](../bootcards/2026-10-30T2045+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-30T2045+0900. Older cards are historical.
-- **active** · 2026-10-30T0946+0900.md · [card](../bootcards/2026-10-30T0946+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-10-30T0946+0900. Older cards are historical.
 
 ---
 
-49 indexed (20 boot cards), 0 missing header, 49 total.
+50 indexed (21 boot cards), 0 missing header, 50 total.

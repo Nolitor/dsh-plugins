@@ -1,14 +1,16 @@
 /**
  * `@nolit/dsh-opencode-v2` — browser half.
  *
- * Adds an "OpenCode v2" settings section that lists every model the local
- * OpenCode catalog serves and lets the operator tick the ones the prompt model
- * picker should offer. Ticking only changes what the picker shows; a session that
- * already selected a hidden route keeps running (measured requirement 2026-10-30).
+ * Adds an "OpenCode V2" settings section that lists the models the local
+ * OpenCode catalog serves, groups them by plan (Go subscription vs Zen
+ * pay-as-you-go), and lets the operator tick the ones the prompt model picker
+ * should offer.
  *
- * The host half owns the data: `/api/local/opencode-v2/model-settings`,
- * `.../measure`, `.../apply` (see `registerModelSettingsRoutes` in lib/http.js).
- * The entitlement sweep is explicit-only — the button, never a conversation.
+ * Availability is decided from the catalog's provider id alone — no per-model
+ * request, so opening this tab costs nothing against the account's request
+ * quota. The host annotates and orders the rows; this file only renders them.
+ * Refusals the backend reports during real turns are recorded by the host and
+ * surface here as a badge.
  *
  * CommonJS module-loader factory: this file is served to the browser as-is.
  */
@@ -27,52 +29,60 @@ window.__ModuleLoader__.load({
       ko: {
         nav: '오픈코드 V2',
         title: '오픈코드 V2 — 모델 서빙',
-        hint: '체크한 모델만 프롬프트의 모델 선택기에 표시됩니다. 이미 선택된 세션은 그대로 동작합니다. 사용 가능한 모델이 위로 정렬됩니다.',
-        measure: '사용 가능 모델 확인',
-        measuring: '확인 중… (모델 수만큼 한 번씩 확인합니다)',
-        all: '전체 선택',
-        none: '전체 해제',
+        hint: '플랜에 맞는 모델만 사용 가능으로 표시됩니다. 체크한 모델만 프롬프트의 모델 선택기에 나타나고, 이미 선택된 세션은 그대로 동작합니다.',
+        planGo: 'Go 구독',
+        planZen: 'Zen 종량제',
+        planLabel: '내 플랜',
+        selectAllAvailable: '사용 가능 전체 선택',
+        clearAll: '전체 해제',
         save: '저장',
         saving: '저장 중…',
         saved: '저장했습니다.',
-        countOne: '선택 {a} / 전체',
+        count: '선택 {a} · 사용 가능 {b} · 전체 {c}',
         stateUsable: '사용 가능',
+        stateOtherPlan: '다른 플랜',
         stateUnavailable: '사용 불가',
         stateDeprecated: '지원 중단',
         stateAuth: '인증 오류',
-        stateForbidden: '구독 없음',
-        stateError: '확인 실패',
-        unmeasured: '미확인',
+        stateForbidden: '권한 없음',
+        stateUnknown: '알 수 없음',
+        refreshRanking: '사용량 순위 갱신',
+        refreshing: '갱신 중…',
+        rankingUpdated: '사용량 순위 {at} 기준',
+        rankingMissing: '사용량 순위 없음 — 이름순으로 표시',
+        rankingError: '사용량 순위를 가져오지 못했습니다',
+        observedAt: '최근 관측 {at}',
         loadError: '설정을 불러오지 못했습니다',
         saveError: '저장하지 못했습니다',
-        measureError: '사용 가능 목록을 확인하지 못했습니다',
-        measuredAt: '방금 확인한 결과',
-        lastMeasured: '마지막 확인 {at}',
       },
       en: {
         nav: 'OpenCode V2',
         title: 'OpenCode V2 — model serving',
-        hint: 'Only checked models appear in the prompt model picker. Sessions that already selected one keep working. Usable models are sorted to the top.',
-        measure: 'Check usable models',
-        measuring: 'Checking… (one request per model)',
-        all: 'Select all',
-        none: 'Clear all',
+        hint: 'Only models your plan offers are usable. Checked models appear in the prompt model picker; sessions that already selected one keep working.',
+        planGo: 'Go subscription',
+        planZen: 'Zen pay-as-you-go',
+        planLabel: 'My plan',
+        selectAllAvailable: 'Select all usable',
+        clearAll: 'Clear all',
         save: 'Save',
         saving: 'Saving…',
         saved: 'Saved.',
-        countOne: '{a} selected / total',
+        count: '{a} selected · {b} usable · {c} total',
         stateUsable: 'usable',
+        stateOtherPlan: 'other plan',
         stateUnavailable: 'unavailable',
         stateDeprecated: 'deprecated',
         stateAuth: 'auth error',
-        stateForbidden: 'no subscription',
-        stateError: 'check failed',
-        unmeasured: 'not checked',
+        stateForbidden: 'no access',
+        stateUnknown: 'unknown',
+        refreshRanking: 'Refresh usage ranking',
+        refreshing: 'Refreshing…',
+        rankingUpdated: 'ranked by usage as of {at}',
+        rankingMissing: 'no usage ranking — sorted by name',
+        rankingError: 'Could not fetch the usage ranking',
+        observedAt: 'last observed {at}',
         loadError: 'Could not load settings',
         saveError: 'Could not save',
-        measureError: 'Could not measure the usable models',
-        measuredAt: 'measured just now',
-        lastMeasured: 'last checked {at}',
       },
     }
     // ===== I18N END =====
@@ -103,30 +113,11 @@ window.__ModuleLoader__.load({
       return Object.entries(params).reduce((acc, [name, value]) => acc.split(`{${name}}`).join(String(value)), text)
     }
 
-    /**
-     * Display order for the checklist: usable first, then routes nobody has
-     * checked yet, then everything the sweep rejected (unavailable, deprecated,
-     * auth, forbidden, error) at the bottom. Ties keep a stable name order.
-     */
-    function sortModels(models, verdicts) {
-      const rank = (verdict) => {
-        if (verdict === 'usable') return 0
-        if (verdict === undefined || verdict === null || verdict === '') return 1
-        return 2
-      }
-      return [...(models ?? [])].sort((left, right) => {
-        const delta = rank(verdicts?.[left.route]) - rank(verdicts?.[right.route])
-        if (delta !== 0) return delta
-        const nameDelta = String(left.name ?? left.route).localeCompare(String(right.name ?? right.route), currentLang())
-        return nameDelta !== 0 ? nameDelta : String(left.route).localeCompare(String(right.route))
-      })
-    }
-
-    function formatMeasuredAt(measuredAt) {
-      if (!measuredAt) return ''
-      const when = new Date(measuredAt)
+    function formatWhen(value) {
+      if (!value) return ''
+      const when = new Date(value)
       if (Number.isNaN(when.getTime())) return ''
-      return t('lastMeasured', { at: when.toLocaleString(currentLang() === 'ko' ? 'ko-KR' : 'en-US') })
+      return when.toLocaleString(currentLang() === 'ko' ? 'ko-KR' : 'en-US')
     }
 
     async function post(route, body) {
@@ -142,19 +133,22 @@ window.__ModuleLoader__.load({
 
     const STATE_KEYS = {
       usable: 'stateUsable',
+      'other-plan': 'stateOtherPlan',
       unavailable: 'stateUnavailable',
       deprecated: 'stateDeprecated',
       auth: 'stateAuth',
       forbidden: 'stateForbidden',
-      error: 'stateError',
+      unknown: 'stateUnknown',
     }
 
     function OpenCodeModelSection() {
       const [state, setState] = React.useState({ loading: true, error: null })
       const [enabled, setEnabled] = React.useState([])
-      const [verdicts, setVerdicts] = React.useState({}) // route -> state string, persisted by the host
-      const [measuredAt, setMeasuredAt] = React.useState(null)
-      const [busy, setBusy] = React.useState('') // '', 'measure', 'save'
+      const [plan, setPlan] = React.useState('go')
+      const [models, setModels] = React.useState([])
+      const [ranking, setRanking] = React.useState({ updatedAt: null, fetchedAt: 0 })
+      const [observedAt, setObservedAt] = React.useState(null)
+      const [busy, setBusy] = React.useState('') // '', 'save', 'ranking'
       const [notice, setNotice] = React.useState('')
 
       React.useEffect(() => {
@@ -163,43 +157,30 @@ window.__ModuleLoader__.load({
           .then((payload) => {
             if (!alive) return
             setEnabled(payload.enabled ?? [])
-            setVerdicts(payload.verdicts ?? {})
-            setMeasuredAt(payload.measuredAt ?? null)
-            setState({ loading: false, error: null, models: payload.models ?? [] })
+            setPlan(payload.activePlan ?? 'go')
+            setModels(payload.models ?? [])
+            setRanking(payload.ranking ?? { updatedAt: null, fetchedAt: 0 })
+            setObservedAt(payload.observedAt ?? null)
+            setState({ loading: false, error: null })
           })
-          .catch((error) => alive && setState({ loading: false, error: error.message, models: [] }))
+          .catch((error) => alive && setState({ loading: false, error: error.message }))
         return () => {
           alive = false
         }
       }, [])
 
-      const models = state.models ?? []
-      const ordered = sortModels(models, verdicts)
+      const usableCount = models.filter((model) => model.available).length
       const toggle = (route) =>
         setEnabled((prev) => (prev.includes(route) ? prev.filter((item) => item !== route) : [...prev, route]))
 
-      const measure = async () => {
-        setBusy('measure')
-        setNotice('')
-        try {
-          // The host persists the snapshot, so the next open shows it without a sweep.
-          const payload = await post('model-settings/measure')
-          setVerdicts(payload.verdicts ?? {})
-          setMeasuredAt(payload.measuredAt ?? null)
-          setNotice(t('measuredAt'))
-        } catch (error) {
-          setNotice(`${t('measureError')}: ${error.message}`)
-        } finally {
-          setBusy('')
-        }
-      }
-
-      const save = async () => {
+      const save = async (nextPlan = plan, nextEnabled = enabled) => {
         setBusy('save')
         setNotice('')
         try {
-          const payload = await post('model-settings/apply', { enabled })
+          const payload = await post('model-settings/apply', { enabled: nextEnabled, activePlan: nextPlan })
           setEnabled(payload.enabled ?? [])
+          setPlan(payload.activePlan ?? nextPlan)
+          setModels(payload.models ?? [])
           setNotice(t('saved'))
         } catch (error) {
           setNotice(`${t('saveError')}: ${error.message}`)
@@ -208,14 +189,35 @@ window.__ModuleLoader__.load({
         }
       }
 
-      const usableOnly = () => setEnabled(models.filter((model) => verdicts[model.route] === 'usable').map((model) => model.route))
+      const choosePlan = (nextPlan) => {
+        setPlan(nextPlan)
+        // Switching plans is a decision, not a draft: persist it immediately so
+        // the prompt picker follows the same plan.
+        save(nextPlan, enabled)
+      }
+
+      const refreshRanking = async () => {
+        setBusy('ranking')
+        setNotice('')
+        try {
+          const payload = await post('model-settings/ranking/refresh')
+          setRanking({ updatedAt: payload.updatedAt ?? null, fetchedAt: payload.fetchedAt ?? 0 })
+          const reloaded = await post('model-settings')
+          setModels(reloaded.models ?? [])
+          setNotice(t('rankingUpdated', { at: formatWhen(payload.updatedAt) }))
+        } catch (error) {
+          setNotice(`${t('rankingError')}: ${error.message}`)
+        } finally {
+          setBusy('')
+        }
+      }
 
       if (state.loading) return h('div', { className: 'ocv2-section' }, h('p', null, '…'))
       if (state.error) {
         return h('div', { className: 'ocv2-section' }, h('h3', null, t('title')), h('p', { role: 'alert' }, `${t('loadError')}: ${state.error}`))
       }
 
-      const stamp = formatMeasuredAt(measuredAt)
+      const stamp = ranking.updatedAt ? t('rankingUpdated', { at: formatWhen(ranking.updatedAt) }) : t('rankingMissing')
 
       return h(
         'div',
@@ -224,48 +226,100 @@ window.__ModuleLoader__.load({
         h('p', { className: 'ocv2-hint' }, t('hint')),
         h(
           'div',
-          { className: 'ocv2-actions', style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' } },
-          h('button', { type: 'button', onClick: measure, disabled: busy !== '' }, busy === 'measure' ? t('measuring') : t('measure')),
-          h('button', { type: 'button', onClick: usableOnly, disabled: busy !== '' || Object.keys(verdicts).length === 0 }, t('all')),
-          h('button', { type: 'button', onClick: () => setEnabled([]), disabled: busy !== '' }, t('none')),
-          h('button', { type: 'button', onClick: save, disabled: busy !== '' }, busy === 'save' ? t('saving') : t('save')),
-          h('span', { style: { alignSelf: 'center', opacity: 0.75 } }, `${t('countOne', { a: enabled.length })} ${models.length}`),
+          { className: 'ocv2-plan', style: { display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' } },
+          h('span', { style: { opacity: 0.75 } }, t('planLabel')),
+          h(
+            'button',
+            {
+              type: 'button',
+              'aria-pressed': plan === 'go',
+              onClick: () => choosePlan('go'),
+              disabled: busy !== '',
+              style: plan === 'go' ? { fontWeight: 600, outline: '2px solid currentColor' } : undefined,
+            },
+            t('planGo'),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              'aria-pressed': plan === 'zen',
+              onClick: () => choosePlan('zen'),
+              disabled: busy !== '',
+              style: plan === 'zen' ? { fontWeight: 600, outline: '2px solid currentColor' } : undefined,
+            },
+            t('planZen'),
+          ),
         ),
-        notice || stamp ? h('p', { role: 'status', style: { margin: '0 0 8px' } }, notice || stamp) : null,
+        h(
+          'div',
+          { className: 'ocv2-actions', style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' } },
+          h('button', { type: 'button', onClick: () => save(), disabled: busy !== '' }, busy === 'save' ? t('saving') : t('save')),
+          h(
+            'button',
+            { type: 'button', onClick: () => save(plan, models.filter((m) => m.available).map((m) => m.route)), disabled: busy !== '' },
+            t('selectAllAvailable'),
+          ),
+          h('button', { type: 'button', onClick: () => setEnabled([]), disabled: busy !== '' }, t('clearAll')),
+          h('button', { type: 'button', onClick: refreshRanking, disabled: busy !== '' }, busy === 'ranking' ? t('refreshing') : t('refreshRanking')),
+          h('span', { style: { alignSelf: 'center', opacity: 0.75 } }, t('count', { a: enabled.length, b: usableCount, c: models.length })),
+        ),
+        notice ? h('p', { role: 'status', style: { margin: '0 0 6px' } }, notice) : null,
+        h(
+          'p',
+          { style: { margin: '0 0 10px', opacity: 0.6, fontSize: '0.85em' } },
+          [stamp, observedAt ? t('observedAt', { at: formatWhen(observedAt) }) : ''].filter(Boolean).join(' · '),
+        ),
         h(
           'ul',
           { className: 'ocv2-list', style: { listStyle: 'none', padding: 0, margin: 0 } },
-          ordered.map((model) => {
-            const verdict = verdicts[model.route]
+          models.map((model) => {
+            const badge = STATE_KEYS[model.state] ?? 'stateUnknown'
+            const tone =
+              model.state === 'usable'
+                ? 'rgba(60,180,90,.18)'
+                : model.state === 'other-plan'
+                  ? 'rgba(120,120,120,.16)'
+                  : 'rgba(220,80,80,.16)'
             return h(
               'li',
-              { key: model.route, style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '2px 0' } },
+              {
+                key: model.route,
+                style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '2px 0', opacity: model.available ? 1 : 0.55 },
+              },
               h('input', {
                 type: 'checkbox',
                 checked: enabled.includes(model.route),
                 onChange: () => toggle(model.route),
+                disabled: !model.available,
                 id: `ocv2-${model.route}`,
               }),
-              // The verdict sits immediately beside the checkbox: the eye scans
+              // The badge sits immediately beside the checkbox: the eye scans
               // "usable?" left to right before the name gets in the way.
               h(
                 'span',
                 {
-                  title: verdict ? t(STATE_KEYS[verdict] ?? 'stateError') : t('unmeasured'),
+                  title: t(badge),
                   style: {
                     flex: '0 0 auto',
-                    minWidth: '4.5em',
+                    minWidth: '5.5em',
+                    textAlign: 'center',
                     fontSize: '0.8em',
                     padding: '1px 6px',
                     borderRadius: '999px',
-                    background: verdict === 'usable' ? 'rgba(60,180,90,.18)' : verdict ? 'rgba(220,80,80,.16)' : 'transparent',
-                    opacity: verdict ? 1 : 0.45,
+                    background: tone,
                   },
                 },
-                verdict ? t(STATE_KEYS[verdict] ?? 'stateError') : t('unmeasured'),
+                t(badge),
               ),
               h('label', { htmlFor: `ocv2-${model.route}`, style: { flex: 1 } }, model.name ?? model.route),
               h('code', { style: { opacity: 0.6, fontSize: '0.85em' } }, model.route),
+              model.plan === 'go' || model.plan === 'zen'
+                ? h('span', { style: { opacity: 0.5, fontSize: '0.75em', minWidth: '3.5em', textAlign: 'right' } }, model.plan)
+                : null,
+              typeof model.rank === 'number'
+                ? h('span', { style: { opacity: 0.5, fontSize: '0.75em', minWidth: '3em', textAlign: 'right' } }, `#${model.rank}`)
+                : h('span', { style: { minWidth: '3em' } }),
             )
           }),
         ),
@@ -294,7 +348,6 @@ window.__ModuleLoader__.load({
     exports.apply = apply
     exports.inject = inject
     exports.OpenCodeModelSection = OpenCodeModelSection
-    exports.sortModels = sortModels
     Object.defineProperty(exports, 'default', { value: { apply, inject } })
     return module.exports
   },
