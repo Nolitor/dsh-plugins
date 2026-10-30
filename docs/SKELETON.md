@@ -20,6 +20,10 @@
 
 ## spec
 
+- **1.0** · reference · 2026-10-30 · [CLI-WORKER-STANDARD.md](../CLI-WORKER-STANDARD.md)
+  Shared and per-CLI worker contract for the OpenCode (/ocode) and Antigravity (/agy) delegation tools.
+- **1.0** · reference · 2026-10-30 · [docs/cli-worker-standard.md](cli-worker-standard.md)
+  Shared and per-CLI worker contract for the OpenCode (/ocode) and Antigravity (/agy) delegation tools.
 - **1.0** · active · 2026-10-29 · [docs/dsh-plugin-runtime-spec.md](dsh-plugin-runtime-spec.md)
   DSH plugin runtime specification: manifest, bundle patch, services, lifecycle, client factory.
 - **1.0** · reference · 2026-10-29 · [docs/plugin-boot-card.md](plugin-boot-card.md)
@@ -29,6 +33,8 @@
 
 ## report
 
+- **1.0** · active · 2026-10-30 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
+  Records the 2026-10-30 subrouter regression (measurement skipped, live profile changed without approval), the measured defects, and the ordered plan to fix them.
 - **1.0** · completed · 2026-10-29 · [DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](../DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
   Runtime measurement and optimization report for the three original plugins on DSH 0.2.2-alpha.2.
 - **1.0** · reference · 2026-10-29 · [UTM-REVIEW-FORGE-VS-SIDEBAR.md](../UTM-REVIEW-FORGE-VS-SIDEBAR.md)
@@ -87,8 +93,10 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 15)
+## boot (newest 5 of 16)
 
+- **active** · 2026-10-30T0946+0900.md · [card](../bootcards/2026-10-30T0946+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-10-30T0946+0900. Older cards are historical.
 - **active** · 2026-10-30T0032+0900.md · [card](../bootcards/2026-10-30T0032+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-30T0032+0900. Older cards are historical.
 - **active** · 2026-10-29T2326+0900.md · [card](../bootcards/2026-10-29T2326+0900.md)
@@ -97,14 +105,7 @@
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T2306+0900. Older cards are historical.
 - **active** · 2026-10-29T2242+0900.md · [card](../bootcards/2026-10-29T2242+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T2242+0900. Older cards are historical.
-- **active** · 2026-10-29T1213+0900.md · [card](../bootcards/2026-10-29T1213+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-10-29T1213+0900, including the off-peak isolated A/B plan for the OpenCode v2 HTTP provider (real workloads). Older cards are historical.
-
-## MISSING HEADER (2) — fix before release
-
-- [CLI-WORKER-STANDARD.md](../CLI-WORKER-STANDARD.md) — missing: entire skeleton block
-- [docs/cli-worker-standard.md](cli-worker-standard.md) — missing: entire skeleton block
 
 ---
 
-41 indexed (15 boot cards), 2 missing header, 43 total.
+45 indexed (16 boot cards), 0 missing header, 45 total.

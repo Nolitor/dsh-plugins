@@ -1,5 +1,14 @@
 # @nolit/dsh-subrouter
 
+<!-- skeleton:
+version: 1.0
+kind: readme
+status: active
+updated: 2026-10-30
+summary: Implementation detail for @nolit/dsh-subrouter. Root record and open defects: ../OPENCODE-MODEL-SERVING-PLAN.md
+-->
+
+
 Adds one or more OpenAI/Anthropic-compatible model routes to DSH without
 editing `dsh-llm-pi-ai` or any canonical DSH package.
 

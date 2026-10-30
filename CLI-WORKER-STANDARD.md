@@ -1,5 +1,14 @@
 # CLI 워커 공통 규격 · 개별 규격 정리 (`/ocode`, `/agy`)
 
+<!-- skeleton:
+version: 1.0
+kind: spec
+status: reference
+updated: 2026-10-30
+summary: Shared and per-CLI worker contract for the OpenCode (/ocode) and Antigravity (/agy) delegation tools.
+-->
+
+
 OpenCode CLI와 Antigravity CLI(`agy`)를 같은 DSH 워커 도구로 다루기 위한 비교 정리.
 측정 환경: `opencode` v2.2 계열(`~/.bun/bin/opencode`), `agy` 1.4.10, Linux.
 

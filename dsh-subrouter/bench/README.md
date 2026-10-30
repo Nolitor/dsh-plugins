@@ -1,5 +1,14 @@
 # Route benchmark
 
+<!-- skeleton:
+version: 1.0
+kind: readme
+status: active
+updated: 2026-10-30
+summary: Isolated per-route benchmark for DSH model routes; metrics, usage, and known limits.
+-->
+
+
 Compares DSH model routes end to end on the same task.
 
 ```bash
