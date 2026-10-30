@@ -26,7 +26,7 @@
  *   - persona `brief` strings or `[note: the caller declared ...]`
  *   - static `cwd` overrides for model context
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 import Schema from '@deepseek-ai/schemastery'
@@ -43,7 +43,7 @@ import {
 } from './shared.js'
 import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
 import { createVerdictStore } from './verdict-store.js'
-import { PLANS, PLAN_PROVIDERS, orderModels, planOfRoute, rankingForRoutes, rankingFromDataIndex } from './plans.js'
+import { PLANS, PLAN_PROVIDERS, NEW_MODEL_DAYS, isNewModel, orderModels, planOfRoute, rankingForRoutes, rankingFromDataIndex } from './plans.js'
 import {
   decideRouterConflict,
   detectRouterConflicts,
@@ -163,8 +163,12 @@ export const Config = Schema.object({
   rankingUrl: Schema.string().default('https://opencode.ai/data/index.json').volatile(),
   /** Where the ranking snapshot is cached; empty follows the catalog rule. */
   rankingPath: Schema.string().default('').volatile(),
-  /** How long the cached ranking stays fresh before a refresh fetches again. */
-  rankingTtlMs: Schema.number().default(86400000).volatile(),
+  /** How long the cached ranking stays fresh before a refresh fetches again (5 days). */
+  rankingTtlMs: Schema.number().default(432000000).volatile(),
+  /** Where the first-seen route snapshot lives; empty follows the catalog rule. */
+  knownModelsPath: Schema.string().default('').volatile(),
+  /** How long a newly appeared route keeps priority-0 ordering. */
+  newModelDays: Schema.number().default(NEW_MODEL_DAYS).volatile(),
   /**
    * Route allow-list for the prompt model picker. Empty means "every route the
    * active plan offers". A non-empty list hides every other route from
@@ -707,18 +711,40 @@ export class OpencodeHttpAdapter {
     const activePlan = this.config.activePlan.get()
     const allowsPlan = (route) => planOfRoute(route) === activePlan
     if (discovered?.models?.length) {
+      this.markKnown(discovered.models.map((model) => String(model.id)))
+      const firstSeen = this.readFirstSeen().firstSeen
+      const ranking = this.readRanking().byModel
+      const now = Date.now()
+      const newWithinDays = this.config.newModelDays.get()
+      const rows = discovered.models
+        // Catalog ids are already `provider/model` (measured: no separate providerID field).
+        // A route that just appeared is offered even when the allow-list is set,
+        // so a new model is reachable from the prompt without hunting for it. The
+        // plan gate still applies, and the window closes after `newModelDays`.
+        .filter((model) => {
+          const route = String(model.id)
+          if (!allowsPlan(route)) return false
+          if (enabled === null || enabled.has(route)) return true
+          return isNewModel(route, { firstSeen, ranking, now, newWithinDays })
+        })
+        .map((model) => ({
+          provider,
+          id: model.id,
+          name: model.name,
+          description,
+          inputModalities: ['text'],
+        }))
+      // Priority 0 for a route that just appeared, so it shows up at the top of
+      // the prompt picker instead of behind 40 ranked models.
+      rows.sort((left, right) => {
+        const leftNew = isNewModel(left.id, { firstSeen, ranking, now, newWithinDays })
+        const rightNew = isNewModel(right.id, { firstSeen, ranking, now, newWithinDays })
+        if (leftNew !== rightNew) return leftNew ? -1 : 1
+        return String(left.name ?? left.id).localeCompare(String(right.name ?? right.id))
+      })
       return [
         { provider, id: 'default', name: 'OpenCode (config default)', description, inputModalities: ['text'] },
-        ...discovered.models
-          // Catalog ids are already `provider/model` (measured: no separate providerID field).
-          .filter((model) => allowsPlan(String(model.id)) && (enabled === null || enabled.has(String(model.id))))
-          .map((model) => ({
-            provider,
-            id: model.id,
-            name: model.name,
-            description,
-            inputModalities: ['text'],
-          })),
+        ...rows,
       ]
     }
     if (this.config.autoDiscoverModels.get()) {
@@ -904,6 +930,70 @@ export class OpencodeHttpAdapter {
       dshHome: process.env.DSH_HOME,
     }))
     return store.read()
+  }
+
+  /** Where the first-seen snapshot is kept. */
+  knownFile() {
+    return resolveCatalogPath({
+      explicit: this.config.knownModelsPath.get(),
+      profileDir: this.ctx?.get?.('profileContext')?.dir,
+      dshHome: process.env.DSH_HOME,
+      fileName: 'opencode-known-models.json',
+    })
+  }
+
+  /** `{ firstSeen: { route: ISO } }`; never performs network I/O. */
+  readFirstSeen() {
+    if (this.firstSeenValue) return this.firstSeenValue
+    const path = this.knownFile()
+    let snapshot = { firstSeen: {} }
+    if (path) {
+      try {
+        const raw = JSON.parse(readFileSync(path, 'utf8'))
+        snapshot = { firstSeen: raw?.firstSeen && typeof raw.firstSeen === 'object' ? raw.firstSeen : {} }
+      } catch {
+        /* first run */
+      }
+    }
+    this.firstSeenValue = snapshot
+    return snapshot
+  }
+
+  /**
+   * Record routes seen for the first time.
+   *
+   * The very first run seeds the whole catalog at the epoch instead of "now", so
+   * an existing deployment does not label all 49 routes as new. Only routes that
+   * appear later get a real timestamp and thereby priority-0 ordering for
+   * `newModelDays`. Plan availability is untouched: a new route from the other
+   * plan is still not offered.
+   *
+   * @param routes - current catalog routes.
+   * @returns the routes added by this call.
+   */
+  markKnown(routes) {
+    const snapshot = this.readFirstSeen()
+    const path = this.knownFile()
+    const firstRun = path ? !existsSync(path) : false
+    const stamp = firstRun ? '1970-01-01T00:00:00.000Z' : new Date().toISOString()
+    const added = []
+    for (const route of routes ?? []) {
+      const key = String(route ?? '')
+      if (key.length === 0 || snapshot.firstSeen[key] !== undefined) continue
+      snapshot.firstSeen[key] = stamp
+      if (!firstRun) added.push(key)
+    }
+    if (added.length > 0 || firstRun) {
+      if (path) {
+        try {
+          mkdirSync(dirname(path), { recursive: true })
+          writeFileSync(path, `${JSON.stringify(snapshot, null, 2)}\n`)
+        } catch {
+          /* the snapshot is best effort */
+        }
+      }
+    }
+    return added
   }
 
   /** Where the public usage ranking is cached. */
@@ -1440,10 +1530,13 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
     const rows = (discovered?.models ?? []).map((model) => ({ route: String(model.id), name: model.name ?? String(model.id) }))
     const ranking = adapter.readRanking()
     const snapshot = adapter.verdicts()
+    adapter.markKnown(rows.map((row) => row.route))
     const models = orderModels(rows, {
       activePlan: config.activePlan?.get?.() ?? 'go',
       verdicts: snapshot.verdicts,
       ranking: rankingForRoutes(rows.map((row) => row.route), ranking.byModel),
+      firstSeen: adapter.readFirstSeen().firstSeen,
+      newWithinDays: config.newModelDays?.get?.() ?? NEW_MODEL_DAYS,
     })
     return { models, verdicts: snapshot.verdicts, observedAt: snapshot.measuredAt, ranking }
   }

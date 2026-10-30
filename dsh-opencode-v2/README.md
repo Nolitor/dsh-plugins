@@ -271,7 +271,8 @@ The backend's own refusals still get through, but they are recorded for free fro
 | `lib/plans.js` | `planOfRoute()`, `availabilityOf()`, `orderModels()`: usable first, then by public usage rank, then by name; the other plan's routes stay visible but disabled. |
 | `lib/client.js` | **OpenCode V2** settings section (`settings.section`, order 60): a Go/Zen plan switch, the checklist with the state badge beside the checkbox, *Select all usable*, *Clear all*, *Save*, *Refresh usage ranking*. Nav label follows the UI locale (`오픈코드 V2` / `OpenCode V2`). |
 | `opencode-model-verdicts.json` | Refusals the backend reported during real traffic (`{verdicts, measuredAt}`), written only when a state changes. Empty is the normal case. |
-| `opencode-data-ranking.json` | Cached `opencode.ai/data/index.json` ranking (`{byModel, updatedAt, fetchedAt}`), refreshed at most once per `rankingTtlMs` (24 h). |
+| `opencode-data-ranking.json` | Cached `opencode.ai/data/index.json` ranking (`{byModel, updatedAt, fetchedAt}`), refreshed at most once per `rankingTtlMs` (**5 days**). |
+| `opencode-known-models.json` | First-seen timestamp per route. A route that appears later sorts first for `newModelDays` (7) and is offered in the prompt picker even when the allow-list is set — the plan gate still applies. The first run seeds the whole catalog at the epoch, so an existing deployment does not label all 49 routes as new. |
 | `/api/local/opencode-v2/model-settings` | Catalog (annotated + ordered), active plan, allow-list, visible routes, observed refusals, ranking metadata. |
 | `/api/local/opencode-v2/model-settings/apply` | Persists `{enabled?, activePlan?}` through `ctx.settings.update('dsh-opencode-v2-http', …)`. |
 | `/api/local/opencode-v2/model-settings/ranking/refresh` | One GET against `opencode.ai/data/index.json` — unrelated to the model request quota. |

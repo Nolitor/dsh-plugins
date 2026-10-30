@@ -15,8 +15,10 @@
 
 ## rule
 
-- **1.2** · active · 2026-10-31 · [docs/RULES.md](RULES.md)
-  Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting.
+- **1.0** · active · 2026-10-31 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
+  Every defect and wrong turn this workspace actually made, with the standing rule that keeps it from happening again. Read before changing a plugin, a doc, or a live service.
+- **1.3** · active · 2026-10-31 · [docs/RULES.md](RULES.md)
+  Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting — with the failure ledger as required reading.
 
 ## spec
 
@@ -33,7 +35,7 @@
 
 ## report
 
-- **2.6** · active · 2026-10-31 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
+- **2.7** · active · 2026-10-31 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
   Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, and the 0.6.0 client-half activation defect that killed the web shell.
 - **1.0** · completed · 2026-10-29 · [DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](../DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
   Runtime measurement and optimization report for the three original plugins on DSH 0.2.2-alpha.2.
@@ -71,7 +73,7 @@
 
 ## policy
 
-- **2.6** · active · 2026-10-31 · [docs/DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md)
+- **2.7** · active · 2026-10-31 · [docs/DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md)
   Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules, and the browser-boot verification gate.
 - **2.0** · active · 2026-10-29 · [docs/BOOTCARD-POLICY.md](BOOTCARD-POLICY.md)
   Boot card generation and read rules; AGENTS.md stays a thin pointer to the newest card, rules live in docs/RULES.md.
@@ -96,7 +98,7 @@
 ## boot (newest 5 of 21)
 
 - **active** · 2026-10-31T0137+0900.md · [card](../bootcards/2026-10-31T0137+0900.md)
-  opencode-v2 0.7.0 removes the per-model entitlement sweep (49 requests/press) in favour of plan-based availability (Go subscription / Zen pay-as-you-go), public usage ranking for ordering, and free refusal capture from real turns.
+  opencode-v2 0.7.2 — entitlement sweep removed for plan-based availability (Go/Zen), usage ranking refreshed every 5 days, newly appearing models served at priority 0 with the plan gate intact. Next: TokenEconomizer savings audit, then an OpenRouter API router plugin.
 - **active** · 2026-10-31T0042+0900.md · [card](../bootcards/2026-10-31T0042+0900.md)
   Settings-tab usability release: sorted checklist, persisted entitlement sweep, locale-aware tab labels (opencode-v2 0.6.2), notify section order/label fix (0.1.7), and the U1 credential correction (the opencode-go key was NOT deleted — it works).
 - **active** · 2026-10-31T0021+0900.md · [card](../bootcards/2026-10-31T0021+0900.md)
@@ -108,4 +110,4 @@
 
 ---
 
-50 indexed (21 boot cards), 0 missing header, 50 total.
+51 indexed (21 boot cards), 0 missing header, 51 total.

@@ -15,6 +15,7 @@ import {
   planOfRoute,
   rankingForRoutes,
   rankingFromDataIndex,
+  isNewModel,
 } from '../lib/plans.js'
 
 test('provider ids map to plans', () => {
@@ -108,4 +109,39 @@ test('ranking maps onto provider-qualified routes', () => {
   const routes = ['opencode-go/glm-5.3-flash', 'opencode/glm-5.3-flash', 'opencode-go/never-ranked']
   const mapped = rankingForRoutes(routes, { 'glm-5.3-flash': 3 })
   assert.deepEqual(mapped, { 'opencode-go/glm-5.3-flash': 3, 'opencode/glm-5.3-flash': 3 })
+})
+
+test('a newly appeared route is served first, without escaping the plan', () => {
+  const now = Date.parse('2026-10-31T02:00:00.000Z')
+  const firstSeen = {
+    'opencode-go/brand-new': '2026-10-30T18:00:00.000Z', // 8h ago -> new
+    'opencode-go/old-route': '2026-09-01T00:00:00.000Z', // long known
+    'opencode/zen-new': '2026-10-30T18:00:00.000Z', // new but other plan
+  }
+  assert.equal(isNewModel('opencode-go/brand-new', { firstSeen, now }), true)
+  assert.equal(isNewModel('opencode-go/old-route', { firstSeen, now }), false)
+  // Once the public ranking covers it, usage decides again.
+  assert.equal(isNewModel('opencode-go/brand-new', { firstSeen, now, ranking: { 'opencode-go/brand-new': 9 } }), false)
+  // The window closes after NEW_MODEL_DAYS.
+  assert.equal(isNewModel('opencode-go/brand-new', { firstSeen, now: Date.parse('2026-11-10T00:00:00.000Z') }), false)
+
+  const models = [
+    { route: 'opencode-go/ranked-1', name: 'Ranked One' },
+    { route: 'opencode-go/brand-new', name: 'Zzz New' },
+    { route: 'opencode-go/old-route', name: 'Aaa Old' },
+    { route: 'opencode/zen-new', name: 'Zen New' },
+  ]
+  const ordered = orderModels(models, {
+    activePlan: 'go',
+    ranking: { 'opencode-go/ranked-1': 1 },
+    firstSeen,
+    now,
+  })
+  assert.deepEqual(
+    ordered.map((model) => model.route),
+    ['opencode-go/brand-new', 'opencode-go/ranked-1', 'opencode-go/old-route', 'opencode/zen-new'],
+  )
+  // Priority 0 does not bypass the plan: the new Zen route stays unavailable.
+  assert.equal(ordered.find((model) => model.route === 'opencode/zen-new').available, false)
+  assert.equal(ordered[0].isNew, true)
 })

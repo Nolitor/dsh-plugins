@@ -1,15 +1,17 @@
 # DSH Plugins — Detailed Rules
 
 <!-- skeleton:
-version: 1.2
+version: 1.3
 kind: rule
 status: active
 updated: 2026-10-31
-summary: Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting.
+summary: Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting — with the failure ledger as required reading.
 -->
 
 > **Reading chain:** global rules (`~/.dsh/AGENTS.md`) → **this file** (project rules) →
-> [docs/SKELETON.md](SKELETON.md) (what exists) → [bootcards/](../bootcards/) (latest dated card).
+> [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md) (mistakes already made here — read before changing a
+> plugin, measuring, or touching live state) → [docs/SKELETON.md](SKELETON.md) (what exists) →
+> [bootcards/](../bootcards/) (latest dated card).
 >
 > `AGENTS.md` at the repo root is auto-loaded and intentionally tiny: it points here. Put new
 > rules **here**, not there, so the auto-loaded context stays small.

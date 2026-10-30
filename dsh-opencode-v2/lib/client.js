@@ -40,6 +40,7 @@ window.__ModuleLoader__.load({
         saved: '저장했습니다.',
         count: '선택 {a} · 사용 가능 {b} · 전체 {c}',
         stateUsable: '사용 가능',
+        stateNew: '새 모델',
         stateOtherPlan: '다른 플랜',
         stateUnavailable: '사용 불가',
         stateDeprecated: '지원 중단',
@@ -69,6 +70,7 @@ window.__ModuleLoader__.load({
         saved: 'Saved.',
         count: '{a} selected · {b} usable · {c} total',
         stateUsable: 'usable',
+        stateNew: 'new model',
         stateOtherPlan: 'other plan',
         stateUnavailable: 'unavailable',
         stateDeprecated: 'deprecated',
@@ -274,9 +276,12 @@ window.__ModuleLoader__.load({
           'ul',
           { className: 'ocv2-list', style: { listStyle: 'none', padding: 0, margin: 0 } },
           models.map((model) => {
-            const badge = STATE_KEYS[model.state] ?? 'stateUnknown'
-            const tone =
-              model.state === 'usable'
+            // A route that just appeared is flagged even while it is usable: it is
+            // ordered first, and the badge explains why.
+            const badge = model.isNew ? 'stateNew' : (STATE_KEYS[model.state] ?? 'stateUnknown')
+            const tone = model.isNew
+              ? 'rgba(70,130,220,.18)'
+              : model.state === 'usable'
                 ? 'rgba(60,180,90,.18)'
                 : model.state === 'other-plan'
                   ? 'rgba(120,120,120,.16)'

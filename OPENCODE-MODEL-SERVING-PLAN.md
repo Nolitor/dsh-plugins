@@ -1,7 +1,7 @@
 # OpenCode Model Serving — Incident Post-Mortem, Autonomous Router Policy, and Decommission Record
 
 <!-- skeleton:
-version: 2.6
+version: 2.7
 kind: report
 status: active
 updated: 2026-10-31
@@ -355,6 +355,22 @@ Measured live 2026-10-31: 49 rows = 28 usable / 7 other-plan / 12 unavailable / 
 refresh = one GET, plan switch flips 28↔7 and keeps `activePlan: go`, picker shows the 12 checked
 routes (all Go), suite 208/208. Trade accepted by the owner: a plan-offered route the backend would
 refuse reads `사용 가능` until something actually uses it.
+
+### 5.2.11 Ranking cadence and priority-0 for new routes (0.7.1 / 0.7.2)
+
+Two owner decisions, both applied 2026-10-31:
+
+| Decision | Implementation | Why |
+|---|---|---|
+| Refresh the usage ranking **every 5 days**, not daily | `rankingTtlMs` default `432000000` | Usage rank is a trend; a daily refresh adds nothing and one GET per 5 days is free of the model quota. |
+| A **newly appearing model** is served at priority 0 in the prompt and in the settings list, **with the plan gate still applied** | `opencode-known-models.json` (first-seen per route) + `isNewModel()`; new routes sort first and are offered in `listModels()` even when an allow-list is set, for `newModelDays` (7) | A brand-new route has no usage rank, so the old ordering buried it behind 40 ranked models. The plan gate is not negotiable — a new route from the other plan stays disabled. |
+
+First run seeds the whole catalog at the epoch, so an existing deployment does not label all 49 routes
+as new. Verified live: seed → `isNew` 0; simulated arrival → the route becomes `models[0]` with
+`available: true` and `visible` 12 → 13; restore → clean. Suite 209/209.
+
+`0.7.2` exists only because `0.7.1` was packed before the picker path was widened; artifacts are
+immutable, so the version moved.
 
 ## 6. Rules restated for the next session
 

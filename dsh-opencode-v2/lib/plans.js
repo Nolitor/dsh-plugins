@@ -49,6 +49,32 @@ export function planOfRoute(route) {
   return planOfProvider(String(route ?? '').split('/')[0])
 }
 
+/** How long a newly appeared route keeps priority-0 ordering. */
+export const NEW_MODEL_DAYS = 7
+
+/**
+ * Is this route new enough to be served first?
+ *
+ * A route counts as new when it was first seen inside the window **and** the
+ * public usage ranking has not covered it yet — once it is ranked it competes on
+ * usage like everything else. Plan availability is decided separately, so a new
+ * route from the other plan is still not offered.
+ *
+ * @param {string} route `provider/model`.
+ * @param {{ firstSeen?: Record<string,string|number>, ranking?: Record<string,number>, now?: number, newWithinDays?: number }} state
+ * @returns {boolean}
+ */
+export function isNewModel(route, { firstSeen = {}, ranking = {}, now = Date.now(), newWithinDays = NEW_MODEL_DAYS } = {}) {
+  const key = String(route ?? '')
+  if (key.length === 0) return false
+  if (typeof ranking?.[key] === 'number') return false
+  const seen = firstSeen?.[key]
+  if (seen === undefined || seen === null) return false
+  const stamp = typeof seen === 'number' ? seen : Date.parse(String(seen))
+  if (!Number.isFinite(stamp)) return false
+  return now - stamp < newWithinDays * 86_400_000
+}
+
 /** Verdicts that mean "the backend itself refused this route". */
 const REFUSALS = new Set(['unavailable', 'deprecated', 'auth', 'forbidden'])
 
@@ -85,15 +111,22 @@ export function availabilityOf(model, { activePlan = 'go', verdicts = {} } = {})
  * @param {{ activePlan?: string, verdicts?: Record<string,string>, ranking?: Record<string, number> }} state
  * @returns {(object & { plan: string, available: boolean, state: string, rank: number|null })[]}
  */
-export function orderModels(models, { activePlan = 'go', verdicts = {}, ranking = {} } = {}) {
+export function orderModels(
+  models,
+  { activePlan = 'go', verdicts = {}, ranking = {}, firstSeen = {}, now = Date.now(), newWithinDays = NEW_MODEL_DAYS } = {},
+) {
   const annotated = (models ?? []).map((model) => {
     const route = String(model?.route ?? model?.id ?? '')
     const availability = availabilityOf({ route }, { activePlan, verdicts })
     const rank = typeof ranking?.[route] === 'number' ? ranking[route] : null
-    return { ...model, route, ...availability, rank }
+    const isNew = isNewModel(route, { firstSeen, ranking, now, newWithinDays })
+    return { ...model, route, ...availability, rank, isNew }
   })
   return annotated.sort((left, right) => {
     if (left.available !== right.available) return left.available ? -1 : 1
+    // A route that just appeared is served first so it is impossible to miss,
+    // but only inside the availability group it already qualified for.
+    if (left.isNew !== right.isNew) return left.isNew ? -1 : 1
     const leftRank = left.rank ?? Number.POSITIVE_INFINITY
     const rightRank = right.rank ?? Number.POSITIVE_INFINITY
     if (leftRank !== rightRank) return leftRank - rightRank

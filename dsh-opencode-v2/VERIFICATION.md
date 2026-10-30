@@ -1982,8 +1982,23 @@ the OpenAPI document (130 paths) has no per-model availability route. The consol
   `opencode-go/*`, no Zen route — the plan filter and the allow-list compose.
 - Suites: **208/208** (new `test/plans.test.mjs`, `observe()` test, plan-filter test).
 
-### 30.4 What is deliberately not known any more
+## 31. v0.7.1 / v0.7.2 — 5-day ranking refresh and priority-0 for new routes (measured 2026-10-31)
 
-Per-account exceptions that never reach a turn stay invisible: a route the plan offers but the
-backend would refuse shows as `사용 가능` until something actually uses it. That is the trade the
-owner chose over 49 probing requests per refresh; `observe()` closes the gap as usage accumulates.
+| Change | Behaviour |
+|---|---|
+| `rankingTtlMs` | 24 h → **5 days** (432 000 000 ms). The usage ranking is a trend, not a live signal; a refresh is one GET against `opencode.ai/data/index.json` and stays off the model quota. |
+| New routes | `opencode-known-models.json` keeps a first-seen stamp per route. A route seen for the first time sorts **first** in the settings list and is offered **first** in the prompt picker for `newModelDays` (7) — the plan gate still applies, so a new route from the other plan stays disabled. |
+| First run | The catalog is seeded at the epoch, so an existing deployment does not mark all 49 routes as new. |
+
+Verified live (2026-10-31 01:52–01:58 KST, `/api/local/opencode-v2/model-settings`):
+
+- Fresh seed: 49 routes, distinct `firstSeen` values = `{1970-01-01T00:00:00.000Z}`, `isNew` count **0**.
+- Simulated arrival (one route's stamp set to "now", service restarted): `isNew` = **1**, that route is
+  `models[0]` ahead of the `#1` ranked route, `available: true`, and `visible` grows 12 → **13** with
+  the new route at position 0.
+- Stamps restored + restart: back to `isNew` 0, `visible` 12, ordering by rank.
+- Suite: **209/209**.
+
+Artifacts: `nolit-dsh-opencode-v2-0.7.1.tgz` (`0d988f4c…`), `nolit-dsh-opencode-v2-0.7.2.tgz`
+(`281316fa…`). 0.7.2 exists because 0.7.1 was packed before the picker path was widened to include new
+routes; release artifacts are immutable, so the version moved instead of the tarball.
