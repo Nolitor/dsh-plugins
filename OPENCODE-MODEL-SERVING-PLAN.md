@@ -317,6 +317,15 @@ Measured live 2026-10-31 (browser, 3080): sweep 49 routes → **35 usable / 12 u
 ordering intact (first rows usable, last rows unavailable), file written at
 `~/.dsh/profiles/web/opencode-model-verdicts.json` (2,246 B, 49 routes).
 
+Cost of one press (measured from the code, 2026-10-31): **one real completion request per catalog
+route** — 49 today — posted straight to the provider backend (`max_tokens: 4`, `stream: false`,
+`x-opencode-session: dsh-entitlement-sweep`, concurrency 6). A route is retried once at 16 tokens
+only when the error mentions a minimum output floor. The provider's usage endpoint exposes
+rolling/weekly/monthly **percent** only (no request counter), and three probes moved no percentage,
+so "how many requests today" cannot be read from the API; the console is login-walled. If the plan's
+limit is per-request, assume 49 requests per press. A `429` currently classifies as `error` and is
+persisted as a verdict — distinguish it before automating the sweep.
+
 `dsh-notify-web@0.1.7` in the same pass: its settings section moved from order 20 to 50 (below
 에이전트 프리셋, above this tab) and its label is now locale-aware (`알림` / `Notifications`) instead
 of a hardcoded Korean string.
