@@ -1,6 +1,6 @@
 {
   "name": "@nolit/dsh-opencode-v2",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": false,
   "description": "OpenCode Go pure LLM adapter for DeepSeek Harness: an `opencode` delegation tool, /opencode command and cli_worker, plus an `opencode-http-agent` route that calls the OpenAI-compatible /chat/completions backend directly (streaming text/reasoning/tool deltas, disjoint usage, cached credentials) while the local OpenCode server is used only as a catalog/provider/credential control plane. No agent loop, persona, session prompt, or static cwd.",
   "keywords": [
@@ -28,7 +28,10 @@
       "default": "./lib/http.js"
     },
     "./locale/en.json": "./locale/en.json",
-    "./locale/ko.json": "./locale/ko.json"
+    "./locale/ko.json": "./locale/ko.json",
+    "./client": {
+      "default": "./lib/client.js"
+    }
   },
   "files": [
     "lib/",
@@ -40,6 +43,14 @@
     "manifestVersion": 1,
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale"
+      ]
     }
   },
   "engines": {
@@ -47,8 +58,8 @@
     "dsh": ">=0.2.2-alpha.2 <0.3.0"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/provider.js && node --check lib/http.js && node --check lib/conflicts.js && node --check lib/shared.js && node --check lib/catalog-cache.js && node --check lib/workers/index.js && node --check lib/workers/run.js && node --check lib/workers/backends.js && node --check lib/workers/artifacts.js"
+    "test": "node --import ./test/setup-isolate.mjs --test test/*.test.mjs",
+    "check": "node --check lib/index.js && node --check lib/provider.js && node --check lib/http.js && node --check lib/conflicts.js && node --check lib/shared.js && node --check lib/catalog-cache.js && node --check lib/workers/index.js && node --check lib/workers/run.js && node --check lib/workers/backends.js && node --check lib/workers/artifacts.js && node --check lib/client.js"
   },
   "dependencies": {
     "@quonaro/dsh-plugin-opencode": "^0.1.2"

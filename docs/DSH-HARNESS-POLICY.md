@@ -1,6 +1,6 @@
 # DSH Plugin Harness Policy & Version Changelog
 <!-- skeleton:
-version: 2.2
+version: 2.3
 kind: policy
 status: active
 updated: 2026-10-30
@@ -34,6 +34,11 @@ result it came from.
   importing its adapter/library, never by inserting a second route table between it and the host.
 - **Extensions must export `apply`.** A module without `apply` is a library and must not be listed
   as a bundle row.
+- **Model visibility is display-only (2026-10-30).** A serving plugin may publish fewer routes to the
+  prompt picker than its catalog serves, but the filter must change *only* what is offered:
+  empty means unrestricted, and a session that already selected a hidden route keeps running.
+  Entitlement is measured per account once (backend answer to a one-shot request), never guessed
+  from `/api/model`'s `status`/`enabled`, which are uniformly active.
 - **Conflict handling is local.** A plugin may warn or yield its own namespace when a legacy
   provider is active; it must never unload or mutate a sibling plugin's registration.
 - Rationale and incident record: [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md).
@@ -54,6 +59,7 @@ result it came from.
 |---|---|---|---|
 | 2026-10-30 | DSH `0.2.2-alpha.2` | `llm-pi-ai` deprecated; autonomous native router policy adopted; `@nolit/dsh-subrouter` decommissioned | `dsh-opencode-v2@0.4.0` mounts `@nolit/dsh-opencode-v2/http` natively; profile repointed to `opencode-http-agent` |
 | 2026-10-30 | DSH `0.2.2-alpha.2` | Live 400 `MissingSessionID` (no `x-opencode-session`) and 401 from a revoked `key` credential preferred over the web OAuth login | `dsh-opencode-v2@0.5.1` sends the session header and ranks oauth over key; see [plan](../OPENCODE-MODEL-SERVING-PLAN.md) §5.1 |
+| 2026-10-30 | DSH `0.2.2-alpha.2` | Prompt picker offered all 49 catalog routes; only 35 usable on this account | `dsh-opencode-v2@0.6.0` adds `enabledModels` (empty = unrestricted) plus an OpenCode v2 settings tab and an explicit entitlement sweep; see [plan](../OPENCODE-MODEL-SERVING-PLAN.md) §5.2 |
 | 2026-10-29 | DSH `0.2.2-alpha.2` | Cordis `4.0.6-alpha.1`, Node `v24.22.1`; current engines/manifests still valid | Re-measured all three plugins; pinned engines to alpha.2 floor |
 | 2026-10-29 | DSH `0.2.2-alpha.2` | Built-in client dictionaries changed; Korean pack stale by 117 keys | Refreshed to 68 namespaces / 3,019 keys; en/zh parity 0 |
 | 2026-10-29 | DSH `0.2.2-alpha.2` | Experimental Forge/Worktrees exposed in official plugin list | Measured isolated boot and UTM policy overlap; advisory guardrails required |

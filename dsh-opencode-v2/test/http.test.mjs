@@ -23,8 +23,11 @@ import {
   finishFromOpenAi,
   modelKey,
   modelRefFromRoute,
+  classifyProbe,
+  enabledRouteFilter,
   parseBanner,
   probeServer,
+  registerModelSettingsRoutes,
   sessionHeaders,
   readBanner,
   resolveWorkspaceDirectory,
@@ -362,12 +365,15 @@ test('backend HTTP failure becomes a stable error finish', async () => {
 })
 
 test('an unreachable control plane is reported instead of an empty model list', async () => {
+  // No durable catalog: a cache left by an earlier run would answer for the dead
+  // control plane and hide the failure this test exists to catch.
   const adapter = new OpencodeHttpAdapter({}, Config({
     baseUrl: 'http://127.0.0.1:1',
     password: 'pw',
     attachToDaemon: false,
     spawnServer: false,
     autoDiscoverModels: true,
+    catalogPath: join(await mkdtemp(join(tmpdir(), 'dsh-nocatalog-')), 'models.json'),
     catalogSyncMs: 0,
     requestTimeoutMs: 200,
   }))
@@ -479,6 +485,139 @@ test('credentialLabel pins an exact store entry', async () => {
       messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
     }))
     assert.equal(state.chatHeaders[0].authorization, 'Bearer go-key')
+  } finally {
+    await close()
+  }
+})
+
+// Measured 2026-10-30: an empty allow-list must not change anything, and a
+// non-empty one must hide every other route from the prompt picker only.
+test('enabledRouteFilter treats an empty list as unrestricted', () => {
+  assert.equal(enabledRouteFilter([]), null)
+  assert.equal(enabledRouteFilter(undefined), null)
+  assert.equal(enabledRouteFilter(['', '   ']), null)
+})
+
+test('enabledRouteFilter trims and matches full provider/model routes', () => {
+  const filter = enabledRouteFilter([' opencode-go/a ', 'opencode/b'])
+  assert.ok(filter instanceof Set)
+  assert.ok(filter.has('opencode-go/a'))
+  assert.ok(filter.has('opencode/b'))
+  assert.ok(!filter.has('a'))
+})
+
+test('classifyProbe maps the measured backend answers', () => {
+  assert.equal(classifyProbe(200, ''), 'usable')
+  assert.equal(classifyProbe(400, 'Upstream request failed: Model is unavailable.'), 'unavailable')
+  assert.equal(classifyProbe(410, 'Model mimo-v2.5 has been deprecated. Use mimo-v2.6-flash instead.'), 'deprecated')
+  assert.equal(classifyProbe(401, 'Upstream request failed: Invalid credential'), 'auth')
+  assert.equal(classifyProbe(403, 'An active OpenCode Go subscription is required'), 'forbidden')
+  assert.equal(classifyProbe(500, 'boom'), 'error')
+})
+
+test('listModels hides routes outside enabledModels but keeps the default row', async () => {
+  const { state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, {
+      baseUrl: controlURL(state),
+      enabledModels: ['opencode-go/minimax-m3.1-flash'],
+    })
+    const models = await adapter.listModels('opencode-http-agent')
+    const ids = models.map((model) => model.id)
+    assert.ok(ids.includes('default'), 'the config-default row always stays selectable')
+    assert.ok(ids.includes('opencode-go/minimax-m3.1-flash'))
+    assert.ok(!ids.includes('opencode/beam-free'), 'an unselected route is hidden')
+  } finally {
+    await close()
+  }
+})
+
+test('listModels offers every catalog route when enabledModels is empty', async () => {
+  const { state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const ids = (await adapter.listModels('opencode-http-agent')).map((model) => model.id)
+    assert.ok(ids.includes('opencode-go/minimax-m3.1-flash'))
+    assert.ok(ids.includes('opencode/beam-free'))
+  } finally {
+    await close()
+  }
+})
+
+test('measureEntitlement classifies every catalog route', async () => {
+  const { state, close } = await startServer({
+    events: [],
+    entitlement: true,
+  })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const results = await adapter.measureEntitlement({ concurrency: 2 })
+    assert.ok(results.length > 0)
+    for (const result of results) {
+      assert.ok(['usable', 'unavailable', 'deprecated', 'auth', 'forbidden', 'error'].includes(result.state))
+      assert.match(result.route, /^opencode(-go)?\//)
+    }
+  } finally {
+    await close()
+  }
+})
+
+test('model-settings routes expose the catalog and persist the allow-list', async () => {
+  const { state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), enabledModels: [] })
+    const registered = new Map()
+    const ctx = {
+      effect: (fn) => fn(),
+      connection: { fetch: { register: (route) => { registered.set(route.path, route); return () => {} } } },
+    }
+    // The row config is a live accessor; keep the written value in the test.
+    let stack = []
+    adapter.config.enabledModels = { get: () => stack }
+    // The host settings service is the writer: mirror what `ctx.settings.update` does.
+    const updates = []
+    ctx.settings = { update: async (ns, patch) => { updates.push([ns, patch]); stack = patch.enabledModels } }
+    assert.equal(registerModelSettingsRoutes(ctx, adapter, adapter.config), true)
+    assert.ok(registered.has('/api/local/opencode-v2/model-settings'))
+    assert.ok(registered.has('/api/local/opencode-v2/model-settings/apply'))
+
+    const getRoute = registered.get('/api/local/opencode-v2/model-settings')
+    const initial = await (await getRoute.fetch(new Request('http://x/', { method: 'POST' }))).json()
+    assert.deepEqual(initial.enabled, [])
+    assert.ok(initial.models.some((model) => model.route === 'opencode-go/minimax-m3.1-flash'))
+
+    const applyRoute = registered.get('/api/local/opencode-v2/model-settings/apply')
+    const applied = await (await applyRoute.fetch(new Request('http://x/', {
+      method: 'POST',
+      body: JSON.stringify({ enabled: ['opencode-go/minimax-m3.1-flash', '  ', 'opencode/beam-free'] }),
+    }))).json()
+    assert.deepEqual(applied.enabled, ['opencode-go/minimax-m3.1-flash', 'opencode/beam-free'])
+    assert.ok(applied.visible.includes('opencode-go/minimax-m3.1-flash'))
+    assert.ok(!applied.visible.includes('opencode/beam-free') || applied.visible.every((id) => id === 'opencode-go/minimax-m3.1-flash' || id === 'opencode/beam-free'))
+
+    assert.equal(updates.length, 1)
+    assert.equal(updates[0][0], 'dsh-opencode-v2-http')
+    assert.deepEqual(updates[0][1].enabledModels, ['opencode-go/minimax-m3.1-flash', 'opencode/beam-free'])
+
+    const bad = await applyRoute.fetch(new Request('http://x/', { method: 'POST', body: JSON.stringify({ nope: 1 }) }))
+    assert.equal(bad.status, 400)
+  } finally {
+    await close()
+  }
+})
+
+test('model-settings routes report a host without a settings service instead of writing', async () => {
+  const { state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const registered = new Map()
+    const ctx = { effect: (fn) => fn(), connection: { fetch: { register: (r) => { registered.set(r.path, r); return () => {} } } } }
+    adapter.config.enabledModels = { get: () => [] }
+    registerModelSettingsRoutes(ctx, adapter, adapter.config)
+    const res = await registered.get('/api/local/opencode-v2/model-settings/apply').fetch(
+      new Request('http://x/', { method: 'POST', body: JSON.stringify({ enabled: ['a/b'] }) }),
+    )
+    assert.equal(res.status, 409)
   } finally {
     await close()
   }

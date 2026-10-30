@@ -50,8 +50,14 @@ import {
 /** Plugin name; the cordis row uses the `@nolit/dsh-opencode-v2/http` specifier. */
 export const name = 'dsh-opencode-v2-http'
 
-/** The llm registry, subprocess (local control-plane/server), and live sessions (cwd). */
-export const inject = ['llm', 'subprocess', 'sessions']
+/**
+ * The llm registry, subprocess (local control-plane/server), live sessions (cwd),
+ * and `connection` — the last one owns `ctx.connection.fetch`, which serves the
+ * settings tab's routes. Declaring it is mandatory: reading an undeclared service
+ * throws and takes the whole plugin entry down (measured in an isolated boot,
+ * 2026-10-30). Hosts without it still boot; the routes are simply not registered.
+ */
+export const inject = ['llm', 'subprocess', 'sessions', 'connection', 'settings']
 
 /** Attribution headers are a host contract; fall back to none in unit tests. */
 let attributionHeaders = () => ({})
@@ -138,6 +144,12 @@ export const Config = Schema.object({
   autoDiscoverModels: Schema.boolean().default(true).volatile(),
   catalogPath: Schema.string().default('').volatile(),
   catalogSyncMs: Schema.number().default(300000).volatile(),
+  /**
+   * Route allow-list for the prompt model picker. Empty means "every route the
+   * catalog serves". A non-empty list hides every other route from `listModels`,
+   * which is what the settings tab writes; running sessions are unaffected.
+   */
+  enabledModels: Schema.array(Schema.string()).default([]).volatile(),
 })
 
 function joinUrl(base, path) {
@@ -666,29 +678,36 @@ export class OpencodeHttpAdapter {
   async listModels(provider) {
     const discovered = await this.discover()
     const description = this.describe()
+    const enabled = enabledRouteFilter(this.config.enabledModels.get().map((entry) => String(entry)))
     if (discovered?.models?.length) {
       return [
         { provider, id: 'default', name: 'OpenCode (config default)', description, inputModalities: ['text'] },
-        ...discovered.models.map((model) => ({
-          provider,
-          id: model.id,
-          name: model.name,
-          description,
-          inputModalities: ['text'],
-        })),
+        ...discovered.models
+          // Catalog ids are already `provider/model` (measured: no separate providerID field).
+          .filter((model) => enabled === null || enabled.has(String(model.id)))
+          .map((model) => ({
+            provider,
+            id: model.id,
+            name: model.name,
+            description,
+            inputModalities: ['text'],
+          })),
       ]
     }
     if (this.config.autoDiscoverModels.get()) {
       const reason = this.discoveryError?.message ?? 'the server returned no models'
       throw new Error(`OpenCode model catalog unavailable: ${reason}`)
     }
-    return this.config.models.get().map((entry) => ({
-      provider,
-      id: entry.id,
-      name: entry.name || `OpenCode ${entry.id}`,
-      description,
-      inputModalities: ['text'],
-    }))
+    return this.config.models
+      .get()
+      .filter((entry) => enabled === null || enabled.has(String(entry.id)))
+      .map((entry) => ({
+        provider,
+        id: entry.id,
+        name: entry.name || `OpenCode ${entry.id}`,
+        description,
+        inputModalities: ['text'],
+      }))
   }
 
   async resolveModel(provider, model) {
@@ -812,6 +831,61 @@ export class OpencodeHttpAdapter {
     if (value.type === 'oauth') return value.access ?? ''
     if (value.type === 'key') return value.key ?? ''
     return ''
+  }
+
+  /**
+   * Measure which catalog routes this account can actually use.
+   *
+   * One `max_tokens`-minimal request per route, classified by the backend's own
+   * answer (`classifyProbe`). This runs only when the settings tab asks for it —
+   * never inside a conversation — so the prompt path pays nothing for it.
+   *
+   * @param options - concurrency cap and an abort signal.
+   * @returns one entry per probed route, in catalog order.
+   */
+  async measureEntitlement({ concurrency = 6, signal } = {}) {
+    const backend = await this.resolveBackend(signal)
+    const discovered = await this.discover()
+    const routes = (discovered?.models ?? []).map((model) => String(model.id))
+    const results = []
+    let next = 0
+    const probe = async (route) => {
+      const model = route.slice(route.indexOf('/') + 1)
+      const send = (maxTokens) => fetch(joinUrl(backend.baseURL, this.config.chatPath.get()), {
+        method: 'POST',
+        headers: sessionHeaders(backend.headers, { sessionId: 'dsh-entitlement-sweep' }, this.config),
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: 'x' }], max_tokens: maxTokens, stream: false }),
+        signal: signal ?? AbortSignal.timeout(this.config.requestTimeoutMs.get()),
+        redirect: 'error',
+      })
+      try {
+        // Some providers enforce a >= 16 output floor; start minimal, then retry once.
+        let response = await send(4)
+        let text = await response.text()
+        if (!response.ok && /minimum|>= 16/i.test(text)) {
+          response = await send(16)
+          text = await response.text()
+        }
+        let message = ''
+        try {
+          message = JSON.parse(text)?.error?.message ?? ''
+        } catch {
+          /* non-JSON body: classify by status alone */
+        }
+        return { route, status: response.status, state: classifyProbe(response.status, message), message: message.slice(0, 200) }
+      } catch (error) {
+        return { route, status: 0, state: 'error', message: String(error?.message ?? error).slice(0, 200) }
+      }
+    }
+    const worker = async () => {
+      while (next < routes.length) {
+        const route = routes[next]
+        next += 1
+        results.push(await probe(route))
+      }
+    }
+    await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, routes.length)) }, worker))
+    return results.sort((left, right) => routes.indexOf(left.route) - routes.indexOf(right.route))
   }
 
   async *stream(options) {
@@ -1028,6 +1102,43 @@ export function errorText(value) {
 }
 
 /**
+ * Build the prompt-picker allow-list.
+ *
+ * An empty list means "no restriction" (every served route is selectable), which
+ * keeps an unconfigured install behaving exactly as before. Hiding a route only
+ * changes what the picker offers: a session that already selected it keeps
+ * running, which is the measured 2026-10-30 requirement ("display only").
+ *
+ * @param routes - `provider/id` entries from the settings tab.
+ * @returns the matching set, or `null` when nothing is restricted.
+ */
+export function enabledRouteFilter(routes) {
+  const list = (routes ?? []).filter((route) => typeof route === 'string' && route.trim().length > 0)
+  return list.length === 0 ? null : new Set(list.map((route) => route.trim()))
+}
+
+/**
+ * Classify a one-shot probe result for the entitlement sweep.
+ *
+ * The Go backend answers a usable model with 200 and an unusable one with 400
+ * `Model is unavailable.`, 410 `... has been deprecated`, or 403 (no
+ * subscription). Classification is the backend's own message, never a guess.
+ *
+ * @param status - HTTP status of the probe.
+ * @param message - `error.message` when the probe failed.
+ * @returns the measured state of that route.
+ */
+export function classifyProbe(status, message) {
+  const text = String(message ?? '')
+  if (status >= 200 && status < 300) return 'usable'
+  if (/deprecated/i.test(text)) return 'deprecated'
+  if (/unavailable/i.test(text)) return 'unavailable'
+  if (status === 401) return 'auth'
+  if (status === 403) return 'forbidden'
+  return 'error'
+}
+
+/**
  * Add the conversation-identity header the Go backend requires.
  *
  * Measured 2026-10-30 against `https://opencode.ai/inference/go/openai/v1`:
@@ -1183,5 +1294,118 @@ export function apply(ctx, config) {
   if (typeof ctx.effect === 'function') {
     ctx.effect(() => () => dispose(), 'dsh-opencode-v2-http: dispose adapter and owned server')
   }
+  registerModelSettingsRoutes(ctx, adapter, config, log)
   return dispose
+}
+
+/**
+ * Settings namespace of this plugin row.
+ *
+ * The loader derives a row's settings namespace from its config row id, which the
+ * bundle patch pins to `dsh-opencode-v2-http` (the module name). Keeping the
+ * derivation in one place makes a rename a single edit.
+ *
+ * @param config - the row config (unused today; kept for a future explicit override).
+ * @returns the namespace `ctx.settings` expects.
+ */
+export function settingsNs(config) {
+  const explicit = config?.settingsNs
+  if (explicit && typeof explicit.get === 'function') {
+    const value = explicit.get()
+    if (typeof value === 'string' && value.length > 0) return value
+  }
+  return 'dsh-opencode-v2-http'
+}
+
+/**
+ * Serve the settings tab's operations over the local connection.
+ *
+ * `model-settings` returns the catalog plus the current allow-list;
+ * `model-settings/measure` runs the entitlement sweep; `model-settings/apply`
+ * persists a new allow-list. The sweep runs only on an explicit measure request —
+ * never during a conversation — so the prompt path never pays for it.
+ *
+ * Registration is optional: a host without `ctx.connection.fetch` simply has no
+ * settings tab, and every adapter behaviour stays intact.
+ *
+ * @param ctx - plugin context.
+ * @param adapter - the mounted HTTP adapter.
+ * @param config - the row config carrying `enabledModels`.
+ * @param log - warning sink.
+ * @returns true when the routes were registered.
+ */
+export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}) {
+  const register = ctx?.connection?.fetch?.register
+  if (typeof register !== 'function') return false
+  const respond = (body, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+
+  const readJson = async (request) => {
+    try {
+      const text = await request.text()
+      return text ? JSON.parse(text) : {}
+    } catch {
+      return null
+    }
+  }
+
+  const routes = {
+    'model-settings': async () => {
+      const models = await adapter.listModels()
+      const discovered = await adapter.discover().catch(() => null)
+      return respond({
+        enabled: config.enabledModels?.get?.() ?? [],
+        models: (discovered?.models ?? []).map((model) => ({ route: String(model.id), name: model.name ?? String(model.id) })),
+        visible: models.map((model) => model.id).filter((id) => id !== 'default'),
+      })
+    },
+    'model-settings/measure': async () => {
+      const results = await adapter.measureEntitlement()
+      return respond({ results })
+    },
+    'model-settings/apply': async (request) => {
+      const payload = await readJson(request)
+      if (payload === null || !Array.isArray(payload.enabled)) {
+        return respond({ error: 'expected { enabled: string[] }' }, 400)
+      }
+      const next = payload.enabled
+        .filter((route) => typeof route === 'string' && route.trim().length > 0)
+        .map((route) => route.trim())
+      const settings = ctx?.settings
+      if (typeof settings?.update !== 'function') {
+        return respond({ error: 'this host exposes no settings service; set enabledModels in the profile patch' }, 409)
+      }
+      const ns = settingsNs(config)
+      await settings.update(ns, { enabledModels: next })
+      // The row config object is live: the host re-reads the persisted value, so
+      // the very next listModels() call reflects what was saved.
+      const models = await adapter.listModels()
+      return respond({ enabled: next, visible: models.map((model) => model.id).filter((id) => id !== 'default') })
+    },
+  }
+
+  for (const [suffix, handler] of Object.entries(routes)) {
+    try {
+      ctx.effect(
+        () =>
+          register({
+            path: `/api/local/opencode-v2/${suffix}`,
+            methods: ['POST'],
+            requestBody: 'buffered',
+            fetch: async (request) => {
+              try {
+                return await handler(request)
+              } catch (error) {
+                log(`dsh-opencode-v2-http: ${suffix} failed: ${error instanceof Error ? error.message : String(error)}`)
+                return respond({ error: String(error?.message ?? error) }, 500)
+              }
+            },
+          }),
+        `dsh-opencode-v2-http: ${suffix}`,
+      )
+    } catch (error) {
+      log(`dsh-opencode-v2-http: could not register ${suffix}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  return true
 }

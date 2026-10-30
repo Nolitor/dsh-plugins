@@ -50,7 +50,7 @@ test('package.json declares its own bundle patch, not upstream\'s', () => {
   assert.equal(pkg.main, 'lib/index.js')
   assert.equal(pkg.type, 'module')
   assert.ok(!pkg.scripts.build, 'no build step')
-  assert.match(pkg.scripts.test, /node --test/)
+  assert.match(pkg.scripts.test, /--test\s/)
 })
 
 /**
@@ -226,4 +226,11 @@ test('the patch default model is a qualified route with a reasoning level', () =
   assert.equal(model, tool.DEFAULT_MODEL)
   // The suffix is the route's lowest advertised reasoning level.
   assert.match(model, /#low$/)
+})
+
+test('the client half is declared as a web bundle entry', () => {
+  assert.equal(pkg.exports['./client'].default, './lib/client.js')
+  assert.equal(pkg.dsh.client.platform, 'web')
+  assert.ok(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-settings'))
+  assert.ok(pkg.files.includes('lib/'), 'the client file ships inside lib/')
 })

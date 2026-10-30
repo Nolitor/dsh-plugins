@@ -1784,3 +1784,78 @@ usage: {"prompt_tokens":208,"completion_tokens":12,...}
 ```
 
 Status: applied in the workspace at `0.5.1`; the running service must be restarted to load it.
+
+## 27. v0.6.0 — per-account model allow-list and its settings tab (measured 2026-10-30)
+
+### 27.1 Why a sweep is needed
+
+`/api/model` returns `status: "active"` and `enabled: true` for all 49 routes, so neither carries
+entitlement; `/api/experimental/usage/limits` exposes only rolling/weekly/monthly percentages.
+The backend's answer to a one-shot request is the only reliable signal:
+
+| Result | Count |
+|---|---|
+| 200 | 35 usable |
+| 400 `Model is unavailable.` | 12 |
+| 410 `… has been deprecated …` | 2 |
+
+Sweep cost: 49 routes, concurrency 8, **20.1 s**. Two routes needed the `max_tokens >= 16` retry.
+Of 19 `opencode/` (Zen) routes 7 are usable; of 30 `opencode-go/` routes 28 (2 deprecated).
+
+### 27.2 Implementation
+
+- `Config.enabledModels` (volatile, default `[]` = unrestricted).
+- `enabledRouteFilter(routes)` → `null` for an empty list, else a trimmed `Set`.
+- `listModels()` keeps the `default` row plus allow-listed catalog ids. Catalog ids are already
+  `provider/model` (there is **no** separate `providerID` field — a first draft compared
+  `${model.providerID}/${model.id}`, produced `undefined/…`, and hid everything; caught by the
+  workspace prototype before any live change).
+- `classifyProbe(status, message)` maps the measured answers.
+- `OpencodeHttpAdapter.measureEntitlement({ concurrency })` performs the sweep.
+- `registerModelSettingsRoutes()` serves three routes over `ctx.connection.fetch.register`.
+- `lib/client.js` registers the `settings.section` tab.
+- `inject` gained `connection` and `settings`.
+
+### 27.3 Isolated real-mount verification (live profile untouched)
+
+```
+$ DSH_HOME=<isolated copy> dsh --profile web --host 127.0.0.1 --port 3919 --no-open
+dsh web: http://127.0.0.1:3919/?token=…
+# no error lines, no "did not activate"
+
+POST /api/local/opencode-v2/model-settings            -> 200 {models: 49, enabled: 0, visible: 49}
+POST /api/local/opencode-v2/model-settings/apply
+     {enabled:[minimax-m3.1-flash, glm-5.3, qwen3.8-flash]}
+                                                      -> 200 visible: exactly those 3
+# isolated cordis.patch.yml gained dsh-opencode-v2-http.config.enabledModels (3 ids)
+POST /api/local/opencode-v2/model-settings/measure    -> 200 in 19.4s
+     {usable: 35, unavailable: 12, deprecated: 2}
+```
+
+First boot of the isolated copy failed with `cannot get property "connection" without inject`,
+taking the whole `dsh-opencode-v2-http` entry down — fixed by declaring `connection` and `settings`
+in `inject`. That failure would not have appeared in unit tests; the real mount caught it.
+
+### 27.4 Test suite
+
+```
+$ (cd dsh-opencode-v2 && npm test)
+ℹ tests 194
+ℹ pass 194
+ℹ fail 0
+$ (cd dsh-opencode-v2 && npm run check)   # 11 files incl. lib/client.js
+```
+
+### 27.5 Defect found in the suite itself: not hermetic
+
+An adapter built without a profile context resolves its catalog to `$DSH_HOME/cache/…`. This shell
+exports the live `DSH_HOME`, so the same commit measured **0 failures** or **2–5 failures**
+depending on environment, and a test run wrote `~/.dsh/cache/opencode-models.json` (removed; the
+service cache at `~/.dsh/profiles/web/opencode-models.json` was untouched and belonged to the
+service's own sync).
+
+Fix: `test/setup-isolate.mjs` sets `DSH_HOME` to a fresh temp dir for every test process via
+`node --import`, and the unreachable-control-plane test pins an explicit `catalogPath`. The suite
+now passes identically with the live `DSH_HOME` exported, with it unset, and on repeated runs.
+
+Status: applied in the workspace at `0.6.0`; live profile not modified (no `enabledModels` key yet).

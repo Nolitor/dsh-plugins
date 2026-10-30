@@ -1,6 +1,6 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 2.1
+version: 2.2
 kind: readme
 status: active
 updated: 2026-10-30
@@ -248,6 +248,31 @@ that must win. Live verification after the fix: `st_66…d659` + `x-opencode-ses
 The OpenCode console documents the requirement (Go: "Send a stable session ID in
 `x-opencode-session` for each conversation") and lists DeepSeek Harness under *known
 problematic clients* for exactly this gap.
+
+### Model allow-list and the settings tab (v0.6.0 — measured 2026-10-30)
+
+The catalog serves 49 routes, but only **35** are usable on this account (12 `Model is
+unavailable.`, 2 deprecated — measured by a one-shot sweep, see
+[`../OPENCODE-MODEL-SERVING-PLAN.md`](../OPENCODE-MODEL-SERVING-PLAN.md) §5.2). `status`/`enabled` in
+`/api/model` are uniformly `active`/`true` and carry no entitlement, and the account limits endpoint
+has no per-model data, so the backend's own answer is the only reliable signal.
+
+| Piece | Behaviour |
+|---|---|
+| `enabledModels: string[]` | Route allow-list for the picker. **Empty = unrestricted**, which is the default, so clearing it restores the old behaviour. |
+| `listModels()` | Keeps the `default` row, then only allow-listed catalog ids. Nothing else changes: sessions that already selected a hidden route keep running (display-only requirement). |
+| `measureEntitlement()` | One minimal request per route, classified by `classifyProbe()` (`usable` / `unavailable` / `deprecated` / `auth` / `forbidden` / `error`); retries once at 16 tokens for providers with an output floor. 49 routes ≈ 20 s. |
+| `lib/client.js` | Adds an **OpenCode v2** settings section (`settings.section`, order 60): a checklist of routes, a *Check usable models* button, *Select all (usable)*, *Clear all*, and *Save*. |
+| `/api/local/opencode-v2/model-settings` | Catalog, current allow-list, and what the picker currently shows. |
+| `/api/local/opencode-v2/model-settings/apply` | Persists the allow-list through `ctx.settings.update('dsh-opencode-v2-http', …)`. |
+| `/api/local/opencode-v2/model-settings/measure` | Runs the sweep — only when the operator presses the button, never during a conversation. |
+
+`inject` now includes `connection` and `settings`: reading an undeclared service throws and takes
+the whole plugin entry down (measured in an isolated boot). A host without them still boots; the
+settings routes are simply absent.
+
+Tests are hermetic: `test/setup-isolate.mjs` pins `DSH_HOME` to a temp dir so a developer shell
+exporting the live `DSH_HOME` can neither read nor overwrite live state.
 
 Two operational facts the measurements forced:
 

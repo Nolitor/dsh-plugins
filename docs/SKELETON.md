@@ -33,8 +33,8 @@
 
 ## report
 
-- **2.2** · active · 2026-10-30 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
-  Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, and the measured live 400 MissingSessionID + 401 revoked-key defects.
+- **2.3** · active · 2026-10-30 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
+  Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, and the measurable per-account model allow-list with its settings tab.
 - **1.0** · completed · 2026-10-29 · [DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](../DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
   Runtime measurement and optimization report for the three original plugins on DSH 0.2.2-alpha.2.
 - **1.0** · reference · 2026-10-29 · [UTM-REVIEW-FORGE-VS-SIDEBAR.md](../UTM-REVIEW-FORGE-VS-SIDEBAR.md)
@@ -71,7 +71,7 @@
 
 ## policy
 
-- **2.2** · active · 2026-10-30 · [docs/DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md)
+- **2.3** · active · 2026-10-30 · [docs/DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md)
   Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules.
 - **2.0** · active · 2026-10-29 · [docs/BOOTCARD-POLICY.md](BOOTCARD-POLICY.md)
   Boot card generation and read rules; AGENTS.md stays a thin pointer to the newest card, rules live in docs/RULES.md.
@@ -93,8 +93,10 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 17)
+## boot (newest 5 of 18)
 
+- **active** · 2026-10-30T2330+0900.md · [card](../bootcards/2026-10-30T2330+0900.md)
+  Dated session card (tier 5). State, active task, handoff for 2026-10-30T2330+0900, plus the measured unresolved issues carried out of the OpenCode v2 0.5.1/0.6.0 work.
 - **active** · 2026-10-30T2045+0900.md · [card](../bootcards/2026-10-30T2045+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-30T2045+0900. Older cards are historical.
 - **active** · 2026-10-30T0946+0900.md · [card](../bootcards/2026-10-30T0946+0900.md)
@@ -103,9 +105,7 @@
   Dated session card (tier 5). State, active task, and handoff for 2026-10-30T0032+0900. Older cards are historical.
 - **active** · 2026-10-29T2326+0900.md · [card](../bootcards/2026-10-29T2326+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T2326+0900. Older cards are historical.
-- **active** · 2026-10-29T2306+0900.md · [card](../bootcards/2026-10-29T2306+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-10-29T2306+0900. Older cards are historical.
 
 ---
 
-46 indexed (17 boot cards), 0 missing header, 46 total.
+47 indexed (18 boot cards), 0 missing header, 47 total.

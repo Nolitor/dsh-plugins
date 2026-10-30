@@ -1,11 +1,11 @@
 # OpenCode Model Serving — Incident Post-Mortem, Autonomous Router Policy, and Decommission Record
 
 <!-- skeleton:
-version: 2.2
+version: 2.3
 kind: report
 status: active
 updated: 2026-10-30
-summary: Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, and the measured live 400 MissingSessionID + 401 revoked-key defects.
+summary: Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, and the measurable per-account model allow-list with its settings tab.
 -->
 
 > Owner: root record for the OpenCode model-serving track. `dsh-subrouter/README.md` and
@@ -177,6 +177,98 @@ the OAuth token works against the Go backend; only the selection order is wrong.
 
 The two defects compound: A returns 400 before credentials are examined, and once A is fixed B
 returns 401. Last successful OpenCode run before the restart: 22:03.
+
+## 5.2 Measured 2026-10-30 23:14–23:24 KST — per-account model allow-list
+
+### 5.2.1 The question
+
+The prompt model picker offered all **49** catalog routes even though most cannot be used on this
+account (Zen routes and some `-free` routes). Two requirements were measured out before any code:
+
+1. Which routes are *actually usable*, without probing one model per conversation.
+2. Let the operator tick routes in a settings tab, and show only those in the picker.
+
+### 5.2.2 Entitlement is measurable in one sweep, not per turn
+
+`/api/model` reports `status: "active"` and `enabled: true` for **all 49** routes (measured), so it
+carries **no** entitlement. The account-level `/api/experimental/usage/limits` reports only
+rolling/weekly/monthly percentages and a budget list — also no per-model information.
+
+What *does* distinguish them is the backend's own answer to a one-shot request:
+
+| Probe result (measured) | Count | Meaning |
+|---|---|---|
+| `200` | 35 | usable on this account |
+| `400` `Upstream request failed: Model is unavailable.` | 12 | not entitled |
+| `410` `Model … has been deprecated. Use …` | 2 | retired upstream |
+
+A sweep of 49 routes at concurrency 8 completed in **20.1 s**, and reproduced the same
+35 / 12 / 2 split both in a standalone script and through the adapter method. Two routes answered
+a token-floor error (`max_output_tokens must be >= 16`) when probed with `max_tokens: 1`; the
+sweep retries those once at 16 and classifies normally.
+
+Measured split: of 19 `opencode/` (Zen) routes only 7 are usable; of 30 `opencode-go/` routes 28
+are usable (2 deprecated).
+
+### 5.2.3 Design: display-only filtering
+
+The operator's requirement was "프롬프트 상태에서 표시만 안 해주면 돼" — hide from the picker only,
+never disturb historical or running sessions. So the allow-list filters **`listModels()`** and
+nothing else; no session is rejected and no stored conversation changes.
+
+- Config `enabledModels: string[]` (volatile). **Empty means unrestricted**, so an unconfigured
+  install behaves exactly as before. This default is the safety property that makes the change
+  reversible by clearing the list.
+- `enabledRouteFilter()` trims entries and returns `null` for an empty list.
+- `listModels()` always keeps the `default` row, then keeps only allow-listed catalog ids.
+
+### 5.2.4 Settings tab
+
+`lib/client.js` registers a `settings.section` (`id: "opencode-v2"`, order 60) — the same slot the
+built-in Models section uses. The host half serves three routes through
+`ctx.connection.fetch.register` (the pattern `dsh-sidebar-manager` already uses):
+
+| Route | Purpose |
+|---|---|
+| `/api/local/opencode-v2/model-settings` | catalog + current allow-list + what the picker shows |
+| `/api/local/opencode-v2/model-settings/apply` | persist a new allow-list via `ctx.settings.update(ns, …)` |
+| `/api/local/opencode-v2/model-settings/measure` | explicit entitlement sweep (button only) |
+
+The sweep is **never** called from a conversation; the tab calls it only when the operator presses
+the button.
+
+### 5.2.5 Isolated verification (no live state touched)
+
+An isolated `DSH_HOME` copy of the profile was booted on a scratch port:
+
+- Boot log: no `error`, no `did not activate` — the earlier "cannot get property connection without
+  inject" failure appeared only once and was fixed by adding `connection` (and `settings`) to
+  `inject`.
+- `model-settings` → 200, 49 models, 0 enabled, 49 visible.
+- `apply` with 3 routes → 200, `visible` = exactly those 3, and the three ids were written into the
+  isolated `cordis.patch.yml` under `dsh-opencode-v2-http.config.enabledModels`.
+- `measure` → 200 in 19.4 s, returning 35 usable / 12 unavailable / 2 deprecated.
+
+The live profile (`~/.dsh/profiles/web`) was **not** modified; it still has no `enabledModels` key.
+
+### 5.2.6 Test hermeticity defect found and fixed
+
+The suite was not hermetic: an adapter built without a profile context writes
+`$DSH_HOME/cache/opencode-models.json`, and this shell exports the **live** `DSH_HOME`. The same
+commit therefore passed (0 failures) or failed (2–5) depending on ambient environment — and the
+run wrote a stray catalog into the live cache, which was removed.
+
+Fix: `test/setup-isolate.mjs` points `DSH_HOME` at a fresh temp dir for every test process
+(`node --import ./test/setup-isolate.mjs --test …`), and the unreachable-control-plane test pins an
+explicit `catalogPath` so a cached catalog cannot mask the failure it exists to catch.
+
+### 5.2.7 The revoked OpenCode Go key
+
+The `opencode-go` key (`cred_1830…`, `…4yjF`) re-measured **401 Invalid credential**. The
+`opencode` integration entries (`Personal` OAuth active; `Master Key 1/2` inactive) are the DSH web
+authentication and are **not** to be deleted — removing them is an outage, not cleanup. Only the
+`opencode-go` entry is disposable, via `DELETE /api/credential/{credentialID}`. v0.5.1 already
+prefers the active OAuth entry, so deleting the dead key changes selection nothing.
 
 ## 6. Rules restated for the next session
 
