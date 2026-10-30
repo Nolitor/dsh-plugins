@@ -234,3 +234,47 @@ test('the client half is declared as a web bundle entry', () => {
   assert.ok(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-settings'))
   assert.ok(pkg.files.includes('lib/'), 'the client file ships inside lib/')
 })
+
+/**
+ * Regression (0.6.1): a client half that touches a service must EXPORT the
+ * service list. The loader injects only `module.exports.inject`; an array that
+ * is declared and used but never exported leaves `ctx.<service>` undefined, so
+ * `apply()` throws and the fibre lands in `failed` — which kills the entire web
+ * shell (`web boot: N entries did not activate`) with no detail in any log.
+ * `--dump-config`, the served bundle returning 200, route probes and
+ * `node --check` all pass in that state, so only this contract test catches it.
+ */
+test('client half exports an inject array covering every ctx service it uses', () => {
+  const source = readFileSync(new URL('lib/client.js', root), 'utf8')
+
+  // The shell evaluates the bundle against a scoped window object, never the
+  // real global: mirror that so the capture is faithful.
+  let registration = null
+  new Function('window', source)({ __ModuleLoader__: { load: (reg) => { registration = reg } } })
+  assert.ok(registration, 'lib/client.js must register with window.__ModuleLoader__.load')
+  assert.equal(registration.id, pkg.name)
+
+  const stub = () => new Proxy(function () {}, {
+    get: (_target, key) => (key === Symbol.toPrimitive ? () => 'stub' : key === 'then' ? undefined : stub()),
+    apply: () => stub(),
+    construct: () => stub(),
+  })
+  const exportsObj = registration.factory((spec) => {
+    assert.equal(spec, 'react', `client half may only require baseline modules, got ${spec}`)
+    return stub()
+  })
+
+  assert.equal(typeof exportsObj.apply, 'function', 'client half must export apply()')
+  assert.ok(Array.isArray(exportsObj.inject), 'exports.inject must be an array (Cordis service injection)')
+
+  const used = new Set([...source.matchAll(/\bctx\.([A-Za-z_$][\w$]*)/g)].map((match) => match[1]))
+  assert.ok(used.size > 0, 'the client half should touch at least one service')
+  for (const service of used) {
+    assert.ok(
+      exportsObj.inject.includes(service),
+      `ctx.${service} is used in apply() but "${service}" is missing from exports.inject`,
+    )
+  }
+  assert.ok(exportsObj.inject.includes('slots'), "the settings.section registration needs the 'slots' service")
+  assert.ok(exportsObj.default?.inject?.includes('slots'), 'the default export face must carry inject as well')
+})

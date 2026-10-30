@@ -292,6 +292,11 @@ test that evaluates the served module and asserts the exported `inject` covers e
 `ctx.<service>` token used in `apply()`. Verification for 0.6.1 is a browser boot of the live
 service, not a route sweep.
 
+Verified (2026-10-31 00:19 KST): `dsh-web.service` restarted at 00:19:18, live profile resolves
+`0.6.1`; browser boot renders the shell with no `web boot:` verdict and zero console errors, and
+**Settings → OpenCode v2** mounts with all 49 routes listed (`선택 0 / 전체 49`, sweep button
+present). The route sweep was not the proof — the rendered tab was.
+
 ## 6. Rules restated for the next session
 
 1. Read `~/.dsh/AGENTS.md` → `docs/RULES.md` → `docs/SKELETON.md` → latest boot card before acting.

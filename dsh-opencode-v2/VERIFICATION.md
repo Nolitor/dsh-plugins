@@ -1917,5 +1917,7 @@ plus a contract test (`test/bundle.test.mjs`) that evaluates the served module w
 and asserts the exported `inject` covers every `ctx.<service>` token used in `apply()` — the class of
 bug this was, not just this instance.
 
-Status: fix applied in the workspace at `0.6.1`; browser-boot verification and the live restart are
-recorded in the session boot card `bootcards/2026-10-31T*.md`.
+Status: fix applied at `0.6.1` and **verified by a real mount** (2026-10-31 00:19 KST): service
+restarted, browser boot renders the shell with no `web boot:` verdict and no console errors, and
+Settings → OpenCode v2 renders all 49 routes. Suite: 195/195. The served artifact
+`artifacts/nolit-dsh-opencode-v2-0.6.1.tgz` (`c6218cb8…a2bfd`) contains the exported `inject`.

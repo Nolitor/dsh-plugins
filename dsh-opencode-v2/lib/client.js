@@ -232,8 +232,9 @@ window.__ModuleLoader__.load({
     }
 
     exports.apply = apply
+    exports.inject = inject
     exports.OpenCodeModelSection = OpenCodeModelSection
-    Object.defineProperty(exports, 'default', { value: { apply } })
+    Object.defineProperty(exports, 'default', { value: { apply, inject } })
     return module.exports
   },
 })

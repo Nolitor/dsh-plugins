@@ -271,6 +271,15 @@ has no per-model data, so the backend's own answer is the only reliable signal.
 the whole plugin entry down (measured in an isolated boot). A host without them still boots; the
 settings routes are simply absent.
 
+The same rule applies to the browser half, and v0.6.0 broke it: `lib/client.js` declared
+`const inject = ['slots']` and called `ctx.slots.inject(…)` but exported only `apply`, so the loader
+never injected `slots`, `apply()` threw, and the **entire web shell** stopped mounting
+(`web boot: 1 entry did not activate`). Fixed in **0.6.1** (`exports.inject = inject`, also on the
+default export face) with a contract test that asserts every `ctx.<service>` used in the client half
+appears in its exported `inject`. Note what does *not* catch this: `--dump-config`, a 200 on the
+served bundle, route probes and `node --check` all pass while the client module is unloadable — only
+a browser boot proves activation.
+
 Tests are hermetic: `test/setup-isolate.mjs` pins `DSH_HOME` to a temp dir so a developer shell
 exporting the live `DSH_HOME` can neither read nor overwrite live state.
 
