@@ -262,7 +262,8 @@ has no per-model data, so the backend's own answer is the only reliable signal.
 | `enabledModels: string[]` | Route allow-list for the picker. **Empty = unrestricted**, which is the default, so clearing it restores the old behaviour. |
 | `listModels()` | Keeps the `default` row, then only allow-listed catalog ids. Nothing else changes: sessions that already selected a hidden route keep running (display-only requirement). |
 | `measureEntitlement()` | One minimal request per route, classified by `classifyProbe()` (`usable` / `unavailable` / `deprecated` / `auth` / `forbidden` / `error`); retries once at 16 tokens for providers with an output floor. 49 routes ≈ 20 s. |
-| `lib/client.js` | Adds an **OpenCode v2** settings section (`settings.section`, order 60): a checklist of routes, a *Check usable models* button, *Select all (usable)*, *Clear all*, and *Save*. |
+| `lib/client.js` | Adds an **OpenCode v2** settings section (`settings.section`, order 60): a checklist of routes — **sorted usable → unchecked → rejected**, with the verdict badge immediately beside the checkbox — a *Check usable models* button, *Select all (usable)*, *Clear all*, and *Save*. The nav label follows the UI locale (`오픈코드 V2` / `OpenCode V2`). |
+| `opencode-model-verdicts.json` | The last sweep (`{verdicts, measuredAt}`), written by `measure` and read by `model-settings`. Opening the tab never re-runs the 20 s sweep; the button is the only refresh. Lives in the profile dir (`verdictPath` overrides). |
 | `/api/local/opencode-v2/model-settings` | Catalog, current allow-list, and what the picker currently shows. |
 | `/api/local/opencode-v2/model-settings/apply` | Persists the allow-list through `ctx.settings.update('dsh-opencode-v2-http', …)`. |
 | `/api/local/opencode-v2/model-settings/measure` | Runs the sweep — only when the operator presses the button, never during a conversation. |

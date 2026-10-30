@@ -278,3 +278,52 @@ test('client half exports an inject array covering every ctx service it uses', (
   assert.ok(exportsObj.inject.includes('slots'), "the settings.section registration needs the 'slots' service")
   assert.ok(exportsObj.default?.inject?.includes('slots'), 'the default export face must carry inject as well')
 })
+
+/** Load the served client module with a stub React, as the shell would. */
+function loadClientExports() {
+  const source = readFileSync(new URL('lib/client.js', root), 'utf8')
+  let registration = null
+  new Function('window', source)({ __ModuleLoader__: { load: (reg) => { registration = reg } } })
+  const stub = () => new Proxy(function () {}, {
+    get: (_target, key) => (key === Symbol.toPrimitive ? () => 'stub' : key === 'then' ? undefined : stub()),
+    apply: () => stub(),
+    construct: () => stub(),
+  })
+  return { exportsObj: registration.factory(() => stub()), source }
+}
+
+/**
+ * Requirement (2026-10-31): the checklist is sorted by the last known verdict —
+ * usable on top, unchecked next, everything the sweep rejected at the bottom —
+ * so the operator does not re-scan 49 rows after every sweep.
+ */
+test('client half sorts usable routes to the top and rejected ones to the bottom', () => {
+  const { exportsObj } = loadClientExports()
+  assert.equal(typeof exportsObj.sortModels, 'function')
+
+  const models = [
+    { route: 'opencode-go/unavailable-b', name: 'Beta' },
+    { route: 'opencode-go/usable-z', name: 'Zeta' },
+    { route: 'opencode-go/unmeasured-m', name: 'Mu' },
+    { route: 'opencode-go/deprecated-a', name: 'Alpha' },
+  ]
+  const verdicts = {
+    'opencode-go/usable-z': 'usable',
+    'opencode-go/unavailable-b': 'unavailable',
+    'opencode-go/deprecated-a': 'deprecated',
+  }
+  assert.deepEqual(
+    exportsObj.sortModels(models, verdicts).map((model) => model.route),
+    ['opencode-go/usable-z', 'opencode-go/unmeasured-m', 'opencode-go/deprecated-a', 'opencode-go/unavailable-b'],
+  )
+  // Every route is still present: sorting must never drop a row.
+  assert.equal(exportsObj.sortModels(models, verdicts).length, models.length)
+})
+
+/** Menu names follow the UI language: 오픈코드 V2 (ko) / OpenCode V2 (en). */
+test('client half labels the settings tab per locale', () => {
+  const { source } = loadClientExports()
+  assert.match(source, /nav: '오픈코드 V2'/)
+  assert.match(source, /nav: 'OpenCode V2'/)
+  assert.ok(!/nav: 'OpenCode v2'/.test(source), 'the lower-case "v2" label must not come back')
+})

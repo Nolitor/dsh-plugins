@@ -25,9 +25,9 @@ window.__ModuleLoader__.load({
     // ===== I18N START =====
     const I18N = {
       ko: {
-        nav: 'OpenCode v2',
-        title: 'OpenCode v2 — 모델 서빙',
-        hint: '체크한 모델만 프롬프트의 모델 선택기에 표시됩니다. 이미 선택된 세션은 그대로 동작합니다.',
+        nav: '오픈코드 V2',
+        title: '오픈코드 V2 — 모델 서빙',
+        hint: '체크한 모델만 프롬프트의 모델 선택기에 표시됩니다. 이미 선택된 세션은 그대로 동작합니다. 사용 가능한 모델이 위로 정렬됩니다.',
         measure: '사용 가능 모델 확인',
         measuring: '확인 중… (모델 수만큼 한 번씩 확인합니다)',
         all: '전체 선택',
@@ -47,11 +47,12 @@ window.__ModuleLoader__.load({
         saveError: '저장하지 못했습니다',
         measureError: '사용 가능 목록을 확인하지 못했습니다',
         measuredAt: '방금 확인한 결과',
+        lastMeasured: '마지막 확인 {at}',
       },
       en: {
-        nav: 'OpenCode v2',
-        title: 'OpenCode v2 — model serving',
-        hint: 'Only checked models appear in the prompt model picker. Sessions that already selected one keep working.',
+        nav: 'OpenCode V2',
+        title: 'OpenCode V2 — model serving',
+        hint: 'Only checked models appear in the prompt model picker. Sessions that already selected one keep working. Usable models are sorted to the top.',
         measure: 'Check usable models',
         measuring: 'Checking… (one request per model)',
         all: 'Select all',
@@ -71,16 +72,61 @@ window.__ModuleLoader__.load({
         saveError: 'Could not save',
         measureError: 'Could not measure the usable models',
         measuredAt: 'measured just now',
+        lastMeasured: 'last checked {at}',
       },
     }
     // ===== I18N END =====
 
-    const current = typeof navigator !== 'undefined' && /^ko/i.test(navigator.language ?? '') ? 'ko' : 'en'
+    // The settings shell's locale service outranks the browser language: it is
+    // the language the surrounding UI actually renders in. `apply()` binds the
+    // reader so the label and the section agree with the rest of the shell.
+    let localeReader = null
+
+    function activeLanguage() {
+      try {
+        const active = localeReader?.()
+        if (active) return String(active)
+      } catch {
+        /* no locale service: fall through to the browser */
+      }
+      return typeof navigator !== 'undefined' ? String(navigator.language ?? '') : ''
+    }
+
+    function currentLang() {
+      return /^ko/i.test(activeLanguage()) ? 'ko' : 'en'
+    }
 
     function t(key, params) {
-      const text = (I18N[current] ?? I18N.en)[key] ?? (I18N.en[key] ?? key)
+      const language = currentLang()
+      const text = (I18N[language] ?? I18N.en)[key] ?? (I18N.en[key] ?? key)
       if (!params) return text
       return Object.entries(params).reduce((acc, [name, value]) => acc.split(`{${name}}`).join(String(value)), text)
+    }
+
+    /**
+     * Display order for the checklist: usable first, then routes nobody has
+     * checked yet, then everything the sweep rejected (unavailable, deprecated,
+     * auth, forbidden, error) at the bottom. Ties keep a stable name order.
+     */
+    function sortModels(models, verdicts) {
+      const rank = (verdict) => {
+        if (verdict === 'usable') return 0
+        if (verdict === undefined || verdict === null || verdict === '') return 1
+        return 2
+      }
+      return [...(models ?? [])].sort((left, right) => {
+        const delta = rank(verdicts?.[left.route]) - rank(verdicts?.[right.route])
+        if (delta !== 0) return delta
+        const nameDelta = String(left.name ?? left.route).localeCompare(String(right.name ?? right.route), currentLang())
+        return nameDelta !== 0 ? nameDelta : String(left.route).localeCompare(String(right.route))
+      })
+    }
+
+    function formatMeasuredAt(measuredAt) {
+      if (!measuredAt) return ''
+      const when = new Date(measuredAt)
+      if (Number.isNaN(when.getTime())) return ''
+      return t('lastMeasured', { at: when.toLocaleString(currentLang() === 'ko' ? 'ko-KR' : 'en-US') })
     }
 
     async function post(route, body) {
@@ -106,7 +152,8 @@ window.__ModuleLoader__.load({
     function OpenCodeModelSection() {
       const [state, setState] = React.useState({ loading: true, error: null })
       const [enabled, setEnabled] = React.useState([])
-      const [measured, setMeasured] = React.useState({}) // route -> state string
+      const [verdicts, setVerdicts] = React.useState({}) // route -> state string, persisted by the host
+      const [measuredAt, setMeasuredAt] = React.useState(null)
       const [busy, setBusy] = React.useState('') // '', 'measure', 'save'
       const [notice, setNotice] = React.useState('')
 
@@ -116,6 +163,8 @@ window.__ModuleLoader__.load({
           .then((payload) => {
             if (!alive) return
             setEnabled(payload.enabled ?? [])
+            setVerdicts(payload.verdicts ?? {})
+            setMeasuredAt(payload.measuredAt ?? null)
             setState({ loading: false, error: null, models: payload.models ?? [] })
           })
           .catch((error) => alive && setState({ loading: false, error: error.message, models: [] }))
@@ -125,6 +174,7 @@ window.__ModuleLoader__.load({
       }, [])
 
       const models = state.models ?? []
+      const ordered = sortModels(models, verdicts)
       const toggle = (route) =>
         setEnabled((prev) => (prev.includes(route) ? prev.filter((item) => item !== route) : [...prev, route]))
 
@@ -132,10 +182,10 @@ window.__ModuleLoader__.load({
         setBusy('measure')
         setNotice('')
         try {
+          // The host persists the snapshot, so the next open shows it without a sweep.
           const payload = await post('model-settings/measure')
-          const next = {}
-          for (const result of payload.results ?? []) next[result.route] = result.state
-          setMeasured(next)
+          setVerdicts(payload.verdicts ?? {})
+          setMeasuredAt(payload.measuredAt ?? null)
           setNotice(t('measuredAt'))
         } catch (error) {
           setNotice(`${t('measureError')}: ${error.message}`)
@@ -158,12 +208,14 @@ window.__ModuleLoader__.load({
         }
       }
 
-      const usableOnly = () => setEnabled(models.filter((model) => measured[model.route] === 'usable').map((model) => model.route))
+      const usableOnly = () => setEnabled(models.filter((model) => verdicts[model.route] === 'usable').map((model) => model.route))
 
       if (state.loading) return h('div', { className: 'ocv2-section' }, h('p', null, '…'))
       if (state.error) {
         return h('div', { className: 'ocv2-section' }, h('h3', null, t('title')), h('p', { role: 'alert' }, `${t('loadError')}: ${state.error}`))
       }
+
+      const stamp = formatMeasuredAt(measuredAt)
 
       return h(
         'div',
@@ -174,17 +226,17 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'ocv2-actions', style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' } },
           h('button', { type: 'button', onClick: measure, disabled: busy !== '' }, busy === 'measure' ? t('measuring') : t('measure')),
-          h('button', { type: 'button', onClick: usableOnly, disabled: busy !== '' || Object.keys(measured).length === 0 }, t('all')),
+          h('button', { type: 'button', onClick: usableOnly, disabled: busy !== '' || Object.keys(verdicts).length === 0 }, t('all')),
           h('button', { type: 'button', onClick: () => setEnabled([]), disabled: busy !== '' }, t('none')),
           h('button', { type: 'button', onClick: save, disabled: busy !== '' }, busy === 'save' ? t('saving') : t('save')),
           h('span', { style: { alignSelf: 'center', opacity: 0.75 } }, `${t('countOne', { a: enabled.length })} ${models.length}`),
         ),
-        notice ? h('p', { role: 'status', style: { margin: '0 0 8px' } }, notice) : null,
+        notice || stamp ? h('p', { role: 'status', style: { margin: '0 0 8px' } }, notice || stamp) : null,
         h(
           'ul',
           { className: 'ocv2-list', style: { listStyle: 'none', padding: 0, margin: 0 } },
-          models.map((model) => {
-            const verdict = measured[model.route]
+          ordered.map((model) => {
+            const verdict = verdicts[model.route]
             return h(
               'li',
               { key: model.route, style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '2px 0' } },
@@ -194,12 +246,15 @@ window.__ModuleLoader__.load({
                 onChange: () => toggle(model.route),
                 id: `ocv2-${model.route}`,
               }),
-              h('label', { htmlFor: `ocv2-${model.route}`, style: { flex: 1 } }, model.name ?? model.route),
-              h('code', { style: { opacity: 0.6, fontSize: '0.85em' } }, model.route),
+              // The verdict sits immediately beside the checkbox: the eye scans
+              // "usable?" left to right before the name gets in the way.
               h(
                 'span',
                 {
+                  title: verdict ? t(STATE_KEYS[verdict] ?? 'stateError') : t('unmeasured'),
                   style: {
+                    flex: '0 0 auto',
+                    minWidth: '4.5em',
                     fontSize: '0.8em',
                     padding: '1px 6px',
                     borderRadius: '999px',
@@ -209,15 +264,20 @@ window.__ModuleLoader__.load({
                 },
                 verdict ? t(STATE_KEYS[verdict] ?? 'stateError') : t('unmeasured'),
               ),
+              h('label', { htmlFor: `ocv2-${model.route}`, style: { flex: 1 } }, model.name ?? model.route),
+              h('code', { style: { opacity: 0.6, fontSize: '0.85em' } }, model.route),
             )
           }),
         ),
       )
     }
 
-    const inject = ['slots']
+    const inject = ['slots', 'locale']
 
     function apply(ctx) {
+      // Bind the shell locale once: the nav label and the section both read it,
+      // so the tab follows the UI language instead of the browser default.
+      localeReader = () => String(ctx.locale?.getSnapshot?.()?.active ?? '')
       ctx.slots.inject('settings.section', () =>
         ctx.slots.register(
           {
@@ -234,6 +294,7 @@ window.__ModuleLoader__.load({
     exports.apply = apply
     exports.inject = inject
     exports.OpenCodeModelSection = OpenCodeModelSection
+    exports.sortModels = sortModels
     Object.defineProperty(exports, 'default', { value: { apply, inject } })
     return module.exports
   },

@@ -1,7 +1,7 @@
 # OpenCode Model Serving — Incident Post-Mortem, Autonomous Router Policy, and Decommission Record
 
 <!-- skeleton:
-version: 2.4
+version: 2.5
 kind: report
 status: active
 updated: 2026-10-31
@@ -296,6 +296,30 @@ Verified (2026-10-31 00:19 KST): `dsh-web.service` restarted at 00:19:18, live p
 `0.6.1`; browser boot renders the shell with no `web boot:` verdict and zero console errors, and
 **Settings → OpenCode v2** mounts with all 49 routes listed (`선택 0 / 전체 49`, sweep button
 present). The route sweep was not the proof — the rendered tab was.
+
+### 5.2.9 Settings-tab usability: sorted checklist, persisted sweep (0.6.2)
+
+The 0.6.1 tab worked but was awkward: 49 rows in catalog order after every open, the verdict
+badge sat at the far right past the name and route, and closing the tab threw the sweep result
+away, so the operator paid the ~20 s sweep again to see it.
+
+Shipped in `0.6.2`:
+
+| Piece | Behaviour |
+|---|---|
+| Sort | `sortModels(models, verdicts)`: usable → unchecked → everything rejected, ties by localized name. Every row is kept; sorting never filters. |
+| Badge | Moved immediately beside the checkbox (`input → span → label → code`), fixed min-width so the names line up. |
+| Persistence | `model-settings/measure` writes `{verdicts, measuredAt}` to `opencode-model-verdicts.json` (profile dir, `verdictPath` overrides); `model-settings` serves it back. Opening the tab shows `마지막 확인 <time>` and never re-sweeps. |
+| Nav label | Follows the UI locale via `ctx.locale.getSnapshot()`: `오픈코드 V2` / `OpenCode V2` (was `OpenCode v2` in both). |
+
+Measured live 2026-10-31 (browser, 3080): sweep 49 routes → **35 usable / 12 unavailable /
+2 deprecated** in ~20 s; the tab reopened without a sweep showing `마지막 확인 2026. 10. 31. 오전 12:38:24`,
+ordering intact (first rows usable, last rows unavailable), file written at
+`~/.dsh/profiles/web/opencode-model-verdicts.json` (2,246 B, 49 routes).
+
+`dsh-notify-web@0.1.7` in the same pass: its settings section moved from order 20 to 50 (below
+에이전트 프리셋, above this tab) and its label is now locale-aware (`알림` / `Notifications`) instead
+of a hardcoded Korean string.
 
 ## 6. Rules restated for the next session
 

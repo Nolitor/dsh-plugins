@@ -41,6 +41,7 @@ import {
   unsupportedEffortMessage,
 } from './shared.js'
 import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
+import { createVerdictStore, verdictsFromResults } from './verdict-store.js'
 import {
   decideRouterConflict,
   detectRouterConflicts,
@@ -144,6 +145,12 @@ export const Config = Schema.object({
   autoDiscoverModels: Schema.boolean().default(true).volatile(),
   catalogPath: Schema.string().default('').volatile(),
   catalogSyncMs: Schema.number().default(300000).volatile(),
+  /**
+   * Where the settings tab's last entitlement sweep is kept. Empty follows the
+   * catalog rule (profile dir, then `$DSH_HOME/cache`). The sweep costs ~20 s,
+   * so it runs on the button and the snapshot is what every later open shows.
+   */
+  verdictPath: Schema.string().default('').volatile(),
   /**
    * Route allow-list for the prompt model picker. Empty means "every route the
    * catalog serves". A non-empty list hides every other route from `listModels`,
@@ -1349,19 +1356,35 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
     }
   }
 
+  // The sweep costs ~20 s, so its result is persisted and served back: opening
+  // the tab must never re-run it, and the checklist can be sorted by the last
+  // known verdict without touching the backend (measured requirement 2026-10-31).
+  const verdictStore = createVerdictStore({
+    explicit: config?.verdictPath?.get?.() ?? '',
+    profileDir: ctx?.get?.('profileContext')?.dir,
+    dshHome: process.env.DSH_HOME,
+  })
+
   const routes = {
     'model-settings': async () => {
       const models = await adapter.listModels()
       const discovered = await adapter.discover().catch(() => null)
+      const snapshot = verdictStore.read()
       return respond({
         enabled: config.enabledModels?.get?.() ?? [],
         models: (discovered?.models ?? []).map((model) => ({ route: String(model.id), name: model.name ?? String(model.id) })),
         visible: models.map((model) => model.id).filter((id) => id !== 'default'),
+        verdicts: snapshot.verdicts,
+        measuredAt: snapshot.measuredAt,
       })
     },
     'model-settings/measure': async () => {
       const results = await adapter.measureEntitlement()
-      return respond({ results })
+      const verdicts = verdictsFromResults(results)
+      const measuredAt = new Date().toISOString()
+      const persisted = verdictStore.write({ verdicts, measuredAt })
+      if (!persisted) log('dsh-opencode-v2-http: measured verdicts could not be persisted (no writable path)')
+      return respond({ results, verdicts, measuredAt, persisted })
     },
     'model-settings/apply': async (request) => {
       const payload = await readJson(request)

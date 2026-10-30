@@ -1921,3 +1921,34 @@ Status: fix applied at `0.6.1` and **verified by a real mount** (2026-10-31 00:1
 restarted, browser boot renders the shell with no `web boot:` verdict and no console errors, and
 Settings → OpenCode v2 renders all 49 routes. Suite: 195/195. The served artifact
 `artifacts/nolit-dsh-opencode-v2-0.6.1.tgz` (`c6218cb8…a2bfd`) contains the exported `inject`.
+
+## 29. v0.6.2 — sorted checklist, persisted sweep, localized labels (measured 2026-10-31)
+
+### 29.1 What changed
+
+| Piece | Before | After |
+|---|---|---|
+| Order | catalog order, every open | usable → unchecked → rejected, ties by localized name (`sortModels`) |
+| Badge | far right, after name and route | immediately beside the checkbox, fixed min-width |
+| Sweep result | in-memory only, lost on close | persisted to `opencode-model-verdicts.json`; the button is the only refresh |
+| Nav label | `OpenCode v2` in both locales | `오픈코드 V2` (ko) / `OpenCode V2` (en), read from `ctx.locale.getSnapshot()` |
+
+New files: `lib/verdict-store.js` (path rule shared with the catalog: explicit → profile dir →
+`$DSH_HOME/cache`; missing or corrupt file reads as "not measured"), `Config.verdictPath`,
+`test/verdict-store.test.mjs`. `model-settings` now returns `verdicts` + `measuredAt`;
+`model-settings/measure` persists before responding.
+
+### 29.2 Proof (live service, 3080, 2026-10-31 00:38 KST)
+
+- Sweep from the tab: 49 routes, ~20 s → `{usable: 35, unavailable: 12, deprecated: 2}`.
+  Same account verdicts as 0.6.0, now stored.
+- File written: `~/.dsh/profiles/web/opencode-model-verdicts.json`, 2,246 B, 49 routes,
+  `measuredAt: 2026-10-30T15:38:24.687Z`.
+- Tab closed and reopened: `마지막 확인 2026. 10. 31. 오전 12:38:24`, **no sweep**, ordering intact
+  (first rows `사용 가능`, last rows `사용 불가`), 0 `미확인`.
+- DOM shape of a row: `input:checkbox → span (verdict) → label (name) → code (route)`.
+- Developer-console errors: 0. Suite: 202/202 including the new sort and label tests.
+
+`dsh-notify-web@0.1.7` in the same release: settings section order 20 → 50 (below 에이전트 프리셋)
+and a locale-aware label (`알림` / `Notifications`). English rendering was verified by unit source
+assertion and code path, not by switching the live UI language.
