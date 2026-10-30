@@ -1,11 +1,11 @@
 # OpenCode Model Serving — Incident Post-Mortem, Autonomous Router Policy, and Decommission Record
 
 <!-- skeleton:
-version: 2.1
+version: 2.2
 kind: report
 status: active
 updated: 2026-10-30
-summary: Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy for all model-serving plugins, the measured decommission of @nolit/dsh-subrouter, and the direct OpenAI-compatible backend pattern.
+summary: Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, and the measured live 400 MissingSessionID + 401 revoked-key defects.
 -->
 
 > Owner: root record for the OpenCode model-serving track. `dsh-subrouter/README.md` and
@@ -122,6 +122,61 @@ Measured on the installed live profile before restart:
 
 Real-mount verification is performed after the approved `dsh-web.service` restart; a
 `--dump-config` result is **not** mount evidence (`docs/RULES.md` §4).
+
+## 5.1 Measured 2026-10-30 22:42–22:52 KST — the live failure and its two causes
+
+After the 22:36 restart every `opencode-http-agent` turn failed with:
+
+```
+OpenCode backend HTTP 400: {"type":"error","error":{"type":"MissingSessionID",
+ "message":"Request is missing x-opencode-session and cannot be routed efficiently.
+  Please see https://opencode.ai/v2/docs/console/go/#where-can-i-use-it"}}
+```
+
+Read-only measurement (real credential, real endpoint, invalid/minimal bodies; no live state
+written). Both defects are in the **current** `dsh-opencode-v2@0.5.0` adapter — not in the
+decommissioned subrouter, which had the header (`sessionHeader`/`sessionFallback`, `lib/adapter.js:392-395`).
+
+### Defect A — the session header is never sent
+
+`lib/http.js:847-853` built the request headers from `attributionHeaders()` (user-agent only),
+provider headers and `authorization`. `grep 'x-opencode-session' lib/ test/` → **0 matches**.
+
+| Probe at `https://opencode.ai/inference/go/openai/v1/chat/completions` | Result |
+|---|---|
+| no `x-opencode-session` | **400** `MissingSessionID` |
+| `x-opencode-session: <id>` present | 400 gone (proceeds to credential check) |
+
+The OpenCode console documents the requirement for Go ("Send a stable session ID in
+`x-opencode-session` for each conversation") and lists **DeepSeek Harness** under *known
+problematic clients*: "Session information arrives on some model paths, but is missing on
+others … remaining work is to send it across all adapters."
+
+Reference pattern in the harness itself: `dsh-llm-deepseek/lib/index.js:2243` sends
+`x-deepseek-harness-session-id` whenever `options.sessionId` is defined.
+
+### Defect B — credential selection picks a revoked key over the live web (OAuth) token
+
+`lib/http.js:762-773` `activeCredential()` reads `GET /api/credential` and takes the first entry
+with `active === true` whose `integrationID` matches either the provider's integration
+(`opencode`) or `backendProviderId` (`opencode-go`, the default at line 112).
+
+Live `GET /api/credential` (keys redacted to their last 4 characters):
+
+| id | integrationID | label | active | type | suffix | Go backend result |
+|---|---|---|---|---|---|---|
+| cred_1 | opencode | Master Key 1 | false | key | 4yhF | — |
+| cred_2 | opencode | Master Key 2 | false | key | Cui7 | **403** "An active OpenCode Go subscription is required" |
+| cred_14ea… | opencode | **Personal** | **true** | **oauth** | d659 | **200** (real completion, `usage` present) |
+| cred_1830… | **opencode-go** | **OpenCode Go** | **true** | key | **4yjF** | **401 Invalid credential** |
+
+The adapter therefore sends the revoked `opencode-go` **key** (`…4yjF`) even though the web
+OAuth credential (`…d659`, `methodID: "device"`, `expires` ≈ 2026-11-17) is active and the Go
+endpoint accepts it. The answer to "is auth already solved by the HTTP web login?" is **yes** —
+the OAuth token works against the Go backend; only the selection order is wrong.
+
+The two defects compound: A returns 400 before credentials are examined, and once A is fixed B
+returns 401. Last successful OpenCode run before the restart: 22:03.
 
 ## 6. Rules restated for the next session
 

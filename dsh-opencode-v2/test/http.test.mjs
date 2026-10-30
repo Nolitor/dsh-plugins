@@ -25,6 +25,7 @@ import {
   modelRefFromRoute,
   parseBanner,
   probeServer,
+  sessionHeaders,
   readBanner,
   resolveWorkspaceDirectory,
   serviceStateCandidates,
@@ -41,6 +42,7 @@ const json = (res, status, body) => {
 async function startServer(script = {}) {
   const state = {
     chatRequests: [],
+    chatHeaders: [],
     providerRequests: 0,
     credentialRequests: 0,
     sessionCalls: 0,
@@ -88,11 +90,14 @@ async function startServer(script = {}) {
       if (url.pathname === '/api/credential') {
         state.credentialRequests += 1
         return json(res, 200, {
-          data: [{ id: 'cred_1', integrationID: 'opencode-go', active: true, value: { type: 'key', key: 'test-key' } }],
+          data: script.credentials ?? [
+            { id: 'cred_1', integrationID: 'opencode-go', active: true, value: { type: 'key', key: 'test-key' } },
+          ],
         })
       }
       if (url.pathname === '/backend/v1/chat/completions') {
         state.chatRequests.push(body)
+        state.chatHeaders.push(req.headers)
         if (script.status) return json(res, script.status, { error: 'backend refused' })
         const events = script.events ?? [
           { choices: [{ delta: { reasoning_content: 'Think.' } }] },
@@ -117,7 +122,7 @@ function adapterFor(serverState, overrides = {}) {
   return new OpencodeHttpAdapter(
     { logger: { warn() {} } },
     Config({
-      baseUrl: `http://127.0.0.1:${new URL(serverState.backendURL).port - 0}`.replace(/\/backend\/v1$/, ''),
+      baseUrl: serverState.backendURL.replace(/\/backend\/v1$/, ''),
       password: 'pw',
       attachToDaemon: false,
       spawnServer: false,
@@ -395,4 +400,86 @@ test('serviceStateCandidates covers the explicit row, v2 roots, and legacy state
   assert.equal(candidates[0], '/explicit')
   assert.ok(candidates.some((path) => path.endsWith('/.local/state/opencode/service.json')))
   assert.ok(candidates.some((path) => path.endsWith('/.config/opencode/service.json')))
+})
+
+// Measured 2026-10-30: the Go backend answers HTTP 400 MissingSessionID when
+// `x-opencode-session` is absent, and 401 when a revoked `key` credential is
+// preferred over the active web (oauth) credential.
+test('session header is sent with the DSH session id', async () => {
+  const { server, state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      sessionId: 'session-abc',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    assert.equal(state.chatHeaders[0]['x-opencode-session'], 'session-abc')
+  } finally {
+    await close()
+  }
+})
+
+test('session header falls back to a stable value when DSH sends no session id', async () => {
+  const { server, state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'probe' }] }],
+    }))
+    assert.equal(state.chatHeaders[0]['x-opencode-session'], 'deepseek-harness')
+  } finally {
+    await close()
+  }
+})
+
+test('sessionHeaders honours a configured header name and an empty header config', () => {
+  const on = Config({ sessionHeader: 'x-opencode-session', sessionFallback: 'fallback' })
+  assert.deepEqual(sessionHeaders({ a: '1' }, { sessionId: 's-1' }, on), { a: '1', 'x-opencode-session': 's-1' })
+  assert.equal(sessionHeaders({}, {}, on)['x-opencode-session'], 'fallback')
+  const off = Config({ sessionHeader: '' })
+  assert.deepEqual(sessionHeaders({ a: '1' }, { sessionId: 's-1' }, off), { a: '1' })
+})
+
+test('credential selection prefers the active oauth entry over a revoked key', async () => {
+  const { server, state, close } = await startServer({
+    credentials: [
+      { id: 'cred_go', integrationID: 'opencode-go', active: true, label: 'OpenCode Go', value: { type: 'key', key: 'revoked-key' } },
+      { id: 'cred_personal', integrationID: 'opencode', active: true, label: 'Personal', value: { type: 'oauth', access: 'oauth-token' } },
+    ],
+  })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    assert.equal(state.chatHeaders[0].authorization, 'Bearer oauth-token')
+  } finally {
+    await close()
+  }
+})
+
+test('credentialLabel pins an exact store entry', async () => {
+  const { server, state, close } = await startServer({
+    credentials: [
+      { id: 'cred_go', integrationID: 'opencode-go', active: true, label: 'OpenCode Go', value: { type: 'key', key: 'go-key' } },
+      { id: 'cred_personal', integrationID: 'opencode', active: true, label: 'Personal', value: { type: 'oauth', access: 'oauth-token' } },
+    ],
+  })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), credentialLabel: 'OpenCode Go' })
+    await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    assert.equal(state.chatHeaders[0].authorization, 'Bearer go-key')
+  } finally {
+    await close()
+  }
 })

@@ -33,8 +33,8 @@
 
 ## report
 
-- **2.1** · active · 2026-10-30 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
-  Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy for all model-serving plugins, the measured decommission of @nolit/dsh-subrouter, and the direct OpenAI-compatible backend pattern.
+- **2.2** · active · 2026-10-30 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
+  Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, and the measured live 400 MissingSessionID + 401 revoked-key defects.
 - **1.0** · completed · 2026-10-29 · [DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](../DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
   Runtime measurement and optimization report for the three original plugins on DSH 0.2.2-alpha.2.
 - **1.0** · reference · 2026-10-29 · [UTM-REVIEW-FORGE-VS-SIDEBAR.md](../UTM-REVIEW-FORGE-VS-SIDEBAR.md)
@@ -71,7 +71,7 @@
 
 ## policy
 
-- **2.1** · active · 2026-10-30 · [docs/DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md)
+- **2.2** · active · 2026-10-30 · [docs/DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md)
   Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules.
 - **2.0** · active · 2026-10-29 · [docs/BOOTCARD-POLICY.md](BOOTCARD-POLICY.md)
   Boot card generation and read rules; AGENTS.md stays a thin pointer to the newest card, rules live in docs/RULES.md.

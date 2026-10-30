@@ -1712,3 +1712,75 @@ exact failure payload), `stream rejects a stale level on a route that advertises
 stays 0). Advertised levels still take the existing `-m …#<variant>` / session-variant paths.
 
 Status: applied in the workspace; the running 3080 process needs a restart to load 0.3.6 + 0.3.7.
+
+## 26. v0.5.1 — live 400 `MissingSessionID` and revoked-credential 401 (measured 2026-10-30)
+
+Reported after the 22:36 live restart: every `opencode-http-agent` turn ended with
+
+```
+OpenCode backend HTTP 400: {"type":"error","error":{"type":"MissingSessionID",
+ "message":"Request is missing x-opencode-session and cannot be routed efficiently. ..."}}
+```
+
+### 26.1 Measurement (read-only; real endpoint, real credential)
+
+Probes at `https://opencode.ai/inference/go/openai/v1/chat/completions`:
+
+| Probe | Result |
+|---|---|
+| no `x-opencode-session` | **400** `MissingSessionID` |
+| `x-opencode-session: <id>` | 400 gone (request proceeds to the credential check) |
+
+`grep 'x-opencode-session' lib/ test/` before the fix → **0 matches**: the adapter built headers
+from `attributionHeaders()` (user-agent), provider headers and `authorization` only
+(`lib/http.js:847-853`).
+
+Credential store (`GET /api/credential`, suffixes only):
+
+| id | integrationID | label | active | type | suffix | Go backend |
+|---|---|---|---|---|---|---|
+| cred_1 | opencode | Master Key 1 | false | key | 4yhF | — |
+| cred_2 | opencode | Master Key 2 | false | key | Cui7 | 403 "active OpenCode Go subscription is required" |
+| cred_14ea… | opencode | Personal | **true** | **oauth** | d659 | **200** |
+| cred_1830… | opencode-go | OpenCode Go | **true** | key | 4yjF | **401 Invalid credential** |
+
+`activeCredential()` took the first `active === true` entry, so the revoked `opencode-go` key won
+over the working web login — and the store files credentials under `opencode` while the route id
+is `opencode-go`, which is why the `Personal` entry was not even a candidate.
+
+### 26.2 Fix
+
+- `sessionHeaders()` — `x-opencode-session` = `options.sessionId`, else `sessionFallback`
+  (default `deepseek-harness`). Config: `sessionHeader`, `sessionFallback`.
+- `activeCredential()` — candidate owner ids are `{provider.integrationID, backendProviderId,
+  provider.id, 'opencode-go', 'opencode'}`; candidates are ranked `oauth` → `key` → other;
+  optional `credentialLabel` pins an exact store entry.
+
+### 26.3 Verification
+
+```
+$ (cd dsh-opencode-v2 && npm test)
+ℹ tests 185
+ℹ pass 185
+ℹ fail 0
+
+$ (cd dsh-opencode-v2 && npm run check)   # all 10 lib files parse
+```
+
+New tests: `session header is sent with the DSH session id`, `session header falls back to a
+stable value when DSH sends no session id`, `sessionHeaders honours a configured header name and
+an empty header config`, `credential selection prefers the active oauth entry over a revoked key`,
+`credentialLabel pins an exact store entry`.
+
+Live end-to-end (real control plane, real backend, adapter's own `activeCredential()` and
+`sessionHeaders()`):
+
+```
+selected credential: st_66…d659 len 39
+session header: {"x-opencode-session":"session-7374b765"}
+backend status: 200
+content: "LIVE_OK"
+usage: {"prompt_tokens":208,"completion_tokens":12,...}
+```
+
+Status: applied in the workspace at `0.5.1`; the running service must be restarted to load it.

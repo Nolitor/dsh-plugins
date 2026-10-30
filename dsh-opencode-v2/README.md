@@ -1,6 +1,6 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 2.0
+version: 2.1
 kind: readme
 status: active
 updated: 2026-10-30
@@ -226,8 +226,28 @@ Control-plane resolution order: explicit `baseUrl` → the CLI daemon's
 `opencode serve --port 0` owned by the adapter. Auth is Basic `opencode:<password>`.
 Backend resolution order: explicit `backendBaseUrl` + `apiKey`/`OPENCODE_API_KEY`, otherwise
 `GET /api/provider/{backendProviderId}` for `settings.baseURL`/headers and
-`GET /api/credential` for the active key or OAuth access token. The pair is cached for
+`GET /api/credential` for the credential. The pair is cached for
 `credentialCacheMs` and refreshed once on a 401.
+
+### Session identity and credential choice (v0.5.1 — measured 2026-10-30)
+
+Two independent defects made every `opencode-http-agent` turn fail after the 2026-10-30 22:36
+restart. Both are fixed in v0.5.1:
+
+| Defect | Measured symptom | Fix |
+|---|---|---|
+| No conversation header | Go backend answered **HTTP 400** `{"type":"error","error":{"type":"MissingSessionID","message":"Request is missing x-opencode-session …"}}`. The same body with the header was accepted. | `sessionHeaders()` sends `x-opencode-session` (config `sessionHeader`) = `options.sessionId`, else `sessionFallback` (default `deepseek-harness`) so catalog/title probes are not rejected either. |
+| Credential preference | `GET /api/credential` listed an active **`key`** entry labelled `OpenCode Go` (revoked: **401 Invalid credential**) beside the active **`oauth`** web login (**200**, served). "First active match" picked the dead key. | Rank active candidates `oauth` → `key` → other; owner ids now include both `opencode` (where the store files credentials) and `opencode-go`; optional `credentialLabel` pins one entry. |
+
+The store files credentials under `opencode` while the route is `opencode-go`, and a stored
+master key without a Go subscription answers 403 — so the web (OAuth) login is the credential
+that must win. Live verification after the fix: `st_66…d659` + `x-opencode-session` → **200**,
+`content: "LIVE_OK"`, usage present. Record of the incident:
+[`../OPENCODE-MODEL-SERVING-PLAN.md`](../OPENCODE-MODEL-SERVING-PLAN.md) §5.1.
+
+The OpenCode console documents the requirement (Go: "Send a stable session ID in
+`x-opencode-session` for each conversation") and lists DeepSeek Harness under *known
+problematic clients* for exactly this gap.
 
 Two operational facts the measurements forced:
 

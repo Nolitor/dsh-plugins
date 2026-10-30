@@ -115,6 +115,15 @@ export const Config = Schema.object({
   /** Explicit bearer token; empty uses OPENCODE_API_KEY or the local credential store. */
   apiKey: Schema.string().default('').volatile(),
   apiKeyEnv: Schema.string().default('OPENCODE_API_KEY').volatile(),
+  /**
+   * Credential-store label to pin for the backend credential (e.g. `Personal`).
+   * Empty means "prefer an active oauth entry, then an active key entry".
+   */
+  credentialLabel: Schema.string().default('').volatile(),
+  /** Header carrying the stable conversation id the Go backend routes on. */
+  sessionHeader: Schema.string().default('x-opencode-session').volatile(),
+  /** Value used when DSH dispatches without a session id (catalog/title probes). */
+  sessionFallback: Schema.string().default('deepseek-harness').volatile(),
   /** Backend-model request path below `backendBaseUrl`. */
   chatPath: Schema.string().default('/chat/completions').volatile(),
   /** How long a resolved provider base/credential pair is reused. */
@@ -759,18 +768,49 @@ export class OpencodeHttpAdapter {
     return value
   }
 
+  /**
+   * Choose the credential for the backend from the local credential store.
+   *
+   * Order matters and was measured (2026-10-30): the Go endpoint rejects a
+   * revoked `key` credential with 401 while the active web `oauth` token is
+   * accepted, so a literal "first active match" sends a dead key. Preference:
+   *
+   *   1. an active `oauth` entry of this integration (the web login is the
+   *      credential the user actually maintains),
+   *   2. an active `key` entry,
+   *   3. the first active entry of the integration.
+   *
+   * Optionally pinned by `credentialLabel`. A 401 triggers one refresh, so a
+   * rotated credential is picked up without a restart.
+   */
   async activeCredential(provider, signal) {
     const payload = await this.server.request('GET', '/api/credential', undefined, { signal })
     const entries = Array.isArray(payload?.data) ? payload.data : []
-    const integration = provider?.integrationID ?? this.config.backendProviderId.get()
-    const active = entries.find(
-      (entry) =>
-        entry?.active === true &&
-        (entry.integrationID === integration || entry.integrationID === this.config.backendProviderId.get()),
+    const providerId = this.config.backendProviderId.get()
+    const integration = provider?.integrationID ?? providerId
+    const label = this.config.credentialLabel.get()
+    /**
+     * The credential store files credentials under `opencode` (the web login and
+     * the master keys), while the model route is `opencode-go`. Accept every id
+     * that can own the credential so one live credential is never invisible.
+     */
+    const owners = new Set(
+      [integration, providerId, provider?.id, 'opencode-go', 'opencode'].filter(
+        (id) => typeof id === 'string' && id.length > 0,
+      ),
     )
-    const value = active?.value ?? {}
-    if (value.type === 'key') return value.key ?? ''
+    let candidates = entries.filter(
+      (entry) => entry?.active === true && owners.has(entry.integrationID),
+    )
+    if (label) {
+      const pinned = candidates.filter((entry) => String(entry.label ?? '') === label)
+      if (pinned.length > 0) candidates = pinned
+    }
+    const rank = (entry) => (entry?.value?.type === 'oauth' ? 0 : entry?.value?.type === 'key' ? 1 : 2)
+    candidates = candidates.slice().sort((left, right) => rank(left) - rank(right))
+    const value = candidates[0]?.value ?? {}
     if (value.type === 'oauth') return value.access ?? ''
+    if (value.type === 'key') return value.key ?? ''
     return ''
   }
 
@@ -844,9 +884,10 @@ export class OpencodeHttpAdapter {
     try {
       backend = await this.resolveBackend(signal)
       const body = buildChatRequest(options, ref, config)
+      const headers = sessionHeaders(backend.headers, options, config)
       const send = () => fetch(joinUrl(backend.baseURL, config.chatPath.get()), {
         method: 'POST',
-        headers: backend.headers,
+        headers,
         body: JSON.stringify(body),
         signal,
         redirect: 'error',
@@ -984,6 +1025,30 @@ export function errorText(value) {
     }
   }
   return 'OpenCode backend failed'
+}
+
+/**
+ * Add the conversation-identity header the Go backend requires.
+ *
+ * Measured 2026-10-30 against `https://opencode.ai/inference/go/openai/v1`:
+ * a request without `x-opencode-session` is rejected with HTTP 400
+ * `{"type":"error","error":{"type":"MissingSessionID", ...}}`; with the header
+ * the same request is served. The OpenCode console documents this for Go
+ * ("Send a stable session ID in `x-opencode-session` for each conversation") and
+ * lists DeepSeek Harness under known problematic clients for exactly this gap.
+ *
+ * A dispatch without a DSH session id (catalog or title probes, direct adapter
+ * callers) still needs a stable value, otherwise the backend answers 400 before
+ * it ever looks at the credential.
+ */
+export function sessionHeaders(headers, options, config) {
+  const name = config.sessionHeader.get()
+  if (!name) return headers
+  const session = options?.sessionId !== undefined && options?.sessionId !== null && options.sessionId !== ''
+    ? String(options.sessionId)
+    : config.sessionFallback.get()
+  if (!session) return headers
+  return { ...headers, [name]: session }
 }
 
 /** Legacy OpenCode `tokens` mapper, kept for batch-worker consumers/tests. */
