@@ -118,16 +118,20 @@ test('every declared file pattern exists on disk', () => {
   assert.ok(readdirSync(new URL('lib/', root)).length >= 3)
 })
 
-test('the bundle ships exactly one row (the delegation tool); the HTTP route is profile-level', async () => {
+test('the bundle ships the tool row plus the autonomous HTTP router row', async () => {
   assert.ok(Array.isArray(doc), 'top-level must be an array of loader patch entries')
   assert.equal(doc.length, 1)
   assert.deepEqual(Object.keys(doc[0]), ['insert'])
   assert.deepEqual(
     rows.map((r) => [r.id, r.name]),
-    [['dsh-opencode-v2', '@nolit/dsh-opencode-v2']],
+    [
+      ['dsh-opencode-v2', '@nolit/dsh-opencode-v2'],
+      ['dsh-opencode-v2-http', '@nolit/dsh-opencode-v2/http'],
+    ],
   )
-  // The HTTP route is the only conversation pipeline. `./provider` stays
-  // exported as the batch-worker backend, but it registers no LLM adapter.
+  // The HTTP route is the only conversation pipeline and is mounted natively.
+  // `./provider` stays exported as the batch-worker backend, but it registers
+  // no LLM adapter and is not a row.
   assert.ok('./provider' in pkg.exports)
   assert.ok('./http' in pkg.exports)
   const worker = await import('../lib/provider.js')
@@ -136,7 +140,24 @@ test('the bundle ships exactly one row (the delegation tool); the HTTP route is 
 
 test('row ids equal the exported plugin names (loader settings namespace)', () => {
   assert.equal(rows[0].id, tool.name)
-  assert.equal(http.name, 'dsh-opencode-v2-http')
+  assert.equal(rows[1].id, http.name)
+})
+
+test('the HTTP row config parses and pins the native-router settings', () => {
+  const row = rows.find((r) => r.id === 'dsh-opencode-v2-http')
+  assert.ok(row, 'missing the native HTTP router row')
+  const known = new Set(Object.keys(http.Config({})))
+  for (const key of Object.keys(row.config)) {
+    assert.ok(known.has(key), `HTTP row sets unknown key ${key}`)
+  }
+  const parsed = http.Config(row.config)
+  assert.equal(parsed.opencodePath.get(), '/home/minami/.bun/bin/opencode')
+  assert.equal(parsed.attachToDaemon.get(), true)
+  assert.equal(parsed.spawnServer.get(), true)
+  assert.equal(parsed.autoDiscoverModels.get(), true)
+  assert.equal(parsed.conflictPolicy.get(), 'warn')
+  assert.match(parsed.cwd.get(), /dsh-workspace/)
+  assert.match(parsed.defaultModel.get(), /^opencode(-go)?\//)
 })
 
 test('row plugin names match package.json exports keys', () => {
@@ -171,9 +192,11 @@ test('the HTTP route config parses with the http Config schema', () => {
     attachToDaemon: true,
     spawnServer: true,
     opencodePath: '/home/minami/.bun/bin/opencode',
+    cwd: '',
     defaultModel: 'opencode/beam-free',
-    permissionDecision: 'once',
-    sessionMapPath: '',
+    conflictPolicy: 'warn',
+    backendProviderId: 'opencode-go',
+    reasoningField: 'reasoning_content',
   }
   for (const key of Object.keys(profileRowConfig)) {
     assert.ok(known.has(key), `HTTP profile row sets unknown key ${key}`)
@@ -182,6 +205,9 @@ test('the HTTP route config parses with the http Config schema', () => {
   assert.equal(parsed.defaultModel.get(), 'opencode/beam-free')
   assert.equal(known.has('fallbackToCli'), false, 'the CLI is not a conversation fallback')
   assert.equal(known.has('registerCliProvider'), false, 'the CLI is not a conversation provider')
+  for (const removed of ['brief', 'sessionMapPath', 'permissionDecision', 'sessionPermissions', 'localSessionTitles']) {
+    assert.equal(known.has(removed), false, `${removed} must not exist after de-harnessing`)
+  }
 })
 
 test('the patch never configures attach or pure (v2 rejects both flags)', () => {

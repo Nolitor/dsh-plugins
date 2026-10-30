@@ -1,28 +1,30 @@
 /**
- * OpenCode v2 **HTTP** provider — the same model backend as `./provider.js`, but
- * it speaks the OpenCode v2 server API instead of spawning `opencode run` per
- * generation.
+ * OpenCode v2 **pure LLM adapter**.
  *
- * Measured v2.2.0 surface this file depends on:
- *   - `opencode serve --port 0` prints `server listening on http://host:port`
- *     and `server password <token>`; every `/api/*` request needs
- *     `Authorization: Basic base64(opencode:<password>)`.
- *   - `GET /api/model` -> `limit.context`, `limit.output`, `variants[]`.
- *   - `POST /api/session` with `model:{providerID,id,variant}`.
- *   - `POST /api/session/{id}/prompt {text}` returns immediately; the generation
- *     is observed on `GET /api/event?types=…` (SSE): `session.text.delta`,
- *     `session.reasoning.delta`, `session.step.ended` (exact tokens incl.
- *     `cache.read/write`), `session.execution.succeeded|failed|interrupted`,
- *     `permission.asked`.
- *   - `POST /api/session/{id}/permission/{rid}/reply {decision}`.
+ * This file is deliberately NOT an OpenCode agent client. It uses the local
+ * OpenCode server only as a control plane for model discovery, provider
+ * metadata, and credentials, then calls the provider's OpenAI-compatible
+ * `/chat/completions` endpoint directly.
  *
- * Why: a long DSH transcript cannot be an argv element (128 KiB limit, see
- * VERIFICATION.md §13), a persistent session keeps the OpenCode-side history and
- * therefore reuses its prefix cache, and usage arrives inline.
+ * The DSH harness owns the agent loop: system prompt, tool schemas, tool
+ * execution, approvals, session history, and the active workspace. The adapter
+ * only translates DSH `GenerateOptions` into a raw chat request and translates
+ * the provider's SSE deltas back into DSH `StreamChunk`s.
  *
- * A session id is supplied by the host (`GenerateOptions.sessionId`), so one DSH
- * conversation maps onto one OpenCode session and later calls send only the new
- * user text.
+ * Measured control-plane surface (OpenCode v2.2.0):
+ *   - `GET /api/info`       -> liveness/version
+ *   - `GET /api/model`      -> catalog: `limit.context`, `limit.output`, `variants[]`
+ *   - `GET /api/provider/{id}` -> provider `settings.baseURL`, `headers`
+ *   - `GET /api/credential` -> active credential (key or OAuth access token)
+ *
+ * Generation surface:
+ *   - `POST {baseURL}/chat/completions` with `stream:true`,
+ *     `stream_options.include_usage:true`, OpenAI messages/tools.
+ *
+ * Forbidden by policy (asserted by tests):
+ *   - `POST /api/session/{id}/prompt` and `agent:"build"` session loops
+ *   - persona `brief` strings or `[note: the caller declared ...]`
+ *   - static `cwd` overrides for model context
  */
 import { readFileSync } from 'node:fs'
 
@@ -30,8 +32,6 @@ import Schema from '@deepseek-ai/schemastery'
 
 import {
   blocksToText,
-  buildPrompt,
-  sessionTitleText,
 } from './provider.js'
 import {
   DEFAULT_CONTEXT_WINDOW,
@@ -41,14 +41,17 @@ import {
   unsupportedEffortMessage,
 } from './shared.js'
 import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
-import { SessionMap } from './session-map.js'
-import { createUsageLedger } from './usage-ledger.js'
+import {
+  decideRouterConflict,
+  detectRouterConflicts,
+  normalizeConflictPolicy,
+} from './conflicts.js'
 
 /** Plugin name; the cordis row uses the `@nolit/dsh-opencode-v2/http` specifier. */
 export const name = 'dsh-opencode-v2-http'
 
-/** Services this plugin needs: the llm registry, and subprocess for the spawn path. */
-export const inject = ['llm', 'subprocess']
+/** The llm registry, subprocess (local control-plane/server), and live sessions (cwd). */
+export const inject = ['llm', 'subprocess', 'sessions']
 
 /** Attribution headers are a host contract; fall back to none in unit tests. */
 let attributionHeaders = () => ({})
@@ -69,36 +72,33 @@ const FORWARD_ENV_DEFAULT = [
   'OPENCODE_CONFIG',
 ]
 
-/** Content block index of the first reasoning/text block (odd/even split). */
-const TEXT_INDEX_BASE = 0
-const REASONING_INDEX_BASE = 1
+const TEXT_INDEX = 0
+const REASONING_INDEX = 1
+const TOOL_INDEX_BASE = 2
 
 export const Config = Schema.object({
-  /** Explicit server URL; when empty the adapter attaches to the CLI daemon or spawns one. */
+  /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
   baseUrl: Schema.string().default('').volatile(),
-  /** Basic-auth password; with an empty value the state file or banner supplies it. */
+  /** Basic-auth password for the local control-plane server. */
   password: Schema.string().default('').volatile(),
+  /**
+   * Reaction when a legacy OpenCode provider (`opencode-go` / `opencode`, e.g.
+   * llm-pi-ai) is already registered, or another instance owns this provider.
+   */
+  conflictPolicy: Schema.string().default('warn').volatile(),
   /** Where a running `opencode serve --service` publishes {url,pid,password}. */
-  serviceStatePath: Schema.string()
-    .default('')
-    .volatile(),
-  /** Attach to the CLI daemon when its state file is alive. */
+  serviceStatePath: Schema.string().default('').volatile(),
   attachToDaemon: Schema.boolean().default(true).volatile(),
-  /** Spawn `opencode serve --port 0` when nothing else is reachable. */
   spawnServer: Schema.boolean().default(true).volatile(),
   opencodePath: Schema.string().default('opencode').volatile(),
   spawnTimeoutMs: Schema.number().default(30000).volatile(),
   forwardEnv: Schema.array(Schema.string()).default(FORWARD_ENV_DEFAULT).volatile(),
-  cwd: Schema.string().default('').volatile(),
   /**
-   * Route id used when the DSH model id is the literal `default`. The value is
-   * a bare `provider/model` pair: the route id is split at the first `/`, so a
-   * `#variant` suffix would become part of the model id. The reasoning level
-   * comes from the DSH agent's own level, which the adapter maps onto this
-   * route's advertised variants.
+   * Local server process cwd only. It is NEVER used as the model context
+   * directory: DSH tools own the caller session's cwd.
    */
+  cwd: Schema.string().default('').volatile(),
   defaultModel: Schema.string().default('opencode-go/minimax-m3.1-flash').volatile(),
-  /** Explicit route table, same shape as the CLI adapter's. */
   models: Schema.array(
     Schema.object({
       id: Schema.string(),
@@ -108,52 +108,39 @@ export const Config = Schema.object({
   )
     .default([{ id: 'default', opencodeModel: '', name: 'OpenCode (config default)' }])
     .volatile(),
-  brief: Schema.string()
-    .default(
-      'You are OpenCode, an autonomous software-engineering agent, invoked as the model backend of another agent harness. The transcript of the calling conversation is below. Carry out the most recent user request end-to-end using your own tools and judgment. Do not ask questions — act autonomously. Your final printed answer is returned verbatim as the model\'s reply.',
-    )
-    .volatile(),
-  /** Session-scoped permission rules forwarded to `POST /api/session`. */
-  sessionPermissions: Schema.array(
-    Schema.object({
-      action: Schema.string(),
-      resource: Schema.string(),
-      effect: Schema.string(),
-    }),
-  )
-    .default([])
-    .volatile(),
-  /** Decision used when OpenCode asks for a tool permission mid-generation. */
-  permissionDecision: Schema.string().default('once').volatile(),
+  /** Local OpenCode provider id whose backend endpoint and credential are used. */
+  backendProviderId: Schema.string().default('opencode-go').volatile(),
+  /** Explicit OpenAI-compatible backend root; empty resolves from `/api/provider/{id}`. */
+  backendBaseUrl: Schema.string().default('').volatile(),
+  /** Explicit bearer token; empty uses OPENCODE_API_KEY or the local credential store. */
+  apiKey: Schema.string().default('').volatile(),
+  apiKeyEnv: Schema.string().default('OPENCODE_API_KEY').volatile(),
+  /** Backend-model request path below `backendBaseUrl`. */
+  chatPath: Schema.string().default('/chat/completions').volatile(),
+  /** How long a resolved provider base/credential pair is reused. */
+  credentialCacheMs: Schema.number().default(300000).volatile(),
+  /** OpenAI-compatible field carrying streamed reasoning (`reasoning_content`, ...). */
+  reasoningField: Schema.string().default('reasoning_content').volatile(),
+  /** OpenAI-compatible field carrying the reasoning effort. */
+  effortField: Schema.string().default('reasoning_effort').volatile(),
   timeoutMs: Schema.number().default(1800000).volatile(),
   requestTimeoutMs: Schema.number().default(30000).volatile(),
   discoveryCacheMs: Schema.number().default(300000).volatile(),
   autoDiscoverModels: Schema.boolean().default(true).volatile(),
-  /** Snapshot file holding the last good catalog; empty resolves under the active profile. */
   catalogPath: Schema.string().default('').volatile(),
-  /** Background catalog sync period in ms; 0 keeps refreshes demand-driven only. */
   catalogSyncMs: Schema.number().default(300000).volatile(),
-  /**
-   * DSH-session → OpenCode-session map persisted next to the catalog. A
-   * resumed DSH session reuses its OpenCode session instead of replaying the
-   * whole transcript; empty resolves under the active profile.
-   */
-  sessionMapPath: Schema.string().default('').volatile(),
-  /** Local session titles avoid a second model call for the title. */
-  localSessionTitles: Schema.boolean().default(true).volatile(),
 })
 
-/** Join URL and path without doubling slashes. */
 function joinUrl(base, path) {
   return `${String(base).replace(/\/+$/, '')}${path}`
 }
 
-/** Basic auth header for `opencode:<password>`. */
+/** Basic auth header for the local control-plane server (`opencode:<password>`). */
 export function authHeader(password) {
   return `Basic ${Buffer.from(`opencode:${password ?? ''}`).toString('base64')}`
 }
 
-/** `provider/id` -> OpenCode model ref; `default` maps through the route table. */
+/** `provider/id` -> backend model ref; `default` maps through the route table. */
 export function modelRefFromRoute(route, table, defaultModel) {
   const entry = (table ?? []).find((item) => item.id === route)
   const resolved = route === 'default' ? entry?.opencodeModel || defaultModel || '' : entry?.opencodeModel || route
@@ -163,24 +150,23 @@ export function modelRefFromRoute(route, table, defaultModel) {
   return { providerID: resolved.slice(0, slash), id: resolved.slice(slash + 1) }
 }
 
-/** Stable key for "same OpenCode model + variant". */
+/** Stable key for "same backend model + variant". */
 export function modelKey(ref, variant) {
   return ref ? `${ref.providerID}/${ref.id}${variant ? `#${variant}` : ''}` : ''
 }
 
 /**
- * Text of the trailing user message(s) in a host history — everything the
- * OpenCode session has not seen yet on a continued conversation.
+ * The caller session's active workspace directory, owned by DSH.
+ * Missing services/session are non-fatal: the harness never guesses a project.
  */
-export function newUserText(messages) {
-  const parts = []
-  for (let i = (messages ?? []).length - 1; i >= 0; i--) {
-    const message = messages[i]
-    if (message?.role !== 'user') break
-    const text = blocksToText(message.content)
-    if (text.trim()) parts.unshift(text)
+export function resolveWorkspaceDirectory(ctx, options) {
+  try {
+    const id = options?.sessionId
+    if (!id) return ''
+    return ctx?.sessions?.get?.(id)?.header?.cwd ?? ''
+  } catch {
+    return ''
   }
-  return parts.join('\n\n')
 }
 
 /** Parse one SSE block (`event:` optional, `data:` concatenated). */
@@ -189,7 +175,7 @@ export function parseSseBlock(block) {
   for (const line of String(block).split(/\r?\n/)) {
     if (line.startsWith('data:')) data += line.slice(5).trim()
   }
-  if (!data) return null
+  if (!data || data === '[DONE]') return null
   try {
     return JSON.parse(data)
   } catch {
@@ -198,36 +184,32 @@ export function parseSseBlock(block) {
 }
 
 /**
- * Async iterator over the server's SSE event stream.
- * The caller closes it by aborting `signal`.
+ * Async iterator over an OpenAI-compatible SSE body.
+ * @param {ReadableStream<Uint8Array>} body
+ * @param {AbortSignal} signal
  */
-async function* sseEvents(url, password, types, signal) {
-  const query = (types ?? []).map((type) => `types=${encodeURIComponent(type)}`).join('&')
-  const target = joinUrl(url, `/api/event${query ? `?${query}` : ''}`)
-  const response = await fetch(target, {
-    headers: { ...attributionHeaders(), authorization: authHeader(password), accept: 'text/event-stream' },
-    signal,
-  })
-  if (!response.ok || !response.body) {
-    throw new Error(`event stream failed: HTTP ${response.status}`)
-  }
-  const reader = response.body.getReader()
+export async function* chatSseEvents(body, signal) {
+  const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
   try {
     for (;;) {
+      if (signal?.aborted) return
       const { done, value } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
-      let at
-      while ((at = buffer.search(/\r?\n\r?\n/)) !== -1) {
+      for (;;) {
         const match = buffer.match(/\r?\n\r?\n/)
-        const block = buffer.slice(0, at)
-        buffer = buffer.slice(at + match[0].length)
+        if (!match) break
+        const block = buffer.slice(0, match.index)
+        buffer = buffer.slice(match.index + match[0].length)
+        if (String(block).includes('data: [DONE]')) return
         const event = parseSseBlock(block)
         if (event) yield event
       }
     }
+    const tail = parseSseBlock(buffer)
+    if (tail) yield tail
   } finally {
     try {
       await reader.cancel()
@@ -237,30 +219,9 @@ async function* sseEvents(url, password, types, signal) {
   }
 }
 
-const EVENT_TYPES = [
-  'session.execution.started',
-  'session.execution.succeeded',
-  'session.execution.failed',
-  'session.execution.interrupted',
-  'session.text.started',
-  'session.text.delta',
-  'session.text.ended',
-  'session.reasoning.started',
-  'session.reasoning.delta',
-  'session.reasoning.ended',
-  'session.step.started',
-  'session.step.ended',
-  'session.usage.updated',
-  'session.tool.called',
-  'session.tool.success',
-  'session.tool.failed',
-  'permission.asked',
-  'permission.replied',
-]
-
 /**
- * Resolve one OpenCode server endpoint for this adapter: explicit baseUrl with
- * an explicit password, the CLI daemon's published state, or a child we own.
+ * The local OpenCode control-plane endpoint. It supplies catalog, provider
+ * metadata, and credentials only; generation never goes through it.
  */
 export class ServerManager {
   constructor(ctx, config) {
@@ -271,24 +232,14 @@ export class ServerManager {
     this.state = null
   }
 
-  /** Absolute path of the CLI daemon's state file (explicit configuration). */
   stateFilePath() {
     return this.config.serviceStatePath.get()
   }
 
-  /** Headers for one request to the resolved server. */
   headers() {
     return { ...attributionHeaders(), authorization: authHeader(this.resolved?.password ?? '') }
   }
 
-  /**
-   * Fetch `path` and parse JSON; throws on a non-2xx answer.
-   *
-   * A daemon we merely attached to can disappear (it is spawned on demand by
-   * the CLI and dies with its parent). One network-level failure re-resolves
-   * the endpoint and retries once, so the adapter picks up a new daemon or
-   * spawns its own server instead of failing the turn.
-   */
   async request(method, path, body, { signal, timeoutMs } = {}) {
     const endpoint = await this.ensure()
     try {
@@ -338,7 +289,6 @@ export class ServerManager {
     }
   }
 
-  /** Resolve once; concurrent callers share the same resolution. */
   async ensure() {
     if (this.resolved) return this.resolved
     if (!this.resolving) {
@@ -376,19 +326,12 @@ export class ServerManager {
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
       throw new Error(
-        `OpenCode server unavailable: ${[...reasons, `spawn failed (${detail})`].join('; ')}. ` +
+        `OpenCode control plane unavailable: ${[...reasons, `spawn failed (${detail})`].join('; ')}. ` +
           'Set opencodePath to an absolute executable path, or keep a daemon running.',
       )
     }
   }
 
-  /**
-   * Read the CLI daemon state file and verify that the server answers.
-   *
-   * A pid check alone is not enough: the daemon is spawned on demand by the
-   * CLI and dies with its parent, so the state file can name a live pid whose
-   * port is already gone. `/api/info` is the measured health probe.
-   */
   async attach() {
     this.attachReason = null
     const failures = []
@@ -403,7 +346,6 @@ export class ServerManager {
     return null
   }
 
-  /** Attach to the daemon described by one descriptor file. */
   async attachCandidate(path) {
     let state
     try {
@@ -437,8 +379,6 @@ export class ServerManager {
     return { url, password, owned: false, version: info.version }
   }
 
-
-  /** Spawn `opencode serve --port 0`, read the banner, and keep the child. */
   async spawn() {
     if (!this.ctx?.subprocess) throw new Error('spawnServer needs ctx.subprocess')
     const env = {}
@@ -469,7 +409,6 @@ export class ServerManager {
     return { url: banner.url, password: banner.password, owned: true, version: info.version }
   }
 
-  /** Terminate the child we own (never a daemon we merely attached to). */
   dispose() {
     if (this.child) {
       try {
@@ -483,15 +422,6 @@ export class ServerManager {
   }
 }
 
-/**
- * Descriptor files that may name an already-running OpenCode server, most
- * specific first. `opencode service` (v2) keeps its descriptor under the XDG
- * state or config root; older installs used `~/.local/state`. Attaching instead
- * of spawning keeps one daemon per user and preserves its sessions.
- *
- * @param {string} [configured] Explicit `serviceStatePath` from config.
- * @returns {string[]} De-duplicated candidate paths.
- */
 export function serviceStateCandidates(configured = '') {
   const home = process.env.HOME ?? ''
   const stateHome = process.env.XDG_STATE_HOME || `${home}/.local/state`
@@ -505,17 +435,6 @@ export function serviceStateCandidates(configured = '') {
   return [...new Set(candidates.filter((path) => typeof path === 'string' && path.length > 0))]
 }
 
-/**
- * Health probe for one server endpoint.
- *
- * `/api/info` is the measured liveness surface (`{"version","pid","urls"}`).
- * Returns the parsed info, or null when the server does not answer.
- *
- * @param {string} url - server base URL
- * @param {string} password - basic-auth password
- * @param {number} [timeoutMs] - probe budget
- * @returns {Promise<{version: string} | null>}
- */
 export async function probeServer(url, password, timeoutMs = 3000) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -534,7 +453,6 @@ export async function probeServer(url, password, timeoutMs = 3000) {
   }
 }
 
-/** Read the serve banner from a piped stdout within `timeoutMs`. */
 export async function readBanner(handle, timeoutMs) {
   const stdout = handle?.stdout
   if (!stdout) return null
@@ -559,7 +477,6 @@ export async function readBanner(handle, timeoutMs) {
   }
 }
 
-/** Extract url + password from the measured v2.2.0 banner. */
 export function parseBanner(text) {
   const url = String(text ?? '').match(/server listening on (https?:\/\/\S+)/)
   if (!url) return null
@@ -567,29 +484,107 @@ export function parseBanner(text) {
   return { url: url[1].replace(/\/+$/, ''), password: password ? password[1] : '' }
 }
 
-/** The HTTP-backed adapter. */
+/** Build the OpenAI-compatible request body from DSH `GenerateOptions`. */
+export function buildChatRequest(options, ref, config) {
+  const messages = []
+  const append = (role, content) => {
+    if (content === undefined || content === null || content === '') return
+    messages.push({ role, content })
+  }
+
+  if (options.system) append('system', options.system)
+  for (const message of options.messages ?? []) {
+    const text = blocksToText(message.content).trim()
+    if (message.role === 'assistant') {
+      const toolCalls = (message.content ?? [])
+        .filter((block) => block.type === 'tool-call')
+        .map((block) => ({
+          id: String(block.id),
+          type: 'function',
+          function: { name: block.name, arguments: block.arguments },
+        }))
+      if (toolCalls.length > 0) {
+        messages.push({ role: 'assistant', content: text || null, tool_calls: toolCalls })
+      } else {
+        append('assistant', text)
+      }
+    } else if (message.role === 'tool') {
+      append('tool', text)
+      const last = messages[messages.length - 1]
+      if (last?.role === 'tool') last.tool_call_id = String(message.toolCallId)
+    } else if (message.role === 'developer') {
+      append('system', text)
+    } else {
+      append('user', text)
+    }
+  }
+
+  const body = {
+    model: ref.id,
+    messages,
+    stream: true,
+    stream_options: { include_usage: true },
+  }
+  if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens
+  if (options.temperature !== undefined) body.temperature = options.temperature
+  if (options.stop !== undefined) body.stop = options.stop
+  if (options.reasoningEffort !== undefined && options.reasoningEffort !== 'off') {
+    body[config.effortField.get()] = options.reasoningEffort
+  }
+  if (options.tools?.length) {
+    body.tools = options.tools.map((tool) => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      },
+    }))
+    body.tool_choice = 'auto'
+  }
+  return body
+}
+
+/** Map OpenAI's final `usage` object onto DSH's disjoint buckets. */
+export function usageFromOpenAi(raw) {
+  const prompt = Number(raw?.prompt_tokens ?? 0)
+  const cached = Number(raw?.prompt_tokens_details?.cached_tokens ?? 0)
+  const output = Number(raw?.completion_tokens ?? 0)
+  const reasoning = Number(raw?.completion_tokens_details?.reasoning_tokens ?? 0)
+  const usage = {
+    inputTokens: Math.max(0, prompt - cached),
+    outputTokens: output,
+    cacheReadTokens: cached,
+    cacheWriteTokens: 0,
+  }
+  if (Number.isFinite(reasoning) && reasoning > 0) usage.reasoningTokens = reasoning
+  usage.totalTokens = usage.inputTokens + usage.outputTokens + usage.cacheReadTokens
+  return usage
+}
+
+/** Map OpenAI finish reasons onto DSH finish kinds. */
+export function finishFromOpenAi(reason) {
+  switch (reason) {
+    case 'tool_calls':
+    case 'function_call':
+      return { kind: 'tool-calls' }
+    case 'length':
+      return { kind: 'max-tokens' }
+    default:
+      return { kind: 'stop' }
+  }
+}
+
+/** Local control-plane catalog + pure OpenAI-compatible generation. */
 export class OpencodeHttpAdapter {
-  /**
-   * @param {*} ctx Host context (llm registry, subprocess, events).
-   * @param {*} config Validated plugin configuration.
-   * @param {{ providerId?: string, catalogFileName?: string }} [options]
-   *   Route name announced on catalog changes and the snapshot file name.
-   */
   constructor(ctx, config, options = {}) {
     this.ctx = ctx
     this.config = config
     this.providerId = options.providerId ?? 'opencode-http-agent'
+    this.standDown = false
     this.server = new ServerManager(ctx, config)
-    this.sessions = new Map()
-    this.usage = createUsageLedger()
-    this.sessionMap = new SessionMap(
-      resolveCatalogPath({
-        explicit: config.sessionMapPath.get(),
-        profileDir: ctx?.get?.('profileContext')?.dir,
-        dshHome: process.env.DSH_HOME,
-        fileName: 'opencode-sessions.json',
-      }),
-    )
+    this.backendCache = null
+    this.lastWorkspace = ''
     this.catalogStore = new CatalogStore(
       resolveCatalogPath({
         explicit: config.catalogPath.get(),
@@ -608,24 +603,16 @@ export class OpencodeHttpAdapter {
     })
   }
 
-  /**
-   * Load the durable catalog and start the background sync.
-   *
-   * The Web catalog read that follows boot answers from memory; the probe
-   * replaces the snapshot when OpenCode's own list moved on.
-   */
   warmStart() {
     this.catalog.seed()
     this.catalog.start()
   }
 
-  /** Stop the background sync timer and the owned server. */
   dispose() {
     this.catalog.stop()
     this.server.dispose()
   }
 
-  /** Tell connected clients that this provider's model list changed. */
   announce() {
     try {
       this.ctx?.emit?.('llm/models-updated', this.providerId)
@@ -635,17 +622,12 @@ export class OpencodeHttpAdapter {
   }
 
   providerInfo(provider) {
-    return { id: provider, name: 'OpenCode (HTTP)' }
+    return { id: provider, name: 'OpenCode Go (direct)' }
   }
 
   providerRetryPolicy() {}
-
   imageRequestPricing() {}
 
-  /**
-   * Current route catalog without blocking on the daemon when a snapshot or a
-   * previous result exists; stale reads revalidate in the background.
-   */
   async discover() {
     if (!this.config.autoDiscoverModels.get()) return null
     return this.catalog.read()
@@ -667,20 +649,9 @@ export class OpencodeHttpAdapter {
     }
   }
 
-  /**
-   * Advertise the routes this server can serve.
-   *
-   * A failed catalog fetch is reported instead of silently degrading to the
-   * bare `default` pseudo-route: the host turns a thrown error into a visible
-   * provider failure, so an operator sees *why* the list is empty.
-   */
-  /**
-   * Human description of the transport and the serving build, so the model
-   * list states which OpenCode version answers.
-   */
   describe() {
     const version = this.server.resolved?.version
-    return version ? `OpenCode server ${version} via HTTP API` : 'OpenCode via HTTP API'
+    return version ? `OpenCode Go v${version} (OpenAI-compatible backend)` : 'OpenCode Go (OpenAI-compatible backend)'
   }
 
   async listModels(provider) {
@@ -732,9 +703,6 @@ export class OpencodeHttpAdapter {
   async lookupModel(model) {
     const discovered = await this.discover()
     if (!discovered?.models?.length) return null
-    // `default` has no catalog entry of its own: it runs through the same
-    // resolution `stream()` uses, so its row must inherit the actual route's
-    // context window and reasoning levels instead of the conservative floor.
     const ref = model === 'default'
       ? modelRefFromRoute('default', this.config.models.get(), this.config.defaultModel.get())
       : null
@@ -750,315 +718,241 @@ export class OpencodeHttpAdapter {
     return { model: await this.resolveModel(provider, model), stream: (options) => this.stream(options) }
   }
 
-  /** Resolve or create the OpenCode session that backs one DSH session. */
-  /** Drop an in-memory and persisted mapping after a 404 or a failed switch. */
-  forget(key) {
-    if (!key) return
-    this.sessions.delete(key)
-    this.sessionMap.delete(key)
-  }
-
-  async sessionFor(key, ref, variant, directory) {
-    const wanted = modelKey(ref, variant)
-    // A resumed DSH session may still own its OpenCode session even though this
-    // adapter instance is new: adopt the persisted id after the server confirms
-    // it, so the first turn sends only the new user text instead of replaying
-    // the transcript. A dead id (new daemon) is dropped and creation follows.
-    if (key && !this.sessions.has(key)) {
-      const persisted = this.sessionMap.get(key)
-      if (persisted) {
-        const directoryMatches = !persisted.directory || !directory || persisted.directory === directory
-        if (directoryMatches) {
-          try {
-            await this.server.request('GET', `/api/session/${persisted.sessionID}`)
-            this.sessions.set(key, {
-              sessionID: persisted.sessionID,
-              modelKey: persisted.modelKey ?? wanted,
-              sent: true,
-            })
-          } catch (error) {
-            if (error.status === 404) this.sessionMap.delete(key)
-            else throw error
-          }
-        }
-      }
-    }
-    const existing = key ? this.sessions.get(key) : null
-    if (existing) {
-      // A server restart (or an external delete) invalidates our mapping.
-      if (existing.sent) {
-        try {
-          await this.server.request('GET', `/api/session/${existing.sessionID}`)
-        } catch (error) {
-          if (error.status === 404) this.forget(key)
-          else throw error
-        }
-      }
-      if (!this.sessions.get(key)) {
-        // fall through to creation below
-      } else if (existing.modelKey !== wanted) {
-        try {
-          await this.server.request('POST', `/api/session/${existing.sessionID}/model`, {
-            model: { ...ref, ...(variant ? { variant } : {}) },
-          })
-          existing.modelKey = wanted
-          this.sessionMap.set(key, {
-            sessionID: existing.sessionID,
-            modelKey: wanted,
-            directory,
-          })
-        } catch (error) {
-          if (error.status === 404) {
-            this.forget(key)
-          } else {
-            throw error
-          }
-        }
-      }
-      if (this.sessions.get(key) === existing) return existing
-    } else if (this.sessions.get(key)) {
-      return this.sessions.get(key)
-    }
-    const created = await this.server.request('POST', '/api/session', {
-      ...(key ? { title: `DSH ${String(key).slice(0, 8)}` } : {}),
-      model: { ...ref, ...(variant ? { variant } : {}) },
-      location: { directory },
-      ...(this.config.sessionPermissions.get().length
-        ? { permissions: this.config.sessionPermissions.get() }
-        : {}),
-    })
-    const session = { sessionID: created.data.id, modelKey: wanted, sent: false }
-    if (key) {
-      this.sessions.set(key, session)
-      this.sessionMap.set(key, { sessionID: session.sessionID, modelKey: wanted, directory })
-    }
-    return session
-  }
-
   /**
-   * Stream one generation over HTTP. Text/reasoning arrive as deltas;
-   * `session.step.ended` supplies exact tokens; permission prompts are answered
-   * by config. This is the only conversation pipeline: the CLI adapter is a
-   * worker backend, not a fallback route.
+   * Resolve the OpenAI-compatible backend root and bearer credential.
+   *
+   * Priority:
+   *   1. explicit `backendBaseUrl` / `apiKey` (or `OPENCODE_API_KEY`)
+   *   2. local control plane: `/api/provider/{id}` + active `/api/credential`
+   *
+   * The result is cached for `credentialCacheMs`; a 401 forces one refresh.
    */
+  async resolveBackend(signal, { force = false } = {}) {
+    const now = Date.now()
+    if (!force && this.backendCache && now - this.backendCache.at < this.config.credentialCacheMs.get()) {
+      return this.backendCache.value
+    }
+    const providerId = this.config.backendProviderId.get()
+    let provider = null
+    let baseURL = this.config.backendBaseUrl.get()
+    if (!baseURL) {
+      const payload = await this.server.request('GET', `/api/provider/${encodeURIComponent(providerId)}`, undefined, { signal })
+      provider = payload?.data
+      baseURL = provider?.settings?.baseURL
+      if (!baseURL) throw new Error(`OpenCode provider "${providerId}" exposes no settings.baseURL`)
+    }
+    let credential = this.config.apiKey.get()
+    if (!credential && this.config.apiKeyEnv.get()) credential = process.env[this.config.apiKeyEnv.get()] ?? ''
+    if (!credential) credential = await this.activeCredential(provider, signal)
+    if (!credential) throw new Error(`no credential for OpenCode provider "${providerId}"`)
+    const value = {
+      baseURL: String(baseURL).replace(/\/+$/, ''),
+      headers: {
+        ...attributionHeaders(),
+        accept: 'text/event-stream',
+        'content-type': 'application/json',
+        ...(provider?.headers ?? {}),
+        authorization: `Bearer ${credential}`,
+      },
+    }
+    this.backendCache = { at: now, value }
+    return value
+  }
+
+  async activeCredential(provider, signal) {
+    const payload = await this.server.request('GET', '/api/credential', undefined, { signal })
+    const entries = Array.isArray(payload?.data) ? payload.data : []
+    const integration = provider?.integrationID ?? this.config.backendProviderId.get()
+    const active = entries.find(
+      (entry) =>
+        entry?.active === true &&
+        (entry.integrationID === integration || entry.integrationID === this.config.backendProviderId.get()),
+    )
+    const value = active?.value ?? {}
+    if (value.type === 'key') return value.key ?? ''
+    if (value.type === 'oauth') return value.access ?? ''
+    return ''
+  }
+
   async *stream(options) {
-    if (options.purpose === 'session-title' && this.config.localSessionTitles.get()) {
-      const text = sessionTitleText(options.messages).slice(0, 80)
-      yield { type: 'block-start', index: 0, blockType: 'text' }
-      yield { type: 'text-delta', index: 0, text }
-      yield { type: 'block-end', index: 0, block: { type: 'text', text } }
-      yield { type: 'finish', reason: { kind: 'stop' } }
+    if (this.standDown) {
+      yield {
+        type: 'finish',
+        reason: {
+          kind: 'error',
+          failure: {
+            code: 'ROUTER_STANDDOWN',
+            message: 'dsh-opencode-v2-http yielded the OpenCode namespace to a legacy provider (conflictPolicy: stand-down)',
+          },
+        },
+      }
       return
     }
 
     const config = this.config
     const timeout = AbortSignal.timeout(config.timeoutMs.get())
     const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
-    const sessionKey = options.sessionId ? String(options.sessionId) : ''
+    this.lastWorkspace = resolveWorkspaceDirectory(this.ctx, options)
+
     const ref = modelRefFromRoute(options.model, config.models.get(), config.defaultModel.get())
     if (!ref) {
       yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_HTTP_MODEL', message: `unmapped route ${options.model}` } } }
       return
     }
-    // Same guard as the CLI route: a level reaches the session model object only
-    // when discovery advertised it. An unknown route stays unvalidated here
-    // (discovery may be unavailable); a known route with no variants rejects.
     if (options.reasoningEffort !== undefined) {
       let found = null
       try {
         found = await this.lookupModel(options.model)
       } catch {
-        /* discovery unavailable: leave the decision to the server */
+        /* discovery unavailable: let the backend decide */
       }
       if (found && !(found.variants ?? []).includes(options.reasoningEffort)) {
-        const message = unsupportedEffortMessage(
-          options.provider,
-          options.model,
-          options.reasoningEffort,
-          found.variants ?? [],
-        )
+        const message = unsupportedEffortMessage(options.provider, options.model, options.reasoningEffort, found.variants ?? [])
         this.ctx?.logger?.warn?.(`opencode-http-agent: ${message}`)
         yield { type: 'finish', reason: { kind: 'error', failure: { code: 'UNSUPPORTED_REASONING_EFFORT', message } } }
         return
       }
     }
 
-    // Aggregated blocks, keyed by "<kind>:<ordinal>" so a tool-using step can
-    // open a fresh text/reasoning block on new indexes.
     const blocks = new Map()
-    let nextText = TEXT_INDEX_BASE
-    let nextReasoning = REASONING_INDEX_BASE
-    const openBlock = (event, kind) => {
-      const key = `${kind}:${event.data?.ordinal ?? 0}`
-      const existing = blocks.get(key)
-      if (existing) return existing
-      const index = kind === 'reasoning' ? nextReasoning : nextText
-      if (kind === 'reasoning') nextReasoning += 2
-      else nextText += 2
-      const block = { index, kind, text: '' }
-      blocks.set(key, block)
+    const toolCalls = new Map()
+    const open = (kind, index) => {
+      const key = `${kind}:${index}`
+      let block = blocks.get(key)
+      if (!block) {
+        block = { index, kind, closed: false, text: '', id: '', name: '', arguments: '' }
+        blocks.set(key, block)
+      }
       return block
     }
     const closeAll = function* () {
-      for (const block of [...blocks.values()].sort((a, b) => a.index - b.index)) {
-        yield { type: 'block-end', index: block.index, block: { type: block.kind, text: block.text } }
-      }
-      blocks.clear()
-    }
-
-    let session = null
-    let ephemeral = false
-    let usage = null
-    let terminal = null
-    const abortEvents = new AbortController()
-    const onAbort = () => {
-      abortEvents.abort()
-      if (session?.sessionID) {
-        this.server.request('POST', `/api/session/${session.sessionID}/interrupt`).catch(() => {})
+      for (const block of [...blocks.values()].sort((left, right) => left.index - right.index)) {
+        if (block.closed) continue
+        block.closed = true
+        yield {
+          type: 'block-end',
+          index: block.index,
+          block: block.kind === 'tool-call'
+            ? { type: 'tool-call', id: block.id || `call_${block.index}`, name: block.name, arguments: block.arguments || '{}' }
+            : { type: block.kind, text: block.text },
+        }
       }
     }
-    signal.addEventListener('abort', onAbort, { once: true })
 
+    let response = null
+    let backend = null
     try {
-      const directory = config.cwd.get() || process.cwd()
-      session = await this.sessionFor(sessionKey, ref, options.reasoningEffort, directory)
-      ephemeral = !sessionKey
-      const promptText = session.sent
-        ? newUserText(options.messages) || buildPrompt(options, config.brief.get())
-        : buildPrompt(options, config.brief.get())
-      const endpoint = await this.server.ensure()
-      const events = sseEvents(endpoint.url, endpoint.password, EVENT_TYPES, abortEvents.signal)
-      // Begin the subscription before the prompt so early deltas are not lost.
-      const firstEvent = events.next()
-      firstEvent.catch(() => {})
-      const startedAt = Date.now()
-      try {
-        await this.server.request('POST', `/api/session/${session.sessionID}/prompt`, { text: promptText }, { signal })
-        session.sent = true
-      } catch (error) {
-        yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_HTTP', message: error.message } } }
+      backend = await this.resolveBackend(signal)
+      const body = buildChatRequest(options, ref, config)
+      const send = () => fetch(joinUrl(backend.baseURL, config.chatPath.get()), {
+        method: 'POST',
+        headers: backend.headers,
+        body: JSON.stringify(body),
+        signal,
+        redirect: 'error',
+      })
+      response = await send()
+      if (response.status === 401) {
+        backend = await this.resolveBackend(signal, { force: true })
+        response = await send()
+      }
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        yield {
+          type: 'finish',
+          reason: {
+            kind: 'error',
+            failure: {
+              code: response.status === 401 || response.status === 403 ? 'OPENCODE_BACKEND_AUTH' : 'OPENCODE_BACKEND_HTTP',
+              message: `OpenCode backend HTTP ${response.status}${text ? `: ${text.slice(0, 300)}` : ''}`,
+            },
+          },
+        }
+        return
+      }
+      if (!response.body) {
+        yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_BACKEND_EMPTY', message: 'backend returned no response body' } } }
         return
       }
 
-      const accept = (event) =>
-        event?.data?.sessionID === session.sessionID &&
-        (typeof event.created !== 'number' || event.created >= startedAt - 2000)
-      let gate = false
-      let pending = firstEvent
-      for (;;) {
-        const step = await pending
-        if (step.done) break
-        if (options.signal?.aborted) {
-          terminal = { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } }
-          break
-        }
-        const event = step.value
-        pending = events.next()
-        pending.catch(() => {})
-        if (!accept(event)) continue
-        const type = event.type
-        if (!gate && (type === 'session.execution.started' || type === 'session.inbox.enqueued' || type === 'session.step.started')) {
-          gate = true
-        }
-        // Permission prompts are answered even before the text gate opens.
-        if (type === 'permission.asked') {
-          const requestID = event.data?.id
-          const decision = config.permissionDecision.get()
-          if (requestID && (decision === 'once' || decision === 'always' || decision === 'reject')) {
-            this.server
-              .request('POST', `/api/session/${session.sessionID}/permission/${requestID}/reply`, { decision })
-              .catch(() => {})
-          }
-          continue
-        }
-        if (!gate) continue
+      let usage = null
+      let finishReason = null
+      let textStarted = false
+      let reasoningStarted = false
 
-        switch (type) {
-          case 'session.reasoning.started':
-          case 'session.text.started': {
-            const kind = type.startsWith('session.reasoning') ? 'reasoning' : 'text'
-            const block = openBlock(event, kind)
-            yield { type: 'block-start', index: block.index, blockType: kind }
-            break
+      for await (const chunk of chatSseEvents(response.body, signal)) {
+        if (chunk?.usage) usage = usageFromOpenAi(chunk.usage)
+        const choice = chunk?.choices?.[0]
+        if (!choice) continue
+        const delta = choice.delta ?? {}
+
+        const reasoningText = delta[config.reasoningField.get()] ?? delta.reasoning ?? delta.reasoning_text
+        if (typeof reasoningText === 'string' && reasoningText.length > 0) {
+          const block = open('reasoning', REASONING_INDEX)
+          if (!reasoningStarted) {
+            reasoningStarted = true
+            yield { type: 'block-start', index: block.index, blockType: 'reasoning' }
           }
-          case 'session.reasoning.delta':
-          case 'session.text.delta': {
-            const kind = type.startsWith('session.reasoning') ? 'reasoning' : 'text'
-            const block = openBlock(event, kind)
-            const delta = String(event.data?.delta ?? '')
-            if (!delta) break
-            block.text += delta
-            yield { type: kind === 'reasoning' ? 'reasoning-delta' : 'text-delta', index: block.index, text: delta }
-            break
-          }
-          case 'session.reasoning.ended':
-          case 'session.text.ended': {
-            const kind = type.startsWith('session.reasoning') ? 'reasoning' : 'text'
-            const block = openBlock(event, kind)
-            if (!block.text && typeof event.data?.text === 'string') block.text = event.data.text
-            yield { type: 'block-end', index: block.index, block: { type: kind, text: block.text } }
-            blocks.delete(`${kind}:${event.data?.ordinal ?? 0}`)
-            break
-          }
-          case 'session.step.ended': {
-            const tokens = event.data?.tokens
-            if (tokens) {
-              // One DSH generation may contain many OpenCode steps (each an
-              // upstream call). The host keeps the LAST `usage` chunk, so emit a
-              // running total: the final chunk then carries the whole generation.
-              usage = addUsage(usage, usageFromTokens(tokens))
-              yield { type: 'usage', usage }
-            }
-            break
-          }
-          case 'session.execution.succeeded':
-            terminal = { kind: 'stop' }
-            break
-          case 'session.execution.failed':
-            terminal = {
-              kind: 'error',
-              failure: {
-                code: 'OPENCODE_HTTP_FAILED',
-                message: errorText(event.data?.error ?? event.data?.message),
-              },
-            }
-            break
-          case 'session.execution.interrupted':
-            terminal = { kind: 'error', failure: { code: 'OPENCODE_INTERRUPTED', message: 'opencode execution was interrupted' } }
-            break
-          default:
-            break
+          block.text += reasoningText
+          yield { type: 'reasoning-delta', index: block.index, text: reasoningText }
         }
-        if (terminal) break
+
+        if (typeof delta.content === 'string' && delta.content.length > 0) {
+          const block = open('text', TEXT_INDEX)
+          if (!textStarted) {
+            textStarted = true
+            yield { type: 'block-start', index: block.index, blockType: 'text' }
+          }
+          block.text += delta.content
+          yield { type: 'text-delta', index: block.index, text: delta.content }
+        }
+
+        for (const call of delta.tool_calls ?? []) {
+          const ordinal = Number(call.index ?? 0)
+          let entry = toolCalls.get(ordinal)
+          if (!entry) {
+            entry = { block: open('tool-call', TOOL_INDEX_BASE + ordinal * 2), started: false }
+            toolCalls.set(ordinal, entry)
+          }
+          const block = entry.block
+          if (call.id) block.id = String(call.id)
+          if (call.function?.name) block.name = String(call.function.name)
+          const args = call.function?.arguments
+          if (!entry.started && (block.id || block.name)) {
+            entry.started = true
+            const initialArgs = typeof args === 'string' ? args : ''
+            block.arguments += initialArgs
+            yield { type: 'block-start', index: block.index, blockType: 'tool-call' }
+            yield {
+              type: 'tool-call-delta',
+              index: block.index,
+              id: block.id || `call_${block.index}`,
+              ...(block.name ? { name: block.name } : {}),
+              argumentsDelta: initialArgs,
+            }
+          } else if (typeof args === 'string' && args.length > 0) {
+            block.arguments += args
+            yield {
+              type: 'tool-call-delta',
+              index: block.index,
+              id: block.id || `call_${block.index}`,
+              argumentsDelta: args,
+            }
+          }
+        }
+
+        if (choice.finish_reason) finishReason = choice.finish_reason
       }
 
       for (const chunk of closeAll()) yield chunk
-
-      // The generation's own usage, measured by its steps. The ledger advances by
-      // the same amount, so a later cumulative snapshot yields only the growth.
-      if (usage && session?.sessionID) this.usage.steps(session.sessionID, usage)
-
+      if (usage) yield { type: 'usage', usage }
       if (options.signal?.aborted) {
-        terminal = { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } }
-      } else if (!terminal) {
-        terminal = timeout.aborted
-          ? { kind: 'error', failure: { code: 'OPENCODE_TIMEOUT', message: `opencode exceeded timeoutMs=${config.timeoutMs.get()}` } }
-          : { kind: 'error', failure: { code: 'OPENCODE_HTTP_FAILED', message: 'event stream ended before a terminal execution event' } }
+        yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } } }
+      } else if (timeout.aborted) {
+        yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_TIMEOUT', message: `OpenCode backend exceeded timeoutMs=${config.timeoutMs.get()}` } } }
+      } else {
+        yield { type: 'finish', reason: finishFromOpenAi(finishReason) }
       }
-      if (!usage) {
-        try {
-          const info = await this.server.request('GET', `/api/session/${session.sessionID}`)
-          if (info?.data?.tokens) {
-            // The session's counters are cumulative; report only their growth
-            // since this session's last report, never the whole session again.
-            usage = this.usage.cumulative(session.sessionID, usageFromTokens(info.data.tokens))
-            yield { type: 'usage', usage }
-          }
-        } catch {
-          /* no usage disclosure is better than a guess */
-        }
-      }
-      yield { type: 'finish', reason: terminal }
     } catch (error) {
       for (const chunk of closeAll()) yield chunk
       yield {
@@ -1068,16 +962,10 @@ export class OpencodeHttpAdapter {
           : {
               kind: 'error',
               failure: {
-                code: 'OPENCODE_HTTP',
+                code: 'OPENCODE_BACKEND',
                 message: error instanceof Error ? error.message : String(error),
               },
             },
-      }
-    } finally {
-      signal.removeEventListener('abort', onAbort)
-      abortEvents.abort()
-      if (ephemeral && session?.sessionID) {
-        this.server.request('DELETE', `/api/session/${session.sessionID}`).catch(() => {})
       }
     }
   }
@@ -1095,10 +983,10 @@ export function errorText(value) {
       return String(value)
     }
   }
-  return 'opencode execution failed'
+  return 'OpenCode backend failed'
 }
 
-/** Map OpenCode `tokens` onto the host's disjoint TokenUsage buckets. */
+/** Legacy OpenCode `tokens` mapper, kept for batch-worker consumers/tests. */
 export function usageFromTokens(tokens) {
   const usage = {
     inputTokens: Number(tokens?.input ?? 0),
@@ -1112,17 +1000,7 @@ export function usageFromTokens(tokens) {
   return usage
 }
 
-/**
- * Sum two usage records bucket by bucket.
- *
- * One DSH generation spans many OpenCode steps, each reporting its own usage;
- * the host persists only the last chunk, so the adapter accumulates and yields
- * the running total instead of letting the final upstream call overwrite it.
- *
- * @param {{inputTokens:number,outputTokens:number,reasoningTokens:number,cacheReadTokens:number,cacheWriteTokens:number,totalTokens:number}|undefined} previous Running total so far.
- * @param {{inputTokens:number,outputTokens:number,reasoningTokens:number,cacheReadTokens:number,cacheWriteTokens:number,totalTokens:number}} next One step's usage.
- * @returns Summed usage over both records.
- */
+/** Sum two legacy usage records bucket by bucket. */
 export function addUsage(previous, next) {
   if (!previous) return next
   const sum = {
@@ -1136,42 +1014,109 @@ export function addUsage(previous, next) {
   return sum
 }
 
-/** Close any block indexes left open by an aborted stream (mirrors provider.js). */
-function closeBlocks(state) {
-  const chunks = []
-  for (const [index, block] of state) {
-    if (block.closed) continue
-    block.closed = true
-    chunks.push({ type: 'block-end', index, block: { type: block.type, text: block.text } })
-  }
-  return chunks
-}
-
 /**
- * Plugin body: register the `opencode-http-agent` route and expose it in the
- * configurable-provider directory so the Web Models page sees it.
+ * Plugin body: register the native `opencode-http-agent` route, own its
+ * catalog/server lifecycle, and reconcile runtime conflicts.
  */
 export function apply(ctx, config) {
-  const adapter = new OpencodeHttpAdapter(ctx, config, { providerId: 'opencode-http-agent' })
-  const registration = ctx.llm.registerAdapter(['opencode-http-agent'], adapter)
-  ctx.llm.registerConfigurableProviders([
-    {
-      provider: 'opencode-http-agent',
-      displayName: 'OpenCode (HTTP)',
-      settingsNs: name,
-      settingsPath: [],
-    },
-  ])
-  if (typeof ctx.effect === 'function') {
-    ctx.effect(() => () => {
-      try {
-        registration()
-      } catch {
-        /* already disposed */
-      }
-      adapter.dispose()
-    }, 'dsh-opencode-v2-http: dispose adapter and owned server')
+  const providerId = 'opencode-http-agent'
+  const adapter = new OpencodeHttpAdapter(ctx, config, { providerId })
+
+  const policy = () => normalizeConflictPolicy(
+    typeof config?.conflictPolicy?.get === 'function'
+      ? config.conflictPolicy.get()
+      : config?.conflictPolicy,
+  )
+  const log = (message) => {
+    try {
+      ctx?.logger?.warn?.(message)
+    } catch {
+      /* logging is advisory */
+    }
   }
-  adapter.warmStart()
-  return () => adapter.dispose()
+
+  let registration = null
+  let directory = null
+  let warmed = false
+  let busy = false
+  let released = false
+  let lastCode = ''
+
+  const commit = () => {
+    busy = true
+    try {
+      registration = ctx.llm.registerAdapter([providerId], adapter)
+      adapter.standDown = false
+    } finally {
+      busy = false
+    }
+    if (!directory) {
+      try {
+        directory = ctx.llm.registerConfigurableProviders([
+          { provider: providerId, displayName: 'OpenCode Go (direct)', settingsNs: name, settingsPath: [] },
+        ])
+      } catch (error) {
+        log(`dsh-opencode-v2-http: could not advertise the configurable provider: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    if (!warmed) {
+      warmed = true
+      try {
+        adapter.warmStart()
+      } catch (error) {
+        log(`dsh-opencode-v2-http: catalog warm start failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  }
+
+  const reconcile = () => {
+    if (released || busy) return
+    const decision = decideRouterConflict(detectRouterConflicts(ctx?.llm, providerId), policy())
+    if (decision.code !== lastCode) {
+      lastCode = decision.code
+      if (decision.warning) log(decision.warning)
+    }
+    if (decision.action === 'serve') {
+      if (!registration) commit()
+      return
+    }
+    if (registration) {
+      const release = registration
+      registration = null
+      adapter.standDown = true
+      try {
+        release()
+      } catch {
+        /* the host may have released it first */
+      }
+    } else {
+      adapter.standDown = true
+    }
+  }
+
+  reconcile()
+  if (typeof ctx?.on === 'function') ctx.on('llm/adapters-updated', () => reconcile())
+
+  const dispose = () => {
+    if (released) return
+    released = true
+    try {
+      directory?.()
+    } catch {
+      /* already released */
+    }
+    directory = null
+    try {
+      registration?.()
+    } catch {
+      /* already released */
+    }
+    registration = null
+    adapter.dispose()
+  }
+
+  if (typeof ctx.effect === 'function') {
+    ctx.effect(() => () => dispose(), 'dsh-opencode-v2-http: dispose adapter and owned server')
+  }
+  return dispose
 }

@@ -60,3 +60,31 @@
       # Budget for the post-run `session export` usage fetch (v2 emits no
       # step_finish, so this is the only authoritative token source).
       exportTimeoutMs: 60000
+  # Pure native model router. The adapter registers directly into dsh-llm
+  # (`opencode-http-agent`) and calls the OpenAI-compatible backend
+  # `/chat/completions`; the local server is control-plane only (catalog,
+  # provider metadata, cached credential). No OpenCode agent/session prompt.
+  # `./provider` stays exported as a library only and is NOT mountable.
+  - id: dsh-opencode-v2-http
+    name: '@nolit/dsh-opencode-v2/http'
+    config:
+      # Absolute path: dsh-web.service's PATH has no ~/.bun/bin, so a bare
+      # `opencode` cannot be resolved by the spawn fallback.
+      opencodePath: '/home/minami/.bun/bin/opencode'
+      # Local `opencode serve` process cwd only. DSH owns the model context
+      # workspace; the adapter resolves it from the caller session
+      # (ctx.sessions.get(sessionId).header.cwd) and never pins it here.
+      cwd: '/home/minami/Workspace/projects/dsh-workspace/dsh-plugins'
+      # Attach to a live `opencode serve --service` first; own a server only
+      # when nothing is reachable. One adapter instance = one server owner.
+      attachToDaemon: true
+      spawnServer: true
+      # Conflict guard: warn when a legacy opencode-go/opencode provider is
+      # active; switch to 'stand-down' to yield the namespace instead.
+      conflictPolicy: 'warn'
+      # Route behind the `default` model id; a `#variant` suffix would become
+      # part of the model id, so levels come from reasoningEffort.
+      defaultModel: 'opencode-go/minimax-m3.1-flash'
+      autoDiscoverModels: true
+      # Durable catalog is written to <profile>/opencode-models.json.
+      catalogSyncMs: 300000

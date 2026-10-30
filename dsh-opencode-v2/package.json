@@ -1,8 +1,8 @@
 {
   "name": "@nolit/dsh-opencode-v2",
-  "version": "0.3.7",
+  "version": "0.5.0",
   "private": false,
-  "description": "OpenCode CLI (v2.2.0 surface) inside DeepSeek Harness: an `opencode` delegation tool, a /opencode command, an `opencode-agent` CLI-backed LLM route with per-route reasoning levels and stdin prompt delivery, an `opencode-http-agent` route that drives the OpenCode v2 HTTP API (sessions, SSE deltas, inline usage, permission bridge), and the built-in `cli_worker` tool for isolated one-shot OpenCode/Codex/Claude batch work — wrapping @quonaro/dsh-plugin-opencode over ctx.subprocess.",
+  "description": "OpenCode Go pure LLM adapter for DeepSeek Harness: an `opencode` delegation tool, /opencode command and cli_worker, plus an `opencode-http-agent` route that calls the OpenAI-compatible /chat/completions backend directly (streaming text/reasoning/tool deltas, disjoint usage, cached credentials) while the local OpenCode server is used only as a catalog/provider/credential control plane. No agent loop, persona, session prompt, or static cwd.",
   "keywords": [
     "dsh",
     "deepseek-harness",
@@ -48,7 +48,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/provider.js && node --check lib/http.js && node --check lib/shared.js && node --check lib/catalog-cache.js && node --check lib/session-map.js && node --check lib/workers/index.js && node --check lib/workers/run.js && node --check lib/workers/backends.js && node --check lib/workers/artifacts.js"
+    "check": "node --check lib/index.js && node --check lib/provider.js && node --check lib/http.js && node --check lib/conflicts.js && node --check lib/shared.js && node --check lib/catalog-cache.js && node --check lib/workers/index.js && node --check lib/workers/run.js && node --check lib/workers/backends.js && node --check lib/workers/artifacts.js"
   },
   "dependencies": {
     "@quonaro/dsh-plugin-opencode": "^0.1.2"

@@ -75,11 +75,11 @@ export const Config = Schema.object({
   )
     .default([{ id: 'default', opencodeModel: '', name: 'OpenCode (config default)' }])
     .volatile(),
-  brief: Schema.string()
-    .default(
-      'You are OpenCode, an autonomous software-engineering agent, invoked as the model backend of another agent harness. The transcript of the calling conversation is below. Carry out the most recent user request end-to-end using your own tools and judgment. Do not ask questions — act autonomously. Your final printed answer is returned verbatim as the model\'s reply.',
-    )
-    .volatile(),
+  /**
+   * Optional neutral preface for a batch run. Empty by default: the adapter
+   * must never inject a vendor persona or a self-harnessing instruction.
+   */
+  brief: Schema.string().default('').volatile(),
   localSessionTitles: Schema.boolean().default(true).volatile(),
   autoDiscoverModels: Schema.boolean().default(true).volatile(),
   discoveryTimeoutMs: Schema.number().default(60000).volatile(),
@@ -128,22 +128,14 @@ export function blocksToText(blocks) {
 
 /** Flatten one generation request into the prompt handed to `opencode run`. */
 export function buildPrompt(options, brief) {
-  const parts = [brief, '', '<transcript>']
+  const parts = []
+  if (typeof brief === 'string' && brief.trim()) parts.push(brief.trim(), '')
+  parts.push('<transcript>')
   if (options.system) parts.push('## system', options.system, '')
   for (const message of options.messages) {
     parts.push(`## ${ROLE_LABEL[message.role] ?? message.role}`, blocksToText(message.content), '')
   }
   parts.push('</transcript>')
-  if (options.tools?.length) {
-    const names = options.tools
-      .map((tool) => tool.name)
-      .slice(0, 12)
-      .join(', ')
-    parts.push(
-      '',
-      `[note: the caller declared ${options.tools.length} of its own tools (${names}${options.tools.length > 12 ? ', …' : ''}) — you cannot invoke them; complete the work with your own capabilities.]`,
-    )
-  }
   return parts.join('\n')
 }
 

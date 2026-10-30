@@ -1,10 +1,10 @@
 # DSH Plugin Harness Policy & Version Changelog
 <!-- skeleton:
-version: 2.0
+version: 2.1
 kind: policy
 status: active
-updated: 2026-10-29
-summary: Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, release rules.
+updated: 2026-10-30
+summary: Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules.
 -->
 
 
@@ -23,6 +23,21 @@ The harness must keep runtime compatibility, release artifacts, policy decisions
 evidence together. A report is not a measurement unless it names the actual boot/route/browser
 result it came from.
 
+## 1.1 Model-serving policy (2026-10-30)
+
+- **`llm-pi-ai` is deprecated and is not restored.** It is a generic multi-provider layer, not a
+  required harness capability.
+- **Every model-serving integration is its own autonomous router.** It registers its adapter
+  directly with `ctx.llm.registerAdapter([providerId], adapter)` and owns its catalog,
+  `reasoning.efforts`, disjoint usage accounting, session mapping, and stable error codes.
+- **No intermediary bridge/proxy plugin.** Reuse another plugin's measured serving surface by
+  importing its adapter/library, never by inserting a second route table between it and the host.
+- **Extensions must export `apply`.** A module without `apply` is a library and must not be listed
+  as a bundle row.
+- **Conflict handling is local.** A plugin may warn or yield its own namespace when a legacy
+  provider is active; it must never unload or mutate a sibling plugin's registration.
+- Rationale and incident record: [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md).
+
 ## 2. Version policy
 
 | Area | Current policy |
@@ -37,6 +52,7 @@ result it came from.
 
 | Date | Runtime | Change | Action |
 |---|---|---|---|
+| 2026-10-30 | DSH `0.2.2-alpha.2` | `llm-pi-ai` deprecated; autonomous native router policy adopted; `@nolit/dsh-subrouter` decommissioned | `dsh-opencode-v2@0.4.0` mounts `@nolit/dsh-opencode-v2/http` natively; profile repointed to `opencode-http-agent` |
 | 2026-10-29 | DSH `0.2.2-alpha.2` | Cordis `4.0.6-alpha.1`, Node `v24.22.1`; current engines/manifests still valid | Re-measured all three plugins; pinned engines to alpha.2 floor |
 | 2026-10-29 | DSH `0.2.2-alpha.2` | Built-in client dictionaries changed; Korean pack stale by 117 keys | Refreshed to 68 namespaces / 3,019 keys; en/zh parity 0 |
 | 2026-10-29 | DSH `0.2.2-alpha.2` | Experimental Forge/Worktrees exposed in official plugin list | Measured isolated boot and UTM policy overlap; advisory guardrails required |

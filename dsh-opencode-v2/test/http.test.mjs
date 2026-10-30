@@ -1,7 +1,10 @@
 /**
- * Unit tests for lib/http.js against a local fake OpenCode v2 HTTP server.
- * No real opencode child, no ~/.dsh access: the server is a node:http stub that
- * speaks the measured surface (OpenAPI paths + SSE event stream).
+ * Pure-adapter contract tests for lib/http.js.
+ *
+ * The fake server exposes only the measured control plane (`/api/info`,
+ * `/api/model`, `/api/provider/{id}`, `/api/credential`) plus an
+ * OpenAI-compatible `/backend/v1/chat/completions` SSE endpoint. It records
+ * every request so tests can prove that no agent/session endpoint is called.
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -12,42 +15,42 @@ import { join } from 'node:path'
 
 import {
   Config,
-  errorText,
   OpencodeHttpAdapter,
+  addUsage,
   authHeader,
+  chatSseEvents,
+  errorText,
+  finishFromOpenAi,
   modelKey,
   modelRefFromRoute,
-  newUserText,
   parseBanner,
   probeServer,
   readBanner,
+  resolveWorkspaceDirectory,
   serviceStateCandidates,
+  usageFromOpenAi,
   usageFromTokens,
-  addUsage,
 } from '../lib/http.js'
+import { buildChatRequest } from '../lib/http.js'
 
 const json = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json' })
   res.end(body === undefined ? '' : JSON.stringify(body))
 }
 
-/** One fake OpenCode server; `script` decides which events one prompt emits. */
 async function startServer(script = {}) {
   const state = {
-    pending: [],
-    sessions: new Map(),
-    creates: 0,
-    modelSwitches: [],
-    prompts: [],
-    permissions: [],
-    deletes: 0,
-    sse: [],
+    chatRequests: [],
+    providerRequests: 0,
+    credentialRequests: 0,
+    sessionCalls: 0,
+    backendURL: '',
   }
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost')
     const chunks = []
     req.on('data', (chunk) => chunks.push(chunk))
-    req.on('end', () => {
+    req.on('end', async () => {
       const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : undefined
       if (url.pathname === '/api/info') {
         return json(res, 200, { version: '2.2.0', pid: 1, hostname: 'test', urls: ['http://127.0.0.1'] })
@@ -57,7 +60,6 @@ async function startServer(script = {}) {
           location: { directory: '/tmp' },
           data: script.models ?? [
             { providerID: 'opencode', id: 'beam-free', name: 'Beam Free', limit: { context: 200000, output: 8192 }, variants: [{ id: 'low' }, { id: 'high' }] },
-            { providerID: 'opencode-go', id: 'deepseek-v4.1-flash', name: 'DeepSeek', limit: { context: 1000000, output: 65536 } },
             {
               providerID: 'opencode-go',
               id: 'minimax-m3.1-flash',
@@ -68,580 +70,329 @@ async function startServer(script = {}) {
           ],
         })
       }
-      if (url.pathname === '/api/session' && req.method === 'POST') {
-        state.creates += 1
-        const id = `ses_${state.creates}`
-        state.sessions.set(id, { model: body?.model })
-        return json(res, 200, { data: { id, model: body?.model } })
+      if (url.pathname.startsWith('/api/session')) {
+        state.sessionCalls += 1
+        return json(res, 500, { error: 'session API must not be called by a pure adapter' })
       }
-      const modelSwitch = url.pathname.match(/^\/api\/session\/([^/]+)\/model$/)
-      if (modelSwitch && req.method === 'POST') {
-        state.modelSwitches.push({ sessionID: modelSwitch[1], model: body?.model })
-        return json(res, 204)
+      if (url.pathname === '/api/provider/opencode-go') {
+        state.providerRequests += 1
+        return json(res, 200, {
+          data: {
+            id: 'opencode-go',
+            integrationID: 'opencode-go',
+            settings: { baseURL: state.backendURL },
+            headers: { 'x-opencode-org-id': 'org_test' },
+          },
+        })
       }
-      const prompt = url.pathname.match(/^\/api\/session\/([^/]+)\/prompt$/)
-      if (prompt && req.method === 'POST') {
-        const sessionID = prompt[1]
-        state.prompts.push({ sessionID, text: body?.text })
-        // Emit the scripted SSE sequence asynchronously.
+      if (url.pathname === '/api/credential') {
+        state.credentialRequests += 1
+        return json(res, 200, {
+          data: [{ id: 'cred_1', integrationID: 'opencode-go', active: true, value: { type: 'key', key: 'test-key' } }],
+        })
+      }
+      if (url.pathname === '/backend/v1/chat/completions') {
+        state.chatRequests.push(body)
+        if (script.status) return json(res, script.status, { error: 'backend refused' })
         const events = script.events ?? [
-          { type: 'session.inbox.enqueued', data: { sessionID } },
-          { type: 'session.execution.started', data: { sessionID } },
-          { type: 'session.step.started', data: { sessionID } },
-          { type: 'session.reasoning.started', data: { sessionID, ordinal: 0 } },
-          { type: 'session.reasoning.delta', data: { sessionID, ordinal: 0, delta: 'Think.' } },
-          { type: 'session.reasoning.ended', data: { sessionID, ordinal: 0, text: 'Think.' } },
-          { type: 'session.text.started', data: { sessionID, ordinal: 0 } },
-          { type: 'session.text.delta', data: { sessionID, ordinal: 0, delta: 'Hello' } },
-          { type: 'session.text.delta', data: { sessionID, ordinal: 0, delta: ' HTTP' } },
-          { type: 'session.text.ended', data: { sessionID, ordinal: 0, text: 'Hello HTTP' } },
-          { type: 'session.step.ended', data: { sessionID, tokens: { input: 11, output: 4, reasoning: 9, cache: { read: 4096, write: 0 } } } },
-          { type: 'session.execution.succeeded', data: { sessionID } },
+          { choices: [{ delta: { reasoning_content: 'Think.' } }] },
+          { choices: [{ delta: { content: 'Hello' } }] },
+          { choices: [{ delta: { content: ' HTTP' } }] },
+          { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 11, prompt_tokens_details: { cached_tokens: 4 }, completion_tokens: 4 } },
         ]
-        const stampedEvents = events.map((event) => ({
-          id: `evt_${state.sse.length}`,
-          created: Date.now(),
-          ...event,
-          data: { sessionID, ...(event.data ?? {}) },
-        }))
-        for (const event of stampedEvents) state.sse.push(event)
-        state.pending.push(...stampedEvents)
-        const flush = () => {
-          if (!state.clients?.size) return setTimeout(flush, 5)
-          for (const event of state.pending.splice(0)) {
-            const frame = `data: ${JSON.stringify({ ...event, created: Date.now() })}\n\n`
-            for (const response of [...state.clients]) {
-              try {
-                response.write(frame)
-              } catch {
-                /* closed */
-              }
-            }
-          }
-        }
-        setTimeout(flush, 5)
-        return json(res, 200, { data: { id: 'msg_user', sessionID } })
+        res.writeHead(200, { 'content-type': 'text/event-stream' })
+        for (const event of events) res.write(`data: ${JSON.stringify(event)}\n\n`)
+        res.write('data: [DONE]\n\n')
+        return res.end()
       }
-      const perm = url.pathname.match(/^\/api\/session\/([^/]+)\/permission\/([^/]+)\/reply$/)
-      if (perm && req.method === 'POST') {
-        state.permissions.push({ sessionID: perm[1], requestID: perm[2], decision: body?.decision })
-        return json(res, 204)
-      }
-      const del = url.pathname.match(/^\/api\/session\/([^/]+)$/)
-      if (del && req.method === 'DELETE') {
-        state.deletes += 1
-        return json(res, 204)
-      }
-      if (del && req.method === 'GET') {
-        const id = del[1]
-        if (!state.sessions.has(id)) return json(res, 404, { _tag: 'NotFoundError' })
-        return json(res, 200, { data: { id, tokens: { input: 11, output: 4, reasoning: 9, cache: { read: 4096, write: 0 } } } })
-      }
-      if (url.pathname === '/api/event') {
-        res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' })
-        res.write('data: {"id":"evt_connected","type":"server.connected","created":0,"data":{}}\n\n')
-        state.clients ??= new Set()
-        state.clients.add(res)
-        res.on('close', () => state.clients.delete(res))
-        for (const event of state.pending.splice(0)) {
-          try {
-            res.write(`data: ${JSON.stringify({ ...event, created: Date.now() })}\n\n`)
-          } catch {
-            /* closed */
-          }
-        }
-        return
-      }
-      return json(res, 404, { _tag: 'NotFoundError', path: url.pathname })
+      return json(res, 404, { error: 'not found' })
     })
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-  const address = server.address()
-  state.url = `http://127.0.0.1:${address.port}`
-  state.close = () =>
-    new Promise((resolve) => {
-      for (const client of state.clients ?? []) {
-        try {
-          client.end()
-        } catch {
-          /* closed */
-        }
-      }
-      server.closeAllConnections?.()
-      server.close(() => resolve())
-    })
-  return state
+  state.backendURL = `http://127.0.0.1:${server.address().port}/backend/v1`
+  return { server, state, close: () => new Promise((resolve) => server.close(resolve)) }
 }
 
-function makeAdapter(state, overrides = {}) {
-  const config = new Config({
-    baseUrl: state.url,
-    password: 'test-password',
-    autoDiscoverModels: true,
-    localSessionTitles: false,
-    timeoutMs: 8000,
-    ...overrides,
-  })
-  return new OpencodeHttpAdapter({}, config)
+function adapterFor(serverState, overrides = {}) {
+  return new OpencodeHttpAdapter(
+    { logger: { warn() {} } },
+    Config({
+      baseUrl: `http://127.0.0.1:${new URL(serverState.backendURL).port - 0}`.replace(/\/backend\/v1$/, ''),
+      password: 'pw',
+      attachToDaemon: false,
+      spawnServer: false,
+      autoDiscoverModels: true,
+      catalogSyncMs: 0,
+      requestTimeoutMs: 2000,
+      timeoutMs: 5000,
+      ...overrides,
+    }),
+  )
 }
 
-async function collect(iterable) {
-  const chunks = []
-  for await (const chunk of iterable) chunks.push(chunk)
-  return chunks
+// The base URL needs the server's control-plane port, not the backend path.
+function controlURL(serverState) {
+  return serverState.backendURL.replace(/\/backend\/v1$/, '')
+}
+
+async function collect(stream) {
+  const out = []
+  for await (const chunk of stream) out.push(chunk)
+  return out
 }
 
 test('parseBanner reads the measured serve banner', () => {
-  assert.deepEqual(parseBanner('server listening on http://127.0.0.1:44103\nserver password abc\n'), {
-    url: 'http://127.0.0.1:44103',
-    password: 'abc',
-  })
-  assert.equal(parseBanner('server password abc'), null)
+  const banner = parseBanner('server listening on http://127.0.0.1:42111\nserver password abc123\n')
+  assert.deepEqual(banner, { url: 'http://127.0.0.1:42111', password: 'abc123' })
+  assert.equal(parseBanner('no banner'), null)
 })
 
 test('readBanner consumes split chunks from a piped stdout', async () => {
+  const encoder = new TextEncoder()
+  const text = 'server listening on http://127.0.0.1:1234\nserver password pw\n'
   const handle = {
     stdout: (async function* () {
-      yield new TextEncoder().encode('server listening on http://127.0.0.1:9999\n')
-      yield new TextEncoder().encode('server password tok\n')
+      yield encoder.encode(text.slice(0, 20))
+      yield encoder.encode(text.slice(20))
     })(),
   }
-  assert.deepEqual(await readBanner(handle, 1000), { url: 'http://127.0.0.1:9999', password: 'tok' })
-  assert.equal(await readBanner({}, 100), null)
+  assert.deepEqual(await readBanner(handle, 1000), { url: 'http://127.0.0.1:1234', password: 'pw' })
 })
 
-test('modelRefFromRoute maps DSH routes onto OpenCode refs', () => {
-  assert.deepEqual(modelRefFromRoute('opencode/beam-free', [], 'opencode/beam-free'), { providerID: 'opencode', id: 'beam-free' })
-  assert.deepEqual(modelRefFromRoute('default', [{ id: 'default', opencodeModel: 'opencode-go/deepseek-v4.1-flash' }], 'opencode/beam-free'), {
-    providerID: 'opencode-go',
-    id: 'deepseek-v4.1-flash',
+test('modelRefFromRoute maps DSH routes onto backend refs', () => {
+  const table = [{ id: 'default', opencodeModel: 'opencode-go/minimax-m3.1-flash' }]
+  assert.deepEqual(modelRefFromRoute('opencode/beam-free', table, ''), { providerID: 'opencode', id: 'beam-free' })
+  assert.deepEqual(modelRefFromRoute('default', table, ''), { providerID: 'opencode-go', id: 'minimax-m3.1-flash' })
+  assert.equal(modelRefFromRoute('unqualified', table, ''), null)
+  assert.equal(modelKey({ providerID: 'p', id: 'm' }, 'high'), 'p/m#high')
+})
+
+test('usageFromTokens keeps legacy OpenCode bucket semantics', () => {
+  assert.deepEqual(usageFromTokens({ input: 11, output: 4, reasoning: 9, cache: { read: 4096, write: 0 } }), {
+    inputTokens: 11,
+    outputTokens: 4,
+    reasoningTokens: 9,
+    cacheReadTokens: 4096,
+    cacheWriteTokens: 0,
+    totalTokens: 4120,
   })
-  assert.deepEqual(modelRefFromRoute('default', [], 'opencode/beam-free'), { providerID: 'opencode', id: 'beam-free' })
-  assert.equal(modelRefFromRoute('bare', [], ''), null)
+  assert.equal(addUsage(usageFromTokens({ input: 1, output: 2 }), usageFromTokens({ input: 3, output: 4 })).totalTokens, 10)
 })
 
-test('newUserText returns only the trailing user messages', () => {
-  const messages = [
-    { role: 'system', content: [{ type: 'text', text: 'sys' }] },
-    { role: 'user', content: [{ type: 'text', text: 'old' }] },
-    { role: 'assistant', content: [{ type: 'text', text: 'answer' }] },
-    { role: 'user', content: [{ type: 'text', text: 'new' }] },
-  ]
-  assert.equal(newUserText(messages), 'new')
-  assert.equal(newUserText([{ role: 'assistant', content: [] }]), '')
-})
-
-test('usageFromTokens maps disjoint buckets and sums the total', () => {
-  const usage = usageFromTokens({ input: 11, output: 4, reasoning: 9, cache: { read: 4096, write: 8 } })
-  assert.equal(usage.totalTokens, 11 + 4 + 9 + 4096 + 8)
-  assert.equal(usage.cacheReadTokens, 4096)
-  assert.equal(usage.cacheWriteTokens, 8)
-})
-
-test('authHeader is basic opencode:<password>', () => {
-  assert.equal(authHeader('pw'), 'Basic ' + Buffer.from('opencode:pw').toString('base64'))
-})
-
-test('resolveModel publishes contextWindow and reasoning variants from /api/model', async () => {
-  const state = await startServer()
-  try {
-    const adapter = makeAdapter(state)
-    const model = await adapter.resolveModel('opencode-http-agent', 'opencode/beam-free')
-    assert.equal(model.context.contextWindow, 200000)
-    assert.equal(model.defaultMaxTokens, 8192)
-    assert.deepEqual(model.reasoning.efforts.map((effort) => effort.id), ['low', 'high'])
-    const plain = await adapter.resolveModel('opencode-http-agent', 'opencode-go/deepseek-v4.1-flash')
-    assert.equal(plain.context.contextWindow, 1000000)
-    assert.equal(plain.reasoning, undefined)
-  } finally {
-    await state.close()
-  }
-})
-
-test('resolveModel default route inherits the route it actually runs', async () => {
-  const state = await startServer()
-  try {
-    // `default` has no catalog entry of its own: it runs through `defaultModel`
-    // (or the route table's `default.opencodeModel`), so the picker row must
-    // carry that route's context window and reasoning levels.
-    const adapter = makeAdapter(state)
-    const viaConfig = await adapter.resolveModel('opencode-http-agent', 'default')
-    assert.equal(viaConfig.id, 'default')
-    // `defaultModel` names the route the default actually runs.
-    assert.equal(viaConfig.context.contextWindow, 1000000)
-    assert.deepEqual(viaConfig.reasoning.efforts.map((effort) => effort.id), ['low', 'medium', 'high', 'xhigh', 'max'])
-    const viaTable = makeAdapter(state, {
-      models: [{ id: 'default', opencodeModel: 'opencode-go/deepseek-v4.1-flash', name: '' }],
-    })
-    const overridden = await viaTable.resolveModel('opencode-http-agent', 'default')
-    assert.equal(overridden.context.contextWindow, 1000000)
-    // The override route declares no variants, so no level choice is offered.
-    assert.equal(overridden.reasoning, undefined)
-  } finally {
-    await state.close()
-  }
-})
-
-test('stream rejects a level the route does not advertise before creating a session', async () => {
-  const state = await startServer()
-  try {
-    const adapter = makeAdapter(state)
-    const chunks = await collect(adapter.stream({
-      provider: 'opencode-http-agent',
-      model: 'opencode-go/deepseek-v4.1-flash',
-      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
-      reasoningEffort: 'high',
-    }))
-    assert.equal(state.creates, 0)
-    assert.deepEqual(chunks, [{
-      type: 'finish',
-      reason: {
-        kind: 'error',
-        failure: {
-          code: 'UNSUPPORTED_REASONING_EFFORT',
-          message: 'provider "opencode-http-agent" model "opencode-go/deepseek-v4.1-flash" does not support reasoning effort "high" (advertised: none)',
-        },
-      },
-    }])
-  } finally {
-    await state.close()
-  }
-})
-
-test('stream maps SSE deltas, usage, and stop; creates one session', async () => {
-  const state = await startServer()
-  try {
-    const adapter = makeAdapter(state)
-    const chunks = await collect(
-      adapter.stream({
-        provider: 'opencode-http-agent',
-        model: 'opencode/beam-free',
-        sessionId: 'dsh-session-1',
-        messages: [
-          { role: 'system', content: [{ type: 'text', text: 'sys' }] },
-          { role: 'user', content: [{ type: 'text', text: 'hi' }] },
-        ],
-      }),
-    )
-    const types = chunks.map((chunk) => chunk.type)
-    assert.equal(state.creates, 1)
-    assert.deepEqual(types, ['block-start', 'reasoning-delta', 'block-end', 'block-start', 'text-delta', 'text-delta', 'block-end', 'usage', 'finish'])
-    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
-    assert.equal(text, 'Hello HTTP')
-    const usage = chunks.find((chunk) => chunk.type === 'usage').usage
-    assert.equal(usage.cacheReadTokens, 4096)
-    assert.equal(usage.inputTokens, 11)
-    assert.deepEqual(chunks.at(-1).reason, { kind: 'stop' })
-    // First call carries the flattened transcript, not just the last message.
-    assert.match(state.prompts[0].text, /<transcript>/)
-    assert.match(state.prompts[0].text, /hi/)
-  } finally {
-    await state.close()
-  }
-})
-
-test('a second call reuses the session and sends only the new user text', async () => {
-  const state = await startServer()
-  try {
-    const adapter = makeAdapter(state)
-    const first = [
-      { role: 'system', content: [{ type: 'text', text: 'sys' }] },
-      { role: 'user', content: [{ type: 'text', text: 'one' }] },
-    ]
-    await collect(adapter.stream({ provider: 'opencode-http-agent', model: 'opencode/beam-free', sessionId: 'dsh-2', messages: first }))
-    const history = [
-      ...first,
-      { role: 'assistant', content: [{ type: 'text', text: 'reply' }] },
-      { role: 'user', content: [{ type: 'text', text: 'two' }] },
-    ]
-    state.sse = []
-    await collect(adapter.stream({ provider: 'opencode-http-agent', model: 'opencode/beam-free', sessionId: 'dsh-2', messages: history }))
-    assert.equal(state.creates, 1)
-    assert.equal(state.prompts.length, 2)
-    assert.equal(state.prompts[1].text, 'two')
-  } finally {
-    await state.close()
-  }
-})
-
-test('a reasoning effort becomes the session model variant', async () => {
-  const state = await startServer()
-  try {
-    const adapter = makeAdapter(state)
-    await collect(
-      adapter.stream({
-        provider: 'opencode-http-agent',
-        model: 'opencode/beam-free',
-        sessionId: 'dsh-3',
-        reasoningEffort: 'high',
-        messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
-      }),
-    )
-    // Created with the variant; the SSE reasoning block still streams.
-    assert.equal(state.sessions.get('ses_1').model.variant, 'high')
-    assert.equal(modelKey({ providerID: 'opencode', id: 'beam-free' }, 'high'), 'opencode/beam-free#high')
-  } finally {
-    await state.close()
-  }
-})
-
-test('permission.asked is answered with the configured decision', async () => {
-  const state = await startServer({
-    events: [
-      { type: 'session.execution.started', data: {} },
-      { type: 'permission.asked', data: { id: 'per_1', action: 'shell', resources: ['echo hi'] } },
-      { type: 'session.text.started', data: { ordinal: 0 } },
-      { type: 'session.text.delta', data: { ordinal: 0, delta: 'ok' } },
-      { type: 'session.text.ended', data: { ordinal: 0, text: 'ok' } },
-      { type: 'session.execution.succeeded', data: {} },
-    ],
-  })
-  try {
-    const adapter = makeAdapter(state, { permissionDecision: 'once' })
-    const chunks = await collect(
-      adapter.stream({
-        provider: 'opencode-http-agent',
-        model: 'opencode/beam-free',
-        sessionId: 'dsh-4',
-        messages: [{ role: 'user', content: [{ type: 'text', text: 'run it' }] }],
-      }),
-    )
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    assert.deepEqual(state.permissions, [{ sessionID: 'ses_1', requestID: 'per_1', decision: 'once' }])
-    assert.deepEqual(chunks.at(-1).reason, { kind: 'stop' })
-  } finally {
-    await state.close()
-  }
-})
-
-test('a failed execution becomes an error finish', async () => {
-  const state = await startServer({
-    events: [
-      { type: 'session.execution.started', data: {} },
-      { type: 'session.execution.failed', data: { error: 'Insufficient account funds' } },
-    ],
-  })
-  try {
-    const adapter = makeAdapter(state)
-    const chunks = await collect(
-      adapter.stream({
-        provider: 'opencode-http-agent',
-        model: 'opencode/beam-free',
-        sessionId: 'dsh-5',
-        messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
-      }),
-    )
-    const finish = chunks.at(-1)
-    assert.equal(finish.type, 'finish')
-    assert.equal(finish.reason.kind, 'error')
-    assert.equal(finish.reason.failure.code, 'OPENCODE_HTTP_FAILED')
-    assert.match(finish.reason.failure.message, /Insufficient account funds/)
-  } finally {
-    await state.close()
-  }
-})
-
-test('events for another session are ignored', async () => {
-  const state = await startServer({
-    events: [
-      { type: 'session.execution.started', data: {} },
-      { type: 'session.text.started', data: { sessionID: 'ses_other', ordinal: 0 } },
-      { type: 'session.text.delta', data: { sessionID: 'ses_other', ordinal: 0, delta: 'WRONG' } },
-      { type: 'session.text.ended', data: { sessionID: 'ses_other', ordinal: 0, text: 'WRONG' } },
-      { type: 'session.text.started', data: { ordinal: 0 } },
-      { type: 'session.text.delta', data: { ordinal: 0, delta: 'RIGHT' } },
-      { type: 'session.text.ended', data: { ordinal: 0, text: 'RIGHT' } },
-      { type: 'session.execution.succeeded', data: {} },
-    ],
-  })
-  try {
-    const adapter = makeAdapter(state)
-    const chunks = await collect(
-      adapter.stream({
-        provider: 'opencode-http-agent',
-        model: 'opencode/beam-free',
-        sessionId: 'dsh-6',
-        messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
-      }),
-    )
-    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
-    assert.equal(text, 'RIGHT')
-  } finally {
-    await state.close()
-  }
-})
-
-test('an ephemeral (no sessionId) call deletes its session', async () => {
-  const state = await startServer()
-  try {
-    const adapter = makeAdapter(state)
-    await collect(
-      adapter.stream({
-        provider: 'opencode-http-agent',
-        model: 'opencode/beam-free',
-        messages: [{ role: 'user', content: [{ type: 'text', text: 'once' }] }],
-      }),
-    )
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    assert.equal(state.deletes, 1)
-  } finally {
-    await state.close()
-  }
-})
-
-test('local session titles answer without any HTTP call', async () => {
-  const state = await startServer()
-  try {
-    const adapter = makeAdapter(state, { localSessionTitles: true })
-    const chunks = await collect(
-      adapter.stream({
-        provider: 'opencode-http-agent',
-        model: 'opencode/beam-free',
-        purpose: 'session-title',
-        messages: [{ role: 'user', content: [{ type: 'text', text: 'Fix the sidebar bug' }] }],
-      }),
-    )
-    assert.equal(chunks.at(-1).reason.kind, 'stop')
-    assert.equal(state.creates, 0)
-  } finally {
-    await state.close()
-  }
-})
-
-// ---------------------------------------------------------------------------
-// Server discovery: an unreachable server must be visible, not silently empty
-// ---------------------------------------------------------------------------
-
-test('probeServer reports the serving version and null for a dead port', async () => {
-  const state = await startServer()
-  try {
-    const info = await probeServer(state.url, 'test-password')
-    assert.equal(info.version, '2.2.0')
-  } finally {
-    await state.close()
-  }
-  const dead = await probeServer('http://127.0.0.1:1', 'x', 500)
-  assert.equal(dead, null)
-})
-
-test('the advertised model list names the serving OpenCode build', async () => {
-  const state = await startServer()
-  try {
-    const adapter = makeAdapter(state)
-    const models = await adapter.listModels('opencode-http-agent')
-    assert.match(models[0].description, /2\.2\.0/)
-    assert.match(models[0].description, /HTTP API/)
-  } finally {
-    await state.close()
-  }
-})
-
-test('an unreachable server is reported instead of an empty model list', async () => {
-  const state = await startServer()
-  const deadUrl = state.url
-  await state.close()
-  const adapter = makeAdapter({ url: deadUrl })
-  await assert.rejects(
-    () => adapter.listModels('opencode-http-agent'),
-    /OpenCode model catalog unavailable/,
+test('usageFromOpenAi produces disjoint DSH buckets', () => {
+  assert.deepEqual(
+    usageFromOpenAi({ prompt_tokens: 100, prompt_tokens_details: { cached_tokens: 40 }, completion_tokens: 20, completion_tokens_details: { reasoning_tokens: 5 } }),
+    { inputTokens: 60, outputTokens: 20, cacheReadTokens: 40, cacheWriteTokens: 0, reasoningTokens: 5, totalTokens: 120 },
   )
 })
 
-test('a missing daemon state file names the reason in the failure', async () => {
-  // The candidate list also reads the XDG roots, where a real `opencode
-  // service` may have published a live daemon. Isolate them so the test asserts
-  // the missing-state path on any machine.
-  const saved = {
-    XDG_STATE_HOME: process.env.XDG_STATE_HOME,
-    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
-    OPENCODE_SERVICE_STATE: process.env.OPENCODE_SERVICE_STATE,
-  }
-  const emptyHome = await mkdtemp(join(tmpdir(), 'no-daemon-state-'))
-  process.env.XDG_STATE_HOME = emptyHome
-  process.env.XDG_CONFIG_HOME = emptyHome
-  delete process.env.OPENCODE_SERVICE_STATE
+test('finishFromOpenAi maps tool calls and length', () => {
+  assert.deepEqual(finishFromOpenAi('tool_calls'), { kind: 'tool-calls' })
+  assert.deepEqual(finishFromOpenAi('length'), { kind: 'max-tokens' })
+  assert.deepEqual(finishFromOpenAi('stop'), { kind: 'stop' })
+})
+
+test('authHeader is basic opencode:<password>', () => {
+  assert.equal(authHeader('pw'), `Basic ${Buffer.from('opencode:pw').toString('base64')}`)
+})
+
+test('resolveWorkspaceDirectory reads the live DSH session cwd only', () => {
+  const ctx = { sessions: { get: (id) => (id === 's1' ? { header: { cwd: '/work/project' } } : undefined) } }
+  assert.equal(resolveWorkspaceDirectory(ctx, { sessionId: 's1' }), '/work/project')
+  assert.equal(resolveWorkspaceDirectory(ctx, { sessionId: 'missing' }), '')
+  assert.equal(resolveWorkspaceDirectory({}, {}), '')
+})
+
+test('buildChatRequest is prompt-neutral and forwards DSH tools', () => {
+  const config = Config({ reasoningField: 'reasoning_content', effortField: 'reasoning_effort' })
+  const body = buildChatRequest(
+    {
+      system: 'SYSTEM',
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'ok' }, { type: 'tool-call', id: 'call_1', name: 'bash', arguments: '{"command":"ls"}' }] },
+        { role: 'tool', toolCallId: 'call_1', content: [{ type: 'text', text: 'file.txt' }] },
+      ],
+      tools: [{ name: 'bash', description: 'Run a command', parameters: { type: 'object' } }],
+      reasoningEffort: 'high',
+      maxTokens: 99,
+    },
+    { providerID: 'opencode-go', id: 'minimax-m3.1-flash' },
+    config,
+  )
+  assert.equal(body.model, 'minimax-m3.1-flash')
+  assert.equal(body.stream, true)
+  assert.deepEqual(body.stream_options, { include_usage: true })
+  assert.equal(body.messages[0].role, 'system')
+  assert.equal(body.messages[1].content, 'hi')
+  assert.deepEqual(body.messages[2].tool_calls[0].function, { name: 'bash', arguments: '{"command":"ls"}' })
+  assert.equal(body.messages[3].tool_call_id, 'call_1')
+  assert.equal(body.tools[0].function.name, 'bash')
+  assert.equal(body.reasoning_effort, 'high')
+  assert.equal(body.max_tokens, 99)
+  const serialized = JSON.stringify(body)
+  assert.ok(!/You are OpenCode|caller declared|complete the work with your own/.test(serialized), 'no persona/note text')
+})
+
+test('chatSseEvents frames JSON data and ignores [DONE]', async () => {
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"a":1}\n\ndata: [DONE]\n\n'))
+      controller.close()
+    },
+  })
+  const events = []
+  for await (const event of chatSseEvents(body, new AbortController().signal)) events.push(event)
+  assert.deepEqual(events, [{ a: 1 }])
+})
+
+test('pure stream maps reasoning, text, usage, and finish without session calls', async () => {
+  const { server, state, close } = await startServer()
   try {
-    const config = new Config({
-      baseUrl: '',
-      attachToDaemon: true,
-      spawnServer: false,
-      serviceStatePath: '/nonexistent/opencode-service.json',
-      autoDiscoverModels: true,
-      localSessionTitles: false,
-      timeoutMs: 8000,
-    })
-    const adapter = new OpencodeHttpAdapter({}, config)
-    await assert.rejects(
-      () => adapter.listModels('opencode-http-agent'),
-      /daemon state unreadable/,
-    )
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      sessionId: 'dsh-1',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    assert.equal(state.sessionCalls, 0, 'no /api/session prompt may be used')
+    assert.equal(state.chatRequests.length, 1)
+    assert.equal(state.chatRequests[0].model, 'minimax-m3.1-flash')
+    assert.equal(state.chatRequests[0].stream, true)
+    assert.equal(adapter.lastWorkspace, '', 'no sessions service in this unit context')
+    const types = chunks.map((chunk) => chunk.type)
+    assert.deepEqual(types, ['block-start', 'reasoning-delta', 'block-start', 'text-delta', 'text-delta', 'block-end', 'block-end', 'usage', 'finish'])
+    const usage = chunks.find((chunk) => chunk.type === 'usage').usage
+    assert.deepEqual(usage, { inputTokens: 7, outputTokens: 4, cacheReadTokens: 4, cacheWriteTokens: 0, totalTokens: 15 })
+    assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
   } finally {
-    for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[key]
-      else process.env[key] = value
-    }
-    await rm(emptyHome, { recursive: true, force: true })
+    await close()
   }
 })
 
-test('the provider name states the transport', () => {
-  const adapter = makeAdapter({ url: 'http://127.0.0.1:1' })
-  assert.equal(adapter.providerInfo('opencode-http-agent').name, 'OpenCode (HTTP)')
+test('pure stream emits tool-call deltas and a tool-call block', async () => {
+  const events = [
+    { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'bash', arguments: '{"command":' } }] } }] },
+    { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '"ls"}' } }] }, finish_reason: 'tool_calls' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'list' }] }],
+    }))
+    const calls = chunks.filter((chunk) => chunk.type === 'tool-call-delta')
+    assert.equal(calls[0].id, 'call_1')
+    assert.equal(calls[0].name, 'bash')
+    assert.equal(calls[0].argumentsDelta, '{"command":')
+    assert.equal(calls[1].argumentsDelta, '"ls"}')
+    const end = chunks.find((chunk) => chunk.type === 'block-end')
+    assert.deepEqual(end.block, { type: 'tool-call', id: 'call_1', name: 'bash', arguments: '{"command":"ls"}' })
+    assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'tool-calls' } })
+  } finally {
+    await close()
+  }
 })
 
+test('backend base URL and credential are cached across calls', async () => {
+  const { server, state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    await collect(adapter.stream({ provider: 'opencode-http-agent', model: 'opencode-go/minimax-m3.1-flash', messages: [{ role: 'user', content: [{ type: 'text', text: 'a' }] }] }))
+    await collect(adapter.stream({ provider: 'opencode-http-agent', model: 'opencode-go/minimax-m3.1-flash', messages: [{ role: 'user', content: [{ type: 'text', text: 'b' }] }] }))
+    assert.equal(state.providerRequests, 1)
+    assert.equal(state.credentialRequests, 1)
+    assert.equal(state.chatRequests.length, 2)
+  } finally {
+    await close()
+  }
+})
+
+test('resolveModel publishes contextWindow and reasoning variants from /api/model', async () => {
+  const { server, state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const resolved = await adapter.resolveModel('opencode-http-agent', 'opencode-go/minimax-m3.1-flash')
+    assert.equal(resolved.context.contextWindow, 1000000)
+    assert.equal(resolved.defaultMaxTokens, 512000)
+    assert.deepEqual(resolved.reasoning.efforts.map((effort) => effort.id), ['low', 'medium', 'high', 'xhigh', 'max'])
+  } finally {
+    await close()
+  }
+})
+
+test('stream rejects a level the route does not advertise before calling the backend', async () => {
+  const { server, state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      reasoningEffort: 'none',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    assert.equal(state.chatRequests.length, 0)
+    assert.equal(chunks.at(-1).reason.failure.code, 'UNSUPPORTED_REASONING_EFFORT')
+  } finally {
+    await close()
+  }
+})
+
+test('backend HTTP failure becomes a stable error finish', async () => {
+  const { server, state, close } = await startServer({ status: 502 })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    assert.equal(chunks.at(-1).reason.failure.code, 'OPENCODE_BACKEND_HTTP')
+  } finally {
+    await close()
+  }
+})
+
+test('an unreachable control plane is reported instead of an empty model list', async () => {
+  const adapter = new OpencodeHttpAdapter({}, Config({
+    baseUrl: 'http://127.0.0.1:1',
+    password: 'pw',
+    attachToDaemon: false,
+    spawnServer: false,
+    autoDiscoverModels: true,
+    catalogSyncMs: 0,
+    requestTimeoutMs: 200,
+  }))
+  await assert.rejects(() => adapter.listModels('opencode-http-agent'), /catalog unavailable/)
+})
+
+test('probeServer reports the serving version and null for a dead port', async () => {
+  const { server, state, close } = await startServer()
+  try {
+    assert.equal((await probeServer(controlURL(state), 'pw')).version, '2.2.0')
+    assert.equal(await probeServer('http://127.0.0.1:1', 'pw', 200), null)
+  } finally {
+    await close()
+  }
+})
+
+test('the provider name states direct backend serving', () => {
+  const adapter = new OpencodeHttpAdapter({}, Config({}))
+  assert.deepEqual(adapter.providerInfo('opencode-http-agent'), { id: 'opencode-http-agent', name: 'OpenCode Go (direct)' })
+})
 
 test('errorText renders structured execution errors instead of [object Object]', () => {
+  assert.equal(errorText({ message: 'boom' }), 'boom')
+  assert.equal(errorText({ error: { message: 'nested' } }), 'nested')
   assert.equal(errorText('plain'), 'plain')
-  assert.equal(errorText({ message: 'Insufficient account funds' }), 'Insufficient account funds')
-  assert.equal(errorText({ error: { message: 'quota exceeded' } }), 'quota exceeded')
-  assert.match(errorText({ type: 'provider.quota', status: 402 }), /provider\.quota/)
-  assert.equal(errorText(undefined), 'opencode execution failed')
-})
-
-
-test('HTTP transport failure is reported; there is no CLI conversation fallback', async () => {
-  const config = new Config({ baseUrl: 'http://127.0.0.1:1', password: 'x', localSessionTitles: false, timeoutMs: 5000 })
-  const adapter = new OpencodeHttpAdapter({}, config)
-  assert.equal(typeof adapter.cli, 'undefined', 'the CLI adapter is not a conversation path')
-  const chunks = await collect(adapter.stream({ provider: 'opencode-http-agent', model: 'opencode/beam-free', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }))
-  assert.equal(chunks.at(-1).reason.failure.code, 'OPENCODE_HTTP')
-})
-
-test('a model-level execution failure is reported as-is', async () => {
-  const state = await startServer({
-    events: [
-      { type: 'session.execution.started', data: {} },
-      { type: 'session.execution.failed', data: { error: { type: 'provider.quota', message: 'Insufficient account funds', status: 402 } } },
-    ],
-  })
-  try {
-    const adapter = makeAdapter(state)
-    const chunks = await collect(adapter.stream({ provider: 'opencode-http-agent', model: 'opencode/beam-free', sessionId: 'dsh-fb', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }))
-    assert.equal(chunks.at(-1).reason.failure.code, 'OPENCODE_HTTP_FAILED')
-    assert.match(chunks.at(-1).reason.failure.message, /Insufficient account funds/)
-  } finally {
-    await state.close()
-  }
-})
-
-test('a generation spanning many OpenCode steps reports the summed usage', async () => {
-  const first = usageFromTokens({ input: 10, output: 4, reasoning: 3, cache: { read: 100, write: 0 } })
-  const second = usageFromTokens({ input: 20, output: 5, reasoning: 1, cache: { read: 200, write: 2 } })
-  assert.deepEqual(addUsage(first, second), {
-    inputTokens: 30,
-    outputTokens: 9,
-    reasoningTokens: 4,
-    cacheReadTokens: 300,
-    cacheWriteTokens: 2,
-    totalTokens: 345,
-  })
-  const only = usageFromTokens({ input: 1, output: 2 })
-  assert.equal(addUsage(undefined, only), only, 'the first step seeds the running total')
 })
 
 test('serviceStateCandidates covers the explicit row, v2 roots, and legacy state', () => {
-  const candidates = serviceStateCandidates('/explicit/service.json')
-  assert.equal(candidates[0], '/explicit/service.json')
-  assert.ok(candidates.some((path) => path.endsWith('/opencode/service.json')), 'state root candidate')
-  assert.equal(new Set(candidates).size, candidates.length, 'de-duplicated')
+  const candidates = serviceStateCandidates('/explicit')
+  assert.equal(candidates[0], '/explicit')
+  assert.ok(candidates.some((path) => path.endsWith('/.local/state/opencode/service.json')))
+  assert.ok(candidates.some((path) => path.endsWith('/.config/opencode/service.json')))
 })

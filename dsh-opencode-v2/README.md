@@ -1,10 +1,10 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 1.6
+version: 2.0
 kind: readme
 status: active
 updated: 2026-10-30
-summary: OpenCode v2.2.0 managed plugin: tool + /opencode + opencode-agent route, real token usage, per-model contextWindow, per-route reasoning levels (variants), stdin prompt delivery that survives the 128 KiB argv limit, and an HTTP provider that drives the OpenCode v2 server API with persistent sessions, a verified server endpoint, and visible discovery failures.
+summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd.
 -->
 
 
@@ -65,12 +65,27 @@ Both halves are plain hand-written ESM — there is **no build step**.
 Parameters: `prompt` (required), `cwd`, `model`, `agent`, `session`,
 `continueLast`, `auto`, **`thinking`**, **`title`**, **`files`**, `timeoutMs`.
 
-**`lib/provider.js` → `@nolit/dsh-opencode-v2/provider`** (row id `dsh-opencode-v2-provider`)
-- the **`opencode-agent` LLM route** — flattens the transcript into one run and
-  **true-streams** it: `text-delta` on block index `0`, `reasoning-delta` on
-  block index `1`, `block-end` for each, then `usage`, then `finish`;
-- per-route **reasoning levels** — advertised from `variants` and applied as
-  `-m provider/model#<variant>` (see §2b).
+**`lib/http.js` → `@nolit/dsh-opencode-v2/http`** (row id `dsh-opencode-v2-http`)
+- the **`opencode-http-agent` pure LLM route** — registered directly with
+  `ctx.llm.registerAdapter()` (no bridge plugin);
+- generation goes straight to OpenCode Go's **OpenAI-compatible
+  `/chat/completions`** backend (`stream:true`,
+  `stream_options.include_usage:true`); the local OpenCode server supplies only
+  catalog/provider metadata/credential (`/api/model`, `/api/provider/{id}`,
+  `/api/credential`);
+- per-route **reasoning levels** — `/api/model` variants become host
+  `reasoning.efforts` and are forwarded as `reasoning_effort`;
+- raw SSE deltas become DSH `block-start`, `text-delta`, `reasoning-delta`,
+  `tool-call-delta`, `block-end`, `usage`, `finish` chunks;
+- DSH owns the agent loop, tool schemas, tool execution, session history, and
+  the active workspace cwd (`ctx.sessions.get(sessionId).header.cwd`). The
+  adapter never runs an OpenCode agent, permission prompt, or session prompt.
+
+**`lib/provider.js`** is a **library**, not a mountable route: it exports the
+batch-worker transcript/parse helpers (`blocksToText`, `buildPrompt`,
+`OpencodeLlmAdapter`) but deliberately exports **no `apply`**. It is kept for
+`cli_worker`/tests and for reading the legacy `opencode run` surface; it never
+registers an LLM adapter (asserted by `test/providers.test.mjs`).
 
 Errors never crash the host: a timeout finishes with
 `{kind:'error', failure:{code:'OPENCODE_TIMEOUT'}}`, a non-zero exit with
@@ -191,23 +206,28 @@ and closes stdin through `sendPrompt()`; argv now ends at the last flag.
 Proof through the real adapter and the real CLI: a 189,051-byte prompt delivered on stdin
 produced an 88-character argv and a `finish{kind:'stop'}` with `text:"PONG"`.
 
-## 2d. HTTP provider (`opencode-http-agent`) — v0.2.0
+## 2d. Pure backend adapter (`opencode-http-agent`) — v0.5.0
 
-A second route, same package, no CLI child per generation. It drives the measured OpenCode
-v2.2.0 HTTP API instead:
+The route is a **protocol router**, not an agent harness. The local OpenCode
+server is used only as a control plane; each DSH generation is one raw
+OpenAI-compatible backend call.
 
-| Concern | CLI route (`opencode-agent`) | HTTP route (`opencode-http-agent`) |
+| Concern | CLI worker (`lib/provider.js`, library only) | Pure route (`lib/http.js`) |
 |---|---|---|
-| Transport | `opencode run` child per call, prompt on stdin | `POST /api/session/{id}/prompt` + `GET /api/event` SSE |
-| History | full transcript re-sent every call | persistent OpenCode session; only new user text is sent |
-| Usage | `opencode session export` second child | inline `session.step.ended.tokens` (input/output/reasoning/cache) |
-| Interrupt | child signal | `POST /api/session/{id}/interrupt` (measured 1.5 s abort) |
-| Permissions | OpenCode's own policy | `permission.asked` → `reply {once|always|reject}` |
-| Server | one process per generation | one `serve` per adapter (attach to the CLI daemon or spawn `--port 0`) |
+| Transport | `opencode run` child per call, prompt on stdin | `POST {settings.baseURL}/chat/completions` |
+| History | full transcript re-sent every call | DSH sends its own full `messages` history each call |
+| Usage | `opencode session export` second child | final OpenAI `usage` chunk (`prompt_tokens`, `completion_tokens`, `cached_tokens`, `reasoning_tokens`) |
+| Interrupt | child signal | abort `AbortSignal` on the HTTP request |
+| Permissions | OpenCode's own policy | **DSH-owned**; the adapter never runs tools |
+| Server | one process per generation | local control plane only (attach daemon or spawn `--port 0`) |
 
-Server resolution order: explicit `baseUrl` → the CLI daemon's
+Control-plane resolution order: explicit `baseUrl` → the CLI daemon's
 `~/.local/state/opencode/service.json` (`url`/`pid`/`password`, verified with `/api/info`) →
 `opencode serve --port 0` owned by the adapter. Auth is Basic `opencode:<password>`.
+Backend resolution order: explicit `backendBaseUrl` + `apiKey`/`OPENCODE_API_KEY`, otherwise
+`GET /api/provider/{backendProviderId}` for `settings.baseURL`/headers and
+`GET /api/credential` for the active key or OAuth access token. The pair is cached for
+`credentialCacheMs` and refreshed once on a 401.
 
 Two operational facts the measurements forced:
 
@@ -221,16 +241,15 @@ Two operational facts the measurements forced:
 
 When no catalog can be fetched, `listModels` throws with the concrete reason; the host turns that
 into a visible provider failure, so an empty list is never silent. The route name carries the
-transport (`OpenCode (HTTP)`) and the advertised model description names the serving build
-(`OpenCode v2 server 2.2.0 via HTTP API`).
+transport (`OpenCode Go (direct)`) and the advertised model description names the serving build
+(`OpenCode Go v2.2.0 (OpenAI-compatible backend)`).
 
-**HTTP-only conversation (v0.3.3):** the HTTP adapter is the only conversation pipeline — chat,
-streaming, reasoning, and model serving. The CLI adapter is no longer a route or a fallback: it is a
-batch-worker backend (`lib/provider.js`) that registers no LLM adapter, and the `opencode` tool
-(`lib/index.js`) already performs one-shot isolated runs. A transport failure is reported as the
-turn failure (`OPENCODE_HTTP` / `OPENCODE_SPAWN`); there is no replay through the CLI. Rationale:
-the A/B measured that `opencode run --format json` delivers whole blocks (no deltas, TTFT equals the
-full generation) and spawns a process per generation — correct for a batch worker, wrong for chat.
+**Pure conversation (v0.5.0):** the HTTP route is model-only. The CLI adapter is not a route or a
+fallback: `lib/provider.js` is a batch-worker backend that registers no LLM adapter, and the
+`opencode` tool (`lib/index.js`) performs one-shot isolated runs. Rationale: the measured
+`POST /api/session/{id}/prompt` path always runs OpenCode's `agent:"build"` with its own persona,
+tools, and permissions — a harness-inside-a-harness. The direct backend has no such loop; DSH sees
+raw deltas and remains the only owner of tool execution and workspace context.
 
 Server discovery: candidate descriptor files are tried in order (`serviceStatePath`, then
 `$OPENCODE_SERVICE_STATE`, `$XDG_STATE_HOME/opencode/service.json`,
@@ -332,23 +351,73 @@ host's working directory.
 inserts two rows whose `id`s equal the exported plugin names (the loader derives
 the settings namespace from the id):
 
-| row id | name |
-|---|---|
-| `dsh-opencode-v2` | `@nolit/dsh-opencode-v2` |
-| `dsh-opencode-v2-provider` | `@nolit/dsh-opencode-v2/provider` |
+| row id | name | role |
+|---|---|---|
+| `dsh-opencode-v2` | `@nolit/dsh-opencode-v2` | `opencode` tool, `/opencode`, `cli_worker`, `/worker` |
+| `dsh-opencode-v2-http` | `@nolit/dsh-opencode-v2/http` | **autonomous model router** (`opencode-http-agent`) |
 
-There are deliberately **no `attach` / `pure` keys**.
+`./provider` is exported for the batch-worker backend but has **no `apply`** and
+is not a bundle row. There are deliberately **no `attach` / `pure` keys**.
+
+### 3.1 Native router and conflict guard
+
+`dsh-opencode-v2` owns the OpenCode model namespace itself: it registers
+`opencode-http-agent` directly into `dsh-llm` and needs no `dsh-subrouter`,
+no bridge plugin, and no `llm-pi-ai` dependency. Token metering, session
+tracking, and request waterfalls are all harness-level, so a native adapter is
+intercepted exactly like any other route.
+
+The HTTP row runs a read-only conflict guard (`lib/conflicts.js`) at activation
+and on every `llm/adapters-updated` event:
+
+| Situation | `conflictPolicy: warn` (default) | `conflictPolicy: stand-down` |
+|---|---|---|
+| Legacy `opencode-go` / `opencode` provider active (llm-pi-ai) | serve, log that the model family is duplicated | do not register; re-register when it disappears |
+| `opencode-http-agent` already registered (second copy) | skip this instance | skip this instance |
+| No conflict | serve | serve |
+
+The guard never unloads another plugin — a plugin must not mutate the host
+registry on behalf of a sibling. "Deactivating `llm-pi-ai`" means this instance
+steps aside when told to, not reaching into another fiber. The tool half has its
+own guard: a duplicate `opencode` tool name is logged and yielded instead of
+aborting the whole plugin row.
+
+### 3.2 Golden reference pattern for future vendor adapters
+
+Every model-serving plugin copies this shape:
+
+1. **Control plane ≠ data plane.** Use the vendor's local server/API only for
+   catalog, provider metadata, and cached credentials. Never send DSH
+   conversations through a vendor agent/session endpoint.
+2. **One raw generation call per DSH step.** `POST {baseURL}/chat/completions`
+   (or the vendor's equivalent) with `stream:true`,
+   `stream_options.include_usage:true`, DSH `messages`/`tools` verbatim, and
+   the caller's `reasoningEffort` mapped to the vendor's effort field.
+3. **Normalize into DSH `StreamChunk`s.** `block-start`, `text-delta`,
+   `reasoning-delta`, `tool-call-delta`, `block-end`, then **`usage` before
+   `finish`**. Usage buckets are disjoint: subtract cached tokens from
+   `prompt_tokens`; never double-count `reasoning_tokens` (they are part of
+   `completion_tokens`).
+4. **No persona, no notes, no session prompt, no permission bridge.** The DSH
+   system prompt is the only system prompt; the adapter constructs no
+   `[note: the caller declared ...]` text.
+5. **Workspace is DSH-owned.** Resolve it from
+   `ctx.sessions.get(options.sessionId).header.cwd`; never pin a static project
+   path in the adapter. `cwd` config remains only for local server process
+   startup.
+6. **Cache credentials, refresh on 401, preserve `AbortSignal`.** Surface
+   vendor errors as stable `OPENCODE_BACKEND_*` failure codes.
 
 ## 4. Verify without touching `~/.dsh`
 
 ```bash
 cd dsh-opencode-v2
-npm test            # node --test: fake subprocess seam, no network, no ~/.dsh
+npm test            # node --test: fake subprocess + fake OpenAI-compatible SSE backend
 npm run check       # node --check on every lib file
 ```
 
-The suite fakes `ctx.subprocess`, so it never spawns `opencode`, opens a socket,
-or reads `~/.dsh`. `test/bundle.test.mjs` also parses `cordis.patch.yml` with
+The suite fakes `ctx.subprocess` and the local control plane, so it never spawns
+`opencode`, opens a real backend socket, or reads `~/.dsh`. `test/bundle.test.mjs` also parses `cordis.patch.yml` with
 `js-yaml` and proves every row id/name/config key agrees with `package.json` and
 the module Config schemas.
 

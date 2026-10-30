@@ -387,47 +387,65 @@ export async function apply(ctx, config) {
   // Resolved lazily so the module stays importable (and unit-testable)
   // without the host toolchain installed; the host always provides it.
   const { defineTool } = await import('@deepseek-ai/dsh-tools')
-  ctx.tools.register(
-    defineTool({
-      name: 'opencode',
-      description: DESCRIPTION,
-      parameters: parameters(),
-      output: {
-        schema: outputSchema(),
-        // The canonical value is the upstream key set; usage rides in stdout's
-        // rendered text via the runner's stderr summary + renderResult.
-        render: (_args, value) => [{ type: 'text', text: renderResult(value) }],
-      },
-      async execute(args, exec) {
-        const result = await runOpencode(ctx, config, {
-          prompt: args.prompt,
-          cwd: args.cwd ?? process.cwd(),
-          model: args.model,
-          agent: args.agent,
-          session: args.session,
-          continueLast: args.continueLast,
-          auto: args.auto,
-          thinking: args.thinking,
-          title: args.title,
-          files: args.files,
-          timeoutMs: args.timeoutMs,
-          signal: exec.signal,
-        })
-        // The canonical value may carry only declared keys, so a successful
-        // usage fetch is folded into `stderr` (a declared string) and nothing
-        // else is added.
-        const withUsage = result.usage
-          ? { ...result, stderr: [result.stderr, formatUsage(result.usage)].filter(Boolean).join('\n') }
-          : result
-        return toOutput(withUsage)
-      },
-      presentResult: (_args, result) => ({
-        card: 'generic',
-        title: 'opencode',
-        content: result.content,
-      }),
+  const opencodeTool = defineTool({
+    name: 'opencode',
+    description: DESCRIPTION,
+    parameters: parameters(),
+    output: {
+      schema: outputSchema(),
+      // The canonical value is the upstream key set; usage rides in stdout's
+      // rendered text via the runner's stderr summary + renderResult.
+      render: (_args, value) => [{ type: 'text', text: renderResult(value) }],
+    },
+    async execute(args, exec) {
+      const result = await runOpencode(ctx, config, {
+        prompt: args.prompt,
+        cwd: args.cwd ?? process.cwd(),
+        model: args.model,
+        agent: args.agent,
+        session: args.session,
+        continueLast: args.continueLast,
+        auto: args.auto,
+        thinking: args.thinking,
+        title: args.title,
+        files: args.files,
+        timeoutMs: args.timeoutMs,
+        signal: exec.signal,
+      })
+      // The canonical value may carry only declared keys, so a successful
+      // usage fetch is folded into `stderr` (a declared string) and nothing
+      // else is added.
+      const withUsage = result.usage
+        ? { ...result, stderr: [result.stderr, formatUsage(result.usage)].filter(Boolean).join('\n') }
+        : result
+      return toOutput(withUsage)
+    },
+    presentResult: (_args, result) => ({
+      card: 'generic',
+      title: 'opencode',
+      content: result.content,
     }),
-  )
+  })
+
+  // Conflict guard: a second live row (e.g. the legacy @quonaro plugin) may
+  // already own the `opencode` tool name. The host throws on duplicate tool
+  // registration, which would abort the whole plugin row; yield the tool and
+  // keep the commands/worker half usable instead.
+  const existing = typeof ctx?.tools?.get === 'function' ? ctx.tools.get('opencode') : undefined
+  if (existing) {
+    ctx?.logger?.warn?.(
+      'dsh-opencode-v2: tool "opencode" is already registered by another plugin; '
+      + 'skipping tool registration (commands and cli_worker still load).',
+    )
+  } else {
+    try {
+      ctx.tools.register(opencodeTool)
+    } catch (error) {
+      ctx?.logger?.warn?.(
+        `dsh-opencode-v2: tool "opencode" registration failed: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
 
   ctx.inject(['commands'], (commandCtx) => {
     commandCtx.commands.register({

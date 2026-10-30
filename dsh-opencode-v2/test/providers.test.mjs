@@ -589,3 +589,43 @@ test('tool apply registers the opencode tool and the /ocode command', async () =
   // and discards everything typed after it, so options would never arrive.
   assert.ok(commands[0].input, 'command must declare an input descriptor')
 })
+
+test('tool apply yields a duplicate opencode tool instead of aborting the row', async () => {
+  const tools = []
+  const warnings = []
+  const ctx = {
+    tools: {
+      get: (name) => (name === 'opencode' ? { name } : undefined),
+      register(def) {
+        tools.push(def)
+      },
+    },
+    logger: { warn: (message) => warnings.push(String(message)) },
+    inject(_services, callback) {
+      callback({ commands: { register() {} } })
+    },
+  }
+  await tool.apply(ctx, fakeConfig({}))
+  assert.equal(tools.length, 0, 'the duplicate opencode tool is not registered')
+  assert.ok(warnings.some((line) => /already registered by another plugin/.test(line)))
+})
+
+test('tool apply catches a host duplicate-tool throw and keeps loading', async () => {
+  const tools = []
+  const warnings = []
+  const ctx = {
+    tools: {
+      register(def) {
+        if (def.name === 'opencode') throw new Error('tool "opencode" is already registered')
+        tools.push(def)
+      },
+    },
+    logger: { warn: (message) => warnings.push(String(message)) },
+    inject(_services, callback) {
+      callback({ commands: { register() {} } })
+    },
+  }
+  await assert.doesNotReject(() => tool.apply(ctx, fakeConfig({})))
+  assert.equal(tools.length, 0, 'the failed opencode tool is not left registered')
+  assert.ok(warnings.some((line) => /tool "opencode" registration failed/.test(line)))
+})

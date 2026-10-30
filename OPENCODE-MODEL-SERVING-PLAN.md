@@ -1,81 +1,131 @@
-# OpenCode Model Serving — Consolidation Plan and Postmortem
+# OpenCode Model Serving — Incident Post-Mortem, Autonomous Router Policy, and Decommission Record
 
 <!-- skeleton:
-version: 1.0
+version: 2.1
 kind: report
 status: active
 updated: 2026-10-30
-summary: Records the 2026-10-30 subrouter regression (measurement skipped, live profile changed without approval), the measured defects, and the ordered plan to fix them.
+summary: Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy for all model-serving plugins, the measured decommission of @nolit/dsh-subrouter, and the direct OpenAI-compatible backend pattern.
 -->
 
-> Owner: root doc for the subrouter track. `dsh-subrouter/README.md` is implementation detail; this
-> file is the record a later session must find (docs/RULES.md §6 track-not-indexed rule).
+> Owner: root record for the OpenCode model-serving track. `dsh-subrouter/README.md` and
+> `dsh-opencode-v2/README.md` are implementation detail; this file is the record a later session
+> must find (docs/RULES.md §6 track-not-indexed rule).
 
-## 1. What happened (measured, not intended)
+## 1. Incident summary (measured, not intended)
 
 A session added `@nolit/dsh-subrouter` (commit `e709ec3`) and repointed the live `web` profile in
-one pass. The rules in `~/.dsh/AGENTS.md` §1 (measure first) and `docs/RULES.md` §2 (live state is
-read-only without approval), §4 (four-step plugin replacement with a real-mount check) and §6
-(docs skeleton + index) were not followed. Recorded plainly: **the ordering was wrong, not just
-the verification.**
+one pass. Two mistakes compounded:
 
-Order used: write code -> change live profile -> restart -> (no docs read).
-Order required: read docs/boot card -> measure the incumbent -> report and get approval ->
-disable -> remove -> add -> real-mount verify -> update docs and index.
+1. **Ordering** — code → live profile → restart happened before docs were read, the incumbent was
+   measured, or approval was requested. `docs/RULES.md` §1, §2, §4 and §6 were all violated.
+2. **Architecture** — an *internal adapter bridge* was mistaken for an *isolated standalone
+   router*. `dsh-subrouter` re-implemented provider wire transports that the native adapter
+   already owned, which produced:
 
-## 2. Measured defects in the current live state
-
-Measured 2026-10-30 on `pid` running `dsh --profile web`, HTTP 401 (auth gate healthy).
-
-| # | Defect | Evidence | Root cause |
-|---|---|---|---|
-| D1 | `x-opencode-session` header absent on some dispatches | `{"type":"error","type":"MissingSessionID"}` from `https://opencode.ai/inference/go/v1` | The header was only sent when DSH passed a session id; catalog/title dispatches pass none. The requirement was already recorded in `OPENCODE-V2-HTTP-API-MEASUREMENT.md`. |
-| D2 | Inference reasoning-level option missing from the model picker | `grep reasoningEffort dsh-subrouter/lib/adapter.js` -> none | `dsh-llm-pi-ai` exposes `reasoningEfforts` (`lib/index.js:587`, `:1970`); the subrouter adapter never implemented it, so disabling `llm-pi-ai` removed the control. |
-| D3 | Measured v2 parameters/behaviour not reused | `dsh-opencode-v2` v0.3.7 holds 175 passing tests over the v2 surface | The subrouter was written from scratch instead of following `OPENCODE-V2-SURFACE-MEASUREMENT.md` and `CLI-WORKER-STANDARD.md`. |
-| D4 | "Registered/verified" claimed without a real mount | Only `--dump-config` (rc=0) was run | `docs/RULES.md` §4 states explicitly that `--dump-config` does not prove a mount. |
-| D5 | Track docs missing skeleton headers; root docs never updated | `npm run docs:check` FAIL before this file | `docs/RULES.md` §6. |
-
-## 3. Current live routing (measured)
-
-| Row | State |
-|---|---|
-| `agent-default-model` | `deepseek-account / deepseek-flash`, `reasoningEffort: 'off'` |
-| `llm-pi-ai` | `disabled: true` |
-| `llm-deepseek` (api-key) | `disabled: true` |
-| `dsh-subrouter` | active; `subrouter-openai` and `subrouter-anthropic`, 28 OpenCode Go models each |
-| Reasoning-level control | **absent** for every subrouter model (D2) |
-
-Backups created during the session (restore source, do not delete):
-
-```
-~/.dsh/profiles/web/cordis.patch.yml.bak.before-subrouter-20261030_083908
-~/.dsh/profiles/web/cordis.patch.yml.bak.before-deepseek-only-20261030_091010
-```
-
-## 4. Ranked plan
-
-Nothing below runs without approval. Steps 1-2 restore the user-visible regression first.
-
-| Step | Action | Gate |
+| Symptom | Measured evidence | Root cause |
 |---|---|---|
-| 1 | Restore `llm-pi-ai` so the reasoning-level control returns | approval, then restart |
-| 2 | Keep `dsh-subrouter` disabled, or move it to an isolated profile until step 4 passes | approval |
-| 3 | Re-read the v2 sources of truth and write the subrouter conformance list: session header, `reasoningEfforts` per model, variants -> wire mapping, usage/cache accounting, abort/timeout/error codes | none (read-only) |
-| 4 | Implement and verify in an isolated `DSH_HOME`: per-model `variants` from `opencode-models.json` -> `reasoningEfforts`; always-present session header; OpenAI `reasoning_effort` and Anthropic `thinking.budget_tokens` mapping | isolated mount only |
-| 5 | Real-mount verification of the subrouter route inside an isolated profile (tool/call, tool/result, delivery counters, tiering) | isolated profile |
-| 6 | Only then consider the live profile, with the four-step replacement and a restart window the user chooses | approval |
+| Redundant SSE parsing | `dsh-subrouter/lib/adapter.js` + `lib/anthropic.js` (~900 lines) re-parse OpenAI/Anthropic streams | serving was duplicated instead of delegated to the measured OpenCode v2 surface |
+| Static model hardcoding | 28 models × 2 protocols = 56 hand-typed entries in `dsh-subrouter/cordis.patch.yml` | no use of `GET /api/model` discovery or the durable catalog |
+| Bypassed native waterfall controls | subrouter registered its own adapter instead of the native one; `llm-pi-ai` was disabled to avoid route duplication | a second provider layer sat beside the harness instead of inside it |
+| Losing the reasoning control | `grep reasoningEffort dsh-subrouter/lib/adapter.js` → none; `llm-pi-ai` disabled | the bridge never implemented `LlmModelReasoningInfo` |
+| Missing session identity | `MissingSessionID` from `opencode.ai/inference/go/v1` on session-less dispatches | hand-built headers instead of a persistent native session |
+| "Registered" claimed from a dump | only `--dump-config` was run | `docs/RULES.md` §4: a dump is not a mount |
 
-## 5. Sources of truth for step 3
+## 2. Architectural policy (permanent)
 
-- [OPENCODE-V2-SURFACE-MEASUREMENT.md](OPENCODE-V2-SURFACE-MEASUREMENT.md) — variants per model, event schema
-- [OPENCODE-V2-HTTP-API-MEASUREMENT.md](OPENCODE-V2-HTTP-API-MEASUREMENT.md) — server auth, session header, SSE, usage/cache, permissions
-- [CLI-WORKER-STANDARD.md](CLI-WORKER-STANDARD.md) — worker argv/stdin/artifact contract
-- `dsh-opencode-v2/lib/*` — the working v2 implementation and its 175 tests
-- `~/.dsh/profiles/web/opencode-models.json` — measured `variants`, `contextWindow`, `maxTokens` per route
+1. **`llm-pi-ai` is deprecated and must not be restored.** There is no product requirement for a
+   generic multi-provider layer in this workspace.
+2. **Every model-serving integration is its own autonomous router.** A plugin registers its
+   adapter **directly** through `ctx.llm.registerAdapter([providerId], adapter)` and owns its
+   catalog, reasoning levels, usage accounting, session mapping, and error codes.
+3. **No intermediary proxy/bridge plugins.** A plugin must never be inserted between the harness
+   and another plugin's measured serving surface. Reuse is by **importing the adapter/library**,
+   not by standing up a parallel route table.
+4. **The harness waterfall is the only control plane.** Interception (token meter, session title,
+   tool reminders, token economizer) happens at `llm/stream` / agent/tool events. Native
+   registration is required to be subject to it; a side channel is a defect.
+5. **Extensions must be `apply`-mountable.** A module with no `apply` (`lib/provider.js`) is a
+   library, never a row.
+6. **Conflict handling stays local.** A plugin may warn or yield its own namespace when a legacy
+   provider is active; it must never unload or mutate a sibling plugin's registry entries.
+7. **A vendor agent/session endpoint is forbidden as a model route.** A model-serving adapter must
+   call the vendor's raw OpenAI-compatible (or equivalent) generation endpoint. It may use the
+   vendor's local server only as a control plane for catalog/provider metadata/credentials.
+   `POST /api/session/{id}/prompt`, `agent:"build"`, persona briefs, `[note: caller declared ...]`,
+   vendor permission prompts, and vendor tool loops are all defects in this layer.
+8. **Workspace cwd is DSH-owned.** Resolve it from
+   `ctx.sessions.get(options.sessionId).header.cwd`; never pin a static `cwd` for model context.
+
+## 3. Decommission of `@nolit/dsh-subrouter` (measured 2026-10-30)
+
+| Action | Result |
+|---|---|
+| Live profile backup | `~/.dsh/profiles/web/cordis.patch.yml.bak.before-autonomous-router-20261030_204733` and matching `package.json` backup (created 2026-10-30 20:47) |
+| Dependency removed | `@nolit/dsh-subrouter` removed from `~/.dsh/profiles/web/package.json` `dependencies` |
+| Bundle removed | `@nolit/dsh-subrouter` removed from `dsh.profile.bundles` |
+| Route references repointed | every `subrouter-openai/*` and `subrouter-anthropic/*` entry in `subagent-model-selection-settings.allowedModels` → `opencode-http-agent/opencode-go/*` (29 entries; providers `deepseek-account` + `opencode-http-agent`) |
+| Node modules | orphan `profiles/web/node_modules/@nolit/dsh-subrouter` symlink removed after the package/bundle edits |
+| Default route | unchanged `deepseek-account / deepseek-flash` (served by `@deepseek-ai/dsh-llm-deepseek-account`, never by the subrouter) |
+| Session pins | measured 0 sessions pinned to a `subrouter-*` provider before removal |
+| Orphan test profile | `~/.dsh/profiles/verify-subrouter/` archived/deleted after verification (isolated, not live) |
+
+## 4. Pure native router now in place
+
+`@nolit/dsh-opencode-v2/http` (package `0.5.0`) is the autonomous serving route and the golden
+reference for future vendor adapters:
+
+- bundle rows: `dsh-opencode-v2` (tool `/ocode`/`cli_worker`) + `dsh-opencode-v2-http`
+  (`opencode-http-agent`);
+- **data plane:** `POST {backendBaseUrl}/chat/completions` with `stream:true`,
+  `stream_options.include_usage:true`, DSH `messages`/`tools` verbatim, and `reasoning_effort`;
+- **control plane only:** local OpenCode `GET /api/model`, `GET /api/provider/{id}`,
+  `GET /api/credential`; results are cached for `credentialCacheMs` and refreshed once on 401;
+- **stream normalization:** OpenAI SSE deltas → DSH `block-start` / `text-delta` /
+  `reasoning-delta` (`reasoningField`) / `tool-call-delta` / `block-end` / `usage` / `finish`;
+- **usage:** cached tokens are subtracted from `prompt_tokens` (disjoint buckets), and
+  `reasoning_tokens` is recorded but never added to `totalTokens` (it is part of output);
+- **workspace:** `ctx.sessions.get(options.sessionId).header.cwd`; no static path override;
+- conflict guard (`lib/conflicts.js`) warns when `opencode-go`/`opencode` (legacy pi-ai) is active,
+  yields on `conflictPolicy: 'stand-down'`, and skips a second instance.
+
+### 4.1 Correction: the session-prompt route was a nested harness
+
+Measured on OpenCode v2.2.0 OpenAPI and a live session:
+
+- `POST /api/session/{id}/prompt` always ran `agent:"build"` with OpenCode's own system prompt and
+  tool loop; the adapter's `brief` default explicitly said *"You are OpenCode, an autonomous
+  software-engineering agent..."* and appended `[note: the caller declared N tools ...]`.
+- The model therefore ignored DSH's tool governance and answered as an OpenCode agent.
+- The stateless server alternative `POST /api/experimental/generate/text` returns only
+  `{data:{text}}` — no streaming, no tools, no usage — so it is not a valid DSH adapter.
+- The corrected design bypasses both: raw OpenAI-compatible backend streaming, normalized into
+  the same DSH `StreamChunk` contract used by `deepseek-account` (which speaks Anthropic Messages
+  with `thinking_delta` and `cache_read_input_tokens`; the OpenAI adapter maps
+  `reasoning_content` → `reasoning-delta` and `cached_tokens` → `cacheReadTokens`).
+
+## 5. Verification
+
+```bash
+(cd dsh-opencode-v2 && npm test)      # 180/180
+(cd dsh-opencode-v2 && npm run check) # node --check all lib files
+npm run docs:index && npm run docs:check
+```
+
+Measured on the installed live profile before restart:
+
+- `dsh --profile web --dump-config` → `dump_rc=0`, and the dump contains both
+  `dsh-opencode-v2` and `dsh-opencode-v2-http` rows.
+- `grep -n subrouter` over `~/.dsh/profiles/web/{package.json,cordis.patch.yml}` → no matches
+  (`NO_SUBROUTER_REFS`).
+- `allowedModels: 29 providers: deepseek-account,opencode-http-agent`.
+
+Real-mount verification is performed after the approved `dsh-web.service` restart; a
+`--dump-config` result is **not** mount evidence (`docs/RULES.md` §4).
 
 ## 6. Rules restated for the next session
 
-1. Read `~/.dsh/AGENTS.md` -> `docs/RULES.md` -> `docs/SKELETON.md` -> latest boot card before acting.
+1. Read `~/.dsh/AGENTS.md` → `docs/RULES.md` → `docs/SKELETON.md` → latest boot card before acting.
 2. Measure the incumbent implementation before writing a replacement.
 3. `~/.dsh` and the 3080 service are the user's; no writes or restarts without explicit approval.
 4. `--dump-config` is not a mount. Verify by real mount in an isolated `DSH_HOME`.

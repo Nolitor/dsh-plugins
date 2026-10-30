@@ -1,11 +1,11 @@
 # OpenCode v2 HTTP API — measurement for DSH-side control
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: measurement
 status: measured
-updated: 2026-10-29
-summary: Measured the OpenCode v2.2.0 HTTP server (130 endpoints, SSE event stream) as a DSH-controlled transport instead of per-turn `opencode run` subprocesses; auth, sessions, streaming, usage/cache, permissions, variants, and lifecycle.
+updated: 2026-10-30
+summary: Measured the OpenCode v2.2.0 HTTP server (130 endpoints, SSE event stream) and later corrected the DSH adapter policy: session/prompt is an OpenCode agent harness, so pure model serving uses the OpenAI-compatible backend directly and the local server only for catalog/provider/credential control.
 -->
 
 > Status: **measured** · Runtime: OpenCode CLI/API `2.2.0`, DSH `0.2.2-alpha.2` ·
@@ -211,3 +211,40 @@ server, pinning `opencodePath` to the absolute binary in the profile, retrying o
 attached daemon disappears, and throwing a provider failure (instead of an empty list) when the
 catalog cannot be fetched. With a daemon absent the route now lists all 46 routes by owning its
 own server. Details: `dsh-opencode-v2/VERIFICATION.md` §15.
+
+
+## 14. Correction (2026-10-30): the session route is an agent, not a model API
+
+Follow-up measurement against the running v2.2.0 server:
+
+- `POST /api/session/{id}/prompt` always executes OpenCode's own `agent:"build"` with its system
+  prompt, tools, permissions, and session directory. `GET /api/session/{id}/message` showed
+  `agent:"build"` and OpenCode tool messages for a DSH turn.
+- The DSH adapter's old `brief` default told the model *"You are OpenCode, an autonomous
+  software-engineering agent..."* and appended `[note: the caller declared N tools ... you cannot
+  invoke them ...]`. The model then self-identified as OpenCode and could not use DSH tools.
+- The only stateless model endpoint is `POST /api/experimental/generate/text`:
+  request `{prompt, model?}`, response `{data:{text}}` — **no streaming, no tools, no usage**.
+  `POST /api/session/{id}/generate` is transient session text with the same JSON-only shape.
+- Therefore the pure serving path is **not** the OpenCode HttpApi session surface. It is the
+  OpenAI-compatible provider backend exposed by `GET /api/provider/{id}`
+  (`settings.baseURL`, e.g. `https://opencode.ai/inference/go/openai/v1`) with the active
+  credential from `GET /api/credential`:
+
+```
+POST {settings.baseURL}/chat/completions
+Authorization: Bearer <active opencode-go credential>
+{ model, messages, tools, stream:true, stream_options:{include_usage:true} }
+```
+
+- Map OpenAI SSE to DSH `StreamChunk`: `delta.content` → `text-delta`,
+  `delta.reasoning_content` (configurable) → `reasoning-delta`, `delta.tool_calls[]` →
+  `tool-call-delta`, final `usage` → `usage`, `finish_reason` → `finish`.
+- Usage is disjoint: `inputTokens = prompt_tokens - prompt_tokens_details.cached_tokens`,
+  `cacheReadTokens = cached_tokens`, `outputTokens = completion_tokens`; `reasoning_tokens` is
+  recorded but not added again to the total.
+- Workspace context is DSH-owned:
+  `ctx.sessions.get(options.sessionId).header.cwd`. The adapter never pins a static cwd.
+
+This supersedes §11's session-prompt implementation plan. The measurement of the session/SSE
+surface remains valid as *control-plane/agent-CLI* evidence, not as the model-serving contract.

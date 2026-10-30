@@ -33,8 +33,8 @@
 
 ## report
 
-- **1.0** · active · 2026-10-30 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
-  Records the 2026-10-30 subrouter regression (measurement skipped, live profile changed without approval), the measured defects, and the ordered plan to fix them.
+- **2.1** · active · 2026-10-30 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
+  Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy for all model-serving plugins, the measured decommission of @nolit/dsh-subrouter, and the direct OpenAI-compatible backend pattern.
 - **1.0** · completed · 2026-10-29 · [DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](../DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
   Runtime measurement and optimization report for the three original plugins on DSH 0.2.2-alpha.2.
 - **1.0** · reference · 2026-10-29 · [UTM-REVIEW-FORGE-VS-SIDEBAR.md](../UTM-REVIEW-FORGE-VS-SIDEBAR.md)
@@ -54,6 +54,8 @@
 
 ## measurement
 
+- **1.1** · measured · 2026-10-30 · [OPENCODE-V2-HTTP-API-MEASUREMENT.md](../OPENCODE-V2-HTTP-API-MEASUREMENT.md)
+  Measured the OpenCode v2.2.0 HTTP server (130 endpoints, SSE event stream) and later corrected the DSH adapter policy: session/prompt is an OpenCode agent harness, so pure model serving uses the OpenAI-compatible backend directly and the local server only for catalog/provider/credential control.
 - **1.3** · measured · 2026-10-30 · [OPENCODE-V2-SURFACE-MEASUREMENT.md](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
   Measured opencode v2.2.0 CLI surface: event schema, session-export tokens, removed flags, and per-model reasoning variants (re-measured 2026-10-30, preflight rules); corrects the 0919 boot card.
 - **1.1** · measured · 2026-10-30 · [TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md](../TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md)
@@ -66,15 +68,13 @@
   Isolated-DSH_HOME runtime measurement of Forge worktrees x Sidebar Manager v0.1.1 x UTM policy.
 - **1.0** · measured · 2026-10-29 · [OPENCODE-ANTIGRAVITY-FEASIBILITY.md](../OPENCODE-ANTIGRAVITY-FEASIBILITY.md)
   Feasibility of OpenCode and Antigravity CLI as DSH subagents/models: auth, routes, sandbox limits.
-- **1.0** · measured · 2026-10-29 · [OPENCODE-V2-HTTP-API-MEASUREMENT.md](../OPENCODE-V2-HTTP-API-MEASUREMENT.md)
-  Measured the OpenCode v2.2.0 HTTP server (130 endpoints, SSE event stream) as a DSH-controlled transport instead of per-turn `opencode run` subprocesses; auth, sessions, streaming, usage/cache, permissions, variants, and lifecycle.
 
 ## policy
 
+- **2.1** · active · 2026-10-30 · [docs/DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md)
+  Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules.
 - **2.0** · active · 2026-10-29 · [docs/BOOTCARD-POLICY.md](BOOTCARD-POLICY.md)
   Boot card generation and read rules; AGENTS.md stays a thin pointer to the newest card, rules live in docs/RULES.md.
-- **2.0** · active · 2026-10-29 · [docs/DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md)
-  Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, release rules.
 
 ## readme
 
@@ -93,8 +93,10 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 16)
+## boot (newest 5 of 17)
 
+- **active** · 2026-10-30T2045+0900.md · [card](../bootcards/2026-10-30T2045+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-10-30T2045+0900. Older cards are historical.
 - **active** · 2026-10-30T0946+0900.md · [card](../bootcards/2026-10-30T0946+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-30T0946+0900. Older cards are historical.
 - **active** · 2026-10-30T0032+0900.md · [card](../bootcards/2026-10-30T0032+0900.md)
@@ -103,9 +105,7 @@
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T2326+0900. Older cards are historical.
 - **active** · 2026-10-29T2306+0900.md · [card](../bootcards/2026-10-29T2306+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-29T2306+0900. Older cards are historical.
-- **active** · 2026-10-29T2242+0900.md · [card](../bootcards/2026-10-29T2242+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-10-29T2242+0900. Older cards are historical.
 
 ---
 
-45 indexed (16 boot cards), 0 missing header, 45 total.
+46 indexed (17 boot cards), 0 missing header, 46 total.
