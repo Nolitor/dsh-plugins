@@ -1,0 +1,239 @@
+{
+  "generatedAt": "2026-10-30T00:18:55.391Z",
+  "profile": "bench",
+  "task": "Use bash exactly once to write the exact text bench-ok to bench-proof.txt, then use read exactly once to read it back. Reply with only the text from the file.",
+  "routes": [
+    {
+      "route": "subrouter-openai/deepseek-v4.1-flash",
+      "stats": {
+        "runs": 2,
+        "ok": 2,
+        "okRate": 1,
+        "wallMs": {
+          "min": 12992,
+          "median": 14495
+        },
+        "ttftToolCallMs": 5012,
+        "steps": 3,
+        "toolCalls": 2,
+        "toolResults": 2,
+        "matchedCallIds": 2,
+        "inputTokens": 6957,
+        "outputTokens": 256,
+        "cacheReadTokens": 14016,
+        "errors": 0,
+        "finishes": [
+          "completed"
+        ]
+      },
+      "runs": [
+        {
+          "route": "subrouter-openai/deepseek-v4.1-flash",
+          "run": 1,
+          "exitCode": 0,
+          "wallMs": 12992,
+          "answer": "bench-ok",
+          "proof": "bench-ok",
+          "stderrTail": "dsh: reasoning:\nThe user wants me to use bash exactly once to write \"bench-ok\" to bench-proof.txt, then read exactly once to read it back. Reply with only the text from the file.\n\nLet me do that. But global rules say measure first. The user's explicit instruction takes precedence. I'll do exactly one bash call and one read call.\n\nLet me write with exactly one bash invocation.",
+          "logError": null,
+          "sessionFile": "/home/minami/.dsh/sessions/--home-minami-Workspace-projects-dsh-workspace-dsh-plugins-dsh-subrouter-bench-.work-subrouter-openai_deepseek-v4.1-flash-run1--/session-ea5b2405-f83b-4130-8eb3-a2b8f7707cd1/session.v4.jsonl.zstd",
+          "diagnostics": {
+            "agentResult": 2,
+            "agentPost": 2,
+            "rootResult": 2,
+            "rootPost": 2,
+            "hookCalls": 2,
+            "hookEmpty": 2
+          },
+          "provider": "subrouter-openai",
+          "model": "deepseek-v4.1-flash",
+          "toolsOffered": 24,
+          "steps": 3,
+          "toolCalls": 2,
+          "toolResults": 2,
+          "matchedCallIds": 2,
+          "toolNames": [
+            "bash",
+            "read"
+          ],
+          "resultBytes": 1131,
+          "usage": {
+            "inputTokens": 7083,
+            "outputTokens": 185,
+            "cacheReadTokens": 13696,
+            "cacheWriteTokens": 0,
+            "totalTokens": 20964
+          },
+          "finish": "completed",
+          "ttftToolCallMs": 4261,
+          "durationMs": 14410,
+          "approvals": [
+            "ask",
+            "never"
+          ]
+        },
+        {
+          "route": "subrouter-openai/deepseek-v4.1-flash",
+          "run": 2,
+          "exitCode": 0,
+          "wallMs": 15998,
+          "answer": "bench-ok",
+          "proof": "bench-ok",
+          "stderrTail": "\nLet me do the bash write. Use printf with no trailing newline? \"exact text bench-ok\" — probably printf 'bench-ok' to be exact. The read will show line content. Then reply only \"bench-ok\".\n\nI'll do one bash call: printf 'bench-ok' > bench-proof.txt. Then verify? Can't verify with bash again. The read is the verification.\n\nWrite, then read in a separate turn (dependent). Then reply.",
+          "logError": null,
+          "sessionFile": "/home/minami/.dsh/sessions/--home-minami-Workspace-projects-dsh-workspace-dsh-plugins-dsh-subrouter-bench-.work-subrouter-openai_deepseek-v4.1-flash-run2--/session-7360ac64-9574-4687-ad29-90d719111785/session.v4.jsonl.zstd",
+          "diagnostics": {
+            "agentResult": 2,
+            "agentPost": 2,
+            "rootResult": 2,
+            "rootPost": 2,
+            "hookCalls": 2,
+            "hookEmpty": 2
+          },
+          "provider": "subrouter-openai",
+          "model": "deepseek-v4.1-flash",
+          "toolsOffered": 24,
+          "steps": 3,
+          "toolCalls": 2,
+          "toolResults": 2,
+          "matchedCallIds": 2,
+          "toolNames": [
+            "bash",
+            "read"
+          ],
+          "resultBytes": 1131,
+          "usage": {
+            "inputTokens": 6831,
+            "outputTokens": 326,
+            "cacheReadTokens": 14336,
+            "cacheWriteTokens": 0,
+            "totalTokens": 21493
+          },
+          "finish": "completed",
+          "ttftToolCallMs": 5762,
+          "durationMs": 13881,
+          "approvals": [
+            "ask",
+            "never"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "subrouter-anthropic/claude-haiku-5-5",
+      "stats": {
+        "runs": 2,
+        "ok": 2,
+        "okRate": 1,
+        "wallMs": {
+          "min": 7090,
+          "median": 7177
+        },
+        "ttftToolCallMs": 2001,
+        "steps": 3,
+        "toolCalls": 2,
+        "toolResults": 2,
+        "matchedCallIds": 2,
+        "inputTokens": 30363,
+        "outputTokens": 321,
+        "cacheReadTokens": 0,
+        "errors": 0,
+        "finishes": [
+          "completed"
+        ]
+      },
+      "runs": [
+        {
+          "route": "subrouter-anthropic/claude-haiku-5-5",
+          "run": 1,
+          "exitCode": 0,
+          "wallMs": 7090,
+          "answer": "bench-ok",
+          "proof": "bench-ok",
+          "stderrTail": "",
+          "logError": null,
+          "sessionFile": "/home/minami/.dsh/sessions/--home-minami-Workspace-projects-dsh-workspace-dsh-plugins-dsh-subrouter-bench-.work-subrouter-anthropic_claude-haiku-5-5-run1--/session-744e1efd-d2e8-4474-bbc6-70c38b7bfb7a/session.v4.jsonl.zstd",
+          "diagnostics": {
+            "agentResult": 2,
+            "agentPost": 2,
+            "rootResult": 2,
+            "rootPost": 2,
+            "hookCalls": 2,
+            "hookEmpty": 2
+          },
+          "provider": "subrouter-anthropic",
+          "model": "claude-haiku-5-5",
+          "toolsOffered": 24,
+          "steps": 3,
+          "toolCalls": 2,
+          "toolResults": 2,
+          "matchedCallIds": 2,
+          "toolNames": [
+            "bash",
+            "read"
+          ],
+          "resultBytes": 1135,
+          "usage": {
+            "inputTokens": 30363,
+            "outputTokens": 321,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0,
+            "totalTokens": 30684
+          },
+          "finish": "completed",
+          "ttftToolCallMs": 2173,
+          "durationMs": 4809,
+          "approvals": [
+            "ask",
+            "never"
+          ]
+        },
+        {
+          "route": "subrouter-anthropic/claude-haiku-5-5",
+          "run": 2,
+          "exitCode": 0,
+          "wallMs": 7263,
+          "answer": "bench-ok",
+          "proof": "bench-ok",
+          "stderrTail": "",
+          "logError": null,
+          "sessionFile": "/home/minami/.dsh/sessions/--home-minami-Workspace-projects-dsh-workspace-dsh-plugins-dsh-subrouter-bench-.work-subrouter-anthropic_claude-haiku-5-5-run2--/session-da2ba738-f553-4b48-afcd-d3670c93c5a0/session.v4.jsonl.zstd",
+          "diagnostics": {
+            "agentResult": 2,
+            "agentPost": 2,
+            "rootResult": 2,
+            "rootPost": 2,
+            "hookCalls": 2,
+            "hookEmpty": 2
+          },
+          "provider": "subrouter-anthropic",
+          "model": "claude-haiku-5-5",
+          "toolsOffered": 24,
+          "steps": 3,
+          "toolCalls": 2,
+          "toolResults": 2,
+          "matchedCallIds": 2,
+          "toolNames": [
+            "bash",
+            "read"
+          ],
+          "resultBytes": 1135,
+          "usage": {
+            "inputTokens": 30363,
+            "outputTokens": 321,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0,
+            "totalTokens": 30684
+          },
+          "finish": "completed",
+          "ttftToolCallMs": 1829,
+          "durationMs": 5054,
+          "approvals": [
+            "ask",
+            "never"
+          ]
+        }
+      ]
+    }
+  ]
+}

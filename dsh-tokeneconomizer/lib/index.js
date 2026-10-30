@@ -72,8 +72,8 @@ import {
 /** Cordis plugin name; must equal package.json `name` and the cordis.patch.yml row id. */
 export const name = 'dsh-tokeneconomizer'
 
-/** Services this plugin needs: the tool registry and the prompt registry. */
-export const inject = ['tools', 'systemPrompt']
+/** Services this plugin needs: the tool registry, the prompt registry, and the token meter. */
+export const inject = ['tools', 'systemPrompt', 'tokenMeter']
 
 /**
  * Deployment-varying settings, with their defaults. The loader passes a bundle row's `config`
@@ -384,6 +384,7 @@ export function apply(ctx, config) {
       calls: new Map(),
       meta: new Map(),
       tiered: 0,
+      tieredTurn: 0,
       requests: 0,
     }
     sessions.set(sid, state)
@@ -441,6 +442,22 @@ export function apply(ctx, config) {
       return decision
     })
     state.agent.ctx.on('session/event', (session, event) => onEvent(state, session, event))
+    // Tiering rewrites the surface, which cannot run while `turn/start` is
+    // being appended. The request waterfall runs after that append and before
+    // the request is assembled, so the rewrite reaches this turn's first call.
+    state.agent.ctx.on('agent/request', async (payload, next) => {
+      if (payload.agent !== state.agent) return next()
+      state.turn = payload.turn
+      if (state.tieredTurn !== payload.turn) {
+        state.tieredTurn = payload.turn
+        try {
+          applyTiering(state)
+        } catch (error) {
+          notice(state, `tiering: failed open (${error instanceof Error ? error.message : String(error)})`)
+        }
+      }
+      return next()
+    })
     state.agent.ctx.on('tools/result', (exec, result) => {
       DELIVERY.agentResult += 1
       onToolResult(state, exec, result)
@@ -514,9 +531,6 @@ export function apply(ctx, config) {
     observeMemory(state, event)
     if (event.type === 'turn/start') {
       state.turn = event.data.turn
-      // A new turn changes what is "recent": the outputs that fell out of the
-      // working window are graded now, before the turn's first request.
-      applyTiering(state)
       if (!state.started) return
       void hook(bins, {
         session_id: state.sid,

@@ -101,12 +101,13 @@ test('a turn grades the outputs that fell out of the working window', async () =
   apply(ctx, resolveConfig({}))
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
 
-  const sessionHandlers = agent.handlers.get('session/event') ?? []
-  assert.ok(sessionHandlers.length > 0, 'the plugin listens for session events')
+  const requestHandlers = agent.handlers.get('agent/request') ?? []
+  assert.ok(requestHandlers.length > 0, 'the plugin grades before a request is assembled')
 
-  // Turn 20 puts turn 1 into the cold tier.
-  for (const handler of sessionHandlers) {
-    handler(session, { type: 'turn/start', data: { turn: 20 } })
+  // Turn 20 puts turn 1 into the cold tier. The request waterfall is the first
+  // point after the turn/start append where a surface rewrite is legal.
+  for (const handler of requestHandlers) {
+    await handler({ agent, turn: 20, step: 0, signal: new AbortController().signal }, async () => ({}))
   }
 
   const pruned = session.appended.filter((entry) => entry.type === 'compaction/prune')
@@ -140,8 +141,8 @@ test('the newest turns are left untouched', async () => {
   apply(ctx, resolveConfig({}))
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
 
-  for (const handler of agent.handlers.get('session/event') ?? []) {
-    handler(session, { type: 'turn/start', data: { turn: 20 } })
+  for (const handler of agent.handlers.get('agent/request') ?? []) {
+    await handler({ agent, turn: 20, step: 0, signal: new AbortController().signal }, async () => ({}))
   }
   assert.equal(session.appended.length, 0, 'a hot output is never replaced')
 })
