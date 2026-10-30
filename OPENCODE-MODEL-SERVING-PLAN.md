@@ -1,11 +1,11 @@
 # OpenCode Model Serving — Incident Post-Mortem, Autonomous Router Policy, and Decommission Record
 
 <!-- skeleton:
-version: 2.3
+version: 2.4
 kind: report
 status: active
-updated: 2026-10-30
-summary: Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, and the measurable per-account model allow-list with its settings tab.
+updated: 2026-10-31
+summary: Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, and the 0.6.0 client-half activation defect that killed the web shell.
 -->
 
 > Owner: root record for the OpenCode model-serving track. `dsh-subrouter/README.md` and
@@ -237,6 +237,12 @@ built-in Models section uses. The host half serves three routes through
 The sweep is **never** called from a conversation; the tab calls it only when the operator presses
 the button.
 
+> **Correction (2026-10-31, measured in a browser):** the 0.6.0 tab never rendered. `lib/client.js`
+> declared `const inject = ['slots']` but exported only `apply`/`OpenCodeModelSection`, so `ctx.slots`
+> was undefined at activation and the shell died with `web boot: 1 entry did not activate` /
+> `@nolit/dsh-opencode-v2: failed`. Every point in §5.2.5 below is an HTTP route result — none of them
+> exercises the browser boot, which is why the defect passed "verification". Fixed in 0.6.1.
+
 ### 5.2.5 Isolated verification (no live state touched)
 
 An isolated `DSH_HOME` copy of the profile was booted on a scratch port:
@@ -269,6 +275,22 @@ The `opencode-go` key (`cred_1830…`, `…4yjF`) re-measured **401 Invalid cred
 authentication and are **not** to be deleted — removing them is an outage, not cleanup. Only the
 `opencode-go` entry is disposable, via `DELETE /api/credential/{credentialID}`. v0.5.1 already
 prefers the active OAuth entry, so deleting the dead key changes selection nothing.
+
+### 5.2.8 Client-half activation defect (0.6.0) and its fix
+
+The 0.6.0 settings tab never rendered, and the whole web UI stopped mounting after the 23:34 live
+restart. Measured cause: `lib/client.js` declared `const inject = ['slots']` and used
+`ctx.slots.inject('settings.section', …)` in `apply()`, but exported only `apply` and
+`OpenCodeModelSection`. The loader injects only `module.exports.inject`, so `ctx.slots` was
+`undefined`; the entry landed in `failed` and the shell's `BZ()` printed no detail.
+
+Why the §5.2.5 checks passed: they are HTTP route probes. `--dump-config`, a 200 on the bundle and
+`node --check` all pass with an unloadable client module. **Only a browser boot proves activation.**
+
+Fix (0.6.1): `exports.inject = inject` (and the same on the default export face), plus a contract
+test that evaluates the served module and asserts the exported `inject` covers every
+`ctx.<service>` token used in `apply()`. Verification for 0.6.1 is a browser boot of the live
+service, not a route sweep.
 
 ## 6. Rules restated for the next session
 

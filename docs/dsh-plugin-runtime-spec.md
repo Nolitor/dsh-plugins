@@ -1,10 +1,10 @@
 # DSH Plugin Runtime Specification
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: spec
 status: active
-updated: 2026-10-29
-summary: DSH plugin runtime specification: manifest, bundle patch, services, lifecycle, client factory.
+updated: 2026-10-31
+summary: DSH plugin runtime specification: manifest, bundle patch, services, lifecycle, client factory, and the measured "declared but unexported inject" activation failure.
 -->
 
 
@@ -196,6 +196,14 @@ Key rules verified in rc.3:
 - `factory(require)` executes at first materialization, not when the script arrives. Side effects (including CSS injection) belong in the factory closure or in `apply`.
 - `require` resolves against the frozen platform module table plus `dsh.client.external`; there is no arbitrary npm resolution in the browser.
 - `apply` and `inject` are Cordis plugin exports. `inject: ['locale']` waits for the locale service.
+- **`inject` must be exported, not merely declared.** The loader injects only what
+  `module.exports.inject` lists (`fiber.inject`); a `const inject = [...]` that is never assigned to
+  `exports.inject` buys nothing. `ctx.<service>` is then `undefined` and the first call throws during
+  activation, which the shell reports as `web boot: N entries did not activate` → `<pkg>: failed`.
+  Measured 2026-10-30: `@nolit/dsh-opencode-v2@0.6.0` declared `const inject = ['slots']`, called
+  `ctx.slots.inject('settings.section', …)` in `apply()`, and exported only `apply` — the entire web
+  UI stopped mounting while the Host side stayed healthy. Every `ctx.<service>` touched in `apply`
+  must appear in the exported array.
 - Do not import browser code from the Host half and do not add a second patch row for `./client`; the browser half is discovered automatically.
 
 ### 3.2 Manifest client declaration
@@ -229,6 +237,8 @@ Key rules verified in rc.3:
 | `declares dsh.client but exports no "./client" bundle` | Missing `exports["./client"]` |
 | `dsh.client.client must be an object` / `platform must be a string` | Malformed manifest |
 | `module graph cycle` | `dsh.client.inject` cycle or a consumer loaded before its provider |
+| `web boot: N entries did not activate` + `<pkg>: failed` | A client entry's `apply()` threw; DSH surfaces no detail. Most common cause: an `inject` array that was declared but never exported, so `ctx.<service>` is `undefined` (measured 2026-10-30, `dsh-opencode-v2@0.6.0`) |
+| `<pkg>: pending (waiting for services: a, b)` | The entry declared services that nothing provides — wrong service name, or the provider row is missing |
 | Factory runs but service missing | Service not listed in the exported `inject` array |
 | Page shows old plugin after edit | Host not restarted, or client HMR watcher not running |
 

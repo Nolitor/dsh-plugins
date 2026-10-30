@@ -1,10 +1,10 @@
 # DSH Plugin Boot Card
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: spec
 status: reference
-updated: 2026-10-29
-summary: Plugin package baseline: required files, cordis.patch.yml shape, locale/client conventions.
+updated: 2026-10-31
+summary: Plugin package baseline: required files, cordis.patch.yml shape, locale/client conventions, and the exported-inject contract that a 0.6.0 client half violated.
 -->
 
 
@@ -118,6 +118,13 @@ window.__ModuleLoader__.load({
 
 Rules:
 
+- **Export the inject array.** `const inject = [...]` is inert unless it is assigned to
+  `exports.inject`; the loader reads `module.exports.inject` only. A module that touches
+  `ctx.slots`/`ctx.locale` without that export dies at activation and takes the whole shell with it
+  (`web boot: 1 entry did not activate`). Every `ctx.<service>` used in `apply` must be in the list.
+- **HTTP-level checks are not activation.** `--dump-config` passing, the bundle serving 200, and every
+  route answering 200 is the *normal* shape of a broken client half; only a browser boot proves the
+  factory ran and `apply()` returned.
 - The factory runs lazily at first materialization; register everything through `ctx.effect` so disposal unloads it.
 - `require` resolves only against the platform baseline + `dsh.client.external`; no arbitrary npm imports.
 - Commit the built `lib/client.js`; a marketplace/link install should not require a build step.

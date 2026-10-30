@@ -15,26 +15,26 @@
 
 ## rule
 
-- **1.1** · active · 2026-10-30 · [docs/RULES.md](RULES.md)
-  Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement, docs/skeleton contract (including the track-not-indexed rule), reporting.
+- **1.2** · active · 2026-10-31 · [docs/RULES.md](RULES.md)
+  Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting.
 
 ## spec
 
+- **1.1** · active · 2026-10-31 · [docs/dsh-plugin-runtime-spec.md](dsh-plugin-runtime-spec.md)
+  DSH plugin runtime specification: manifest, bundle patch, services, lifecycle, client factory, and the measured "declared but unexported inject" activation failure.
+- **1.1** · reference · 2026-10-31 · [docs/plugin-boot-card.md](plugin-boot-card.md)
+  Plugin package baseline: required files, cordis.patch.yml shape, locale/client conventions, and the exported-inject contract that a 0.6.0 client half violated.
 - **1.0** · reference · 2026-10-30 · [CLI-WORKER-STANDARD.md](../CLI-WORKER-STANDARD.md)
   Shared and per-CLI worker contract for the OpenCode (/ocode) and Antigravity (/agy) delegation tools.
 - **1.0** · reference · 2026-10-30 · [docs/cli-worker-standard.md](cli-worker-standard.md)
   Shared and per-CLI worker contract for the OpenCode (/ocode) and Antigravity (/agy) delegation tools.
-- **1.0** · active · 2026-10-29 · [docs/dsh-plugin-runtime-spec.md](dsh-plugin-runtime-spec.md)
-  DSH plugin runtime specification: manifest, bundle patch, services, lifecycle, client factory.
-- **1.0** · reference · 2026-10-29 · [docs/plugin-boot-card.md](plugin-boot-card.md)
-  Plugin package baseline: required files, cordis.patch.yml shape, locale/client conventions.
 - **1.0** · reference · 2026-10-24 · [UTM-PROMOTION-GATE-SPEC.md](../UTM-PROMOTION-GATE-SPEC.md)
   Recovered UTM promotion-gate contract: promotion.mjs, G1-G6, 2PC, inheritance rules.
 
 ## report
 
-- **2.3** · active · 2026-10-30 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
-  Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, and the measurable per-account model allow-list with its settings tab.
+- **2.4** · active · 2026-10-31 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
+  Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, and the 0.6.0 client-half activation defect that killed the web shell.
 - **1.0** · completed · 2026-10-29 · [DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](../DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
   Runtime measurement and optimization report for the three original plugins on DSH 0.2.2-alpha.2.
 - **1.0** · reference · 2026-10-29 · [UTM-REVIEW-FORGE-VS-SIDEBAR.md](../UTM-REVIEW-FORGE-VS-SIDEBAR.md)
@@ -71,8 +71,8 @@
 
 ## policy
 
-- **2.3** · active · 2026-10-30 · [docs/DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md)
-  Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules.
+- **2.4** · active · 2026-10-31 · [docs/DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md)
+  Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules, and the browser-boot verification gate.
 - **2.0** · active · 2026-10-29 · [docs/BOOTCARD-POLICY.md](BOOTCARD-POLICY.md)
   Boot card generation and read rules; AGENTS.md stays a thin pointer to the newest card, rules live in docs/RULES.md.
 

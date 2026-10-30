@@ -1,11 +1,11 @@
 # DSH Plugins — Detailed Rules
 
 <!-- skeleton:
-version: 1.1
+version: 1.2
 kind: rule
 status: active
-updated: 2026-10-30
-summary: Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement, docs/skeleton contract (including the track-not-indexed rule), reporting.
+updated: 2026-10-31
+summary: Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting.
 -->
 
 > **Reading chain:** global rules (`~/.dsh/AGENTS.md`) → **this file** (project rules) →
@@ -49,6 +49,9 @@ summary: Detailed project rules (tier 2): measurement, live-state gates, single-
 - `dsh plugin add` never disables an existing tool/route registration.
 - Two plugins registering the same tool or provider route is a **hard mount failure**.
 - `--dump-config` exiting 0 does **not** prove a plugin mounts. Mount or don't claim.
+- For a browser half, "mount" means **a browser boot**: the shell renders and the page prints no
+  `web boot: N entries did not activate`. Route probes, a 200 on the client bundle and
+  `node --check` all pass while a client module is unloadable (measured 2026-10-30).
 
 ## 5. Sandbox scripts never write through a symlink
 

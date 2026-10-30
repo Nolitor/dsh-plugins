@@ -1859,3 +1859,63 @@ Fix: `test/setup-isolate.mjs` sets `DSH_HOME` to a fresh temp dir for every test
 now passes identically with the live `DSH_HOME` exported, with it unset, and on repeated runs.
 
 Status: applied in the workspace at `0.6.0`; live profile not modified (no `enabledModels` key yet).
+
+## 28. v0.6.1 — the client half never activated (measured 2026-10-31)
+
+### 28.1 Symptom
+
+`dsh-web.service` was healthy (active since 23:34:03, `:3080` listening, `/` 401 without a token,
+200 with one, every asset 200). The browser was not:
+
+```
+HARNESS
+Failed to load plugins
+@nolit/dsh-opencode-v2
+web boot: 1 entry did not activate
+@nolit/dsh-opencode-v2: failed
+```
+
+The body text is only the verdict — **one failed client entry blocks the whole shell**, so the
+settings page, the chat and every other tab are unreachable. Reported as "dsh crashed after the
+plugin install".
+
+### 28.2 Root cause
+
+`lib/client.js` (added in 0.6.0) declared the service list and used it, but never exported it:
+
+```js
+const inject = ['slots']                                  // 220
+function apply(ctx) {
+  ctx.slots.inject('settings.section', () => …)            // 221
+}
+exports.apply = apply                                     // 234
+exports.OpenCodeModelSection = OpenCodeModelSection        // 235
+Object.defineProperty(exports, 'default', { value: { apply } })
+```
+
+The loader injects only what `module.exports.inject` lists. With no exported `inject`,
+`ctx.slots` is `undefined`, `apply()` throws, the fibre lands in `failed`, and `BZ()` in
+`assets/index-*.js` prints `failed` **without any detail** — nothing reaches the journal, so the
+server side looks clean.
+
+### 28.3 Why 0.6.0's verification missed it
+
+§27.4 and §5.2.5 of the plan verified the *routes*: `model-settings` 200, `apply` 200, `measure` 200
+in 19.4 s. None of those exercises client-half activation. `--dump-config` listed both rows,
+the bundle served 200 with the registration present, and `node --check lib/client.js` passed.
+Every check that was run could pass while the module was unloadable — the defect only appears at
+`web boot:` in a browser.
+
+### 28.4 Fix
+
+```js
+exports.inject = inject
+Object.defineProperty(exports, 'default', { value: { apply, inject } })
+```
+
+plus a contract test (`test/bundle.test.mjs`) that evaluates the served module with a capture loader
+and asserts the exported `inject` covers every `ctx.<service>` token used in `apply()` — the class of
+bug this was, not just this instance.
+
+Status: fix applied in the workspace at `0.6.1`; browser-boot verification and the live restart are
+recorded in the session boot card `bootcards/2026-10-31T*.md`.

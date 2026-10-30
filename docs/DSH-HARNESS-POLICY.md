@@ -1,10 +1,10 @@
 # DSH Plugin Harness Policy & Version Changelog
 <!-- skeleton:
-version: 2.3
+version: 2.4
 kind: policy
 status: active
-updated: 2026-10-30
-summary: Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules.
+updated: 2026-10-31
+summary: Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules, and the browser-boot verification gate.
 -->
 
 
@@ -51,12 +51,13 @@ result it came from.
 | `engines.dsh` | `>=0.2.2-alpha.2 <0.3.0` for all three plugins |
 | Manifest | `dsh.manifestVersion: 1`, bundle patch, web client factory |
 | Prerelease handling | Pin the exact prerelease floor; do not rely on a lower prerelease window |
-| Upgrade gate | Re-run: package scan, isolated `dsh web` boot, browser console, routes/UI probes, tests |
+| Upgrade gate | Re-run: package scan, isolated `dsh web` boot, **browser boot** (shell mounts, no `web boot:` verdict), routes/UI probes, tests. Route probes alone do not prove a client half activates |
 
 ### 2.1 Version changelog
 
 | Date | Runtime | Change | Action |
 |---|---|---|---|
+| 2026-10-31 | DSH `0.2.2-alpha.2` | 0.6.0's client half killed the whole web UI after the 23:34 restart: `web boot: 1 entry did not activate` / `@nolit/dsh-opencode-v2: failed` — `lib/client.js` declared `const inject = ['slots']` and never exported it, so `ctx.slots` was undefined at activation | `dsh-opencode-v2@0.6.1` exports `inject`; contract test added; verification gate now requires a **browser boot**, not route probes; see [plan](../OPENCODE-MODEL-SERVING-PLAN.md) §5.2.8 |
 | 2026-10-30 | DSH `0.2.2-alpha.2` | `llm-pi-ai` deprecated; autonomous native router policy adopted; `@nolit/dsh-subrouter` decommissioned | `dsh-opencode-v2@0.4.0` mounts `@nolit/dsh-opencode-v2/http` natively; profile repointed to `opencode-http-agent` |
 | 2026-10-30 | DSH `0.2.2-alpha.2` | Live 400 `MissingSessionID` (no `x-opencode-session`) and 401 from a revoked `key` credential preferred over the web OAuth login | `dsh-opencode-v2@0.5.1` sends the session header and ranks oauth over key; see [plan](../OPENCODE-MODEL-SERVING-PLAN.md) §5.1 |
 | 2026-10-30 | DSH `0.2.2-alpha.2` | Prompt picker offered all 49 catalog routes; only 35 usable on this account | `dsh-opencode-v2@0.6.0` adds `enabledModels` (empty = unrestricted) plus an OpenCode v2 settings tab and an explicit entitlement sweep; see [plan](../OPENCODE-MODEL-SERVING-PLAN.md) §5.2 |
@@ -65,6 +66,10 @@ result it came from.
 | 2026-10-29 | DSH `0.2.2-alpha.2` | Built-in client dictionaries changed; Korean pack stale by 117 keys | Refreshed to 68 namespaces / 3,019 keys; en/zh parity 0 |
 | 2026-10-29 | DSH `0.2.2-alpha.2` | Experimental Forge/Worktrees exposed in official plugin list | Measured isolated boot and UTM policy overlap; advisory guardrails required |
 | 2026-10-24 | DSH `0.2.1-rc.3` | Previous verified baseline | Retained in runtime spec as historical evidence |
+
+Correction (2026-10-31): the 2026-10-30 row above claims "mount verified on a clone; live restart
+pending". The restart ran at 23:34:03 and the browser boot failed — the clone check exercised HTTP
+routes, not client-half activation. A clone boot plus 200s on every route is not a mount.
 
 ## 3. Live-state policy
 
