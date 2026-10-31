@@ -19,17 +19,18 @@
  *       produces the same parts in the same order (property-tested).
  */
 
-const OPENERS = ['<antml:thinking>', '<thinking>', '<analysis>', '<antml:analysis>', '[tool call ', '<antml:invoke', '<invoke']
+const OPENERS = ['<antml:think>', '<think>', '<antml:thinking>', '<thinking>', '<analysis>', '<antml:analysis>', '[tool call ', '<antml:invoke', '<invoke']
 const MAX_OPENER = Math.max(...OPENERS.map((opener) => opener.length))
 // Spans erased in place (syntax only, never body prose). Their partial tails must
 // be held exactly like openers, or the same input classifies differently per chunk.
 const STRAY = [
+  '</think>', '<think>', '</antml:think>', '<antml:think>',
   '</thinking>', '<thinking>', '</antml:thinking>', '<antml:thinking>',
   '</analysis>', '<analysis>', '</antml:analysis>', '<antml:analysis>',
   '</summary>', '<summary>', '</antml:summary>', '<antml:summary>',
 ]
 const MAX_STRAY = Math.max(...STRAY.map((tag) => tag.length))
-const THINKING_CLOSE = /^<\/(?:antml:)?thinking>/i
+const THINKING_CLOSE = /^<\/(?:antml:)?think(?:ing)?>/i
 
 const STATE_TEXT = 'text'
 const STATE_REASONING = 'reasoning'
@@ -150,7 +151,7 @@ export function createStreamParser(options = {}) {
         state = STATE_TOOL_HEAD
         callName = ''
         callId = ''
-      } else if (buf.startsWith('<thinking>') || buf.startsWith('<antml:thinking>')) {
+      } else if (/^<(?:antml:)?think(?:ing)?>/i.test(buf)) {
         buf = buf.slice(buf.indexOf('>') + 1)
         closer = null
         state = STATE_REASONING
@@ -185,7 +186,7 @@ export function createStreamParser(options = {}) {
 
   /** REASONING: emit until the thinking closer. */
   function stepReasoning(out, final) {
-    const close = closer === null ? buf.search(/<\/(?:antml:)?thinking>/i) : buf.toLowerCase().indexOf(closer)
+    const close = closer === null ? buf.search(/<\/(?:antml:)?think(?:ing)?>/i) : buf.toLowerCase().indexOf(closer)
     if (close >= 0) {
       const width = closer === null ? (THINKING_CLOSE.exec(buf.slice(close))?.[0].length ?? 0) : closer.length
       reasoning(out, buf.slice(0, close))

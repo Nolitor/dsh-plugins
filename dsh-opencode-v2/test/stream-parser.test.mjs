@@ -145,3 +145,19 @@ test('I2: the parser never holds more than a marker prefix while in text', () =>
   const parts = parser.push('more and more prose')
   assert.ok(allText(parts).includes('more and more prose'), 'prose was held back')
 })
+
+// The short tag form. Measured 2026-11-01 02:10: the model emitted <think> and the
+// parser only knew <thinking>, so private reasoning was rendered as text.
+test('the short <think> form is reasoning, not text', () => {
+  const parts = parseWhole('<think>private reasoning</think>Answer text')
+  assert.equal(parts.filter((p) => p.kind === 'reasoning').map((p) => p.text).join(''), 'private reasoning')
+  assert.equal(allText(parts), 'Answer text')
+})
+
+test('<think> survives re-chunking at every split', () => {
+  const input = '<think>a</think>B<think>c</think>D'
+  const whole = canon(parseWhole(input))
+  for (let cut = 1; cut < input.length; cut++) {
+    assert.equal(canon(parseChunks(input, [cut])), whole, 'split at ' + cut)
+  }
+})
