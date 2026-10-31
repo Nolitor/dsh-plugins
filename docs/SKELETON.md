@@ -15,7 +15,7 @@
 
 ## rule
 
-- **1.0** · active · 2026-10-31 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
+- **1.2** · active · 2026-11-01 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
   Every defect and wrong turn this workspace actually made, with the standing rule that keeps it from happening again. Read before changing a plugin, a doc, or a live service.
 - **1.3** · active · 2026-10-31 · [docs/RULES.md](RULES.md)
   Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting — with the failure ledger as required reading.
@@ -35,8 +35,8 @@
 
 ## report
 
-- **2.7** · active · 2026-10-31 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
-  Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, and the 0.6.0 client-half activation defect that killed the web shell.
+- **3.0** · active · 2026-11-01 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
+  Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, the 0.6.0 client-half activation defect that killed the web shell, the 0.7.3 stream-cut/inline-tag defects with their measured fix, and the 0.7.6 split-marker hold gap that still printed the notation on screen.
 - **1.0** · completed · 2026-10-29 · [DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](../DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
   Runtime measurement and optimization report for the three original plugins on DSH 0.2.2-alpha.2.
 - **1.0** · reference · 2026-10-29 · [UTM-REVIEW-FORGE-VS-SIDEBAR.md](../UTM-REVIEW-FORGE-VS-SIDEBAR.md)
@@ -95,8 +95,10 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 21)
+## boot (newest 5 of 22)
 
+- **active** · 2026-10-31T2129+0900.md · [card](../bootcards/2026-10-31T2129+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-10-31T2129+0900. Older cards are historical.
 - **active** · 2026-10-31T0137+0900.md · [card](../bootcards/2026-10-31T0137+0900.md)
   opencode-v2 0.7.2 — entitlement sweep removed for plan-based availability (Go/Zen), usage ranking refreshed every 5 days, newly appearing models served at priority 0 with the plan gate intact. Next: TokenEconomizer savings audit, then an OpenRouter API router plugin.
 - **active** · 2026-10-31T0042+0900.md · [card](../bootcards/2026-10-31T0042+0900.md)
@@ -105,9 +107,7 @@
   Dated session card (tier 5). The 0.6.0 client-half activation failure, its 0.6.1 fix, the browser-boot verification of the live service, and the docs/contract changes that gate it.
 - **active** · 2026-10-30T2330+0900.md · [card](../bootcards/2026-10-30T2330+0900.md)
   Dated session card (tier 5). State, active task, handoff for 2026-10-30T2330+0900, plus the measured unresolved issues carried out of the OpenCode v2 0.5.1/0.6.0 work.
-- **active** · 2026-10-30T2045+0900.md · [card](../bootcards/2026-10-30T2045+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-10-30T2045+0900. Older cards are historical.
 
 ---
 
-51 indexed (21 boot cards), 0 missing header, 51 total.
+52 indexed (22 boot cards), 0 missing header, 52 total.

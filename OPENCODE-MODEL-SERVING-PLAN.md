@@ -1,11 +1,11 @@
 # OpenCode Model Serving — Incident Post-Mortem, Autonomous Router Policy, and Decommission Record
 
 <!-- skeleton:
-version: 2.7
+version: 3.0
 kind: report
 status: active
-updated: 2026-10-31
-summary: Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, and the 0.6.0 client-half activation defect that killed the web shell.
+updated: 2026-11-01
+summary: Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, the 0.6.0 client-half activation defect that killed the web shell, the 0.7.3 stream-cut/inline-tag defects with their measured fix, and the 0.7.6 split-marker hold gap that still printed the notation on screen.
 -->
 
 > Owner: root record for the OpenCode model-serving track. `dsh-subrouter/README.md` and
@@ -371,6 +371,81 @@ as new. Verified live: seed → `isNew` 0; simulated arrival → the route becom
 
 `0.7.2` exists only because `0.7.1` was packed before the picker path was widened; artifacts are
 immutable, so the version moved.
+
+## 5.3 Measured 2026-10-31 — a transport cut was reported as a request verdict (fixed in 0.7.3)
+
+Long turns kept dying mid-step. The owner's hypothesis was that the adapter mishandled DSH's thinking
+and tool-call tags. Measurement said something else, and found a second defect next to it.
+
+### 5.3.1 What the session records actually show
+
+Source: `~/.dsh/sessions/--home-minami-…-dsh-plugins--/*/session.v4.jsonl.zstd`, read-only
+(`zstd -dc` then JSON over `turn/end`, `assistant/message`).
+
+| Measurement | Value |
+|---|---|
+| Last 6 sessions ending on `{kind:'error', error:{message:'terminated', code:'OPENCODE_BACKEND'}}` | **3 of 6** |
+| Turns aborted by `tokeneconomizer/watchdog` (a hook cancel, not an adapter error) | **8** in this workspace, **3 of 6** turns in the spec session |
+| Silence between `step/start` and the abort in those turns | **186.6 s / 261.1 s / 281.1 s** (watchdog budget: 180 000 ms) |
+| Literal `<thinking>` stored in assistant **text** | **31** occurrences in the interrupted session |
+| Literal `[tool call bash #call_…]` stored in assistant **text** | **24–44** per session |
+
+So: the *reasoning tag itself was fine* (`{"type":"reasoning"}` blocks are stored correctly). The two
+real causes were **a transport cut mapped to a hard verdict** and **no inline-tag parser**, plus a third
+one owned by a different track (the watchdog).
+
+### 5.3.2 The defect in one line
+
+`lib/http.js` caught *every* exception from the SSE loop and yielded
+`{kind:'error', failure:{code:'OPENCODE_BACKEND'}}`. undici reports a dropped upstream body as
+`TypeError: terminated`, so a momentary network reset discarded a step that had already produced
+usable work — the exact "이 턴이 실패했습니다 / terminated" the owner saw.
+
+### 5.3.3 The fix (0.7.3, measured by the suite)
+
+| Layer | Behaviour |
+|---|---|
+| Classification | `isTransientStreamError()`: `terminated`, `socket hang up`, `other side closed`, `premature close`, `ECONNRESET`, `ECONNABORTED`, `EPIPE`, `ETIMEDOUT`, `UND_ERR_SOCKET`, `UND_ERR_CLOSED` |
+| Before any output | transparent retry (`streamRetries: 1`); the retry cannot duplicate content because nothing reached the transcript |
+| After output exists | partial preserve (`streamCutPreserve: true`): router flush, open blocks closed, `repairJson()` for a cut tool call, `{kind:'stop'}`; the harness keeps the step and continues |
+| Nothing preserved / opt-out | the old honest `OPENCODE_BACKEND` error (`streamCutPreserve: false`) |
+| Inline tags | `lib/inline-tags.js` turns `<thinking>`, `[tool call …]: {…}` and `<invoke …>` / `antml:invoke` into real `reasoning`/`tool-call` blocks; undeclared tool names and unparsable text pass through byte-for-byte; an unterminated `<thinking>` is flushed as reasoning |
+
+`finish` reasons are constrained by DSH (`stop`, `tool-calls`, `max-tokens`, `aborted`, `error` —
+`dsh-llm` `FinishReasonMap`), which is why a preserved partial is closed as `stop` rather than inventing
+a new kind. `max-tokens` was rejected on purpose: `dsh-llm` drops **tool-call blocks** on that kind, which
+would silently delete exactly the call the cut interrupted.
+
+Verification: `npm run check` clean, `npm test` **229/229** (209 pre-existing unchanged + 20 new).
+
+**Addendum (0.7.4).** 0.7.3 converted only the well-formed `[tool call name #id]: {json}` shape.
+Measured in the live session record: 149 structured tool calls coexist with **80** literal
+markers in assistant text plus stray `</thinking>` closers — the transcript was still dirty and
+the suite was still green, because the new tests only covered the well-formed shape. 0.7.4 makes
+removal unconditional (`sanitizeProtocolText` on every text and reasoning fragment), stops
+showing a marker for an undeclared tool, and adds the failing shapes as fixtures. Suite
+**237/237**.
+Evidence and the file list: `dsh-opencode-v2/VERIFICATION.md` §32.
+
+## 5.4 Measured 2026-11-01 — the inline-tag router released a split marker (fixed in 0.7.6)
+
+The screen still showed `[tool call bash #…]: {…}` after 0.7.4. The cause was a **hold gap**, not a
+sanitiser gap: `drainCall()` released any `[tool call …` prefix that had not yet received its
+closing `]`, so the marker plus its JSON payload was emitted as assistant text. Because SSE chunks
+split the marker (recorded: `[tool call bash #` | `chatcmpl-t` | `ool-f82` | `dc4b5b1582ac5` |
+`]: {…}`), the failing shape was the *normal* one; the passing shape — a whole marker in a single
+delta — was the one the tests covered. 13 of 24 assistant messages in session `e9c75e9a` carried
+the notation in their text part.
+
+Fix (0.7.6): a partial marker is held (bounded by `maxHold`), a complete-but-invalid marker has its
+syntax stripped while the prose is kept, `<invoke>`/`<parameter>` notation is removed by
+`sanitizeProtocolText`, and every text/reasoning block is re-sanitised at `block-end` as a last-mile
+net. Suite 237 -> 243, all pass; the route-level regression test replays the recorded delta
+boundaries. Detail: `dsh-opencode-v2/VERIFICATION.md` §34, `docs/FAILURE-LEDGER.md` F-18.
+
+Also measured in the same pass and **not** fixed here: `routingTrace` and `bootBeacon` guards are
+inverted relative to their docstrings, so both write to `/tmp` on every content delta by default
+(`OPENCODE_V2_ROUTING_DEBUG=0` / `OPENCODE_V2_BEACON=0` disable them).
 
 ## 6. Rules restated for the next session
 

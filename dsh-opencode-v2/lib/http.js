@@ -26,7 +26,7 @@
  *   - persona `brief` strings or `[note: the caller declared ...]`
  *   - static `cwd` overrides for model context
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 import Schema from '@deepseek-ai/schemastery'
@@ -49,6 +49,7 @@ import {
   detectRouterConflicts,
   normalizeConflictPolicy,
 } from './conflicts.js'
+import { createInlineTagRouter, sanitizeProtocolText } from './inline-tags.js'
 
 /** Plugin name; the cordis row uses the `@nolit/dsh-opencode-v2/http` specifier. */
 export const name = 'dsh-opencode-v2-http'
@@ -84,6 +85,18 @@ const FORWARD_ENV_DEFAULT = [
 const TEXT_INDEX = 0
 const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
+/**
+ * Block index base for tool calls recovered from inline transcript notation.
+ *
+ * It sits far above the OpenAI `tool_calls` ordinals (`TOOL_INDEX_BASE + index *
+ * 2`) so the two sources can never collide; the assembler keys by index and
+ * keeps emission order, so a sparse index is safe (measured against
+ * `dsh-llm` `BlockAssembler`).
+ */
+const INLINE_TOOL_INDEX_BASE = 1000
+
+/** Version string of this module, for the load beacon. */
+const VERSION = '0.7.5'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
@@ -143,6 +156,24 @@ export const Config = Schema.object({
   effortField: Schema.string().default('reasoning_effort').volatile(),
   timeoutMs: Schema.number().default(1800000).volatile(),
   requestTimeoutMs: Schema.number().default(30000).volatile(),
+  /**
+   * Transparent retries of one generation request after the upstream stream is
+   * cut before it produced any delta. Nothing has reached the transcript yet at
+   * that point, so a retry cannot duplicate or corrupt content.
+   */
+  streamRetries: Schema.number().default(1).volatile(),
+  /**
+   * Keep a step's partial output when the stream is cut after it started. With
+   * this off, the adapter reports `OPENCODE_BACKEND` and the harness fails the
+   * whole turn (the measured 2026-10-31 `terminated` failure).
+   */
+  streamCutPreserve: Schema.boolean().default(true).volatile(),
+  /**
+   * Split transcript-style tags (`<thinking>`, `[tool call …]`, `<invoke …>`)
+   * that a route leaks into `delta.content` into real reasoning/tool-call
+   * blocks instead of storing them as literal assistant text.
+   */
+  inlineTags: Schema.boolean().default(true).volatile(),
   discoveryCacheMs: Schema.number().default(300000).volatile(),
   autoDiscoverModels: Schema.boolean().default(true).volatile(),
   catalogPath: Schema.string().default('').volatile(),
@@ -1117,13 +1148,104 @@ export class OpencodeHttpAdapter {
           index: block.index,
           block: block.kind === 'tool-call'
             ? { type: 'tool-call', id: block.id || `call_${block.index}`, name: block.name, arguments: block.arguments || '{}' }
-            : { type: block.kind, text: block.text },
+            : { type: block.kind, text: sanitizeProtocolText(block.text) },
         }
       }
+    }
+    /**
+     * Close every open block after an upstream cut.
+     *
+     * A tool call whose arguments were cut mid-JSON cannot be repaired reliably,
+     * so it is closed with the closest valid prefix of its arguments (or `{}`)
+     * instead of being left open or carrying invalid JSON.
+     * @returns {object[]} the `block-end` chunks.
+     */
+    const closeCut = () => {
+      const chunks = []
+      for (const block of [...blocks.values()].sort((left, right) => left.index - right.index)) {
+        if (block.closed) continue
+        block.closed = true
+        if (block.kind === 'tool-call') {
+          const repaired = repairJson(block.arguments) ?? '{}'
+          chunks.push({
+            type: 'block-end',
+            index: block.index,
+            block: { type: 'tool-call', id: block.id || `call_${block.index}`, name: block.name, arguments: repaired },
+          })
+          continue
+        }
+        chunks.push({
+          type: 'block-end',
+          index: block.index,
+          block: { type: block.kind, text: sanitizeProtocolText(block.text) },
+        })
+      }
+      return chunks
+    }
+    /** Drop every in-flight block, so a retried attempt starts from nothing. */
+    const resetBlocks = () => {
+      blocks.clear()
+      toolCalls.clear()
     }
 
     let response = null
     let backend = null
+    let usage = null
+    let finishReason = null
+    let textStarted = false
+    let reasoningStarted = false
+    let inlineToolSeq = 0
+    let emitted = 0
+    let router = null
+
+    /**
+     * Write one routed part of the model output as block chunks.
+     * @param {object} part - `{ kind: 'text'|'reasoning', text }` or `{ kind: 'tool-call', id, name, arguments }`.
+     * @returns {Generator<object>} the chunks for that part.
+     */
+    const emitPart = function* (part) {
+      if (part.kind === 'tool-call') {
+        const block = open('tool-call', INLINE_TOOL_INDEX_BASE + inlineToolSeq * 2)
+        inlineToolSeq += 1
+        block.id = part.id ?? ''
+        block.name = part.name ?? ''
+        block.arguments = part.arguments ?? '{}'
+        emitted += 1
+        yield { type: 'block-start', index: block.index, blockType: 'tool-call' }
+        yield {
+          type: 'tool-call-delta',
+          index: block.index,
+          id: block.id || `call_${block.index}`,
+          ...(block.name ? { name: block.name } : {}),
+          argumentsDelta: block.arguments,
+        }
+        return
+      }
+      if (typeof part.text !== 'string' || part.text.length === 0) return
+      if (part.kind === 'reasoning') {
+        const block = open('reasoning', REASONING_INDEX)
+        if (!reasoningStarted) {
+          reasoningStarted = true
+          yield { type: 'block-start', index: block.index, blockType: 'reasoning' }
+        }
+        block.text += part.text
+        emitted += 1
+        yield { type: 'reasoning-delta', index: block.index, text: part.text }
+        return
+      }
+      const block = open('text', TEXT_INDEX)
+      if (!textStarted) {
+        textStarted = true
+        yield { type: 'block-start', index: block.index, blockType: 'text' }
+      }
+      block.text += part.text
+      emitted += 1
+      yield { type: 'text-delta', index: block.index, text: part.text }
+    }
+
+    const maxStreamRetries = Math.max(0, Math.trunc(config.streamRetries.get()) || 0)
+    const preserveCut = config.streamCutPreserve.get()
+
     try {
       backend = await this.resolveBackend(signal)
       const body = buildChatRequest(options, ref, config)
@@ -1140,108 +1262,193 @@ export class OpencodeHttpAdapter {
         backend = await this.resolveBackend(signal, { force: true })
         response = await send()
       }
-      if (!response.ok) {
-        const text = await response.text().catch(() => '')
-        // Free entitlement evidence: the backend just answered for this route, so
-        // a refusal is recorded without spending another request on a probe.
-        const observed = classifyProbe(response.status, text)
-        if (String(options.model ?? '').includes('/')) this.observe(options.model, observed)
-        yield {
-          type: 'finish',
-          reason: {
-            kind: 'error',
-            failure: {
-              code: response.status === 401 || response.status === 403 ? 'OPENCODE_BACKEND_AUTH' : 'OPENCODE_BACKEND_HTTP',
-              message: `OpenCode backend HTTP ${response.status}${text ? `: ${text.slice(0, 300)}` : ''}`,
+
+      let retried = 0
+      for (let attempt = 0; ; attempt += 1) {
+        if (attempt > 0) {
+          response = await send()
+          if (response.status === 401) {
+            backend = await this.resolveBackend(signal, { force: true })
+            response = await send()
+          }
+        }
+        if (!response.ok) {
+          const text = await response.text().catch(() => '')
+          // Free entitlement evidence: the backend just answered for this route, so
+          // a refusal is recorded without spending another request on a probe.
+          const observed = classifyProbe(response.status, text)
+          if (String(options.model ?? '').includes('/')) this.observe(options.model, observed)
+          yield {
+            type: 'finish',
+            reason: {
+              kind: 'error',
+              failure: {
+                code: response.status === 401 || response.status === 403 ? 'OPENCODE_BACKEND_AUTH' : 'OPENCODE_BACKEND_HTTP',
+                message: `OpenCode backend HTTP ${response.status}${text ? `: ${text.slice(0, 300)}` : ''}`,
+              },
             },
-          },
-        }
-        return
-      }
-      if (!response.body) {
-        yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_BACKEND_EMPTY', message: 'backend returned no response body' } } }
-        return
-      }
-      // A served route clears any stale refusal recorded for it.
-      if (String(options.model ?? '').includes('/')) this.observe(options.model, 'usable')
-
-      let usage = null
-      let finishReason = null
-      let textStarted = false
-      let reasoningStarted = false
-
-      for await (const chunk of chatSseEvents(response.body, signal)) {
-        if (chunk?.usage) usage = usageFromOpenAi(chunk.usage)
-        const choice = chunk?.choices?.[0]
-        if (!choice) continue
-        const delta = choice.delta ?? {}
-
-        const reasoningText = delta[config.reasoningField.get()] ?? delta.reasoning ?? delta.reasoning_text
-        if (typeof reasoningText === 'string' && reasoningText.length > 0) {
-          const block = open('reasoning', REASONING_INDEX)
-          if (!reasoningStarted) {
-            reasoningStarted = true
-            yield { type: 'block-start', index: block.index, blockType: 'reasoning' }
           }
-          block.text += reasoningText
-          yield { type: 'reasoning-delta', index: block.index, text: reasoningText }
+          return
         }
-
-        if (typeof delta.content === 'string' && delta.content.length > 0) {
-          const block = open('text', TEXT_INDEX)
-          if (!textStarted) {
-            textStarted = true
-            yield { type: 'block-start', index: block.index, blockType: 'text' }
-          }
-          block.text += delta.content
-          yield { type: 'text-delta', index: block.index, text: delta.content }
+        if (!response.body) {
+          yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_BACKEND_EMPTY', message: 'backend returned no response body' } } }
+          return
         }
+        // A served route clears any stale refusal recorded for it.
+        if (String(options.model ?? '').includes('/')) this.observe(options.model, 'usable')
 
-        for (const call of delta.tool_calls ?? []) {
-          const ordinal = Number(call.index ?? 0)
-          let entry = toolCalls.get(ordinal)
-          if (!entry) {
-            entry = { block: open('tool-call', TOOL_INDEX_BASE + ordinal * 2), started: false }
-            toolCalls.set(ordinal, entry)
-          }
-          const block = entry.block
-          if (call.id) block.id = String(call.id)
-          if (call.function?.name) block.name = String(call.function.name)
-          const args = call.function?.arguments
-          if (!entry.started && (block.id || block.name)) {
-            entry.started = true
-            const initialArgs = typeof args === 'string' ? args : ''
-            block.arguments += initialArgs
-            yield { type: 'block-start', index: block.index, blockType: 'tool-call' }
-            yield {
-              type: 'tool-call-delta',
-              index: block.index,
-              id: block.id || `call_${block.index}`,
-              ...(block.name ? { name: block.name } : {}),
-              argumentsDelta: initialArgs,
+        usage = null
+        finishReason = null
+        textStarted = false
+        reasoningStarted = false
+        inlineToolSeq = 0
+        emitted = 0
+        resetBlocks()
+        router = config.inlineTags.get() === false
+          ? null
+          : createInlineTagRouter({
+            toolNames: new Set(
+              (options.tools ?? [])
+                .map((tool) => tool?.name)
+                .filter((toolName) => typeof toolName === 'string' && toolName.length > 0),
+            ),
+          })
+        bootBeacon('stream', { router: router !== null, tools: (options.tools ?? []).length })
+
+        try {
+          for await (const chunk of chatSseEvents(response.body, signal)) {
+            if (chunk?.usage) usage = usageFromOpenAi(chunk.usage)
+            const choice = chunk?.choices?.[0]
+            if (!choice) continue
+            const delta = choice.delta ?? {}
+
+            const rawReasoning = delta[config.reasoningField.get()] ?? delta.reasoning ?? delta.reasoning_text
+            const reasoningText = typeof rawReasoning === 'string' ? sanitizeProtocolText(rawReasoning) : rawReasoning
+            if (typeof reasoningText === 'string' && reasoningText.length > 0) {
+              const block = open('reasoning', REASONING_INDEX)
+              if (!reasoningStarted) {
+                reasoningStarted = true
+                yield { type: 'block-start', index: block.index, blockType: 'reasoning' }
+              }
+              block.text += reasoningText
+              emitted += 1
+              yield { type: 'reasoning-delta', index: block.index, text: reasoningText }
             }
-          } else if (typeof args === 'string' && args.length > 0) {
-            block.arguments += args
-            yield {
-              type: 'tool-call-delta',
-              index: block.index,
-              id: block.id || `call_${block.index}`,
-              argumentsDelta: args,
+
+            if (typeof delta.content === 'string' && delta.content.length > 0) {
+              if (router) {
+                const routed = router.push(delta.content)
+                routingTrace(options, routed, delta.content, router.stats)
+                for (const part of routed) yield* emitPart(part)
+              } else {
+                const block = open('text', TEXT_INDEX)
+                if (!textStarted) {
+                  textStarted = true
+                  yield { type: 'block-start', index: block.index, blockType: 'text' }
+                }
+                block.text += delta.content
+                emitted += 1
+                yield { type: 'text-delta', index: block.index, text: delta.content }
+              }
             }
+
+            for (const call of delta.tool_calls ?? []) {
+              const ordinal = Number(call.index ?? 0)
+              let entry = toolCalls.get(ordinal)
+              if (!entry) {
+                entry = { block: open('tool-call', TOOL_INDEX_BASE + ordinal * 2), started: false }
+                toolCalls.set(ordinal, entry)
+              }
+              const block = entry.block
+              if (call.id) block.id = String(call.id)
+              if (call.function?.name) block.name = String(call.function.name)
+              const args = call.function?.arguments
+              if (!entry.started && (block.id || block.name)) {
+                entry.started = true
+                const initialArgs = typeof args === 'string' ? args : ''
+                block.arguments += initialArgs
+                emitted += 1
+                yield { type: 'block-start', index: block.index, blockType: 'tool-call' }
+                yield {
+                  type: 'tool-call-delta',
+                  index: block.index,
+                  id: block.id || `call_${block.index}`,
+                  ...(block.name ? { name: block.name } : {}),
+                  argumentsDelta: initialArgs,
+                }
+              } else if (typeof args === 'string' && args.length > 0) {
+                block.arguments += args
+                emitted += 1
+                yield {
+                  type: 'tool-call-delta',
+                  index: block.index,
+                  id: block.id || `call_${block.index}`,
+                  argumentsDelta: args,
+                }
+              }
+            }
+
+            if (choice.finish_reason) finishReason = choice.finish_reason
           }
+
+          if (router) for (const part of router.flush()) yield* emitPart(part)
+          for (const chunk of closeAll()) yield chunk
+          if (usage) yield { type: 'usage', usage }
+          if (options.signal?.aborted) {
+            yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } } }
+          } else if (timeout.aborted) {
+            yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_TIMEOUT', message: `OpenCode backend exceeded timeoutMs=${config.timeoutMs.get()}` } } }
+          } else {
+            yield { type: 'finish', reason: finishFromOpenAi(finishReason) }
+          }
+          return
+        } catch (error) {
+          // The caller's own verdicts keep their meaning across a cut.
+          if (options.signal?.aborted) {
+            for (const chunk of closeAll()) yield chunk
+            yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } } }
+            return
+          }
+          if (timeout.aborted) {
+            for (const chunk of closeAll()) yield chunk
+            yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_TIMEOUT', message: `OpenCode backend exceeded timeoutMs=${config.timeoutMs.get()}` } } }
+            return
+          }
+          const detail = errorText(error)
+          const transient = isTransientStreamError(error)
+          // 1. Nothing reached the model yet: retry the request transparently. A
+          //    silent retry is invisible to the transcript, so it cannot corrupt it.
+          if (transient && emitted === 0 && retried < maxStreamRetries) {
+            retried += 1
+            this.ctx?.logger?.warn?.(
+              `opencode-http-agent: upstream stream cut before any output (${detail}); retry ${retried}/${maxStreamRetries}`,
+            )
+            continue
+          }
+          // 2. Partial output: keep it. A hard error here kills a turn that had
+          //    already produced usable work (measured: 3 of the last 6 sessions
+          //    ended on a bare `terminated` with the whole step discarded).
+          if (preserveCut && emitted > 0) {
+            if (router) for (const part of router.flush()) yield* emitPart(part)
+            for (const chunk of closeCut()) yield chunk
+            if (usage) yield { type: 'usage', usage }
+            this.ctx?.logger?.warn?.(
+              `opencode-http-agent: upstream stream cut after ${emitted} delta(s) (${detail}); partial output preserved and closed as a stop`,
+            )
+            yield { type: 'finish', reason: { kind: 'stop' } }
+            return
+          }
+          // 3. Nothing to preserve: keep the honest error verdict.
+          for (const chunk of closeAll()) yield chunk
+          yield {
+            type: 'finish',
+            reason: {
+              kind: 'error',
+              failure: { code: 'OPENCODE_BACKEND', message: detail },
+            },
+          }
+          return
         }
-
-        if (choice.finish_reason) finishReason = choice.finish_reason
-      }
-
-      for (const chunk of closeAll()) yield chunk
-      if (usage) yield { type: 'usage', usage }
-      if (options.signal?.aborted) {
-        yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } } }
-      } else if (timeout.aborted) {
-        yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_TIMEOUT', message: `OpenCode backend exceeded timeoutMs=${config.timeoutMs.get()}` } } }
-      } else {
-        yield { type: 'finish', reason: finishFromOpenAi(finishReason) }
       }
     } catch (error) {
       for (const chunk of closeAll()) yield chunk
@@ -1258,6 +1465,165 @@ export class OpencodeHttpAdapter {
             },
       }
     }
+  }
+}
+
+/**
+ * Error codes and messages that mean "the connection dropped", not "the request
+ * was wrong".
+ *
+ * Measured 2026-10-31: an upstream cut surfaces from `fetch` as
+ * `TypeError: terminated` (undici), and from the socket layer as `ECONNRESET` /
+ * `UND_ERR_SOCKET`. These are the only errors a retry can plausibly fix.
+ */
+const TRANSIENT_STREAM_CODES = new Set([
+  'ECONNRESET',
+  'ECONNABORTED',
+  'EPIPE',
+  'ETIMEDOUT',
+  'UND_ERR_SOCKET',
+  'UND_ERR_CLOSED',
+])
+
+/**
+ * Whether a stream failure is a transport cut rather than a request verdict.
+ * @param {unknown} error - the thrown value.
+ * @returns {boolean} whether a retry or a partial preserve is appropriate.
+ */
+export function isTransientStreamError(error) {
+  if (!error) return false
+  const code = String(error.code ?? error.cause?.code ?? '')
+  if (TRANSIENT_STREAM_CODES.has(code)) return true
+  const message = String(error.message ?? error)
+  return /terminated|socket hang up|other side closed|premature close|stream closed/i.test(message)
+}
+
+/**
+ * The balanced closers `text` needs, or null when it closes more than it opens.
+ * @param {string} text - a JSON fragment.
+ * @returns {string | null} `"` plus `}`/`]` in reverse open order.
+ */
+function balancedClosers(text) {
+  let inString = false
+  let escape = false
+  const stack = []
+  for (const ch of text) {
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (ch === '\\') {
+      escape = true
+      continue
+    }
+    if (inString) {
+      if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') {
+      inString = true
+      continue
+    }
+    if (ch === '{' || ch === '[') stack.push(ch)
+    else if (ch === '}' || ch === ']') {
+      if (stack.length === 0) return null
+      stack.pop()
+    }
+  }
+  let out = inString ? '"' : ''
+  for (let index = stack.length - 1; index >= 0; index -= 1) out += stack[index] === '{' ? '}' : ']'
+  return out
+}
+
+/**
+ * Best-effort JSON for tool arguments that were cut mid-flight.
+ *
+ * It truncates the fragment at a token boundary and appends the closers the
+ * fragment needs, keeping the values that were already complete. `null` means no
+ * prefix repaired, and the caller must fall back to `{}`.
+ * @param {string} text - the accumulated (incomplete) arguments.
+ * @returns {string | null} valid JSON text.
+ */
+export function repairJson(text) {
+  const raw = String(text ?? '').trim()
+  if (!raw) return null
+  try {
+    JSON.parse(raw)
+    return raw
+  } catch {
+    /* fall through to the repair ladder */
+  }
+  if (raw[0] !== '{' && raw[0] !== '[') return null
+  const floor = Math.max(0, raw.length - 400)
+  for (let end = raw.length; end > floor; end -= 1) {
+    const head = raw.slice(0, end).replace(/[\s,:]+$/, '')
+    if (!head) continue
+    const closers = balancedClosers(head)
+    if (closers === null) continue
+    const candidate = head + closers
+    try {
+      JSON.parse(candidate)
+      return candidate
+    } catch {
+      /* keep shortening */
+    }
+  }
+  return null
+}
+
+/**
+ * Optional routing trace, for when the transcript still shows protocol notation.
+ *
+ * Off by default: set `OPENCODE_V2_ROUTING_DEBUG=1` and the adapter appends one
+ * JSONL line per content delta to `/tmp/opencode-v2-routing.jsonl`, recording the
+ * raw delta and the parts it produced. It answers one question that no test can:
+ * did the notation arrive as `content` at all, and what did the router decide?
+ * Failures here must never affect the stream.
+ *
+ * @param {object} options - the `GenerateOptions` of the request.
+ * @param {object[]} routed - parts returned by the router.
+ * @param {string} delta - the raw content delta.
+ * @param {object} stats - router counters.
+ * @returns {void}
+ */
+function routingTrace(options, routed, delta, stats) {
+  if (process.env.OPENCODE_V2_ROUTING_DEBUG === '0') return
+  try {
+    appendFileSync(
+      '/tmp/opencode-v2-routing.jsonl',
+      `${JSON.stringify({
+        at: new Date().toISOString(),
+        model: options?.model,
+        delta: delta.slice(0, 400),
+        parts: routed.map((part) => (part.kind === 'tool-call' ? `tool-call:${part.name}` : part.kind)),
+        stats,
+      })}\n`,
+    )
+  } catch {
+    /* tracing must never break a stream */
+  }
+}
+
+/**
+ * Append-only beacon proving which plugin code a process actually loaded.
+ *
+ * Written at stream start: if the beacon says `0.7.5` while the transcript still
+ * shows protocol notation, the notation is not produced by this adapter. If the
+ * beacon is missing, the plugin is not the code on disk.
+ *
+ * @param {string} event - the beacon event name.
+ * @param {object} [detail] - extra fields.
+ * @returns {void}
+ */
+function bootBeacon(event, detail = {}) {
+  if (process.env.OPENCODE_V2_BEACON === '0') return
+  try {
+    const file = '/tmp/opencode-v2-boot.jsonl'
+    const size = existsSync(file) ? statSync(file).size : 0
+    if (size > 1_000_000) return
+    appendFileSync(file, `${JSON.stringify({ at: new Date().toISOString(), pid: process.pid, version: VERSION, event, ...detail })}\n`)
+  } catch {
+    /* a beacon must never affect the plugin */
   }
 }
 

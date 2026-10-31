@@ -25,9 +25,11 @@ import {
   modelRefFromRoute,
   classifyProbe,
   enabledRouteFilter,
+  isTransientStreamError,
   parseBanner,
   probeServer,
   registerModelSettingsRoutes,
+  repairJson,
   sessionHeaders,
   readBanner,
   resolveWorkspaceDirectory,
@@ -108,6 +110,16 @@ async function startServer(script = {}) {
           { choices: [{ delta: { content: ' HTTP' } }] },
           { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 11, prompt_tokens_details: { cached_tokens: 4 }, completion_tokens: 4 } },
         ]
+        // `cuts[i]` = how many events attempt i delivers before the socket is
+        // destroyed mid-stream (the measured `TypeError: terminated` shape).
+        const cutEvents = (script.cuts ?? [])[state.chatRequests.length - 1]
+        if (cutEvents !== undefined) {
+          res.writeHead(200, { 'content-type': 'text/event-stream' })
+          for (const event of events.slice(0, cutEvents)) res.write(`data: ${JSON.stringify(event)}\n\n`)
+          res.flushHeaders()
+          setTimeout(() => res.destroy(), 10)
+          return undefined
+        }
         res.writeHead(200, { 'content-type': 'text/event-stream' })
         for (const event of events) res.write(`data: ${JSON.stringify(event)}\n\n`)
         res.write('data: [DONE]\n\n')
@@ -632,6 +644,267 @@ test('model-settings routes report a host without a settings service instead of 
       new Request('http://x/', { method: 'POST', body: JSON.stringify({ enabled: ['a/b'] }) }),
     )
     assert.equal(res.status, 409)
+  } finally {
+    await close()
+  }
+})
+
+// --- upstream stream cut (measured 2026-10-31: `TypeError: terminated`) ---------
+
+test('a stream cut before any output is retried once and then succeeds', async () => {
+  const { server, state, close } = await startServer({ cuts: [0] })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    // The retry is invisible in the transcript: exactly one text block, one stop.
+    assert.equal(state.chatRequests.length, 2)
+    const texts = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text)
+    assert.deepEqual(texts, ['Hello', ' HTTP'])
+    assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
+  } finally {
+    await close()
+  }
+})
+
+test('a stream cut after partial text preserves the text instead of failing the turn', async () => {
+  const events = [
+    { choices: [{ delta: { reasoning_content: 'Think.' } }] },
+    { choices: [{ delta: { content: 'Hello' } }] },
+    { choices: [{ delta: { content: ' HTTP' } }] },
+  ]
+  const { server, state, close } = await startServer({ events, cuts: [2] })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    const final = chunks.at(-1)
+    // `stop`, not `error`: the harness keeps the partial message and continues.
+    assert.deepEqual(final, { type: 'finish', reason: { kind: 'stop' } })
+    assert.ok(!chunks.some((chunk) => chunk.type === 'finish' && chunk.reason.kind === 'error'))
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.equal(text, 'Hello')
+    // Every opened block is closed exactly once.
+    const opened = chunks.filter((chunk) => chunk.type === 'block-start').map((chunk) => chunk.index)
+    const closed = chunks.filter((chunk) => chunk.type === 'block-end').map((chunk) => chunk.index)
+    assert.deepEqual(closed.sort(), opened.sort())
+  } finally {
+    await close()
+  }
+})
+
+test('a stream cut mid tool-call closes the call with repaired JSON', async () => {
+  const events = [
+    { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_7', function: { name: 'bash', arguments: '{"command":"ls' } }] } }] },
+  ]
+  const { server, state, close } = await startServer({ events, cuts: [1] })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'list' }] }],
+      tools: [{ name: 'bash', description: 'run', parameters: { type: 'object', properties: {} } }],
+    }))
+    assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
+    const end = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    assert.equal(end.block.id, 'call_7')
+    assert.equal(end.block.name, 'bash')
+    // Never invalid JSON: the tool layer can parse it and the model can retry.
+    assert.doesNotThrow(() => JSON.parse(end.block.arguments))
+  } finally {
+    await close()
+  }
+})
+
+test('streamCutPreserve:false keeps the previous hard error verdict', async () => {
+  const { server, state, close } = await startServer({ cuts: [1] })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), streamCutPreserve: false, streamRetries: 0 })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    const final = chunks.at(-1)
+    assert.equal(final.type, 'finish')
+    assert.equal(final.reason.kind, 'error')
+    assert.equal(final.reason.failure.code, 'OPENCODE_BACKEND')
+  } finally {
+    await close()
+  }
+})
+
+test('inline thinking tags in content become a reasoning block, not literal text', async () => {
+  const events = [
+    { choices: [{ delta: { content: '<thinking>plan it</thinking>Hel' } }] },
+    { choices: [{ delta: { content: 'lo' } }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    const starts = chunks.filter((chunk) => chunk.type === 'block-start').map((chunk) => chunk.blockType)
+    assert.deepEqual(starts, ['reasoning', 'text'])
+    const reasoning = chunks.filter((chunk) => chunk.type === 'reasoning-delta').map((chunk) => chunk.text).join('')
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.equal(reasoning, 'plan it')
+    assert.equal(text, 'Hello')
+    assert.ok(!JSON.stringify(chunks).includes('<thinking>'))
+  } finally {
+    await close()
+  }
+})
+
+test('inlineTags:false leaves the tags alone (escape hatch)', async () => {
+  const events = [
+    { choices: [{ delta: { content: '<thinking>x</thinking>y' } }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), inlineTags: false })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.equal(text, '<thinking>x</thinking>y')
+  } finally {
+    await close()
+  }
+})
+
+test('a leaked literal tool call becomes a real tool-call block for a declared tool', async () => {
+  const events = [
+    { choices: [{ delta: { content: 'I will run it.[tool call bash #call_42]: {"command":"ls"}' } }] },
+    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'list' }] }],
+      tools: [{ name: 'bash', description: 'run', parameters: { type: 'object', properties: {} } }],
+    }))
+    const call = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    assert.equal(call.block.id, 'call_42')
+    assert.equal(call.block.name, 'bash')
+    assert.equal(call.block.arguments, '{"command":"ls"}')
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.equal(text, 'I will run it.')
+  } finally {
+    await close()
+  }
+})
+
+test('isTransientStreamError separates a transport cut from a request verdict', () => {
+  assert.equal(isTransientStreamError(new TypeError('terminated')), true)
+  assert.equal(isTransientStreamError(Object.assign(new Error('x'), { code: 'ECONNRESET' })), true)
+  assert.equal(isTransientStreamError(Object.assign(new Error('fetch failed'), { cause: { code: 'UND_ERR_SOCKET' } })), true)
+  assert.equal(isTransientStreamError(new Error('HTTP 400 model is unavailable')), false)
+  assert.equal(isTransientStreamError(undefined), false)
+})
+
+test('repairJson returns valid JSON for a cut argument fragment', () => {
+  assert.equal(repairJson('{"command":"ls"}'), '{"command":"ls"}')
+  assert.equal(repairJson('{"command":"ls'), '{"command":"ls"}')
+  assert.equal(repairJson('{"a":1,"b":[1,2'), '{"a":1,"b":[1,2]}')
+  assert.doesNotThrow(() => JSON.parse(repairJson('{"a":1,"b":[1,2')))
+  assert.equal(repairJson('not json'), null)
+  assert.equal(repairJson(''), null)
+})
+
+// --- last-mile notation stripping (the "screen is a mess" case, 2026-10-31) ---
+
+test('a leaked multi-call block never reaches the transcript as text', async () => {
+  const blob = '\n\n[tool call bash #call_1]: {"command":"grep -c x y"}'
+    + '\n[tool call bash #call_2]: {"command":"echo ok"}'
+    + '\n</thinking>\n'
+  const events = [
+    { choices: [{ delta: { content: blob } }] },
+    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'go' }] }],
+      tools: [{ name: 'bash', description: 'run', parameters: { type: 'object', properties: {} } }],
+    }))
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.ok(!text.includes('[tool call '), `notation survived: ${JSON.stringify(text)}`)
+    assert.ok(!text.includes('thinking>'), `tag survived: ${JSON.stringify(text)}`)
+    const calls = chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    assert.equal(calls.length, 2)
+  } finally {
+    await close()
+  }
+})
+
+test('a stray thinking tag inside reasoning is stripped', async () => {
+  const events = [
+    { choices: [{ delta: { reasoning_content: 'plan it</thinking> and more' } }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'go' }] }],
+    }))
+    const reasoning = chunks.filter((chunk) => chunk.type === 'reasoning-delta').map((chunk) => chunk.text).join('')
+    assert.equal(reasoning, 'plan it and more')
+  } finally {
+    await close()
+  }
+})
+
+test('a tool-call marker split across SSE events never reaches the transcript as text', async () => {
+  // Boundaries copied from the stored stream of session e9c75e9a (2026-10-31),
+  // where v0.7.5 leaked the notation into the assistant text block.
+  const events = [
+    { choices: [{ delta: { content: 'Now I will look.\\n\\n' } }] },
+    { choices: [{ delta: { content: '[tool call bash #' } }] },
+    { choices: [{ delta: { content: 'chatcmpl-t' } }] },
+    { choices: [{ delta: { content: 'ool-f82' } }] },
+    { choices: [{ delta: { content: 'dc4b5b1582ac5' } }] },
+    { choices: [{ delta: { content: ']: {"command":"ls -la"}' } }] },
+    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'list' }] }],
+      tools: [{ name: 'bash', description: 'run', parameters: { type: 'object', properties: {} } }],
+    }))
+    const call = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    assert.equal(call.block.name, 'bash')
+    assert.equal(call.block.arguments, '{"command":"ls -la"}')
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.equal(text, 'Now I will look.\\n\\n')
+    assert.ok(!/\[tool call /.test(JSON.stringify(chunks)), 'notation leaked into the stream')
   } finally {
     await close()
   }

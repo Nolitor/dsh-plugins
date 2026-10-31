@@ -229,6 +229,46 @@ Backend resolution order: explicit `backendBaseUrl` + `apiKey`/`OPENCODE_API_KEY
 `GET /api/credential` for the credential. The pair is cached for
 `credentialCacheMs` and refreshed once on a 401.
 
+### Stream-cut defence and inline-tag routing (v0.7.3/v0.7.4 — measured 2026-10-31)
+
+Two defects made a long turn die mid-step. Both are session-record measurements, not hypotheses:
+
+| Symptom (measured) | Cause | Fix |
+|---|---|---|
+| `turn/end` -> `{kind:'error', error:{message:'terminated', code:'OPENCODE_BACKEND'}}` in **3 of the last 6 sessions** | every exception thrown while reading the SSE body (undici `TypeError: terminated`, `ECONNRESET`, `UND_ERR_SOCKET`) was mapped straight to a hard error, so the whole step was discarded | `isTransientStreamError()` separates a transport cut from a request verdict; the request is retried while **nothing** has been emitted (`streamRetries`, default 1), and once output exists it is **preserved** (`streamCutPreserve`, default true) |
+| literal `<thinking>` (31 occurrences in one session) and `[tool call bash #call_...]` / `<invoke ...>` (24-44 per session) stored as assistant **text** | the adapter only read the structured OpenAI fields (`reasoning_content`, `tool_calls`); no inline-tag parser existed | `lib/inline-tags.js` routes those tags into real `reasoning` / `tool-call` blocks (`inlineTags`, default true) |
+
+Rules the implementation follows:
+
+- **Retry only before the first delta.** A retry after text has reached the transcript would duplicate
+  content; instead the partial message is closed and finished as `stop`, so the harness keeps the work
+  and continues. Nothing is silently dropped and no block is left open.
+- **A cut tool call is closed with valid JSON.** `repairJson()` keeps the completed prefix and falls
+  back to `{}`; invalid JSON never reaches the tool layer.
+- **Inline routing is byte-preserving.** A delta with no tag is forwarded unchanged; an undeclared
+  tool name stays text; an unterminated `<thinking>` is flushed as reasoning so the literal tag never
+  enters the transcript. `inlineTags: false` restores the old pass-through.
+- **v0.7.6 — a split marker is held, not released.** 0.7.3-0.7.5 held a tag split *inside an opener*
+  (and the `<thinking>` body), but **not** a `[tool call …` marker that arrived without its closing
+  `]`: that fell through `drainCall()` and was emitted as text, so the notation plus its JSON payload
+  reached the screen. Measured live split: `[tool call bash #` | `chatcmpl-t` | `ool-f82` |
+  `dc4b5b1582ac5` | `]: {…}`. A partial marker is now held (bounded by `maxHold`), a complete-but-
+  invalid marker has its syntax stripped while the prose is kept, and every text/reasoning block is
+  re-sanitised at `block-end` as a last-mile net.
+- Recovered tool-call blocks use block index `1000 + n * 2` (`INLINE_TOOL_INDEX_BASE`), far from the
+  OpenAI ordinals (`2 + index * 2`), so the two sources can never collide.
+- **v0.7.4 — the notation is removed, not merely parsed.** 0.7.3 converted only well-formed
+  markers and passed every other shape through, so a stray `</thinking>`, a marker followed by
+  prose, or a marker with broken JSON still appeared in the transcript. `sanitizeProtocolText()`
+  now runs on every text fragment (and on reasoning): thinking tags are dropped, and any
+  `[tool call …]` marker is dropped together with its JSON payload when that payload parses. A
+  marker whose tool is **not** declared is dropped and never executed. Text with no marker is
+  untouched.
+- `OPENCODE_V2_ROUTING_DEBUG=0` **disables** the per-delta trace; the trace is **on by default** and
+  appends one JSONL line per content delta to `/tmp/opencode-v2-routing.jsonl` (raw delta + decision).
+  The same applies to `OPENCODE_V2_BEACON=0` and `/tmp/opencode-v2-boot.jsonl`. Both guards are
+  inverted relative to the 0.7.3 docstring; treat the files as on unless explicitly disabled.
+
 ### Session identity and credential choice (v0.5.1 — measured 2026-10-30)
 
 Two independent defects made every `opencode-http-agent` turn fail after the 2026-10-30 22:36
@@ -535,8 +575,10 @@ dsh-opencode-v2/
 ├── lib/
 │   ├── index.js          # `opencode` tool + /opencode command
 │   ├── provider.js       # `opencode-agent` LLM route (true streaming)
+│   ├── inline-tags.js    # <thinking> / [tool call ...] / <invoke ...> -> real blocks
 │   └── shared.js         # argv, ndjson parser, usage mapping/fetch
 └── test/
+    ├── inline-tags.test.mjs # inline transcript-tag router
     ├── shared.test.mjs   # argv / parser / usage
     ├── providers.test.mjs# tool + provider halves
     ├── bundle.test.mjs   # package.json <-> cordis.patch.yml contract

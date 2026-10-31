@@ -1,10 +1,10 @@
 # Failure Ledger — Mistakes Made Here, and the Rule That Prevents a Repeat
 
 <!-- skeleton:
-version: 1.0
+version: 1.2
 kind: rule
 status: active
-updated: 2026-10-31
+updated: 2026-11-01
 summary: Every defect and wrong turn this workspace actually made, with the standing rule that keeps it from happening again. Read before changing a plugin, a doc, or a live service.
 -->
 
@@ -33,6 +33,8 @@ change cannot satisfy it, say so before acting, not after.
 | F-8 | The entitlement design sent **one real completion per route** (49/press) on an account whose quota counts requests. Found only when the owner asked about the daily limit. | **Ask what the quota counts before designing a probe.** Prefer zero-request signals (provider id, plan) and free evidence from real traffic. |
 | F-9 | A curl probe returned `403 error code: 1010` (Cloudflare) and was nearly read as a credential verdict. | **An edge/WAF status is not an application verdict.** Re-probe with the client the product actually uses before concluding anything. |
 | F-10 | `cp -a` of a profile broke every plugin link (`node_modules/@scope/*` are **relative** symlinks); the isolated boot then reported "cannot resolve" for all bundles. | **Rebuild links as absolute paths** in any profile copy, and label a run invalid-and-discarded when the copy itself is broken. |
+| F-17 | A dropped upstream SSE body (`TypeError: terminated`) was reported as `{kind:'error', code:'OPENCODE_BACKEND'}`, so a step that had already produced usable work was discarded — 3 of the last 6 sessions ended that way, and the owner read it as "the turn keeps dying". | **A transport cut is not a request verdict.** Classify the error (`isTransientStreamError`): retry only while nothing has been emitted, otherwise preserve the partial output and close it with a legal `finish` reason. Never invent a finish kind — read the harness's `FinishReasonMap` first. |
+| F-18 | 0.7.3-0.7.5 held a tag split *inside an opener* but released a `[tool call …` marker that arrived without its closing `]`, so the notation and its JSON payload were emitted as assistant text and printed on screen. `sanitizeProtocolText` could not catch it because it is per-fragment and its `CALL_MARKER` also requires the closing `]` — the net only ever caught strings that were already intact. The split test in `inline-tags.test.mjs` split **after** `]`, so 229/229 stayed green while the screen was dirty. | **A partial marker is held, never released.** Any prefix that can still become a marker must be buffered (bounded by `maxHold`) until the shape is decided; only then convert it or strip its syntax. A sanitiser that runs per fragment cannot be the last line of defence for a stream — test the exact delta boundaries recorded from the live stream, not a single-delta blob. |
 
 ## 3. Live state
 

@@ -2002,3 +2002,177 @@ Verified live (2026-10-31 01:52–01:58 KST, `/api/local/opencode-v2/model-setti
 Artifacts: `nolit-dsh-opencode-v2-0.7.1.tgz` (`0d988f4c…`), `nolit-dsh-opencode-v2-0.7.2.tgz`
 (`281316fa…`). 0.7.2 exists because 0.7.1 was packed before the picker path was widened to include new
 routes; release artifacts are immutable, so the version moved instead of the tarball.
+
+## 32. v0.7.3 — stream-cut defence and inline-tag routing (measured 2026-10-31)
+
+Two measured defects, one cause each. Nothing in `~/.dsh` was written and the live 3080 service was not
+restarted; every number below comes from a read-only session record or from the test suite.
+
+### 32.1 The measurement that started it
+
+`turn/end` reasons of the last 6 session records under
+`~/.dsh/sessions/--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--/*/session.v4.jsonl.zstd`
+(`zstd -dc … | python3` over `turn/end.data.reason`):
+
+| Finding | Value | Command that produced it |
+|---|---|---|
+| Sessions ending on a hard error from this adapter | **3 of 6**, all `{"kind":"error","error":{"message":"terminated","code":"OPENCODE_BACKEND"}}` | `zstd -dc session.v4.jsonl.zstd \| grep '"turn/end"'` |
+| Literal `<thinking>` in stored assistant **text** | **31** occurrences in the session that was interrupted | per-block regex count over `assistant/message` |
+| Literal `[tool call bash #call_…]` in stored assistant **text** | **24–44** per session (6 sessions scanned) | same |
+| Turns aborted by the TokenEconomizer watchdog | 8 across the workspace (3 of 6 in the spec session) | `turn/end.reason.reason.reason = tokeneconomizer/watchdog` |
+
+The watchdog abort is the TokenEconomizer track's defect and is **out of scope here** (owner: another
+session). This version fixes the two that belong to the adapter.
+
+### 32.2 What changed
+
+| File | Change |
+|---|---|
+| `lib/http.js` | stream consume phase wrapped in an attempt loop; `isTransientStreamError()` classifies a transport cut; `repairJson()` closes cut tool arguments; `streamRetries`, `streamCutPreserve`, `inlineTags` config |
+| `lib/inline-tags.js` | new: streaming-safe router for `<thinking>`, `[tool call …]: {…}`, `<invoke …>` / `antml:invoke` |
+| `test/inline-tags.test.mjs` | new: 11 router tests |
+| `test/http.test.mjs` | 9 new tests: retry-before-output, partial preserve, cut tool call, `streamCutPreserve:false`, inline thinking, `inlineTags:false`, leaked literal call, `isTransientStreamError`, `repairJson`; the fake server grew a `cuts[]` switch that destroys the socket mid-SSE |
+| `package.json` | `0.7.3`; `check` also syntax-checks `lib/inline-tags.js` |
+
+Behaviour contract, deliberately chosen:
+
+- A cut **before the first delta** is retried (`streamRetries: 1`) → the transcript never sees it.
+- A cut **after** output exists is closed as `{kind:'stop'}` with the partial blocks ended, so the
+  harness keeps the step and continues. Previously: `{kind:'error', code:'OPENCODE_BACKEND'}` and the
+  whole step was discarded.
+- `streamCutPreserve: false` restores the previous hard-error verdict for anyone who wants it.
+
+### 32.3 Verification
+
+```
+$ npm run check
+> node --check lib/index.js … node --check lib/http.js … && node --check lib/inline-tags.js && …
+CHECK OK
+
+$ npm test
+ℹ tests 229
+ℹ pass 229
+ℹ fail 0
+ℹ duration_ms 5146
+```
+
+209 pre-existing tests still pass unchanged; 20 are new (11 router + 9 stream/helper).
+
+### 32.4 Status
+
+`applied pending restart` — the live `web` profile links this workspace (audit:
+`liveEqualsWorkspace: true`), so the code is already on disk for the running service, but the process
+has not reloaded it. No restart was performed (rules: live state is the owner's). Version `0.7.3`
+supersedes the `0.7.2` artifact hash recorded in the boot card; a release tarball has not been packed.
+
+
+## 33. v0.7.4 — no protocol notation reaches the transcript (measured 2026-10-31 23:20-23:40)
+
+### 33.1 What the owner saw and what it was
+
+After 0.7.3 the owner still saw blocks like
+`[tool call bash #call_736b…]: {"command":…}` and a stray `</thinking>` inside assistant
+**text**. Measurement of the live session record `session-45134ad1` (the session that produced the
+screen) fixed the facts:
+
+| Measurement | Value |
+|---|---|
+| Serving adapter (`request/header`) | `provider: opencode-http-agent` — this plugin |
+| Structured tool-call blocks | **149** (endpoint and protocol are fine) |
+| Literal `[tool call ` inside assistant **text** | **80** (turn1 13, turn2 13, turn3 20, turn4 34, turn5 0) |
+| Stray `</thinking>` with no opener | present in the same blocks |
+| Client bundles containing a `[tool call …]` template | **none** — so the UI did not synthesise it; it was stored content |
+| Service restart | 23:11:13, single process, `NRestarts=0`, no bytecode cache |
+
+0.7.3 converted only the **well-formed** `[tool call name #id]: {json}` shape and passed every
+other shape through "byte for byte": a stray closer, a marker with prose, or a marker with
+broken JSON all survived. The new tests had covered only the well-formed case, which is why
+229/229 was green while the screen was not clean.
+
+### 33.2 What changed
+
+- `sanitizeProtocolText()` runs on **every** text fragment (and on reasoning), so no protocol
+  marker can reach the model-visible text: `<thinking>`/`</thinking>`, and any
+  `[tool call …]` marker — with its JSON payload when that payload parses, without it otherwise.
+- A marker whose name is **not** a declared tool is stripped and never executed (0.7.3 kept it
+  as literal text).
+- A marker holding a stray `</thinking>` in the middle of a sentence is fixed in place.
+- `OPENCODE_V2_ROUTING_DEBUG=1` writes one JSONL line per content delta to
+  `/tmp/opencode-v2-routing.jsonl` (raw delta + routing decision), so a future recurrence can be
+traced without guesswork. Off by default; failures are swallowed.
+- `package.json` `0.7.4`.
+
+### 33.3 Verification
+
+```
+$ npm run check   -> CHECK OK
+$ npm test        -> tests 237 / pass 237 / fail 0   (229 before; 6 router + 2 stream new)
+```
+
+New router tests are the shapes that were still on screen: stray closer, marker with prose,
+marker with broken JSON, marker mid-sentence, and the **verbatim leaked block** from the session
+record. Each asserts that no `[tool call ` and no `thinking>` survives in the text parts.
+
+### 33.4 Status
+
+`applied pending restart` at the time of writing; the restart that loads it is scheduled and the
+mount is verified in the boot log afterwards. Known residual: a marker whose JSON payload does
+**not** parse keeps its (harmless, still textual) payload fragment; the notation itself is gone.
+
+## 34. v0.7.6 — a split marker is held, not released (measured 2026-11-01)
+
+### 34.1 What was still wrong after 0.7.4
+
+0.7.4 promised "no protocol marker reaches the model-visible text, ever". It held a tag split
+*inside an opener* and the `<thinking>` body, but a `[tool call …` marker that arrived **without
+its closing `]`** fell straight through `drainCall()`'s last branch and was pushed out as text.
+
+The router therefore worked only when the whole marker landed in one SSE chunk — which is the
+case that never happens live.
+
+### 34.2 Measured reproduction (before the fix)
+
+| Delta shape | Result |
+|---|---|
+| whole marker in one delta | `tool-call` (correct) |
+| split **before** the closing `]` | `text:"[tool call bash #"`, `text:"c1"`, `text:" ]: {…}"` — **leaked** |
+| split right after the tool name | `text:"[tool call bash"`, `text:" #c1]: {…}"` — **leaked** |
+| split inside the opener (`[tool ca` / `ll …`) | `tool-call` (correct) |
+| `<thinking>` split across deltas | `reasoning` (correct) |
+
+The live stream of session `e9c75e9a` split exactly like row 2, recorded in the stored
+`text-chunks` as `[tool call bash #` | `chatcmpl-t` | `ool-f82` | `dc4b5b1582ac5` | `]: {…}`.
+13 of that session's 24 assistant messages carried the notation in their **text** part.
+
+Why the last mile did not catch it: `sanitizeProtocolText()` runs per fragment and its
+`CALL_MARKER` also requires the closing `]`, so it only ever stripped strings that were already
+intact. `http.js` applied sanitising to reasoning only (`:1322`); text was forwarded verbatim.
+
+### 34.3 What changed
+
+- `drainCall()` now **holds** any prefix that can still become a marker — `[tool call …` with no
+  `]` yet, or `<invoke …` with no `>` yet — bounded by `maxHold`, so a literal mention in prose
+  cannot wedge the stream.
+- A complete-but-invalid marker goes through the new `stripLeadingMarker()`: the syntax is
+  dropped, the prose around it is kept.
+- `sanitizeProtocolText()` also removes `<invoke>…</invoke>` blocks and stray
+  `<invoke>`/`<parameter>` tags, which 0.7.4 did not cover at all.
+- Last-mile net: every `text`/`reasoning` block is re-sanitised when it is closed, in both
+  `closeAll()` and `closeCut()`.
+
+### 34.4 Verification
+
+| Check | Result |
+|---|---|
+| `npm run check` | clean |
+| `npm test` | **243/243 pass, fail 0** (was 237; +5 router cases, +1 route case) |
+| Split-before-`]` case | now one `tool-call`, zero text |
+| Recorded live delta split | one `tool-call`, text is exactly the prose |
+| Route-level SSE split test | `block-end` tool-call `{"command":"ls -la"}`, no `[tool call ` anywhere in the chunk stream |
+| Artifact | `artifacts/nolit-dsh-opencode-v2-0.7.6.tgz`, SHA-256 `def0ff0f7b58a220c38a98b165246197b8b4fb0da1ffcfcd71857df0f6691049` |
+
+### 34.5 Status
+
+`applied pending restart` — code, tests, artifact and docs are on disk; the running 3080 process
+still serves the pre-0.7.6 module. Known residual: a marker whose JSON payload does not parse
+keeps a harmless textual payload fragment; the notation itself is gone.
