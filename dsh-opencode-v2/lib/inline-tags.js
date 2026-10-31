@@ -51,12 +51,29 @@ const INVOKE_TAG = /<\/?(?:antml:)?(?:invoke|parameter)\b[^>]*>/gi
 const CALL_MARKER = /\[tool call [^\s\]]+(?:\s+#[^\]\s]+)?\]\s*:?\s*/g
 
 /**
+ * A compaction scratchpad block: `<analysis>…</analysis>`.
+ *
+ * The compaction prompt in this family ("an <analysis> block followed by a
+ * <summary> block", inherited from Claude Code's /compact) designates the
+ * analysis as a drafting scratchpad, not answer text. Upstream treats a leak of
+ * it into visible output as a bug, not a rendering choice — see
+ * QwenLM/qwen-code#6023, QwenLM/qwen-code#6595 and windmill-labs/windmill#9750.
+ */
+const ANALYSIS_BLOCK = /<analysis\b[^>]*>[\s\S]*?<\/analysis\s*>/gi
+const ANALYSIS_OPEN = /<analysis\b[^>]*>/gi
+/** The answer wrapper keeps its content; only the tags go. */
+const SUMMARY_TAG = /<\/?summary\b[^>]*>/gi
+
+/**
  * Fast pre-check: does this delta contain anything the router must look at?
  * @param {string} text - one content delta.
  * @returns {boolean} whether the delta carries a known inline tag.
  */
 export function hasInlineTags(text) {
-  return typeof text === 'string' && /<(?:antml:)?thinking>|\[tool call |<(?:antml:)?invoke/i.test(text)
+  return (
+    typeof text === 'string' &&
+    /<(?:antml:)?thinking>|\[tool call |<(?:antml:)?invoke|<analysis\b|<\/?summary\b/i.test(text)
+  )
 }
 
 /**
@@ -122,7 +139,8 @@ function parsesJson(text) {
  */
 export function sanitizeProtocolText(text) {
   if (typeof text !== 'string' || text.length === 0) return text
-  const withoutInvoke = text.replace(INVOKE_BLOCK, '').replace(INVOKE_TAG, '')
+  const withoutScratchpad = dropScratchpad(text)
+  const withoutInvoke = withoutScratchpad.replace(INVOKE_BLOCK, '').replace(INVOKE_TAG, '')
   const withoutTags = withoutInvoke.replace(THINKING_TAG, '')
   let out = ''
   let last = 0
@@ -151,6 +169,25 @@ export function sanitizeProtocolText(text) {
  * @param {string} text - fragment starting at a marker.
  * @returns {string} the fragment without its leading marker.
  */
+function dropScratchpad(text) {
+  // Only a response that *starts* with the scratchpad is a compaction answer.
+  // A mention of <analysis> inside prose or a code fence must stay readable.
+  if (!/^\s*<analysis\b/i.test(text)) return text.replace(SUMMARY_TAG, '')
+  const closed = text.replace(ANALYSIS_BLOCK, '')
+  ANALYSIS_OPEN.lastIndex = 0
+  const open = ANALYSIS_OPEN.exec(closed)
+  if (open === null) return closed.replace(SUMMARY_TAG, '')
+  const rest = closed.slice(open.index + open[0].length)
+  const closer = rest.toLowerCase().indexOf('</analysis')
+  if (closer !== -1) {
+    const after = rest.slice(closer + '</analysis'.length).replace(/^\s*>/, '')
+    return (closed.slice(0, open.index) + after).replace(SUMMARY_TAG, '')
+  }
+  const summaryAt = rest.toLowerCase().indexOf('<summary')
+  const kept = summaryAt === -1 ? '' : rest.slice(summaryAt)
+  return (closed.slice(0, open.index) + kept).replace(SUMMARY_TAG, '')
+}
+
 function stripLeadingMarker(text) {
   const bracket = /^\[tool call\b[^\]]*\]?\s*:?\s*/i.exec(text)
   if (bracket !== null) return text.slice(bracket[0].length)

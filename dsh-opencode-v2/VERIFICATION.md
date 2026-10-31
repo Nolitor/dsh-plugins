@@ -2216,3 +2216,62 @@ a tool call and none became text.
 Caveat carried forward: 15 post-restart messages with a single 1-character text part is a thin sample
 for the *prose-preserved* half of the fix; that half rests on the unit and route tests (§34.4), not on
 this window.
+
+## 35. v0.7.7 — the compaction scratchpad, and why this is not a bespoke "dialect" table
+
+### 35.1 What was still on screen (measured 2026-11-01 00:48 KST)
+
+The 0.7.6 fix closed the streaming marker leak. It did not close the whole class. Scanning every
+`assistant/message` `text` part in every session log and splitting on the 00:12:41 restart:
+
+| Notation reaching TEXT | before restart | after restart |
+|---|---|---|
+| `[tool call` | 219 | 1 (prose quoting it) |
+| `</thinking>` / `<thinking>` | 89 / 64 | 0 / 0 |
+| `<invoke>`, `<parameter>`, `<name>`, `<function_results>`, `<result>`, `<output>` | 18 / 10 / 13 / 5 / 5 / 5 | 0 |
+| **`<analysis>` / `<summary>`** | **3 / 3** | **2 / 2** |
+
+So one family was still live: the compaction wrappers. Calling it out of scope was wrong; it is the
+same defect class as the rest.
+
+### 35.2 Prior art — this is a known bug with known fixes
+
+The wrappers are not invented by this adapter. The compaction prompt in this lineage says, verbatim:
+"Your entire response must be plain text: an `<analysis>` block followed by a `<summary>` block"
+(Claude Code `/compact` prompt, reproduced in `claude-code-system-prompts`). The `<analysis>` block is
+a **drafting scratchpad**, not answer text. Upstream projects treat its leak into visible output as a
+bug and fix it at the boundary:
+
+- `QwenLM/qwen-code#6023` — "Subagent final result leaks `<analysis>`/`<summary>` tags into parent
+  context and breaks daemon UI markdown rendering". Their conclusion: the pollution exists *before*
+  rendering; the tool result must not carry the scratchpad.
+- `QwenLM/qwen-code#6595` — "may leak `<analysis>`/`<summary>` tags in main assistant responses".
+- `windmill-labs/windmill#9750` — "strip unclosed `<summary>` tag leaking into compaction summary".
+- `nccasia/agent-sdk` — "strip inlined ` thinking` reasoning from answers" (DeepSeek-R1 / Qwen / MiniMax
+  emit chain-of-thought inside `message.content`; the client adapts it).
+
+The common rule: **classify the wrapper onto the transport's own fields** — reasoning/scratchpad stays
+invisible, the answer stays visible — instead of deleting strings per tag.
+
+### 35.3 What changed
+
+- `dropScratchpad()` in `lib/inline-tags.js`: when a text block **starts** with `<analysis>` (the real
+  failure shape), the scratchpad is dropped — through `</analysis>`, or up to `<summary>`, or to the
+  end when the model never closed it.
+- `SUMMARY_TAG` unwraps `<summary>`/`</summary>` wherever it appears and keeps the prose.
+- Guard: a *mention* of `<analysis>` inside a sentence or a code fence is left alone, so documentation
+  and reports stay readable.
+- `hasInlineTags()` now recognises both wrappers.
+
+### 35.4 Verification
+
+| Check | Result |
+|---|---|
+| `npm run check` | clean |
+| `npm test` | **248/248 pass, fail 0** (was 243; +5 wrapper cases) |
+| Replay of every recorded `text` part carrying notation (226) through `sanitizeProtocolText` | **203 fully clean**; the 23 survivors are prose that *describes* the notation (sampled and confirmed), preserved on purpose |
+| Artifact | `artifacts/nolit-dsh-opencode-v2-0.7.7.tgz`, SHA-256 `9f394d43600b73b94487f119202cfc235d1167dad9e6e1bc9d1822334666c8f2` |
+
+### 35.5 Status
+
+`applied pending restart` — the live 3080 process still serves 0.7.6.

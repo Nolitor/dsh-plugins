@@ -95,8 +95,10 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 24)
+## boot (newest 5 of 25)
 
+- **active** · 2026-11-01T0112+0900.md · [card](../bootcards/2026-11-01T0112+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-01T0112+0900. Older cards are historical.
 - **active** · 2026-11-01T0034+0900.md · [card](../bootcards/2026-11-01T0034+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-01T0034+0900. Older cards are historical.
 - **active** · 2026-11-01T0007+0900.md · [card](../bootcards/2026-11-01T0007+0900.md)
@@ -105,9 +107,7 @@
   Dated session card (tier 5). State, active task, and handoff for 2026-10-31T2129+0900. Older cards are historical.
 - **active** · 2026-10-31T0137+0900.md · [card](../bootcards/2026-10-31T0137+0900.md)
   opencode-v2 0.7.2 — entitlement sweep removed for plan-based availability (Go/Zen), usage ranking refreshed every 5 days, newly appearing models served at priority 0 with the plan gate intact. Next: TokenEconomizer savings audit, then an OpenRouter API router plugin.
-- **active** · 2026-10-31T0042+0900.md · [card](../bootcards/2026-10-31T0042+0900.md)
-  Settings-tab usability release: sorted checklist, persisted entitlement sweep, locale-aware tab labels (opencode-v2 0.6.2), notify section order/label fix (0.1.7), and the U1 credential correction (the opencode-go key was NOT deleted — it works).
 
 ---
 
-54 indexed (24 boot cards), 0 missing header, 54 total.
+55 indexed (25 boot cards), 0 missing header, 55 total.

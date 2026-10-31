@@ -232,3 +232,40 @@ test('a bracket call past maxHold does not leak its argument payload', () => {
   const text = out.filter((part) => part.kind === 'text').map((part) => part.text).join('')
   assert.ok(!NO_MARKERS.test(text), `notation survived: ${JSON.stringify(text.slice(0, 120))}`)
 })
+
+// --- compaction wrappers (measured 2026-11-01, post-restart session 8859609a) ---
+// The compaction prompt asks for an <analysis> block followed by a <summary> block.
+// The analysis is a scratchpad; upstream treats its leak into visible text as a bug
+// (QwenLM/qwen-code#6023, QwenLM/qwen-code#6595, windmill-labs/windmill#9750).
+
+test('a compaction answer keeps only the summary, never the analysis scratchpad', () => {
+  const raw = '<analysis>\nI must check the git log first.\n</analysis>\n<summary>\nThe task is done.\n</summary>'
+  const text = sanitizeProtocolText(raw)
+  assert.ok(!/analysis/i.test(text), 'scratchpad survived: ' + JSON.stringify(text))
+  assert.ok(!/<\/?summary/i.test(text), 'wrapper tag survived: ' + JSON.stringify(text))
+  assert.equal(text.trim(), 'The task is done.')
+})
+
+test('an unclosed analysis before a summary drops the analysis and keeps the summary', () => {
+  const raw = '<analysis>\nstep 1\nstep 2\n<summary>\nAnswer.\n</summary>'
+  const text = sanitizeProtocolText(raw)
+  assert.ok(!/step 1|step 2/.test(text), 'scratchpad survived: ' + JSON.stringify(text))
+  assert.ok(!/<\/?summary/i.test(text), 'wrapper tag survived: ' + JSON.stringify(text))
+  assert.equal(text.trim(), 'Answer.')
+})
+
+test('an unclosed analysis with no summary keeps nothing', () => {
+  const text = sanitizeProtocolText('<analysis>\nonly scratchpad, never closed')
+  assert.ok(!/scratchpad/.test(text), 'scratchpad survived: ' + JSON.stringify(text))
+})
+
+test('a bare summary is unwrapped, its prose kept', () => {
+  const text = sanitizeProtocolText('<summary>The build passed.</summary>')
+  assert.equal(text.trim(), 'The build passed.')
+})
+
+test('hasInlineTags recognises the compaction wrappers', () => {
+  assert.equal(hasInlineTags('<analysis>x</analysis>'), true)
+  assert.equal(hasInlineTags('<summary>y</summary>'), true)
+  assert.equal(hasInlineTags('plain prose'), false)
+})
