@@ -255,6 +255,28 @@ Rules the implementation follows:
   `dc4b5b1582ac5` | `]: {…}`. A partial marker is now held (bounded by `maxHold`), a complete-but-
   invalid marker has its syntax stripped while the prose is kept, and every text/reasoning block is
   re-sanitised at `block-end` as a last-mile net.
+- **v0.7.7 — the compaction scratchpad never reaches the screen.** A compaction answer is
+  `<analysis>` (a drafting scratchpad) followed by a `summary` block. The scratchpad was stored as
+  assistant *text* and rendered, because the compaction path is separate from the streaming router.
+  A text block that **starts** with the scratchpad now enters the reasoning channel instead, and the
+  answer wrapper is unwrapped. A mere mention of the tag inside a sentence stays readable prose.
+  Prior art: QwenLM/qwen-code#6023, #6595, windmill-labs/windmill#9750.
+- **v0.7.8 — the regex filter is gone; a state machine parses the stream.** The 0.7.3-0.7.7 router
+  re-scanned and rewrote accumulated text with twelve module-level regexes, so the same input could
+  classify differently depending on where the SSE stream split, and notation was hidden by deleting
+  body text. It is replaced by `lib/stream-parser.js`: one pass, explicit states `TEXT` / `REASONING` /
+  `TOOL_HEAD` / `TOOL_ARGS` / `INVOKE_HEAD`, emitting ordered `text` / `reasoning` / `tool-call` parts
+  modelled on the Vercel AI SDK stream parts and assistant-ui assistant-stream chunks. Four invariants:
+  text is emitted once verbatim; while in `TEXT` only a bounded marker prefix is held; a marker that
+  cannot be parsed degrades to text instead of being swallowed; output is invariant under re-chunking
+  (property-tested over every two-way split and 40 random multi-way splits per fixture). The
+  `createInlineTagRouter` regex body and the block-end `sanitizeProtocolText` net are deleted; a
+  malformed marker now keeps its prose and a declared call still becomes a real tool call.
+- **Canonical docs.** `README.md` (this file) is the canonical, shipped document — it is the only
+  markdown file in the package `files` list, so anything a consumer needs must be here. `VERIFICATION.md`
+  (current rounds) and `VERIFICATION-ARCHIVE.md` (rounds through 0.7.3) are the internal evidence trail:
+  measured commands, transcripts and before/after tables. They are not shipped, and a version bump is
+  not complete until this README carries it.
 - Recovered tool-call blocks use block index `1000 + n * 2` (`INLINE_TOOL_INDEX_BASE`), far from the
   OpenAI ordinals (`2 + index * 2`), so the two sources can never collide.
 - **v0.7.4 — the notation is removed, not merely parsed.** 0.7.3 converted only well-formed
