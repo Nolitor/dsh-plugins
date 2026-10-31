@@ -1,16 +1,16 @@
 <!-- skeleton:
-version: 1.1
+version: 1.2
 kind: ver
 status: active
 updated: 2026-11-01
-summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.8.0. Older rounds live in VERIFICATION-ARCHIVE.md.
+summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.9.0. Older rounds live in VERIFICATION-ARCHIVE.md.
 -->
 # @nolit/dsh-opencode-v2 - Verification (current)
 
 > Only the recent rounds live here. Everything up to v0.7.3 is in
 > VERIFICATION-ARCHIVE.md in this directory.
 >
-> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.7.8
+> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.9.0
 
 ## 33. v0.7.4 — no protocol notation reaches the transcript (measured 2026-10-31 23:20-23:40)
 
@@ -327,54 +327,54 @@ scanner inside the adapter.
 
 applied on disk; the live 3080 process still runs the previous build until restart.
 
-## 37. v0.8.0 — boundary pipeline: the wire field decides the type (measured 2026-11-01)
+## 38. v0.9.0 — display cleaning of the two route scaffoldings (measured 2026-11-01 04:35-04:50)
 
-### 37.1 Why a text scanner was the wrong layer
+### 38.1 What 0.8.0 exposed, measured
 
-Measured from the recorded per-delta trace (`/tmp/opencode-v2-routing.jsonl`, 29,940 content deltas, two models):
+0.8.0 stopped rewriting text, and the real session that produced the screen
+(`/tmp/sess.ndjson`, 11 assistant messages, `opencode-go/deepseek-v4.1-flash`) showed two
+shapes, not a dialect:
 
-| Measure | Value |
-|---|---|
-| content deltas traced | 29,940 |
-| pure text, no notation | 11,256 (37.6%) |
-| carried transcript notation | 495 (1.7%) |
-| reasoning deltas, every one re-sanitised per fragment | 11,061 |
-| structured tool-call deltas | 153 |
+| Shape | Where | Measured |
+|---|---|---|
+| literal `<thinking>` / `</thinking>` | inside *reasoning*, at arbitrary offsets (257, 764, 1378...) | 6 of 11 reasoning parts; 19 tokens |
+| `[tool call <name> #<id>]: <json>` | inside *text*, starting a line and running to the end of the part | 2 blocks; 1,549 of 1,923 text chars (80.6%) |
 
-More than 98% of deltas paid for a scanner that could only ever matter for 1.7%, and every
-reasoning delta was rewritten on the way through. The type is already on the wire.
-
-### 37.2 What changed
+### 38.2 What changed
 
 | File | Change |
 |---|---|
-| `lib/upstream-map.js` | new: `mapChatDelta(delta)` returns reasoning parts, then text parts, then tool-call parts (ordinal plus this delta's argument fragment) |
-| `lib/stream-parser.js` | 337 -> 55 lines: a pass-through reducer. No tags, no buffers, no state machine; `push(parts)` returns those parts unchanged |
-| `lib/http.js` | one call per delta: `reduce.push(mapChatDelta(delta, { reasoningField }))`; `emitPart` keys tool calls by ordinal; router, sanitiser and routing trace deleted |
-| `lib/inline-tags.js` | deleted |
-| `inlineTags` config | deleted; there is nothing left to toggle |
-| `test/stream-parser.test.mjs` | rewritten: 17 contract tests, including notation text returned verbatim |
-| `test/upstream-map.test.mjs` | new: 10 field-shape tests |
-| `test/http.test.mjs` | 6 tag tests -> 4 boundary tests |
-| `test/inline-tags.test.mjs` | deleted |
+| `lib/display-clean.js` | new: `stripThinkingTags`, `parseToolCallEcho`, `echoMatchesStructuredCall`, `dropEchoTail`, `cleanParts`, and the streaming gates `createReasoningGate` / `createTextGate` |
+| `lib/http.js` | +40 lines: both gates in the stream path, flushed with the structured calls before `closeAll`, reset on retry/cut |
+| `package.json` | 0.8.0 -> 0.9.0; `check` covers `display-clean.js` |
+| `test/display-clean.test.mjs` | new: 8 tests (tokens anywhere, echo match by id and by name+args, non-echo line released, non-terminal echo kept) |
+| `test/display-gate.test.mjs` | new: 5 tests (split token, bounded hold, prose not delayed, echo held then dropped, held non-echo released) |
+| `test/http.test.mjs` | the "reasoning verbatim" contract test updated: the two tokens are removed |
 
-### 37.3 Verification
+### 38.3 Verification, real model
+
+The adapter was attached to the running CLI daemon (`~/.local/state/opencode/service.json`,
+`/api/info` 200) and streamed real requests; baseline was the live 0.8.0 `lib/http.js`, gated was
+this build. Models `opencode-go/deepseek-v4.1-flash` (effort high) and `opencode-go/beam-free`.
 
 | Check | Result |
 |---|---|
-| baseline before this round | 260 tests, 260 pass, 0 fail |
-| `npm run check` | exit 0, clean |
-| `npm test` | 245/245 pass, 0 fail |
-| `node --check` on the three touched modules | exit 0 |
+| `npm run check` | exit 0 |
+| `npm test` | 258/258 pass, 0 fail (245 before; +8 +5 new, 1 updated) |
+| A/B live runs (6 plain + 3 tool calls + 2 free route) | 11/11 clean (0 thinking tokens, 0 echo after) |
+| gated output vs offline `cleanParts` of the same real stream | 11/11 identical |
+| structured tool calls | 3/3 complete, arguments valid JSON, identical to baseline |
+| latency, gated vs baseline (first text delta) | 0.93-1.22 s vs 1.00-1.84 s; max inter-chunk gap 12-69 ms vs 33-41 ms |
+| plain text deltas held | 0 of 74 live text deltas |
+| replay of the recorded leaking session | 19 tokens removed, 2 echo tails dropped, non-echo text byte-identical, 0 order violations |
+| gate replay of 33,977 recorded real deltas | 483,609 chars in = 483,609 out; 0.46 us/delta |
 
-### 37.4 The consequence, stated plainly
+### 38.4 Corrections and limits, stated plainly
 
-A route that puts transcript notation inside `delta.content` now shows that notation as text.
-The adapter no longer guesses, so the measured 1.7% becomes visible instead of being rewritten.
-That is the deliberate trade: the wire field is authoritative. Correcting such a route belongs to
-the route (use the structured fields) or to a renderer that is told the type — not to a character
-scanner inside the adapter.
-
-### 37.5 Status
-
-applied on disk; the live 3080 process still runs the previous build until restart.
+- The earlier `deltasWithHold: 33921 / 99.835%` number measured per-push deferral over an entire
+  unflushed trace, not latency. Retracted; superseded by the latency row above.
+- The live route did not reproduce the leak in these 11 runs (baseline leaked 0), so the live runs
+  prove the gates are transparent; the recorded session proves they remove. Re-measuring the leak
+  live needs a route that leaks again.
+- An echo line that is not at the end of a text part is released, not dropped (the tail parser
+  requires the whole remainder). Both measured real echo cases were terminal.

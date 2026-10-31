@@ -810,7 +810,7 @@ test('repairJson returns valid JSON for a cut argument fragment', () => {
 
 // --- boundary contract: the wire field decides the type (measured 2026-11-01) ---
 
-test('reasoning_content is reasoning verbatim, including any tag bytes', async () => {
+test('reasoning_content is reasoning with the two protocol tokens removed', async () => {
   const events = [
     { choices: [{ delta: { reasoning_content: 'plan it</thinking> and more' } }] },
     { choices: [{ delta: { content: 'done' } }] },
@@ -828,7 +828,7 @@ test('reasoning_content is reasoning verbatim, including any tag bytes', async (
     assert.deepEqual(starts, ['reasoning', 'text'])
     const reasoning = chunks.filter((chunk) => chunk.type === 'reasoning-delta').map((chunk) => chunk.text).join('')
     const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
-    assert.equal(reasoning, 'plan it</thinking> and more')
+    assert.equal(reasoning, 'plan it and more')
     assert.equal(text, 'done')
   } finally {
     await close()

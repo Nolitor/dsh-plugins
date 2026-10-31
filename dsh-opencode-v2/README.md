@@ -1,10 +1,10 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 2.2
+version: 2.3
 kind: readme
 status: active
-updated: 2026-10-30
-summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd.
+updated: 2026-11-01
+summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.9.0 removes the two shaped route scaffoldings (thinking tokens, rendered tool-call echo) at display time without re-typing any part.
 -->
 
 
@@ -236,7 +236,7 @@ Two defects made a long turn die mid-step. Both are session-record measurements,
 | Symptom (measured) | Cause | Fix |
 |---|---|---|
 | `turn/end` -> `{kind:'error', error:{message:'terminated', code:'OPENCODE_BACKEND'}}` in **3 of the last 6 sessions** | every exception thrown while reading the SSE body (undici `TypeError: terminated`, `ECONNRESET`, `UND_ERR_SOCKET`) was mapped straight to a hard error, so the whole step was discarded | `isTransientStreamError()` separates a transport cut from a request verdict; the request is retried while **nothing** has been emitted (`streamRetries`, default 1), and once output exists it is **preserved** (`streamCutPreserve`, default true) |
-| literal `<thinking>` (31 occurrences in one session) and `[tool call bash #call_...]` / `<invoke ...>` stored as assistant **text** | the adapter only read the structured OpenAI fields (`reasoning_content`, `tool_calls`); a text-level tag router was bolted on to compensate | **reverted in 0.8.0**: the router is deleted. The wire field decides the type; content that carries notation is forwarded verbatim as text, so a route that emits tags inside content shows them (measured: 1.7% of 29,940 deltas) instead of being guessed at |
+| literal `<thinking>` (31 occurrences in one session) and `[tool call bash #call_...]` / `<invoke ...>` stored as assistant **text** | the adapter only read the structured OpenAI fields (`reasoning_content`, `tool_calls`); a text-level tag router was bolted on to compensate | **reverted in 0.8.0**: the router is deleted. The wire field decides the type; content that carries notation is forwarded verbatim as text, so a route that emits tags inside content shows them (measured: 1.7% of 29,940 deltas) instead of being guessed at; **0.9.0** removes the two shaped residues at display time (exact tokens; an echo only when it starts a line, runs to the end of the part and matches a structured call) |
 
 Rules the implementation follows:
 
@@ -279,6 +279,19 @@ Rules the implementation follows:
   `lib/inline-tags.js`, the `inlineTags` option, the per-delta routing trace and every tag
   pattern are deleted. Measured over 29,940 recorded content deltas: 37.6% pure prose, 1.7%
   carrying notation — a character scanner was the wrong layer.
+- **v0.9.0 — display cleaning: the two scaffoldings go, the typing stays.** 0.8.0 made the route's
+  own notation visible, and it was two shapes, not a dialect: literal `<thinking>`/`</thinking>` at
+  arbitrary offsets inside *reasoning* (6 of 11 messages, 19 tokens, measured on the real session
+  that produced the screen) and a rendered call `[tool call <name> #<id>]: <json>` inside *text*
+  (2 blocks, 1,549 of 1,923 chars, 80.6%). `lib/display-clean.js` removes exactly those two,
+  structurally: the tokens anywhere, and an echo only when it begins a line, runs to the end of the
+  part, and matches a structured call of the same response by id or by name + equal arguments; a
+  non-matching line is released unchanged. Two streaming gates apply the rule live (reasoning holds
+  at most 11 characters; text holds only a line that starts like an echo), so plain prose streams
+  with no added delay. Nothing is re-typed and no prose is rewritten. Measured 2026-11-01 through
+  the running CLI daemon against a real model: 11/11 runs clean, 74/74 plain text deltas held 0
+  times, tool calls intact, and the recorded leaking session loses 19 tokens and both echo tails
+  with the remaining text byte-identical. Detail: `VERIFICATION.md` §38.
 - **Canonical docs.** `README.md` (this file) is the canonical, shipped document — it is the only
   markdown file in the package `files` list, so anything a consumer needs must be here. `VERIFICATION.md`
   (current rounds) and `VERIFICATION-ARCHIVE.md` (rounds through 0.7.3) are the internal evidence trail:

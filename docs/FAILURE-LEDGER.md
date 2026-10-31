@@ -1,7 +1,7 @@
 # Failure Ledger — Mistakes Made Here, and the Rule That Prevents a Repeat
 
 <!-- skeleton:
-version: 1.3
+version: 1.5
 kind: rule
 status: active
 updated: 2026-11-01
@@ -60,7 +60,16 @@ change cannot satisfy it, say so before acting, not after.
 | F-20 | The 3080 service was replaced by `fuser -k 3080/tcp` — SIGKILL by default. The unit (`Type=simple`, `KillMode=control-group`, `Restart=always`, `RestartSec=3`) has no drain, so the in-flight agent turn died with no record, and the restart was reported to nobody. Measured: `Main process exited, code=killed, status=9/KILL` at 00:12:38, **no systemd `Stopping` line** (real stops do log one, e.g. 23:11:14 / 23:33:13 / 23:40:29), no kernel OOM, `MemoryMax=infinity`, restart at 00:12:41. | **Stop the unit, never the port holder.** Use `systemctl --user restart`/`stop` so systemd owns the shutdown, and report the restart with its before/after facts in the same reply. A SIGKILL of the listener is indistinguishable from a crash in the journal and loses whatever the turn was doing. |
 | F-21 | A turn died with `opencode GET /api/provider/opencode-go -> HTTP 404: ProviderNotFoundError`. Cause: `lib/http.js` defaults `backendProviderId` to `opencode-go` and resolves the backend with `GET /api/provider/{id}` when no explicit base URL is set — but the local control plane's auth catalog is `opencode`, `opencode-zen`, `zen`; there is no `opencode-go` provider. | **Resolve a provider id from the live catalog before issuing it.** A default id is a guess; read `/api/provider` (or `auth.json` keys), match it, and on a 404 fall back to a known id instead of failing the turn. |
 
-## 6. Using this file
+## 6. Stream typing at the boundary
+
+| # | What happened | Rule now |
+|---|---|---|
+| F-22 | The 0.7.3-0.7.8 stream fix was built as a **downstream text scanner**: lib/inline-tags.js plus lib/stream-parser.js grew six tag families and re-typed delta.content by pattern. Every new defect (split marker, stray closer, multi-call blob, malformed JSON) was answered by another pattern. Measured on 29,940 recorded deltas: 1.7% carried notation, 37.6% were plain prose, and all 11,061 reasoning deltas were re-sanitised fragment by fragment. | **A part's type comes from the wire field, never from its characters.** Map delta.reasoning_content to reasoning, delta.tool_calls to tool-call, delta.content to text at the boundary (lib/upstream-map.js), and let the downstream reducer forward typed parts unchanged. If a route leaks notation into content that is the route's defect to fix or a renderer's to display; adding one more tag to the scanner is forbidden (0.8.0, dsh-opencode-v2/VERIFICATION.md section 37). |
+| F-23 | A live-stream switch was nearly reported as done from beacon lines alone: "0.8.0" had appeared in /tmp/opencode-v2-boot.jsonl while the serving pid still logged 0.7.5 with router:true. Those 0.8.0 lines were the **test suite** (17 streaming tests per run), not the service. Only the pid, the ExecMainPID and a field that exists in exactly one build settle it. | **Identify the process, not the version string.** Before claiming a live code switch, report the serving pid before and after, a field present in only one build, and the timestamp of the last old-code write. A version string in a log is not a mount proof. |
+| F-24 | The display-cleaning round was first "verified" with hand-written fixtures plus a metric that only described itself: `held = delta.length - emit.length` summed over one unflushed trace produced "33,921 / 99.835% held", which is a per-push deferral, not delay — the gate actually holds at most 11 characters of reasoning and nothing of prose. The owner rejected it ("실제 모델 찔러서 테스트해"). | **Measure the thing the user experiences, on a real model, through the real transport.** Latency is first-delta time and inter-delta gaps versus the previous build; correctness is pass rate over real runs plus a replay of real recorded traffic. A metric you cannot explain to a reviewer in one sentence is not a measurement. |
+| F-25 | `VERIFICATION.md` shipped two byte-identical copies of round 37; the duplicate survived the 0.8.0 release commit and was only found during the 0.9.0 doc cleanup. | **Before a version bump, count the round headings.** `grep -c '^## <n>\\.'` must be 1 for every round; a duplicated block hides stale claims and doubles the document. |
+
+## 7. Using this file
 
 - Before changing a plugin: read §1. Before measuring: §2. Before touching `~/.dsh`: §3.
 - When a new mistake is made, add it here **with the rule**, not with a narrative. The rule is the

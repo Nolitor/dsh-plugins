@@ -50,6 +50,7 @@ import {
   normalizeConflictPolicy,
 } from './conflicts.js'
 import { createPassThroughReducer } from './stream-parser.js'
+import { createReasoningGate, createTextGate } from './display-clean.js'
 import { mapChatDelta } from './upstream-map.js'
 
 /** Plugin name; the cordis row uses the `@nolit/dsh-opencode-v2/http` specifier. */
@@ -1116,6 +1117,14 @@ export class OpencodeHttpAdapter {
 
     const blocks = new Map()
     const toolCalls = new Map()
+    // Display gates (lib/display-clean.js): scaffolding is removed even when a
+    // delta splits it. Prose is not delayed; only echo-shaped lines are held.
+    let reasoningGate = createReasoningGate()
+    let textGate = createTextGate()
+    const resetGates = () => {
+      reasoningGate = createReasoningGate()
+      textGate = createTextGate()
+    }
     const open = (kind, index) => {
       const key = `${kind}:${index}`
       let block = blocks.get(key)
@@ -1172,6 +1181,7 @@ export class OpencodeHttpAdapter {
     const resetBlocks = () => {
       blocks.clear()
       toolCalls.clear()
+      resetGates()
     }
 
     let response = null
@@ -1255,6 +1265,30 @@ export class OpencodeHttpAdapter {
       emitted += 1
       yield { type: 'text-delta', index: block.index, text: part.text }
     }
+    /** Route one part through its display gate before it becomes a block chunk. */
+    const gateParts = (part) => {
+      if (!part || typeof part !== 'object') return []
+      if (part.kind === 'reasoning') {
+        const gated = reasoningGate.push(part.text)
+        return gated.emit.length > 0 ? [{ ...part, text: gated.emit }] : []
+      }
+      if (part.kind === 'text') {
+        const gated = textGate.push(part.text)
+        return gated.emit.length > 0 ? [{ ...part, text: gated.emit }] : []
+      }
+      return [part]
+    }
+    /** Release whatever the gates still hold; a held echo is dropped here. */
+    const flushGates = function* () {
+      const calls = [...blocks.values()]
+        .filter((block) => block.kind === 'tool-call')
+        .map((block) => ({ id: block.id, name: block.name, arguments: block.arguments }))
+      const reasoningRest = reasoningGate.finish()
+      if (reasoningRest.emit.length > 0) yield* emitPart({ kind: 'reasoning', text: reasoningRest.emit })
+      const textRest = textGate.finish(calls)
+      if (textRest.emit.length > 0) yield* emitPart({ kind: 'text', text: textRest.emit })
+      resetGates()
+    }
 
     const maxStreamRetries = Math.max(0, Math.trunc(config.streamRetries.get()) || 0)
     const preserveCut = config.streamCutPreserve.get()
@@ -1332,13 +1366,14 @@ export class OpencodeHttpAdapter {
             // reasoning, tool_calls -> tool-call, content -> text. The downstream
             // reducer forwards these parts unchanged; nothing here reads prose.
             for (const part of reduce.push(mapChatDelta(delta, { reasoningField: config.reasoningField.get() }))) {
-              yield* emitPart(part)
+              for (const gated of gateParts(part)) yield* emitPart(gated)
             }
 
             if (choice.finish_reason) finishReason = choice.finish_reason
           }
 
           for (const part of reduce.flush()) yield* emitPart(part)
+          yield* flushGates()
           for (const chunk of closeAll()) yield chunk
           if (usage) yield { type: 'usage', usage }
           if (options.signal?.aborted) {
@@ -1377,6 +1412,7 @@ export class OpencodeHttpAdapter {
           //    ended on a bare `terminated` with the whole step discarded).
           if (preserveCut && emitted > 0) {
             for (const part of reduce.flush()) yield* emitPart(part)
+            yield* flushGates()
             for (const chunk of closeCut()) yield chunk
             if (usage) yield { type: 'usage', usage }
             this.ctx?.logger?.warn?.(

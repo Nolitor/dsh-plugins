@@ -1,11 +1,11 @@
 # OpenCode Model Serving — Incident Post-Mortem, Autonomous Router Policy, and Decommission Record
 
 <!-- skeleton:
-version: 3.0
+version: 3.2
 kind: report
 status: active
 updated: 2026-11-01
-summary: Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, the 0.6.0 client-half activation defect that killed the web shell, the 0.7.3 stream-cut/inline-tag defects with their measured fix, and the 0.7.6 split-marker hold gap that still printed the notation on screen.
+summary: Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, the 0.6.0 client-half activation defect that killed the web shell, the 0.7.3 stream-cut/inline-tag defects with their measured fix, the 0.7.6 split-marker hold gap that still printed the notation on screen, and the 0.8.0 boundary pipeline that deletes the tag scanner and types every delta from its wire field.
 -->
 
 > Owner: root record for the OpenCode model-serving track. `dsh-subrouter/README.md` and
@@ -446,6 +446,94 @@ boundaries. Detail: `dsh-opencode-v2/VERIFICATION.md` §34, `docs/FAILURE-LEDGER
 Also measured in the same pass and **not** fixed here: `routingTrace` and `bootBeacon` guards are
 inverted relative to their docstrings, so both write to `/tmp` on every content delta by default
 (`OPENCODE_V2_ROUTING_DEBUG=0` / `OPENCODE_V2_BEACON=0` disable them).
+
+## 5.5 Measured 2026-11-01 02:38-03:10 KST — the tag scanner removed, typing moved to the boundary (0.8.0)
+
+0.7.4-0.7.8 answered each leak with another pattern. This round removed the scanner. Measured from the
+recorded per-delta trace (29,940 content deltas, two models): 11,256 (37.6%) were plain prose, 495
+(1.7%) carried transcript notation, and 11,061 reasoning deltas were re-sanitised one fragment at a
+time. A scanner that could only matter for 1.7% of traffic was rewriting 100% of it.
+
+| Layer | Before | After |
+|---|---|---|
+| typing | inferred downstream, by tag pattern | decided upstream from the wire field (lib/upstream-map.js) |
+| lib/stream-parser.js | 337-line state machine | 55-line pass-through reducer (parts in, same parts out) |
+| lib/inline-tags.js | 245-line router | deleted, with its test file |
+| inlineTags config | on by default | deleted; nothing left to toggle |
+| per-delta trace | /tmp/opencode-v2-routing.jsonl | deleted with the router |
+| tool-call block index | 1000+n*2 for inline, 2+i*2 for structured | the structured ordinal only: 2+i*2 |
+
+Verification, measured:
+
+| Check | Result |
+|---|---|
+| npm run check | exit 0 |
+| npm test | 245/245 pass, 0 fail (baseline before the round: 260/260) |
+| replay of 33,027 recorded live content deltas through the new pipeline | 33,027 text parts, all verbatim, 0 mutated, 0 lost |
+| live switch | timer restart 03:08:33 KST; serving pid 1956641 (0.7.5, router:true) replaced by 2008891 (0.8.0, no router field); the old routing trace stopped at 03:05:41 |
+| package | the web profile symlink for @nolit/dsh-opencode-v2 resolves into the workspace and reports 0.8.0, so the restart is the whole replacement |
+
+Consequence, stated plainly: a route that puts notation inside delta.content now shows that text
+as-is. That is the deliberate trade. The wire field is authoritative, and the parser no longer
+guesses; a route that leaks notation is a route defect to fix, or a renderer's to display.
+
+## 5.6 Measured 2026-11-01 04:35-04:45 KST — display cleaning in the adapter (candidate 0.9.0, test env only)
+
+0.8.0 stopped rewriting text, so two pieces of **route scaffolding** that had been hidden by the old
+scanner became visible again. Measured on the real session record that produced the screen
+(`/tmp/sess.ndjson`, 11 assistant messages): literal `<thinking>`/`</thinking>` inside 6 of 11
+reasoning parts (19 tokens, at arbitrary offsets), and 2 rendered tool calls
+`[tool call <name> #<id>]: <json>` inside *text* (1,549 of 1,923 chars, 80.6%). The typing is
+correct; the payload carries the notation.
+
+**Option A — display cleaning, not typing.** `lib/display-clean.js` removes only those two shaped
+pieces, structurally: the two exact protocol tokens anywhere in reasoning, and a rendered call only
+when it begins a line, runs to the end of the part, and matches a structured call in the same
+response by id or by name + equal arguments. Two streaming gates (reasoning holds <= 11 chars; text
+holds only a line that starts like an echo) apply the same rule without buffering prose. Nothing is
+re-typed, and no prose is rewritten.
+
+Verification — real model through the running CLI daemon (state file → `/api/info`), model
+`opencode-go/deepseek-v4.1-flash`, effort high, in the test copy `.runtime-measure/optA`:
+
+| Check | Result |
+|---|---|
+| `npm run check` (now includes `lib/display-clean.js`) | exit 0 |
+| `npm test` | 258/258 pass, 0 fail (baseline 245; +8 display-clean, +5 display-gate, 1 contract test updated) |
+| A/B live runs, baseline 0.8.0 vs gated, 6 plain + 3 tool calls | 9/9 clean (0 thinking tokens, 0 echo), 9/9 gated output replay-identical to offline cleaning, 3/3 tool calls complete and valid JSON, identical to baseline |
+| same A/B on the free route `opencode-go/beam-free` | 2/2 clean, 2/2 replay-identical |
+| latency, gated vs baseline | first text delta 0.93-1.22 s vs 1.00-1.84 s; max inter-chunk gap 12-69 ms vs 33-41 ms — within generation noise |
+| 3 agentic multi-turn runs, 56 real text deltas | 0 deltas held, raw 753 chars = emitted 753 |
+| replay of the recorded leaking session through `cleanParts` | 19 tokens removed, 2 echo tails dropped, non-echo text byte-identical, 0 order violations |
+| gate-level replay of 33,977 recorded real deltas | 483,609 chars in = 483,609 out, 0.46 us/delta |
+
+Two corrections stated plainly:
+
+1. The earlier `deltasWithHold: 33921 / 99.835%` figure measured **per-push deferral over an entire
+   unflushed trace**, not latency. It is retracted; the real latency is the table above, and prose
+   was held in 0 of 74 measured live text deltas.
+2. The current route did not reproduce the leak in 11 live runs (baseline leaked 0 times), so the
+   live runs prove the gates are transparent, and the recorded session proves they remove. A run of
+   the route that leaks again is still the only way to re-measure that path live. One first attempt
+   returned `OPENCODE_BACKEND: ProviderNotFoundError: providerID=opencode-go` before any of the 11
+   counted runs; it did not recur and is the known F-21 fallback path, not a gate defect.
+
+Known limitation, measured assumption: an echo line that is **not** at the end of a text part is
+released, not dropped (the parser requires the whole tail). Both real echo cases were terminal.
+
+### Candidate 0.9.0 change set (staged, not applied to the live package)
+
+| Step | Change |
+|---|---|
+| 1 | `lib/display-clean.js` (new) + `lib/http.js` gate wiring (+40 lines) |
+| 2 | `package.json` 0.8.0 -> 0.9.0; check script gains `display-clean.js` |
+| 3 | tests: `display-clean.test.mjs` (8), `display-gate.test.mjs` (5), `http.test.mjs` contract test updated |
+| 4 | docs: canonical `README.md` display-cleaning section + version table, `VERIFICATION.md` §38, `docs/FAILURE-LEDGER.md` F-24 (synthetic-only validation), this section, boot card, `npm run docs:index` + `docs:check` |
+| 5 | artifact `artifacts/nolit-dsh-opencode-v2-0.9.0.tgz` + `SHA256SUMS.opencode-v2` |
+| 6 | live apply after approval: copy the four files into `dsh-opencode-v2/`, `npm test` there, `systemctl --user restart dsh-web.service`, then verify by pid change + a field that exists only in 0.9.0 + journal activation errors — not by a version string in a log |
+
+Status: **staged in `.runtime-measure/optA`; the live package and service are untouched** (0.8.0,
+serving pid 2008891 since 03:08:33). Live application needs the owner's confirmation.
 
 ## 6. Rules restated for the next session
 

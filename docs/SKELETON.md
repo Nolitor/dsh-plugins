@@ -15,7 +15,7 @@
 
 ## rule
 
-- **1.3** · active · 2026-11-01 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
+- **1.5** · active · 2026-11-01 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
   Every defect and wrong turn this workspace actually made, with the standing rule that keeps it from happening again. Read before changing a plugin, a doc, or a live service.
 - **1.3** · active · 2026-10-31 · [docs/RULES.md](RULES.md)
   Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting — with the failure ledger as required reading.
@@ -35,8 +35,8 @@
 
 ## report
 
-- **3.0** · active · 2026-11-01 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
-  Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, the 0.6.0 client-half activation defect that killed the web shell, the 0.7.3 stream-cut/inline-tag defects with their measured fix, and the 0.7.6 split-marker hold gap that still printed the notation on screen.
+- **3.2** · active · 2026-11-01 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
+  Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, the 0.6.0 client-half activation defect that killed the web shell, the 0.7.3 stream-cut/inline-tag defects with their measured fix, the 0.7.6 split-marker hold gap that still printed the notation on screen, and the 0.8.0 boundary pipeline that deletes the tag scanner and types every delta from its wire field.
 - **1.0** · completed · 2026-10-29 · [DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](../DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
   Runtime measurement and optimization report for the three original plugins on DSH 0.2.2-alpha.2.
 - **1.0** · reference · 2026-10-29 · [UTM-REVIEW-FORGE-VS-SIDEBAR.md](../UTM-REVIEW-FORGE-VS-SIDEBAR.md)
