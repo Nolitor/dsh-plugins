@@ -1148,7 +1148,7 @@ export class OpencodeHttpAdapter {
           index: block.index,
           block: block.kind === 'tool-call'
             ? { type: 'tool-call', id: block.id || `call_${block.index}`, name: block.name, arguments: block.arguments || '{}' }
-            : { type: block.kind, text: sanitizeProtocolText(block.text) },
+            : { type: block.kind, text: block.text },
         }
       }
     }
@@ -1177,7 +1177,7 @@ export class OpencodeHttpAdapter {
         chunks.push({
           type: 'block-end',
           index: block.index,
-          block: { type: block.kind, text: sanitizeProtocolText(block.text) },
+          block: { type: block.kind, text: block.text },
         })
       }
       return chunks
