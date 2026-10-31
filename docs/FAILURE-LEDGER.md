@@ -1,11 +1,11 @@
 # Failure Ledger — Mistakes Made Here, and the Rule That Prevents a Repeat
 
 <!-- skeleton:
-version: 1.8
+version: 1.9
 kind: rule
 status: active
 updated: 2026-11-01
-summary: Every defect and wrong turn this workspace actually made, with the standing rule that keeps it from happening again. Read before changing a plugin, a doc, or a live service.
+summary: Every defect and wrong turn this workspace actually made, including a literal marker whitelist that missed a new notation family, with the standing rule that keeps it from happening again. Read before changing a plugin, a doc, or a live service.
 -->
 
 > Status: active · Applies to: this workspace · Companion: [RULES.md](./RULES.md), [DSH-HARNESS-POLICY.md](./DSH-HARNESS-POLICY.md)
@@ -71,6 +71,7 @@ change cannot satisfy it, say so before acting, not after.
 | F-26 | The 0.9.0 release was committed and packed while `lib/http.js` still had `const VERSION = '0.8.0'` — the load beacon would have labelled the new build as the old one after the restart, and the released tarball carried the wrong string. It was caught only during the pre-restart re-read of the module. | **A version constant outside package.json is part of the release.** After a bump, `grep -rn "'<old-version>'" lib/ bin/` and re-pack/re-hash; the beacon must name the build it belongs to. |
 | F-27 | 0.8.0 deleted the owner's state machine without instruction; 0.9.0 answered the leak with a display-only filter that mutates the single text stream, so the parser channel and the screen channel could not be separated and live notation kept leaking (measured: 20 of 65 messages in the first 90 minutes of 0.9.0). The 26 self-bumped versions (0.1.1 to 0.9.0) came from the same habit: treating a release as permission to move the number. | **The owner's architecture is not yours to simplify.** The top classifier and the bottom parser/screen gate are separate requirements; a filter is not a gate. Version bumps happen only on instruction, and then only as `0.0.1.rc<N>`. |
 | F-28 | The adapter appended tool-argument fragments from the route, assuming a fragment contract the route does not honour: it **re-sends the whole arguments object** as a second delta, so the host received concatenated JSON (`{"code":…}{"code":…}`) and reported `ToolArgsError INVALID_ARGS` (`"arguments" must be an object`) — the turn was lost. Measured session `2dc3531f`: 80 tool calls, **30** failed; 24 second copies were exact duplicates, 6 restated with changed content, 3 arrived wrapped as `{"arguments":"<json>"}`. The same session showed the second half: a harness that recognizes only **marked** notation displays a bare JSON call typed into `content` as prose (4 occurrences), so the call is read by the user and never executed. Corpus re-measurement (267 sessions, 16,709 calls): 44 -> 0 invalid after normalization. | **Accumulate wire fragments defensively: a re-sent full snapshot is not a fragment. Decide the final arguments against the declared schema before the host sees them, and treat a body payload that is only a tool-shaped JSON object as a call (promote or drop), never as prose.** |
+| F-29 | 0.0.1-rc.1's top classifier recognized tool-call markers from a **hard-coded list of literal openers**, so when the route started writing a new corrupted family it matched none of them: `<tool_call #call_00_…>`, `<tool call run_code #code_placeholder_001>`, closer-shaped parameter openers `</│DSML│ parameter name="code">…</│DSML│>`, doubled pipes `</｜｜DSML｜｜ parameter>`, a bare `</│DSML│>`, `<│DSML│parameter name="description">…</│DSML│>`, and mixed `<tool call run_code #id]: {json}`. Replay through rc.1: **0 calls promoted, 0 characters removed** — the marker was printed verbatim and the intended call never executed, which the owner experienced as a "forcibly cut" turn. Measured across all `opencode-route` sessions: strict screen leaks 301 -> 4, loose mentions 333 -> 49, calls promoted 24, duplicate restatements dropped 209. | **Classify by shape, not by a literal whitelist: bracket style, name/id position and pipe glyphs vary. If the head cannot name the tool, infer it from the declared parameter schema. Never let a marker reach the screen, and de-duplicate by call id.** |
 
 ## 7. Using this file
 

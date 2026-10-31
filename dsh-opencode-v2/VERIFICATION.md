@@ -1,16 +1,17 @@
 <!-- skeleton:
-version: 1.5
+version: 1.6
 kind: ver
 status: active
 updated: 2026-11-01
-summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1 and 0.0.1-rc.1. Older rounds live in VERIFICATION-ARCHIVE.md.
+summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1 and 0.0.1-rc.2. Older rounds live in VERIFICATION-ARCHIVE.md.
 -->
 # @nolit/dsh-opencode-v2 - Verification (current)
 
 > Only the recent rounds live here. Everything up to v0.7.3 is in
 > VERIFICATION-ARCHIVE.md in this directory.
 >
-> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.1 on disk (serving pid 2199391 still runs 0.0.1 until restart)
+> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.2 on disk (serving pid 2251772
+> still runs 0.0.1-rc.1 until restart)
 
 ## 33. v0.7.4 — no protocol notation reaches the transcript (measured 2026-10-31 23:20-23:40)
 
@@ -605,5 +606,88 @@ nothing else moves it.
 2026-11-01 06:52:39 KST) still serves `0.0.1`; the `0.0.1-rc.1` source is on disk and is **not
 live**. No mount is claimed here, and no live traffic has exercised the new normalizer or the JSON
 probe yet.
+
+## 41. v0.0.1-rc.2 — classify the marker by shape, not by a literal whitelist (measured 2026-11-01)
+
+### 41.1 The report and the measured timeline
+
+The owner reported that his turns looked "forcibly cut" and that more errors appeared, pointing at
+session `2dc3531f-1b50-406e-bacc-9ce73345e193` (`opencode-go/deepseek-v4.1-flash`, workspace
+`total_skill`). The timeline shows no rc.1 regression in that session:
+
+| Window in the session | Measured outcome |
+|---|---|
+| `0.0.1` — before the 07:54–07:56 KST restart | 30 `ToolArgsError INVALID_ARGS`, all timestamped 06:58–07:41 KST |
+| `0.0.1-rc.1` — after the restart | 3 turns, 11 tool calls, **0 tool errors**, every `turn/end` `completed` |
+
+What did change is a **new, corrupted notation family** the route/model began writing into
+`content`. The classifier did not recognize it, so the intended call never reached the parser; the
+model's own text says "continuing from where it was cut". That is the cut the owner saw.
+
+### 41.2 The four measured payload shapes
+
+| # | Shape | Measured example |
+|---|---|---|
+| 1 | marker only, no payload to execute | `<tool_call #call_00_…>` |
+| 2 | head with a placeholder name/id | `<tool call run_code #code_placeholder_001>` |
+| 3 | parameter tags with invented closers (a parameter opener written as a closer) | `</│DSML│ parameter name="code">…</│DSML│>`; doubled pipes `</｜｜DSML｜｜ parameter>`; bare `</│DSML│>`; `<│DSML│parameter name="description">…</│DSML│>` |
+| 4 | marker and JSON mixed in one line | `<tool call run_code #id]: {json}` |
+
+### 41.3 Replay through the rc.1 classifier
+
+Those payloads replayed through the `0.0.1-rc.1` top classifier produced **0 calls promoted and 0
+characters removed** — every classifier statistic stayed at zero and the notation was displayed
+verbatim. The screen showed the marker; the parser never saw the call.
+
+### 41.4 What changed
+
+The top classifier is the same state machine; its marker recognition is no longer a literal list.
+
+| Piece | Behaviour |
+|---|---|
+| marker head | recognized in any bracket style: `^[<\[]\s*tool[ _-]?call\b` |
+| call name | a declared name in the head, `name="…"`, or inferred from the parameter schema with `inferToolFromArguments` |
+| call id | `#id` or `id="…"` |
+| payload | a JSON object found after the head, or parameter tags with whatever closer the model invented (a parameter opener may even be written as a closer). Block terminators require `invoke`/`calls`/`tool_calls`, so a bare closer stays a parameter closer |
+| pipe glyphs | `｜`, `│` or `\|` in any 1–2 repeats, doubled included |
+| screen scrub | removes model-written tool/parameter tags and DSML tokens, so they never reach the screen |
+| bottom gate | also de-duplicates by call id, so the same call restated with drifted arguments is promoted once |
+
+### 41.5 Before/after measurement
+
+Across all `opencode-route` sessions:
+
+| Measure | Before | After |
+|---|---|---|
+| assistant messages whose text contained protocol notation | 333 | 333 (same corpus) |
+| strict screen leaks (line-start marker, DSML token, parameter tag) | 301 | **4** — all 4 are prose that quotes the notation inside backticks |
+| looser "any mention" count | 333 | **49** — all prose |
+| calls promoted from those payloads | 0 | **24** |
+| duplicate restatements dropped | 0 | **209** |
+
+Reported session, payload by payload:
+
+| Payload | Result |
+|---|---|
+| marker-only payload | dropped, no call promoted (there is no payload to execute) |
+| mixed marker + JSON payload | **1 call**, correct id and JSON arguments, **0 characters shown** |
+| 6,427-character final payload | collapses to **2 distinct calls** after id de-duplication |
+
+### 41.6 Tests and release artifact
+
+| Check | Result |
+|---|---|
+| `npm run check` | exit 0 |
+| `npm test` | **282/282 pass**, 0 fail |
+| artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.2.tgz` |
+| sha256 | `29260240b776708a524e90c5e6b4071557beeb9f6b18908c4ad09befda85e8e3` (recorded in `artifacts/SHA256SUMS.opencode-v2`) |
+
+The number advanced one instructed RC step (`0.0.1-rc.1` → `0.0.1-rc.2`); the rule stays
+`0.0.1.rc<N>` and nothing else moves it.
+
+### 41.7 Status
+
+**`applied on disk, pending restart`.** Serving `pid 2251772` still runs `0.0.1-rc.1`; the
+`0.0.1-rc.2` source is on disk only. No mount is claimed here.
 
 

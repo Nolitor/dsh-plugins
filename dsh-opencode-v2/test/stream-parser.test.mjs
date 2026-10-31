@@ -132,3 +132,47 @@ test('stray closers are removed from prose', () => {
   const { parts } = classify('done</thinking> now')
   assert.equal(textOf(parts), 'done now')
 })
+
+const NEW_TOOLS = [{ name: 'run_code', parameters: { type: 'object', properties: { code: {}, description: {} }, required: ['code'] } }]
+function classifyWithTools(text) {
+  const classifier = createStreamClassifier({ toolNames: new Set(['run_code']), tools: NEW_TOOLS })
+  return { parts: [...classifier.push(text), ...classifier.flush()], stats: classifier.stats }
+}
+
+test('a mixed <tool_call> marker with box-drawing DSML parameters becomes a call', () => {
+  const source = '<tool_call #call_00_abc>\n' +
+    '</│DSML│ parameter name="code">const x = 1</│DSML│>\n' +
+    '<│DSML│parameter name="description">probe</│DSML│>'
+  const { parts } = classifyWithTools(source)
+  const calls = callsOf(parts)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].name, 'run_code')
+  assert.deepEqual(JSON.parse(calls[0].arguments), { code: 'const x = 1', description: 'probe' })
+  assert.equal(textOf(parts).includes('DSML'), false)
+  assert.equal(textOf(parts).includes('tool_call'), false)
+})
+
+test('a bare marker with no payload is dropped, never printed', () => {
+  const { parts, stats } = classifyWithTools('prose\n<tool call run_code #code_placeholder_001>\n</｜｜DSML｜｜ parameter>')
+  assert.equal(textOf(parts), 'prose\n')
+  assert.equal(callsOf(parts).length, 0)
+  assert.equal(stats.degraded, 1)
+})
+
+test('a JSON payload after a mixed <tool call ...] marker is still promoted', () => {
+  const source = '<tool call run_code #call_00_6s1e]: {"code":"const a = 1"}'
+  const { parts } = classifyWithTools(source)
+  const calls = callsOf(parts)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].id, 'call_00_6s1e')
+  assert.deepEqual(JSON.parse(calls[0].arguments), { code: 'const a = 1' })
+})
+
+test('an unknown name is inferred from the argument schema', () => {
+  const source = '<tool_call #call_00_x>\n</│DSML│ parameter name="code">const y = 2</│DSML│>'
+  const { parts } = classifyWithTools(source)
+  const calls = callsOf(parts)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].name, 'run_code')
+})
+

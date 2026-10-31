@@ -1,10 +1,10 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 2.6
+version: 2.7
 kind: readme
 status: active
 updated: 2026-11-01
-summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose.
+summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose. 0.0.1-rc.2 makes the top classifier recognize the tool-call marker by shape (any bracket style, name/id from the head or the declared parameter schema, any pipe glyph) instead of a literal list, scrubs model-written tags and DSML tokens from the screen, and de-duplicates promoted calls by id; measured screen leaks 301 -> 4.
 -->
 
 
@@ -18,20 +18,26 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 
 > Measurement of record: [`../OPENCODE-V2-SURFACE-MEASUREMENT.md`](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
 
-## 0. Version — 0.0.1 baseline, 0.0.1-rc.1 on instruction
+## 0. Version — 0.0.1 baseline, 0.0.1-rc.2 on instruction
 
 | Field | Value |
 |---|---|
-| `package.json` | `0.0.1-rc.1` (was `0.0.1`, which was `0.9.0`) |
-| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.1` (was `0.0.1`, which was `0.9.0`) |
+| `package.json` | `0.0.1-rc.2` (was `0.0.1-rc.1`, which was `0.0.1`) |
+| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.2` (was `0.0.1-rc.1`, which was `0.0.1`) |
 | Versions self-bumped in this history | 26 (`0.1.1` … `0.9.0`) |
 | `0.0.1-rc.1` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.1.tgz` — sha256 `64be56cd99543754caadcc5459b983c597ac53f226cdd145ded4ab7d99a3fc16` |
+| `0.0.1-rc.2` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.2.tgz` — sha256 `29260240b776708a524e90c5e6b4071557beeb9f6b18908c4ad09befda85e8e3` |
 
 The owner reset the number and forbade further self-bumps: **the version changes again only on an
-explicit owner instruction, and then only as `0.0.1.rc<N>`**. A release, a fix round or a green test
-run is not an instruction. The load-beacon constant is part of the release, not a log decoration.
-The `0.0.1` baseline stays the reset; the line advances one release-candidate step per instructed
-fix round and nowhere else.
+explicit owner instruction, and then only as `0.0.1.rc<N>`** (packaged as `0.0.1-rc.<N>`). A release,
+a fix round or a green test run is not an instruction. The load-beacon constant is part of the
+release, not a log decoration. The `0.0.1` baseline stays the reset; the line advances one
+release-candidate step per instructed fix round and nowhere else.
+
+Two instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
+accumulation, §0.1) and `0.0.1-rc.1` → `0.0.1-rc.2` (shape-based marker classification, §0.2).
+Neither number came from a green suite or a defect found on our own; each was the one RC step the
+owner's instruction allowed.
 
 ### 0.1 `0.0.1-rc.1` — what changed and why
 
@@ -72,6 +78,58 @@ Details and the before/after tables: `VERIFICATION.md` §40.
 
 **Status: applied on disk, pending restart.** The running service (`pid 2199391`, started
 2026-11-01 06:52:39 KST) still serves `0.0.1`; the `0.0.1-rc.1` source is on disk and is **not live**.
+
+### 0.2 `0.0.1-rc.2` — the marker family was a literal list; classification is now by shape
+
+The owner reported that his turns looked "forcibly cut" and that more errors appeared, again
+pointing at session `2dc3531f-1b50-406e-bacc-9ce73345e193`. Measured, that report contains two
+different things and neither is an rc.1 regression:
+
+| Window in that session | Measured outcome |
+|---|---|
+| `0.0.1` (before the 07:54–07:56 KST restart) | 30 `ToolArgsError INVALID_ARGS`, all timestamped 06:58–07:41 KST |
+| `0.0.1-rc.1` (after the restart) | 3 turns, 11 tool calls, **0 tool errors**, every `turn/end` `completed` |
+
+So rc.1 added no errors there. What did change is a **new, corrupted notation family** the route/model
+began writing into `content`: the classifier recognized it in none of its forms, so the intended call
+never reached the parser and the model's own text says "continuing from where it was cut". Measured
+shapes: `<tool_call #call_00_…>`, `<tool call run_code #code_placeholder_001>`, closer-shaped
+parameter openers `</│DSML│ parameter name="code">…</│DSML│>`, doubled pipes
+`</｜｜DSML｜｜ parameter>`, a bare `</│DSML│>`, `<│DSML│parameter name="description">…</│DSML│>`,
+and the mixed `<tool call run_code #id]: {json}`.
+
+Replayed through the **rc.1** classifier those payloads yield **0 calls promoted and 0 characters
+removed** — the notation was displayed verbatim. That is the "cut": the call was never executed.
+
+`0.0.1-rc.2` keeps the same state machine and makes the top classifier tolerant:
+
+| Piece | Behaviour |
+|---|---|
+| marker head | recognized in any bracket style, `^[<\[]\s*tool[ _-]?call\b` — `[tool call …`, `<tool_call …`, `<tool-call …` |
+| call name | taken from a declared tool name in the head, from `name="…"`, or **inferred from the parameter schema** (`inferToolFromArguments`) when the head cannot name it |
+| call id | from `#id` or `id="…"` |
+| payload | a JSON object found after the head, **or** parameter tags closed by whatever closer the model invented — a parameter opener may even be written as a closer. Block terminators require `invoke`/`calls`/`tool_calls`, so a bare closer stays a parameter closer |
+| pipe glyphs | `｜`, `│` and `\|` in any 1–2 repeats, doubled included |
+| screen | `scrub` removes model-written tool/parameter tags and DSML tokens, so no marker reaches the screen |
+| bottom gate | de-duplicates by **call id**, so the same call restated with drifted arguments is promoted once |
+
+Measured across all `opencode-route` sessions:
+
+| Measure | Before `0.0.1-rc.2` | After |
+|---|---|---|
+| assistant messages whose text contained protocol notation | 333 | 333 (same corpus) |
+| strict screen leaks (line-start marker, DSML token, parameter tag) | 301 | **4** — all 4 are prose quoting the notation inside backticks |
+| looser "any mention" count | 333 | **49** — all prose |
+| calls promoted from those payloads | 0 | **24** |
+| duplicate restatements dropped | 0 | **209** |
+
+In the reported session: the marker-only payload is dropped with no call (there is no payload to
+execute), the mixed payload becomes **1 call** with the correct id and JSON arguments and **0
+characters shown**, and the 6,427-character final payload collapses to **2 distinct calls** after
+id de-duplication.
+
+**Status: applied on disk, pending restart.** Serving `pid 2251772` still runs `0.0.1-rc.1`; the
+`0.0.1-rc.2` source is on disk only. No mount is claimed. Detail: `VERIFICATION.md` §41, ledger F-29.
 
 ## 1. Measured OpenCode v2.2.0 facts this plugin is built on
 
@@ -397,7 +455,7 @@ Rules the implementation follows:
   source edit), `UNDECIDED` (newer but no beacon). `--wait <seconds>` waits for `MainPID` to
   change; exit codes 0/1/2.
 
-### Tool-call arguments and bare-JSON payloads (v0.0.1-rc.1 — measured 2026-11-01)
+### Tool-call arguments, body payloads and the tolerant marker family (v0.0.1-rc.1 / rc.2 — measured 2026-11-01)
 
 Two argument-boundary defects were fixed on the `0.0.1` baseline; the router, the state machine and
 the parser/screen gate are untouched. Source: session `2dc3531f-1b50-406e-bacc-9ce73345e193`
@@ -416,6 +474,36 @@ declared tool, **none displayed**. The reported session: **30 → 0** invalid an
 (4 matched to `run_code`). Tests: `test/arguments.test.mjs` (15) and five end-to-end cases in
 `test/http.test.mjs`; `npm test` 277/277. Status: **applied on disk, pending restart** — serving
 `pid 2199391` is still `0.0.1`. Detail: `VERIFICATION.md` §40, ledger F-28.
+
+**rc.1's classifier did not recognize the next notation family.** After rc.1 the route/model started
+writing tool calls into `content` in a corrupted family — `<tool_call #call_00_…>`,
+`<tool call run_code #code_placeholder_001>`, closer-shaped parameter openers
+`</│DSML│ parameter name="code">…</│DSML│>`, doubled pipes `</｜｜DSML｜｜ parameter>`, bare
+`</│DSML│>`, `<│DSML│parameter name="description">…</│DSML│>`, and mixed
+`<tool call run_code #id]: {json}`. The rc.1 classifier matched a hard-coded list of literals; a
+replay of those payloads promoted **0 calls and removed 0 characters**, so the notation was printed
+verbatim and the intended call never executed — the "cut" the owner saw. `0.0.1-rc.2` replaces the
+literal list with shape-based recognition:
+
+| Piece | Behaviour (rc.2) |
+|---|---|
+| marker head | `^[<\[]\s*tool[ _-]?call\b` — `[tool call`, `<tool_call`, `<tool-call` |
+| name | declared tool name in the head, `name="…"`, or schema inference via `inferToolFromArguments` |
+| id | `#id` or `id="…"` |
+| payload | JSON object after the head, or parameter tags with any invented closer (a parameter opener may be written as a closer); block terminators require `invoke`/`calls`/`tool_calls` |
+| pipe glyphs | `｜` / `│` / `\|`, 1–2 repeats, doubled included |
+| screen | scrub removes model-written tool/parameter tags and DSML tokens |
+| bottom gate | de-duplicates by call id, so a restated call with drifted arguments is promoted once |
+
+Measured across all `opencode-route` sessions: protocol notation present in **333** assistant
+messages; strict screen leaks (line-start marker, DSML token, parameter tag) **301 → 4**, and all 4
+are prose quoting the notation inside backticks; the looser "any mention" count **333 → 49**, all
+prose. Calls promoted from those payloads: **24**; duplicate restatements dropped: **209**. In the
+reported session the marker-only payload is dropped (nothing to execute), the mixed payload becomes
+1 call with the correct id and JSON arguments and 0 characters shown, and the 6,427-character final
+payload collapses to 2 distinct calls. Tests: `npm test` **282/282**; `npm run check` exit 0.
+Status: **applied on disk, pending restart** — serving `pid 2251772` still runs `0.0.1-rc.1`.
+Detail: `VERIFICATION.md` §41, ledger F-29.
 
 ### Session identity and credential choice (v0.5.1 — measured 2026-10-30)
 

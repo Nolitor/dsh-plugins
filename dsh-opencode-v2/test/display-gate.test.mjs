@@ -86,3 +86,13 @@ test('argument equality is order-independent', () => {
   ), true)
   assert.equal(stableStringify({ b: 1, a: 2 }), '{"a":2,"b":1}')
 })
+
+test('the same call restated with drifted arguments and the same id is promoted once', () => {
+  const gate = createDisplayGate({ toolNames: TOOLS })
+  gate.addCandidate(candidate({ id: 'call_dup', arguments: '{"command":"ls"}' }))
+  gate.addCandidate(candidate({ id: 'call_dup', arguments: '{"command":"ls -la"}' }))
+  const settled = gate.settle([])
+  assert.equal(settled.promote.length, 1)
+  assert.equal(settled.dropped[0].verdict, 'duplicate')
+})
+

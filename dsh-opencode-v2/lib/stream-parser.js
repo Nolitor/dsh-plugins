@@ -57,9 +57,29 @@ const ANALYSIS_CLOSE = /<\/(?:antml:)?analysis>/i
  *   </｜DSML｜ calls>
  */
 const DSML_TOKEN = '｜DSML｜'
-const DSML_END = /<\/?｜DSML｜\s*(?:invoke|calls|tool_calls)\s*>/
-const DSML_PARAM = /<｜DSML｜\s*parameter\s+name="([^"]+)"(?:\s+string="(true|false)")?\s*>([\s\S]*?)<\/｜DSML｜\s*parameter>/g
-const DSML_ANY = /<\/?｜DSML｜[^>]*>/g
+// The model reproduces the token with whatever pipe glyph it has: ｜ (full width),
+// │ (box drawing) or |, sometimes doubled. Measured live 2026-11-01:
+//   </｜｜DSML｜｜ parameter>, </│DSML│>, <│DSML│parameter name="description">
+const DSML_PIPES = '[｜│|]{1,2}\\s*DSML\\s*[｜│|]{1,2}'
+const DSML_END = new RegExp('<\\/?' + DSML_PIPES + '\\s*(?:invoke|calls|tool_calls)\\s*>')
+// A parameter tag and whatever closer the model invented for it:
+//   </│DSML│ parameter>, </｜｜DSML｜｜ parameter>, </│DSML│>, </parameter>
+const PARAM_CLOSE = '(?:(?:' + DSML_PIPES + '\\s*)?parameter|(?:' + DSML_PIPES + '))\\s*>'
+const DSML_PARAM = new RegExp(
+  // The opening tag is sometimes written as a closer (measured: </│DSML│ parameter …>).
+  '<\\/?(?:' + DSML_PIPES + '\\s*)?parameter\\s+name="([^"]+)"(?:\\s+string="(true|false)")?\\s*>([\\s\\S]*?)<\\/' + PARAM_CLOSE,
+  'g',
+)
+const DSML_ANY = new RegExp('<\\/?' + DSML_PIPES + '[^>]*>', 'g')
+// A tool-call marker in any bracket/delimiter style the model mixes up:
+//   [tool call name #id], <tool call name #id>, <tool_call #id>, <tool-call ...
+const TOOL_MARK = /^[<\[]\s*tool[ _-]?call\b/i
+// Model-written call tags and parameter tags that must never reach the screen.
+const TOOL_TAG = /<\/?(?:tool[ _-]?call|invoke|parameter)\b[^>]*>/gi
+const PLAIN_PARAM = /<(?:[｜│|]{1,2}\s*DSML\s*[｜│|]{1,2}\s*)?parameter\s+name="([^"]+)"(?:\s+string="(true|false)")?\s*>([\s\S]*?)<\/(?:[｜│|]{1,2}\s*DSML\s*[｜│|]{1,2}\s*)?parameter>/g
+const MAX_HEAD = 8192
+
+import { inferToolFromArguments } from './arguments.js'
 
 const STATE_TEXT = 'text'
 const STATE_REASONING = 'reasoning'
@@ -87,6 +107,7 @@ export function createStreamClassifier(options = {}) {
   const toolNames = options.toolNames instanceof Set
     ? options.toolNames
     : new Set(options.toolNames ?? [])
+  const tools = Array.isArray(options.tools) ? options.tools : []
   const maxHold = options.maxHold ?? 65536
   const stats = {
     thinking: 0, unterminatedThinking: 0, calls: 0,
@@ -109,11 +130,10 @@ export function createStreamClassifier(options = {}) {
       const count = out.split(tag).length - 1
       if (count > 0) { stats.stray += count; out = out.split(tag).join('') }
     }
-    if (out.includes(DSML_TOKEN)) {
-      const count = (out.match(DSML_ANY) ?? []).length
-      if (count > 0) { stats.stray += count }
-      out = out.replace(DSML_ANY, '')
-    }
+    const dsml = out.match(DSML_ANY)
+    if (dsml) { stats.stray += dsml.length; out = out.replace(DSML_ANY, '') }
+    const tags = out.match(TOOL_TAG)
+    if (tags) { stats.stray += tags.length; out = out.replace(TOOL_TAG, '') }
     return out
   }
 
@@ -130,9 +150,15 @@ export function createStreamClassifier(options = {}) {
   }
 
   function emitCall(out, name, id, args) {
-    if (!declared(name)) { stats.stripped += 1; return }
+    let resolved = name
+    if (!resolved && tools.length > 0) {
+      let parsed = null
+      try { parsed = JSON.parse(args) } catch { parsed = null }
+      resolved = parsed === null ? '' : (inferToolFromArguments(parsed, tools) ?? '')
+    }
+    if (!declared(resolved)) { stats.stripped += 1; return }
     stats.calls += 1
-    out.push({ kind: 'tool-call', id: id ?? '', name, arguments: args })
+    out.push({ kind: 'tool-call', id: id ?? '', name: resolved, arguments: args })
   }
 
   /**
@@ -156,6 +182,13 @@ export function createStreamClassifier(options = {}) {
         }
         from = at + 1
       }
+    }
+    // A model-written call marker in another bracket style: [<tool[ _-]call ...
+    for (let at = 0; at < s.length; at += 1) {
+      const ch = s[at]
+      if (ch !== '<' && ch !== '[') continue
+      if (at !== 0 && s[at - 1] !== '\n') continue
+      if (TOOL_MARK.test(s.slice(at, at + 24)) && (best < 0 || at < best)) best = at
     }
     return best
   }
@@ -228,8 +261,9 @@ export function createStreamClassifier(options = {}) {
     if (at >= 0) {
       text(out, buf.slice(0, at))
       buf = buf.slice(at)
-      if (buf.startsWith('[tool call ')) {
-        buf = buf.slice('[tool call '.length)
+      const toolMatch = TOOL_MARK.exec(buf)
+      if (toolMatch) {
+        buf = buf.slice(toolMatch[0].length)
         state = STATE_TOOL_HEAD
         callName = ''
         callId = ''
@@ -296,32 +330,65 @@ export function createStreamClassifier(options = {}) {
    *   DSML  `[tool call <name>">`              — head ends at '">'
    */
   function stepToolHead(out, final) {
-    const specClose = buf.indexOf(']')
-    const quoteClose = buf.indexOf('">')
-    if (specClose >= 0 && (quoteClose < 0 || specClose < quoteClose)) {
-      const head = buf.slice(0, specClose).trim()
-      callName = (head.split(/\s+/)[0] ?? '').replace(/^"|"$/g, '')
-      callId = (head.split(/\s+/)[1] ?? '').replace(/^#/, '')
-      buf = buf.slice(specClose + 1)
+    // The head is everything the model wrote between the marker and the payload:
+    // a name, an id, a closing bracket/quote, or entirely invented markup. Whatever
+    // it is, the call is defined by the payload that follows.
+    const jsonAt = buf.indexOf('{')
+    const paramAt = findParamStart(buf)
+    const hasJson = jsonAt >= 0 && jsonAt <= MAX_HEAD
+    const hasParam = paramAt >= 0 && paramAt <= MAX_HEAD
+    if (hasJson && (!hasParam || jsonAt < paramAt)) {
+      const head = buf.slice(0, jsonAt)
+      callName = nameFromHead(head)
+      callId = idFromHead(head)
+      buf = buf.slice(jsonAt)
       state = STATE_TOOL_ARGS
       return true
     }
-    if (quoteClose >= 0) {
-      callName = buf.slice(0, quoteClose).trim().replace(/^"|"$/g, '')
-      callId = ''
-      buf = buf.slice(quoteClose + 2)
+    if (hasParam) {
+      const head = buf.slice(0, paramAt)
+      callName = nameFromHead(head)
+      callId = idFromHead(head)
+      buf = buf.slice(paramAt)
       state = STATE_DSML_ARGS
       stats.dsml += 1
       return true
     }
-    if (final || buf.length > maxHold) {
-      // Undecidable notation is dropped, never printed (I3).
+    if (final || buf.length > MAX_HEAD) {
+      // No payload ever arrived: the marker is notation, never prose (I3).
       stats.degraded += 1
       buf = ''
       state = STATE_TEXT
       return true
     }
     return false
+  }
+
+  /** First declared tool name mentioned in a head, else a name="…" value, else ''. */
+  function nameFromHead(head) {
+    for (const name of toolNames) {
+      if (head.includes(name)) return name
+    }
+    const quoted = /name\s*=\s*"([^"]+)"/.exec(head)
+    if (quoted) return quoted[1]
+    const word = /^\s*"?([A-Za-z_][\w.:/-]*)"?/.exec(head)
+    return word ? word[1] : ''
+  }
+
+  /** One id from a head: #id, id="…" or a trailing token. */
+  function idFromHead(head) {
+    const hash = /#\s*([A-Za-z0-9_.:/-]+)/.exec(head)
+    if (hash) return hash[1]
+    const quoted = /id\s*=\s*"([^"]+)"/.exec(head)
+    return quoted ? quoted[1] : ''
+  }
+
+  /** Index of the '<' that opens a parameter tag, or -1. */
+  function findParamStart(value) {
+    const at = value.indexOf('parameter')
+    if (at < 0) return -1
+    const open = value.lastIndexOf('<', at)
+    return open >= 0 ? open : -1
   }
 
   /** TOOL_ARGS: read exactly one JSON object, or drop the notation (I3). */
@@ -355,7 +422,11 @@ export function createStreamClassifier(options = {}) {
     const m = DSML_END.exec(buf)
     if (!m) {
       if (final || buf.length > maxHold) {
-        stats.degraded += 1
+        // The block never closed, but the parameters that did arrive are the call:
+        // measured payloads end with an invented closer or stop mid-markup.
+        const partial = collectParams(buf)
+        if (Object.keys(partial).length > 0) emitCall(out, callName, callId, JSON.stringify(partial))
+        else stats.degraded += 1
         buf = ''
         state = STATE_TEXT
         return false
@@ -364,6 +435,21 @@ export function createStreamClassifier(options = {}) {
     }
     const block = buf.slice(0, m.index)
     const tail = buf.slice(m.index + m[0].length)
+    const args = collectParams(block)
+    if (Object.keys(args).length === 0) stats.degraded += 1
+    else emitCall(out, callName, callId, JSON.stringify(args))
+    // More parameter tags may follow the same closer (measured: the model writes a
+    // second <…parameter> after </│DSML│>); they belong to the same call block.
+    const moreParams = /^\s*<(?:[｜│|]{1,2}\s*DSML\s*[｜│|]{1,2}\s*)?parameter\s/i.test(tail)
+    buf = moreParams
+      ? tail
+      : tail.replace(new RegExp('^\\s*<\\/?' + DSML_PIPES + '\\s*(?:calls|tool_calls)\\s*>'), '')
+    state = moreParams ? STATE_DSML_ARGS : STATE_TEXT
+    return true
+  }
+
+  /** Collect every parameter tag in a block with the closers the model invented. */
+  function collectParams(block) {
     const args = {}
     DSML_PARAM.lastIndex = 0
     for (let p = DSML_PARAM.exec(block); p !== null; p = DSML_PARAM.exec(block)) {
@@ -374,13 +460,7 @@ export function createStreamClassifier(options = {}) {
         try { args[name] = JSON.parse(raw) } catch { args[name] = raw }
       }
     }
-    if (Object.keys(args).length === 0) stats.degraded += 1
-    else emitCall(out, callName, callId, JSON.stringify(args))
-    // The closing wrapper of the call block (`</｜DSML｜ calls>`) belongs to the same
-    // notation and is consumed here, so it cannot reach the screen as prose.
-    buf = tail.replace(/^\s*<\/?｜DSML｜\s*(?:calls|tool_calls)\s*>/, '')
-    state = STATE_TEXT
-    return true
+    return args
   }
 
   /** INVOKE_HEAD: an XML-shaped call block. */

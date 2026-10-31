@@ -112,11 +112,19 @@ export function createDisplayGate(options = {}) {
       const promote = []
       const dropped = []
       const seen = new Set()
+      const seenIds = new Set()
       for (const candidate of candidates) {
         const parsed = parseArgs(candidate.arguments)
         const key = candidate.name + '::' + stableStringify(parsed ?? candidate.arguments)
-        if (seen.has(key)) { stats.echo += 1; dropped.push({ ...candidate, verdict: 'duplicate' }); continue }
+        // The same call restated with another representation keeps its id; count it
+        // once even when the invented markup drifted enough to change the arguments.
+        if (seen.has(key) || (candidate.id && seenIds.has(candidate.id))) {
+          stats.echo += 1
+          dropped.push({ ...candidate, verdict: 'duplicate' })
+          continue
+        }
         seen.add(key)
+        if (candidate.id) seenIds.add(candidate.id)
         if (structured.some((call) => sameCall(candidate, call))) {
           stats.echo += 1
           dropped.push({ ...candidate, verdict: 'echo' })
