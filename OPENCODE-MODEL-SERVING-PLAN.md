@@ -534,7 +534,8 @@ released, not dropped (the parser requires the whole tail). Both real echo cases
 
 Status: **applied on disk, pending restart.** `dsh-opencode-v2/package.json` is 0.9.0 (commit
 `a9e9529`), the artifact is `artifacts/nolit-dsh-opencode-v2-0.9.0.tgz`
-(`546a717457566cb851c09802aa0cedf62847109276c82b76336cbe6bbf88756a`), and the web profile was
+(`01ec75de5bb7b685ced42436ac8718389576e383e6484b0e8b5208a2b8224751`, re-packed after the
+beacon `VERSION` constant was corrected from 0.8.0 to 0.9.0), and the web profile was
 reinstalled with `dsh plugin --profile web add link:...` — pnpm answered "Already up to date" and
 the profile `package.json` is byte-identical (sha256 `7571413c...`), while the link now resolves to
 0.9.0 with `lib/display-clean.js` present. The running service still serves 0.8.0 (pid 2008891,

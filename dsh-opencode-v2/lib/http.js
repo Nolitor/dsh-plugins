@@ -88,8 +88,8 @@ const TEXT_INDEX = 0
 const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
-/** Version string of this module, for the load beacon. */
-const VERSION = '0.8.0'
+/** Version string of this module, for the load beacon. Must match package.json. */
+const VERSION = '0.9.0'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */

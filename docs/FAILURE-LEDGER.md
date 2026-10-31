@@ -1,7 +1,7 @@
 # Failure Ledger — Mistakes Made Here, and the Rule That Prevents a Repeat
 
 <!-- skeleton:
-version: 1.5
+version: 1.6
 kind: rule
 status: active
 updated: 2026-11-01
@@ -68,6 +68,7 @@ change cannot satisfy it, say so before acting, not after.
 | F-23 | A live-stream switch was nearly reported as done from beacon lines alone: "0.8.0" had appeared in /tmp/opencode-v2-boot.jsonl while the serving pid still logged 0.7.5 with router:true. Those 0.8.0 lines were the **test suite** (17 streaming tests per run), not the service. Only the pid, the ExecMainPID and a field that exists in exactly one build settle it. | **Identify the process, not the version string.** Before claiming a live code switch, report the serving pid before and after, a field present in only one build, and the timestamp of the last old-code write. A version string in a log is not a mount proof. |
 | F-24 | The display-cleaning round was first "verified" with hand-written fixtures plus a metric that only described itself: `held = delta.length - emit.length` summed over one unflushed trace produced "33,921 / 99.835% held", which is a per-push deferral, not delay — the gate actually holds at most 11 characters of reasoning and nothing of prose. The owner rejected it ("실제 모델 찔러서 테스트해"). | **Measure the thing the user experiences, on a real model, through the real transport.** Latency is first-delta time and inter-delta gaps versus the previous build; correctness is pass rate over real runs plus a replay of real recorded traffic. A metric you cannot explain to a reviewer in one sentence is not a measurement. |
 | F-25 | `VERIFICATION.md` shipped two byte-identical copies of round 37; the duplicate survived the 0.8.0 release commit and was only found during the 0.9.0 doc cleanup. | **Before a version bump, count the round headings.** `grep -c '^## <n>\\.'` must be 1 for every round; a duplicated block hides stale claims and doubles the document. |
+| F-26 | The 0.9.0 release was committed and packed while `lib/http.js` still had `const VERSION = '0.8.0'` — the load beacon would have labelled the new build as the old one after the restart, and the released tarball carried the wrong string. It was caught only during the pre-restart re-read of the module. | **A version constant outside package.json is part of the release.** After a bump, `grep -rn "'<old-version>'" lib/ bin/` and re-pack/re-hash; the beacon must name the build it belongs to. |
 
 ## 7. Using this file
 

@@ -15,7 +15,7 @@
 
 ## rule
 
-- **1.5** · active · 2026-11-01 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
+- **1.6** · active · 2026-11-01 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
   Every defect and wrong turn this workspace actually made, with the standing rule that keeps it from happening again. Read before changing a plugin, a doc, or a live service.
 - **1.3** · active · 2026-10-31 · [docs/RULES.md](RULES.md)
   Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting — with the failure ledger as required reading.
