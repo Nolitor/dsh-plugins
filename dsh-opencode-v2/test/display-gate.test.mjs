@@ -1,48 +1,88 @@
-import assert from 'node:assert/strict'
+/**
+ * Contract tests for the bottom gate (0.0.1).
+ *
+ * The gate is the only place that decides the fate of a tool call recovered from
+ * the body text: promote to the DSH parser, or drop as echo / superseded /
+ * undeclared. These tests pin both directions, because a wrong promote executes a
+ * duplicate call and a wrong drop loses work.
+ */
 import test from 'node:test'
-import { createReasoningGate, createTextGate } from '../lib/display-clean.js'
+import assert from 'node:assert/strict'
 
-test('reasoning gate removes a token split across deltas', () => {
-  const g = createReasoningGate()
-  let out = ''
-  for (const chunk of ['abc <thi', 'nking> deep', ' </thin', 'king> tail']) out += g.push(chunk).emit
-  out += g.finish().emit
-  assert.equal(out, 'abc  deep  tail')
+import { createDisplayGate, sameCall, stableStringify } from '../lib/display-gate.js'
+
+const TOOLS = new Set(['bash', 'run_code'])
+
+const candidate = (over = {}) => ({
+  kind: 'tool-call',
+  id: '',
+  name: 'bash',
+  arguments: '{"command":"ls"}',
+  ...over,
 })
 
-test('reasoning gate holds at most 11 chars for plain text', () => {
-  const g = createReasoningGate()
-  const first = g.push('plain prose here')
-  assert.equal(first.emit, 'plain prose here')
-  assert.equal(g.finish().emit, '')
+test('a body call with no structured twin is promoted', () => {
+  const gate = createDisplayGate({ toolNames: TOOLS })
+  gate.addCandidate(candidate())
+  const settled = gate.settle([])
+  assert.equal(settled.promote.length, 1)
+  assert.equal(settled.promote[0].name, 'bash')
+  assert.equal(settled.promote[0].source, 'text')
+  assert.equal(settled.dropped.length, 0)
 })
 
-test('text gate streams prose with no delay beyond the line probe', () => {
-  const g = createTextGate()
-  const a = g.push('hello world')
-  assert.equal(a.emit, 'hello world')
-  const b = g.push(' more\nnext line')
-  assert.equal(b.emit, ' more\nnext line')
-  assert.equal(g.finish([]).emit, '')
+test('a text echo of a structured call is dropped, never promoted twice', () => {
+  const gate = createDisplayGate({ toolNames: TOOLS })
+  gate.addCandidate(candidate({ id: 'call_1' }))
+  const settled = gate.settle([{ id: 'call_1', name: 'bash', arguments: '{"command":"ls"}' }])
+  assert.equal(settled.promote.length, 0)
+  assert.equal(settled.dropped[0].verdict, 'echo')
 })
 
-test('text gate holds a line that starts with the echo prefix and drops a matching echo', () => {
-  const calls = [{ id: 'r1', name: 'run_code', arguments: '{"code":"x"}' }]
-  const g = createTextGate()
-  let out = ''
-  out += g.push('prose line\n[tool call run_code #echo]: {"code":').emit
-  out += g.push('"x"}').emit
-  const fin = g.finish(calls)
-  out += fin.emit
-  assert.equal(fin.dropped, true)
-  assert.equal(out, 'prose line\n')
+test('equal arguments with a different id are still the same call', () => {
+  const gate = createDisplayGate({ toolNames: TOOLS })
+  gate.addCandidate(candidate({ id: 'text_id' }))
+  const settled = gate.settle([{ id: 'wire_id', name: 'bash', arguments: '{"command": "ls"}' }])
+  assert.equal(settled.promote.length, 0)
+  assert.equal(settled.dropped[0].verdict, 'echo')
 })
 
-test('text gate releases a held line that turns out not to be an echo', () => {
-  const g = createTextGate()
-  const held = g.push('[tool call run_code #x]: not json at all')
-  assert.equal(held.emit, '')
-  const fin = g.finish([])
-  assert.equal(fin.dropped, false)
-  assert.equal(fin.emit, '[tool call run_code #x]: not json at all')
+test('a stale attempt of a name that was re-sent is superseded, not executed', () => {
+  const gate = createDisplayGate({ toolNames: TOOLS })
+  gate.addCandidate(candidate({ id: 'call_8c09', arguments: '{"command":"old"}' }))
+  const settled = gate.settle([{ id: 'call_6640', name: 'bash', arguments: '{"command":"new"}' }])
+  assert.equal(settled.promote.length, 0)
+  assert.equal(settled.dropped[0].verdict, 'superseded')
+})
+
+test('an undeclared name is dropped and never promoted', () => {
+  const gate = createDisplayGate({ toolNames: TOOLS })
+  gate.addCandidate(candidate({ name: 'rm_rf' }))
+  const settled = gate.settle([])
+  assert.equal(settled.promote.length, 0)
+  assert.equal(settled.dropped[0].verdict, 'undeclared')
+})
+
+test('two identical body calls promote once', () => {
+  const gate = createDisplayGate({ toolNames: TOOLS })
+  gate.addCandidate(candidate())
+  gate.addCandidate(candidate())
+  const settled = gate.settle([])
+  assert.equal(settled.promote.length, 1)
+  assert.equal(settled.dropped[0].verdict, 'duplicate')
+})
+
+test('settle clears the queue: a second settle promotes nothing', () => {
+  const gate = createDisplayGate({ toolNames: TOOLS })
+  gate.addCandidate(candidate())
+  assert.equal(gate.settle([]).promote.length, 1)
+  assert.equal(gate.settle([]).promote.length, 0)
+})
+
+test('argument equality is order-independent', () => {
+  assert.equal(sameCall(
+    { name: 'bash', arguments: '{"a":1,"b":2}' },
+    { name: 'bash', arguments: '{"b":2,"a":1}' },
+  ), true)
+  assert.equal(stableStringify({ b: 1, a: 2 }), '{"a":2,"b":1}')
 })

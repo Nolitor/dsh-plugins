@@ -741,7 +741,7 @@ test('streamCutPreserve:false keeps the previous hard error verdict', async () =
   }
 })
 
-test('content is passed through verbatim: a tag-looking delta is never reinterpreted', async () => {
+test('a thinking wrapper in content becomes reasoning, never screen text', async () => {
   const events = [
     { choices: [{ delta: { content: '<thinking>plan it</thinking>Hel' } }] },
     { choices: [{ delta: { content: 'lo' } }] },
@@ -756,10 +756,13 @@ test('content is passed through verbatim: a tag-looking delta is never reinterpr
       messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
     }))
     const starts = chunks.filter((chunk) => chunk.type === 'block-start').map((chunk) => chunk.blockType)
-    assert.deepEqual(starts, ['text'])
+    // 0.0.1: the restored top classifier turns the wrapper into reasoning and the
+    // screen channel never carries the token.
+    assert.deepEqual(starts, ['reasoning', 'text'])
+    const reasoning = chunks.filter((chunk) => chunk.type === 'reasoning-delta').map((chunk) => chunk.text).join('')
     const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
-    assert.equal(text, '<thinking>plan it</thinking>Hello')
-    assert.equal(chunks.filter((chunk) => chunk.type === 'reasoning-delta').length, 0)
+    assert.equal(reasoning, 'plan it')
+    assert.equal(text, 'Hello')
   } finally {
     await close()
   }
@@ -835,7 +838,7 @@ test('reasoning_content is reasoning with the two protocol tokens removed', asyn
   }
 })
 
-test('a tool-call marker split across SSE events stays text, byte for byte', async () => {
+test('a tool-call marker split across SSE events is promoted and dropped from text', async () => {
   // Boundaries copied from the stored stream of session e9c75e9a (2026-10-31).
   const events = [
     { choices: [{ delta: { content: 'Now I will look.\n\n' } }] },
@@ -856,11 +859,74 @@ test('a tool-call marker split across SSE events stays text, byte for byte', asy
       tools: [{ name: 'bash', description: 'run', parameters: { type: 'object', properties: {} } }],
     }))
     const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
-    assert.equal(text, 'Now I will look.\n\n[tool call bash #chatcmpl-tool-f82dc4b5b1582ac5]: {"command":"ls -la"}')
-    assert.equal(chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call').length, 0)
+    // 0.0.1: the split marker is classified, promoted to the DSH parser channel and
+    // dropped from the screen channel - no marker, no id, no payload in the text.
+    assert.equal(text, 'Now I will look.\n\n')
+    const calls = chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].block.name, 'bash')
+    assert.equal(calls[0].block.id, 'chatcmpl-tool-f82dc4b5b1582ac5')
+    assert.deepEqual(JSON.parse(calls[0].block.arguments), { command: 'ls -la' })
   } finally {
     await close()
   }
 })
 
+
+
+test('an echo of a call that also arrived as a wire field is dropped, not executed twice', async () => {
+  // Shape measured live on 0.9.0 (2026-11-01T20:23:08Z): the text carries the rendered
+  // call, and a structured tool_calls delta carries the same call.
+  const events = [
+    { choices: [{ delta: { content: 'Look.\n[tool call bash #call_1]: {"command":"ls"}\n' } }] },
+    { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'bash', arguments: '{"command":"ls"}' } }] } }] },
+    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'list' }] }],
+      tools: [{ name: 'bash', description: 'run', parameters: { type: 'object', properties: {} } }],
+    }))
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.equal(text, 'Look.\n\n')
+    const calls = chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    assert.equal(calls.length, 1, 'the echo must not become a second call')
+    assert.equal(calls[0].block.id, 'call_1')
+  } finally {
+    await close()
+  }
+})
+
+test('DSML notation leaked into content reaches the parser and never the screen', async () => {
+  const dsml = 'Doing it.\n[tool call bash">\n' +
+    '<｜DSML｜ parameter name="command" string="true">ls -la</｜DSML｜ parameter>\n' +
+    '</｜DSML｜ invoke>\n</｜DSML｜ calls>'
+  const events = [
+    { choices: [{ delta: { content: dsml } }] },
+    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'list' }] }],
+      tools: [{ name: 'bash', description: 'run', parameters: { type: 'object', properties: {} } }],
+    }))
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.equal(text, 'Doing it.\n')
+    assert.equal(text.includes('｜DSML｜'), false)
+    const calls = chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].block.name, 'bash')
+    assert.deepEqual(JSON.parse(calls[0].block.arguments), { command: 'ls -la' })
+  } finally {
+    await close()
+  }
+})
 

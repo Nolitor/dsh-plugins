@@ -1,10 +1,10 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 2.3
+version: 2.5
 kind: readme
 status: active
 updated: 2026-11-01
-summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.9.0 removes the two shaped route scaffoldings (thinking tokens, rendered tool-call echo) at display time without re-typing any part.
+summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended.
 -->
 
 
@@ -17,6 +17,18 @@ as an ordinary npm **dependency** and **never modifies it** — no patching
 surface needs is re-implemented here on top of `ctx.subprocess`.
 
 > Measurement of record: [`../OPENCODE-V2-SURFACE-MEASUREMENT.md`](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
+
+## 0. Version — 0.0.1, reset on instruction
+
+| Field | Value |
+|---|---|
+| `package.json` | `0.0.1` (was `0.9.0`) |
+| `lib/http.js` load-beacon `VERSION` | `0.0.1` (was `0.9.0`) |
+| Versions self-bumped in this history | 26 (`0.1.1` … `0.9.0`) |
+
+The owner reset the number and forbade further self-bumps: **the version changes again only on an
+explicit owner instruction, and then only as `0.0.1.rc<N>`**. A release, a fix round or a green test
+run is not an instruction. The load-beacon constant is part of the release, not a log decoration.
 
 ## 1. Measured OpenCode v2.2.0 facts this plugin is built on
 
@@ -236,7 +248,7 @@ Two defects made a long turn die mid-step. Both are session-record measurements,
 | Symptom (measured) | Cause | Fix |
 |---|---|---|
 | `turn/end` -> `{kind:'error', error:{message:'terminated', code:'OPENCODE_BACKEND'}}` in **3 of the last 6 sessions** | every exception thrown while reading the SSE body (undici `TypeError: terminated`, `ECONNRESET`, `UND_ERR_SOCKET`) was mapped straight to a hard error, so the whole step was discarded | `isTransientStreamError()` separates a transport cut from a request verdict; the request is retried while **nothing** has been emitted (`streamRetries`, default 1), and once output exists it is **preserved** (`streamCutPreserve`, default true) |
-| literal `<thinking>` (31 occurrences in one session) and `[tool call bash #call_...]` / `<invoke ...>` stored as assistant **text** | the adapter only read the structured OpenAI fields (`reasoning_content`, `tool_calls`); a text-level tag router was bolted on to compensate | **reverted in 0.8.0**: the router is deleted. The wire field decides the type; content that carries notation is forwarded verbatim as text, so a route that emits tags inside content shows them (measured: 1.7% of 29,940 deltas) instead of being guessed at; **0.9.0** removes the two shaped residues at display time (exact tokens; an echo only when it starts a line, runs to the end of the part and matches a structured call) |
+| literal `<thinking>` (31 occurrences in one session) and `[tool call bash #call_...]` / `<invoke ...>` stored as assistant **text** | the adapter only read the structured OpenAI fields (`reasoning_content`, `tool_calls`); a text-level tag router was bolted on to compensate | **0.8.0 deleted the router outright**; the wire field decides the type, but a route that puts notation inside `content` then shows it (measured: 1.7% of 29,940 deltas). **0.9.0** answered that with a display-only filter for two shapes instead of separating the parser channel from the screen channel; **0.0.1** restores the top classifier and adds the bottom display gate (see below) |
 
 Rules the implementation follows:
 
@@ -261,44 +273,65 @@ Rules the implementation follows:
   A text block that **starts** with the scratchpad now enters the reasoning channel instead, and the
   answer wrapper is unwrapped. A mere mention of the tag inside a sentence stays readable prose.
   Prior art: QwenLM/qwen-code#6023, #6595, windmill-labs/windmill#9750.
-- **Historical (0.7.8, removed in 0.8.0) — a state machine parsed the stream.** The 0.7.3-0.7.7 router
-  re-scanned and rewrote accumulated text with twelve module-level regexes, so the same input could
-  classify differently depending on where the SSE stream split, and notation was hidden by deleting
-  body text. It is replaced by `lib/stream-parser.js`: one pass, explicit states `TEXT` / `REASONING` /
-  `TOOL_HEAD` / `TOOL_ARGS` / `INVOKE_HEAD`, emitting ordered `text` / `reasoning` / `tool-call` parts
-  modelled on the Vercel AI SDK stream parts and assistant-ui assistant-stream chunks. Four invariants:
-  text is emitted once verbatim; while in `TEXT` only a bounded marker prefix is held; a marker that
-  cannot be parsed degrades to text instead of being swallowed; output is invariant under re-chunking
-  (property-tested over every two-way split and 40 random multi-way splits per fixture). The
-  `createInlineTagRouter` regex body and the block-end `sanitizeProtocolText` net are deleted; a
-  malformed marker now keeps its prose and a declared call still becomes a real tool call.
+- **Historical (0.7.8, deleted in 0.8.0, restored in 0.0.1) — a state machine parsed the stream.** The
+  0.7.3-0.7.7 router re-scanned and rewrote accumulated text with twelve module-level regexes, so the
+  same input could classify differently depending on where the SSE stream split, and notation was
+  hidden by deleting body text. The machine **is** `lib/stream-parser.js` — one pass, explicit states,
+  emitting ordered `text` / `reasoning` / `tool-call` parts modelled on the Vercel AI SDK stream parts
+  and assistant-ui assistant-stream chunks. 0.8.0 reduced that same file to a 55-line pass-through
+  (commit `e1ef561`: 366 -> 55 lines) and deleted `lib/inline-tags.js` (245 lines); 0.0.1 restores the
+  machine (see the 0.0.1 bullets below).
 - **v0.8.0 — boundary pipeline; tag guessing is gone.** Every delta is typed at the boundary
   (`lib/upstream-map.js`): `reasoning_content` (and the `reasoning` / `reasoning_text` aliases) is a reasoning
   part, `tool_calls` is a tool-call part carrying its ordinal, and `content` is a text part.
-  `lib/stream-parser.js` is now a 55-line pass-through reducer that returns those parts unchanged;
-  `lib/inline-tags.js`, the `inlineTags` option, the per-delta routing trace and every tag
-  pattern are deleted. Measured over 29,940 recorded content deltas: 37.6% pure prose, 1.7%
-  carrying notation — a character scanner was the wrong layer.
-- **v0.9.0 — display cleaning: the two scaffoldings go, the typing stays.** 0.8.0 made the route's
-  own notation visible, and it was two shapes, not a dialect: literal `<thinking>`/`</thinking>` at
-  arbitrary offsets inside *reasoning* (6 of 11 messages, 19 tokens, measured on the real session
-  that produced the screen) and a rendered call `[tool call <name> #<id>]: <json>` inside *text*
-  (2 blocks, 1,549 of 1,923 chars, 80.6%). `lib/display-clean.js` removes exactly those two,
-  structurally: the tokens anywhere, and an echo only when it begins a line, runs to the end of the
-  part, and matches a structured call of the same response by id or by name + equal arguments; a
-  non-matching line is released unchanged. Two streaming gates apply the rule live (reasoning holds
-  at most 11 characters; text holds only a line that starts like an echo), so plain prose streams
-  with no added delay. Nothing is re-typed and no prose is rewritten. Measured 2026-11-01 through
-  the running CLI daemon against a real model: 11/11 runs clean, 74/74 plain text deltas held 0
-  times, tool calls intact, and the recorded leaking session loses 19 tokens and both echo tails
-  with the remaining text byte-identical. Detail: `VERIFICATION.md` §38.
+  `lib/stream-parser.js` was reduced to a 55-line pass-through reducer that returned those parts
+  unchanged (restored as a machine in 0.0.1); `lib/inline-tags.js`, the `inlineTags` option, the
+  per-delta routing trace and every tag pattern were deleted. Measured over 29,940 recorded content
+  deltas: 37.6% pure prose, 1.7% carrying notation — a character scanner was the wrong layer, but
+  deleting the parser too was the wrong conclusion (see the 0.0.1 bullets).
+- **v0.8.0 / 0.9.0 — the superseded detour.** 0.8.0 deleted the owner's 0.7.8 state machine without
+  an instruction, and 0.9.0 answered the resulting leak with a **display-only filter** on the one
+  text stream (`lib/display-clean.js` plus two streaming gates). A filter is not a gate: it mutates
+  the only channel it can see, so the DSH parser channel and the screen channel could not be
+  separated, and notation kept leaking live (measured: 20 of 65 messages in the first 90 minutes of
+  0.9.0). 0.0.1 **replaces** the filter; it does not extend it. `lib/display-clean.js` is retained,
+  but only `stripThinkingTags` is used, and it is no longer on the stream path. Detail: `VERIFICATION.md` §38-39.
+- **v0.0.1 — TOP restored: an explicit state machine classifies the stream.** `lib/stream-parser.js`
+  is again a state machine, not a pass-through: states `TEXT` / `REASONING` / `TOOL_HEAD` /
+  `TOOL_ARGS` / `DSML_ARGS` / `INVOKE_HEAD`. Four invariants, each one a defect this file prevents:
+  **I1** prose is emitted once, in order, verbatim — only protocol syntax is removed; **I2** in `TEXT`
+  at most `longest opener - 1` characters are held back; **I3** notation that cannot be parsed is
+  dropped and never printed (a marker must not reach the screen and a malformed call must not
+  execute); **I4** output is invariant under re-chunking (property-tested over every two-way split).
+  Body shapes it classifies: the spec form `[tool call <name> #<id>]: <json>`, XML
+  `<invoke name=...><parameter ...>`, DSML `[tool call <name>">` + `<｜DSML｜ parameter name=...
+  string="true|false">...`, and the thinking wrappers `<thinking>` / `<analysis>` (which become
+  reasoning, not screen text). **Only a wrapper at a line start (or payload start) opens a block.** An
+  inline mention is scrubbed from prose, it does not reclassify the message — measured: an assistant
+  explaining the notation lost its own text to the reasoning channel before the fix.
+- **v0.0.1 — BOTTOM new: the parser/screen gate.** `lib/display-gate.js` splits the classified parts
+  into the two destinations: tool-call parts go to the DSH parser channel (the host parses and
+  executes), text/reasoning deltas go to the screen channel, which never receives a marker, an id or
+  an argument payload. A body call recovered by the top layer is: **promoted** when no structured
+  call of that name exists in the same response; dropped as **echo** when the same call also arrived
+  as a wire field (same id, or same name with equal arguments); dropped as **superseded** when a
+  structured call of the same name exists with different arguments (measured live: the route
+  re-rendered the failed attempt, then sent a corrected call — promoting the stale attempt would
+  execute a call the route already replaced); dropped as **undeclared** when the name is not in the
+  declared tool set. A promoted call takes the next free block ordinal, so it cannot collide with a
+  wire call.
+- **v0.0.1 — `lib/http.js` wiring.** The 0.9.0 `reasoningGate` / `textGate` are removed from the
+  stream path. The classifier runs on `delta.content`; wire-typed reasoning is stripped of wrapper
+  tokens; tool-call parts from `delta.tool_calls` go straight to the parser channel. The gate
+  settles once, after the response body is consumed.
 - **Canonical docs.** `README.md` (this file) is the canonical, shipped document — it is the only
   markdown file in the package `files` list, so anything a consumer needs must be here. `VERIFICATION.md`
   (current rounds) and `VERIFICATION-ARCHIVE.md` (rounds through 0.7.3) are the internal evidence trail:
-  measured commands, transcripts and before/after tables. They are not shipped, and a version bump is
-  not complete until this README carries it.
-- Tool calls use the OpenAI ordinal: block index `2 + index * 2`. There is no second source
-  any more, so the `1000 + n * 2` inline range and its collision guard are gone.
+  measured commands, transcripts and before/after tables. They are not shipped, and a release is not
+  complete until this README carries it.
+- Block ordinals: a structured (wire) call uses the OpenAI ordinal `2 + index * 2`. A body call
+  promoted by the gate takes the next free ordinal after the structured ones, so two blocks never
+  share an index and the old `1000 + n * 2` inline range is still gone.
 - **v0.7.4 — the notation is removed, not merely parsed.** 0.7.3 converted only well-formed
   markers and passed every other shape through, so a stray `</thinking>`, a marker followed by
   prose, or a marker with broken JSON still appeared in the transcript. `sanitizeProtocolText()`
@@ -307,9 +340,19 @@ Rules the implementation follows:
   marker whose tool is **not** declared is dropped and never executed. Text with no marker is
   untouched.
 - The per-delta routing trace (`OPENCODE_V2_ROUTING_DEBUG`, `/tmp/opencode-v2-routing.jsonl`) was
-  removed in 0.8.0 together with the router. The boot beacon (`/tmp/opencode-v2-boot.jsonl`) stays.
-  The same applies to `OPENCODE_V2_BEACON=0` and `/tmp/opencode-v2-boot.jsonl`. Both guards are
-  inverted relative to the 0.7.3 docstring; treat the files as on unless explicitly disabled.
+  removed in 0.8.0 together with the router. The boot beacon (`/tmp/opencode-v2-boot.jsonl`) stays:
+  `OPENCODE_V2_BEACON=0` disables it. The guard is inverted relative to the 0.7.3 docstring; treat
+  the file as on unless explicitly disabled.
+- **v0.0.1 — the beacon proves a restart with zero model requests.** `lib/http.js` writes
+  `bootBeacon('load')` once at module evaluation, in addition to the existing `('stream')` event on
+  the first real request, into the same `/tmp/opencode-v2-boot.jsonl` and with the same `VERSION`
+  constant. A restart is verified by **pid + event**, not by a version string, because the test
+  suite writes beacons too. Read-only check (workspace root, not this package):
+  `scripts/verify-opencode-v2-restart.sh` prints unit state, serving pid, process start, source
+  version, that pid's beacon (version, events, last), other beacon pids, and a verdict: `PASS`
+  (beacon version = source version), `STALE` (differs), `PENDING` (process predates the newest
+  source edit), `UNDECIDED` (newer but no beacon). `--wait <seconds>` waits for `MainPID` to
+  change; exit codes 0/1/2.
 
 ### Session identity and credential choice (v0.5.1 — measured 2026-10-30)
 
@@ -570,6 +613,19 @@ The suite fakes `ctx.subprocess` and the local control plane, so it never spawns
 `js-yaml` and proves every row id/name/config key agrees with `package.json` and
 the module Config schemas.
 
+**Post-restart proof** (read-only; no model request, no `~/.dsh` write). Run from the workspace
+root; the helper is not shipped in this package:
+
+```bash
+./scripts/verify-opencode-v2-restart.sh            # verdict for the current process
+./scripts/verify-opencode-v2-restart.sh --wait 300 # one terminal: wait for MainPID to change
+                                                   # restart in another; read the "after" block
+```
+
+`STALE` is expected before the restart (the serving pid loaded the previous build). It is `PASS`
+only when that pid's `load` beacon carries the source version: `beacon(pid=<new>): 0.0.1
+events={"load":1,...}`, verdict `PASS - serving pid <new> loaded 0.0.1`, exit 0.
+
 **Isolated profile boot** (boot-card rule 3 — no live state touched):
 
 ```bash
@@ -618,11 +674,14 @@ dsh-opencode-v2/
 │   ├── index.js          # `opencode` tool + /opencode command
 │   ├── provider.js       # `opencode-agent` LLM route (true streaming)
 │   ├── upstream-map.js   # OpenAI / AI SDK delta -> typed part (reasoning | text | tool-call)
-│   ├── stream-parser.js  # pass-through reducer: typed parts in, the same parts out
+│   ├── stream-parser.js  # TOP: explicit state machine, content -> typed parts
+│   ├── display-gate.js   # BOTTOM: parser channel vs screen channel
+│   ├── display-clean.js  # retained: stripThinkingTags only; off the stream path
 │   └── shared.js         # argv, ndjson parser, usage mapping/fetch
 └── test/
     ├── upstream-map.test.mjs   # the wire field decides the part type
-    ├── stream-parser.test.mjs  # pass-through reducer contract
+    ├── stream-parser.test.mjs  # classifier contract incl. DSML and two-way-split invariance
+    ├── display-gate.test.mjs   # promote / echo / superseded / undeclared
     ├── shared.test.mjs   # argv / parser / usage
     ├── providers.test.mjs# tool + provider halves
     ├── bundle.test.mjs   # package.json <-> cordis.patch.yml contract

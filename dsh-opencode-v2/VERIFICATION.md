@@ -1,16 +1,16 @@
 <!-- skeleton:
-version: 1.2
+version: 1.4
 kind: ver
 status: active
 updated: 2026-11-01
-summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.9.0. Older rounds live in VERIFICATION-ARCHIVE.md.
+summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1. Older rounds live in VERIFICATION-ARCHIVE.md.
 -->
 # @nolit/dsh-opencode-v2 - Verification (current)
 
 > Only the recent rounds live here. Everything up to v0.7.3 is in
 > VERIFICATION-ARCHIVE.md in this directory.
 >
-> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.9.0
+> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1 on disk (the serving process still runs 0.9.0 until restart)
 
 ## 33. v0.7.4 — no protocol notation reaches the transcript (measured 2026-10-31 23:20-23:40)
 
@@ -378,3 +378,158 @@ this build. Models `opencode-go/deepseek-v4.1-flash` (effort high) and `opencode
   live needs a route that leaks again.
 - An echo line that is not at the end of a text part is released, not dropped (the tail parser
   requires the whole remainder). Both measured real echo cases were terminal.
+
+## 39. v0.0.1 — TOP state machine restored, BOTTOM parser/screen gate added (measured 2026-11-01)
+
+### 39.1 What this round is
+
+0.8.0 deleted the 0.7.8 state machine without an instruction and reduced `lib/stream-parser.js` to a
+55-line pass-through (commit `e1ef561`: 366 -> 55 lines; `lib/inline-tags.js`, 245 lines, deleted).
+0.9.0 answered the resulting leak with a display-only filter that mutates the single text stream, so
+the parser channel and the screen channel could not be separated. The owner reset the version and
+forbade further self-bumps.
+
+| Item | Measured |
+|---|---|
+| `package.json` | 0.9.0 -> 0.0.1 |
+| `lib/http.js` load-beacon `VERSION` | 0.9.0 -> 0.0.1 |
+| Versions self-bumped before the reset | 26 (`0.1.1` ... `0.9.0`) |
+| Version rule now | no bump except on explicit owner instruction, and then only `0.0.1.rc<N>` |
+
+### 39.2 What changed
+
+| File | Change |
+|---|---|
+| `lib/stream-parser.js` | TOP restored: explicit state machine (455 lines), states TEXT / REASONING / TOOL_HEAD / TOOL_ARGS / DSML_ARGS / INVOKE_HEAD |
+| `lib/display-gate.js` | BOTTOM new: parser channel vs screen channel; promote / echo / superseded / undeclared |
+| `lib/http.js` | the 0.9.0 reasoningGate / textGate removed from the stream path; classifier runs on `delta.content`; wire-typed reasoning stripped of wrapper tokens; tool-call parts go straight to the parser |
+| `lib/display-clean.js` | retained but no longer on the stream path (only `stripThinkingTags` is used) |
+| `test/stream-parser.test.mjs` | rewritten for the classifier: 11 tests, incl. DSML and a two-way-split invariance loop over every cut position |
+| `test/display-gate.test.mjs` | new: 8 gate tests |
+| `test/http.test.mjs` | +2 end-to-end: an echo of a wire call is dropped (one call block, not two); DSML notation reaches the parser while the screen text stays clean |
+| 0.9.0-era tests | 2 flipped from "notation stays text verbatim" to the new contract |
+
+### 39.3 Tests
+
+| Check | Result |
+|---|---|
+| `npm run check` | exit 0 |
+| `npm test` | 257/257 pass, 0 fail |
+
+### 39.4 Replay of the recorded corpus
+
+Source: 1455 assistant text messages from the `opencode-route` sessions under `~/.dsh/sessions`,
+read with `zstd`, replayed through the 0.0.1 classifier and gate.
+
+| Measure | 0.9.0 (recorded) | 0.0.1 replay |
+|---|---|---|
+| messages with screen-visible notation | 316 | 13 |
+| marker occurrences | 703 | 0 |
+| `<thinking>` tokens | 448 | 0 |
+| `<analysis>` tokens | 36 | 0 |
+| `｜DSML｜` tokens | 124 | 7 |
+| `<invoke` | 12 | 4 |
+
+The 7 surviving `｜DSML｜` occurrences are prose sentences that discuss the token inline, and the 4
+`<invoke` survivors are inline prose too. No protocol notation is printed.
+
+### 39.5 Live window
+
+Window: the 0.9.0 build only, since 2026-10-31T19:53:06Z — 65 assistant messages.
+
+| Measure | 0.9.0 | 0.0.1 replay |
+|---|---|---|
+| leaky messages | 20 | 7 |
+| marker occurrences | 14 | 0 |
+| `<thinking>` tokens | 26 | 0 |
+| `<analysis>` tokens | 12 | 0 |
+| `｜DSML｜` tokens | 42 | 4 (inline prose) |
+
+| Body calls recovered from text | Count |
+|---|---|
+| promoted to the DSH parser | 5 |
+| dropped as echo | 1 |
+| dropped as superseded | 7 |
+
+44 of the 45 notation-free messages are byte-identical after the replay; the one that differs is
+not a notation case.
+
+### 39.6 Load beacon — a restart proof with zero model requests
+
+A `stream` beacon only appears once a request starts, and the test suite also writes beacons, so a
+restart could not be proven without spending a model request. `lib/http.js` now writes
+`bootBeacon('load')` at module evaluation, into the same `/tmp/opencode-v2-boot.jsonl` and with the
+same `VERSION` constant.
+
+| Item | Measured |
+|---|---|
+| `lib/http.js` | `bootBeacon('load')` at the end of the module; the `stream` event is unchanged |
+| Tests after the change | 257/257 pass, 0 fail; `npm run check` exit 0 |
+| Re-packed artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1.tgz`, SHA-256 `5c73f5c61b795f63e5b3860f3c1e630e6c01a18dc447cd32c1c9829ac30ba904` (supersedes `67a2d7b24f4291a367188b722b11d1b27215cfb8e57e58d941fd39b3d5546094`) |
+| `artifacts/SHA256SUMS.opencode-v2` | carries the new `5c73f5c6...904` |
+
+### 39.7 Post-restart verification helper
+
+`scripts/verify-opencode-v2-restart.sh` (workspace root; read-only, never restarts anything, never
+calls a model) prints unit state, serving pid, process start, source version, the newest source
+file, the beacon for that pid (version, events, last), other beacon pids, and a verdict: `PASS`
+when the serving pid's beacon version equals the source version, `STALE` when it differs,
+`PENDING` when the process predates the newest source edit, `UNDECIDED` when the process is newer
+but wrote no beacon. `--wait <seconds>` waits for `MainPID` to change; exit codes 0/1/2.
+
+Measured before the restart (2026-11-01 06:48 KST):
+
+| Field | Value |
+|---|---|
+| unit | `dsh-web.service (active)` |
+| serving pid | `2091170` |
+| process start | 2026-11-01 04:53:07 KST |
+| source version | `0.0.1` |
+| beacon(pid=2091170) | `0.9.0 events={"stream":84} last=2026-10-31T21:21:51.801Z` |
+| other beacon pids | other processes that loaded the plugin at `0.0.1` — test runs or failed boot attempts, not the serving process |
+| verdict | `STALE - pid 2091170 loaded 0.9.0, source is 0.0.1` |
+| exit | 1 |
+
+Expected after the restart:
+
+| Field | Expected |
+|---|---|
+| serving pid | a new pid; the old pid is gone |
+| beacon(pid=<new>) | `0.0.1 events={"load":1,...} last=<iso>` |
+| verdict | `PASS - serving pid <new> loaded 0.0.1` |
+| exit | 0 |
+
+### 39.8 Status
+
+**`applied on disk, pending restart`.** The running service (`pid 2091170`, started
+2026-11-01 04:53:07 KST) still serves the previous 0.9.0 code; the helper reports `STALE` (exit 1),
+which is the correct pre-restart verdict. The new source is on disk and is not live; no mount is
+claimed here.
+
+### 39.9 Measured after the restart (2026-11-01 06:52 KST)
+
+| Field | Measured |
+|---|---|
+| restart sequence | old `pid 2091170` ended `status=9/KILL` at 06:52:15 (port not released); `2199034` (06:52:18) and `2199192` (06:52:25) both failed with `webserver (required) … EADDRINUSE 127.0.0.1:3080`; `2199284` (06:52:32) came up, printed the URL and was killed at 06:52:36; `2199391` started 06:52:39 and is serving; a further attempt `2199413` loaded the plugin and then hit the same EADDRINUSE at 06:52:45 |
+| serving pid | `2199391` (start 2026-11-01 06:52:39 KST, `NRestarts=4`) |
+| listener on 3080 | exactly one: `pid=2199391` |
+| beacon(pid=2199391) | `0.0.1 events={"load":1} last=2026-10-31T21:52:41.449Z` |
+| journal after 06:52:39 | no `did not activate`, no `startup failed`, no `EADDRINUSE` |
+| helper verdict | `PASS - serving pid 2199391 loaded 0.0.1`, exit 0 |
+| artifact | `5c73f5c6…904` (matches `SHA256SUMS.opencode-v2`) |
+
+Two things this measurement does **not** claim:
+
+1. The two failed boots were **not** caused by this plugin. The failing required plugin was
+   `@deepseek-ai/dsh-host-webserver` (EADDRINUSE on 3080), and `include:dsh-opencode-v2` plus
+   `include:dsh-opencode-v2-http` are present in the serving process's diagnostics. The port was
+   still bound because the previous process was killed with SIGKILL instead of being stopped by
+   systemd (ledger F-20); the cascade is the cost of that, not a mount defect.
+2. No `stream` event exists for `2199391` yet: the opencode route has not served a request since
+   the restart. `load` proves the module was evaluated in the serving process; a single live
+   request would add `"stream":1` and exercise the restored classifier and the bottom gate on
+   real traffic. That request spends account quota, so it is left for an explicit instruction.
+
+Restart procedure that avoids the cascade: `systemctl --user restart dsh-web.service` (never kill
+the port holder), then `scripts/verify-opencode-v2-restart.sh`.
+

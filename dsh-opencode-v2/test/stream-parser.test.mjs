@@ -1,203 +1,134 @@
 /**
- * Contract tests for the pass-through reducer.
+ * Contract tests for the restored upstream classifier (0.0.1).
  *
- * lib/stream-parser.js used to be a tag-guessing state machine that re-typed
- * delta text by scanning for `<thinking>`, `[tool call …]` and `<invoke …>`.
- * Typing now happens upstream (lib/upstream-map.js), so what is left to prove is
- * negative: the reducer changes nothing — and, as the regression guard, text
- * that merely *looks* like transcript notation is returned verbatim rather than
- * converted back into reasoning or a tool call.
+ * The 0.7.8 state machine was deleted in 0.8.0. This file pins the behaviour it
+ * must keep now that it is back, plus the shape it must additionally handle:
+ * DeepSeek markup (DSML) leaked inside a text payload.
+ *
+ * Invariants under test:
+ *   I1 prose verbatim, syntax only removed
+ *   I2 bounded hold in TEXT
+ *   I3 unparsable notation is dropped, never printed
+ *   I4 output invariant under re-chunking
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createPassThroughReducer } from '../lib/stream-parser.js'
+import { createStreamClassifier } from '../lib/stream-parser.js'
 
-/** One already-typed sequence covering every kind, in a fixed order. */
-const MIXED = [
-  { kind: 'reasoning', text: 'weigh the options' },
-  { kind: 'text', text: 'Here is the plan.' },
-  { kind: 'tool-call', id: 'call_1', name: 'bash', arguments: '{"command":"ls"}' },
-  { kind: 'text', text: 'Done.' },
-]
+const TOOLS = new Set(['bash', 'run_code'])
 
-test('a mixed sequence comes back as the same array, same objects, same order', () => {
-  const reducer = createPassThroughReducer()
-  const out = reducer.push(MIXED)
-
-  assert.equal(out, MIXED, 'push must return its own argument array, not a copy')
-  assert.equal(out.length, MIXED.length, 'part count changed')
-  for (let index = 0; index < MIXED.length; index += 1) {
-    assert.equal(out[index], MIXED[index], 'part at ' + index + ' is not the same object')
-    assert.equal(out[index].kind, MIXED[index].kind, 'kind at ' + index + ' changed')
+function classify(text, chunkSize = 0) {
+  const classifier = createStreamClassifier({ toolNames: TOOLS })
+  const out = []
+  if (chunkSize > 0) {
+    for (let at = 0; at < text.length; at += chunkSize) {
+      out.push(...classifier.push(text.slice(at, at + chunkSize)))
+    }
+  } else {
+    out.push(...classifier.push(text))
   }
-  assert.deepEqual(out, MIXED)
-})
-
-test('the order of kinds is preserved exactly', () => {
-  const reducer = createPassThroughReducer()
-  const kinds = reducer.push(MIXED).map((part) => part.kind)
-  assert.deepEqual(kinds, ['reasoning', 'text', 'tool-call', 'text'])
-})
-
-test('pushPart returns a one-element array holding the same object', () => {
-  const reducer = createPassThroughReducer()
-  const part = { kind: 'text', text: 'only me' }
-  const out = reducer.pushPart(part)
-
-  assert.deepEqual(out, [part])
-  assert.equal(out.length, 1)
-  assert.equal(out[0], part)
-})
-
-test('pushPart returns [] for null and undefined', () => {
-  const reducer = createPassThroughReducer()
-  assert.deepEqual(reducer.pushPart(null), [])
-  assert.deepEqual(reducer.pushPart(undefined), [])
-  assert.deepEqual(reducer.stats, { text: 0, reasoning: 0, toolCall: 0, total: 0 })
-})
-
-test('push returns [] for non-array input instead of throwing', () => {
-  const reducer = createPassThroughReducer()
-  assert.deepEqual(reducer.push(null), [])
-  assert.deepEqual(reducer.push(undefined), [])
-  assert.deepEqual(reducer.push('a string delta'), [])
-  assert.deepEqual(reducer.push({ kind: 'text', text: 'not an array' }), [])
-  assert.deepEqual(reducer.stats, { text: 0, reasoning: 0, toolCall: 0, total: 0 })
-})
-
-test('flush is always empty: nothing is ever held back', () => {
-  const reducer = createPassThroughReducer()
-
-  assert.deepEqual(reducer.flush(), [], 'flush on a fresh reducer must be empty')
-  reducer.push(MIXED)
-  assert.deepEqual(reducer.flush(), [], 'flush after a push must be empty')
-  assert.deepEqual(reducer.flush(), [], 'flush must stay empty when called twice')
-  assert.deepEqual(reducer.pushPart({ kind: 'reasoning', text: 'r' }), [
-    { kind: 'reasoning', text: 'r' },
-  ])
-  assert.deepEqual(reducer.flush(), [], 'flush after pushPart must be empty')
-})
-
-test('a push plus its flush equals the push, with no trailing parts', () => {
-  const reducer = createPassThroughReducer()
-  const streamed = [...reducer.push(MIXED), ...reducer.flush()]
-  assert.deepEqual(streamed, MIXED)
-})
-
-test('stats count what passed through, per kind and in total', () => {
-  const reducer = createPassThroughReducer()
-
-  reducer.push([
-    { kind: 'text', text: 'a' },
-    { kind: 'reasoning', text: 'b' },
-    { kind: 'tool-call', id: 'c1', name: 'bash', arguments: '{}' },
-    { kind: 'text', text: 'c' },
-    { kind: 'reasoning', text: 'd' },
-    { kind: 'tool-call', id: 'c2', name: 'read', arguments: '{}' },
-  ])
-
-  assert.deepEqual(reducer.stats, { text: 2, reasoning: 2, toolCall: 2, total: 6 })
-})
-
-test('stats are live: pushPart and later pushes accumulate on the same object', () => {
-  const reducer = createPassThroughReducer()
-  const stats = reducer.stats
-
-  reducer.pushPart({ kind: 'text', text: 'one' })
-  assert.deepEqual(stats, { text: 1, reasoning: 0, toolCall: 0, total: 1 })
-
-  reducer.push([{ kind: 'reasoning', text: 'two' }])
-  assert.deepEqual(stats, { text: 1, reasoning: 1, toolCall: 0, total: 2 })
-  assert.equal(reducer.stats, stats, 'stats must be one stable object, not a fresh copy')
-})
-
-test('stats do not count input that could not pass through', () => {
-  const reducer = createPassThroughReducer()
-  reducer.push('a bare string delta')
-  reducer.push(null)
-  reducer.pushPart(undefined)
-  reducer.flush()
-  assert.deepEqual(reducer.stats, { text: 0, reasoning: 0, toolCall: 0, total: 0 })
-})
-
-test('splitting the same parts across pushes equals one single push', () => {
-  const head = [
-    { kind: 'reasoning', text: 'think' },
-    { kind: 'text', text: 'say ' },
-  ]
-  const middle = [
-    { kind: 'tool-call', id: 'call_9', name: 'bash', arguments: '{"command":"pwd"}' },
-  ]
-  const tail = [{ kind: 'text', text: 'end' }]
-
-  const whole = createPassThroughReducer()
-  const once = [...whole.push([...head, ...middle, ...tail])]
-
-  const split = createPassThroughReducer()
-  const many = [...split.push(head), ...split.push(middle), ...split.push(tail)]
-
-  assert.deepEqual(many, once)
-  assert.deepEqual(many, [...head, ...middle, ...tail])
-  assert.deepEqual(split.stats, whole.stats, 'stats must not depend on chunking')
-})
-
-// The regression guard. This module used to convert each of these into a
-// reasoning or tool-call part by scanning characters; typing is upstream now,
-// so text that happens to contain the old markers must survive untouched.
-const NOTATION = [
-  '<thinking>x</thinking>',
-  '[tool call bash #c1]: {"command":"ls"}',
-  '<invoke name="bash">',
-]
-
-for (const fixture of NOTATION) {
-  test('notation is returned verbatim, never re-typed: ' + JSON.stringify(fixture), () => {
-    const reducer = createPassThroughReducer()
-    const part = { kind: 'text', text: fixture }
-    const out = reducer.push([part])
-
-    assert.deepEqual(out, [part])
-    assert.equal(out[0].text, fixture, 'text was rewritten')
-    assert.equal(out[0].kind, 'text', 'a text part changed kind')
-    assert.equal(out.length, 1, 'a text part was split into several parts')
-    assert.deepEqual(
-      out.filter((candidate) => candidate.kind === 'tool-call'),
-      [],
-      'text was converted into a tool call',
-    )
-    assert.deepEqual(reducer.stats, { text: 1, reasoning: 0, toolCall: 0, total: 1 })
-  })
+  out.push(...classifier.flush())
+  return { parts: out, stats: classifier.stats }
 }
 
-test('all three notations inside one text part survive together', () => {
-  const reducer = createPassThroughReducer()
-  const text =
-    'Before <thinking>x</thinking> after [tool call bash #c1]: {"command":"ls"} and <invoke name="bash"> tail'
-  const out = reducer.push([{ kind: 'text', text }])
+const textOf = (parts) => parts.filter((part) => part.kind === 'text').map((part) => part.text).join('')
+const callsOf = (parts) => parts.filter((part) => part.kind === 'tool-call')
 
-  assert.equal(out.length, 1)
-  assert.equal(out[0].text, text)
-  assert.deepEqual(reducer.stats, { text: 1, reasoning: 0, toolCall: 0, total: 1 })
+test('plain prose is emitted verbatim and unchanged', () => {
+  const { parts } = classify('Hello. This mentions [a link] and <but not a tag>.')
+  assert.deepEqual(parts, [{ kind: 'text', text: 'Hello. This mentions [a link] and <but not a tag>.' }])
 })
 
-test('every notation fixture also survives pushPart verbatim', () => {
-  const reducer = createPassThroughReducer()
-  for (const fixture of NOTATION) {
-    const part = { kind: 'text', text: fixture }
-    const out = reducer.pushPart(part)
-    assert.equal(out.length, 1)
-    assert.equal(out[0].text, fixture)
-    assert.equal(out[0].kind, 'text')
+test('a thinking wrapper becomes reasoning; the token never reaches text', () => {
+  const { parts, stats } = classify('<thinking>weigh it</thinking>done')
+  assert.deepEqual(parts, [
+    { kind: 'reasoning', text: 'weigh it' },
+    { kind: 'text', text: 'done' },
+  ])
+  assert.equal(stats.thinking, 1)
+  assert.equal(textOf(parts).includes('</thinking>'), false)
+})
+
+test('an unterminated thinking block is flushed as reasoning, not text', () => {
+  const { parts, stats } = classify('<thinking>still going')
+  assert.deepEqual(parts, [{ kind: 'reasoning', text: 'still going' }])
+  assert.equal(stats.unterminatedThinking, 1)
+})
+
+test('a spec-grammar body call is promoted and removed from text', () => {
+  const source = 'Now:\n[tool call bash #call_7]: {"command":"ls -la"}\n'
+  const { parts } = classify(source)
+  assert.equal(textOf(parts), 'Now:\n\n')
+  const calls = callsOf(parts)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].name, 'bash')
+  assert.equal(calls[0].id, 'call_7')
+  assert.deepEqual(JSON.parse(calls[0].arguments), { command: 'ls -la' })
+})
+
+test('an undeclared tool in the body is dropped, never executed or printed', () => {
+  const { parts, stats } = classify('x\n[tool call rm_rf #call_1]: {"path":"/"}\n')
+  assert.equal(callsOf(parts).length, 0)
+  assert.equal(textOf(parts).includes('rm_rf'), false)
+  assert.equal(stats.stripped, 1)
+})
+
+test('malformed notation is dropped, not printed', () => {
+  const { parts, stats } = classify('[tool call bash #call_1]: {"command": "ls"')
+  assert.equal(textOf(parts).includes('[tool call'), false)
+  assert.equal(callsOf(parts).length, 0)
+  assert.equal(stats.degraded, 1)
+})
+
+test('a notation that begins mid-line stays prose (a marker must start a line)', () => {
+  const { parts } = classify('the form is [tool call bash #call_1]: {"command":"ls"} inline')
+  assert.equal(textOf(parts).includes('[tool call bash'), true)
+  assert.equal(callsOf(parts).length, 0)
+})
+
+test('the XML invoke form becomes a call', () => {
+  const source = '<invoke name="bash"><parameter name="command">ls -la</parameter></invoke>'
+  const { parts } = classify(source)
+  const calls = callsOf(parts)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].name, 'bash')
+  assert.deepEqual(JSON.parse(calls[0].arguments), { command: 'ls -la' })
+  assert.equal(textOf(parts).includes('<invoke'), false)
+})
+
+test('DSML notation leaked into content becomes a real call and leaves no marker', () => {
+  const source = 'Running it.\n[tool call run_code">\n' +
+    '<｜DSML｜ parameter name="code" string="true">const x = 1</｜DSML｜ parameter>\n' +
+    '<｜DSML｜ parameter name="description" string="true">probe</｜DSML｜ parameter>\n' +
+    '</｜DSML｜ invoke>\n</｜DSML｜ calls>'
+  const { parts } = classify(source)
+  const calls = callsOf(parts)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].name, 'run_code')
+  assert.deepEqual(JSON.parse(calls[0].arguments), { code: 'const x = 1', description: 'probe' })
+  assert.equal(textOf(parts).includes('｜DSML｜'), false)
+  assert.equal(textOf(parts).includes('[tool call'), false)
+  assert.equal(textOf(parts), 'Running it.\n')
+})
+
+test('re-chunking invariance: every two-way split yields the same parts', () => {
+  const source = 'a\n<thinking>t</thinking>b\n[tool call bash #c1]: {"command":"ls"}\nc'
+  const whole = classify(source).parts.map((part) => JSON.stringify(part)).join('\n')
+  for (let cut = 1; cut < source.length; cut += 1) {
+    const split = classify(source, cut)
+    // join, because a chunk boundary may split a prose part into two parts
+    const text = textOf(split.parts)
+    const calls = callsOf(split.parts)
+    assert.equal(calls.length, 1, 'call lost at cut ' + cut)
+    assert.deepEqual(JSON.parse(calls[0].arguments), { command: 'ls' }, 'call mutated at cut ' + cut)
+    assert.equal(text.includes('[tool call '), false, 'marker printed at cut ' + cut)
+    assert.equal(text.includes('<thinking>'), false, 'thinking token printed at cut ' + cut)
   }
-  assert.equal(reducer.stats.toolCall, 0, 'pushPart must never yield a tool call')
-  assert.equal(reducer.stats.reasoning, 0, 'pushPart must never yield reasoning')
+  assert.equal(typeof whole, 'string')
 })
 
-test('two reducers do not share state', () => {
-  const first = createPassThroughReducer()
-  const second = createPassThroughReducer()
-  first.push([{ kind: 'text', text: 'only the first' }])
-  assert.deepEqual(second.stats, { text: 0, reasoning: 0, toolCall: 0, total: 0 })
-  assert.deepEqual(second.flush(), [])
+test('stray closers are removed from prose', () => {
+  const { parts } = classify('done</thinking> now')
+  assert.equal(textOf(parts), 'done now')
 })

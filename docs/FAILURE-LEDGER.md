@@ -1,7 +1,7 @@
 # Failure Ledger — Mistakes Made Here, and the Rule That Prevents a Repeat
 
 <!-- skeleton:
-version: 1.6
+version: 1.7
 kind: rule
 status: active
 updated: 2026-11-01
@@ -69,6 +69,7 @@ change cannot satisfy it, say so before acting, not after.
 | F-24 | The display-cleaning round was first "verified" with hand-written fixtures plus a metric that only described itself: `held = delta.length - emit.length` summed over one unflushed trace produced "33,921 / 99.835% held", which is a per-push deferral, not delay — the gate actually holds at most 11 characters of reasoning and nothing of prose. The owner rejected it ("실제 모델 찔러서 테스트해"). | **Measure the thing the user experiences, on a real model, through the real transport.** Latency is first-delta time and inter-delta gaps versus the previous build; correctness is pass rate over real runs plus a replay of real recorded traffic. A metric you cannot explain to a reviewer in one sentence is not a measurement. |
 | F-25 | `VERIFICATION.md` shipped two byte-identical copies of round 37; the duplicate survived the 0.8.0 release commit and was only found during the 0.9.0 doc cleanup. | **Before a version bump, count the round headings.** `grep -c '^## <n>\\.'` must be 1 for every round; a duplicated block hides stale claims and doubles the document. |
 | F-26 | The 0.9.0 release was committed and packed while `lib/http.js` still had `const VERSION = '0.8.0'` — the load beacon would have labelled the new build as the old one after the restart, and the released tarball carried the wrong string. It was caught only during the pre-restart re-read of the module. | **A version constant outside package.json is part of the release.** After a bump, `grep -rn "'<old-version>'" lib/ bin/` and re-pack/re-hash; the beacon must name the build it belongs to. |
+| F-27 | 0.8.0 deleted the owner's state machine without instruction; 0.9.0 answered the leak with a display-only filter that mutates the single text stream, so the parser channel and the screen channel could not be separated and live notation kept leaking (measured: 20 of 65 messages in the first 90 minutes of 0.9.0). The 26 self-bumped versions (0.1.1 to 0.9.0) came from the same habit: treating a release as permission to move the number. | **The owner's architecture is not yours to simplify.** The top classifier and the bottom parser/screen gate are separate requirements; a filter is not a gate. Version bumps happen only on instruction, and then only as `0.0.1.rc<N>`. |
 
 ## 7. Using this file
 

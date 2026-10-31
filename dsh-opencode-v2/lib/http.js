@@ -49,8 +49,9 @@ import {
   detectRouterConflicts,
   normalizeConflictPolicy,
 } from './conflicts.js'
-import { createPassThroughReducer } from './stream-parser.js'
-import { createReasoningGate, createTextGate } from './display-clean.js'
+import { createStreamClassifier } from './stream-parser.js'
+import { createDisplayGate } from './display-gate.js'
+import { stripThinkingTags } from './display-clean.js'
 import { mapChatDelta } from './upstream-map.js'
 
 /** Plugin name; the cordis row uses the `@nolit/dsh-opencode-v2/http` specifier. */
@@ -89,7 +90,7 @@ const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
 /** Version string of this module, for the load beacon. Must match package.json. */
-const VERSION = '0.9.0'
+const VERSION = '0.0.1'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
@@ -1117,13 +1118,21 @@ export class OpencodeHttpAdapter {
 
     const blocks = new Map()
     const toolCalls = new Map()
-    // Display gates (lib/display-clean.js): scaffolding is removed even when a
-    // delta splits it. Prose is not delayed; only echo-shaped lines are held.
-    let reasoningGate = createReasoningGate()
-    let textGate = createTextGate()
+    const displayLogger = this.ctx?.logger
+    // Two layers (0.0.1). TOP: lib/stream-parser.js classifies the text stream into
+    // text / reasoning / tool-call parts. BOTTOM: lib/display-gate.js routes those
+    // parts to the DSH parser channel (tool-call) or the screen channel (text,
+    // reasoning) and drops protocol notation from the screen entirely.
+    const declaredToolNames = new Set(
+      (Array.isArray(options.tools) ? options.tools : [])
+        .map((tool) => (tool && typeof tool.name === 'string' ? tool.name : ''))
+        .filter((value) => value.length > 0),
+    )
+    let classifier = createStreamClassifier({ toolNames: declaredToolNames })
+    let displayGate = createDisplayGate({ toolNames: declaredToolNames })
     const resetGates = () => {
-      reasoningGate = createReasoningGate()
-      textGate = createTextGate()
+      classifier = createStreamClassifier({ toolNames: declaredToolNames })
+      displayGate = createDisplayGate({ toolNames: declaredToolNames })
     }
     const open = (kind, index) => {
       const key = `${kind}:${index}`
@@ -1196,7 +1205,7 @@ export class OpencodeHttpAdapter {
      * Write one typed part of the model output as block chunks.
      *
      * The part's type was decided upstream by the wire field that carried it
-     * (lib/upstream-map.js) and forwarded unchanged by the pass-through reducer;
+     * (lib/upstream-map.js) or by the restored classifier (lib/stream-parser.js);
      * this function only maps a part onto its block lifecycle.
      *
      * @param {object} part - `{ kind: 'text'|'reasoning', text }` or
@@ -1265,28 +1274,62 @@ export class OpencodeHttpAdapter {
       emitted += 1
       yield { type: 'text-delta', index: block.index, text: part.text }
     }
-    /** Route one part through its display gate before it becomes a block chunk. */
-    const gateParts = (part) => {
-      if (!part || typeof part !== 'object') return []
-      if (part.kind === 'reasoning') {
-        const gated = reasoningGate.push(part.text)
-        return gated.emit.length > 0 ? [{ ...part, text: gated.emit }] : []
+    /** Structured calls of this response, in the shape the gate decides against. */
+    const structuredCalls = () => [...blocks.values()]
+      .filter((block) => block.kind === 'tool-call')
+      .map((block) => ({ id: block.id, name: block.name, arguments: block.arguments }))
+    /**
+     * Route classified parts to their destination.
+     *
+     * A structured call (wire field) goes to the DSH parser immediately. A call the
+     * classifier recovered from text is queued: the gate can only tell promote from
+     * echo once the structured calls of the whole response are known. Prose and
+     * reasoning go to the screen, with any remaining wrapper token stripped.
+     */
+    const routeParts = function* (parts) {
+      if (!Array.isArray(parts)) return
+      for (const part of parts) {
+        if (!part || typeof part !== 'object') continue
+        if (part.kind === 'tool-call') {
+          if (part.source === 'text') displayGate.addCandidate(part)
+          else yield* emitPart(part)
+          continue
+        }
+        if (part.kind === 'reasoning') {
+          const cleaned = stripThinkingTags(typeof part.text === 'string' ? part.text : '')
+          if (cleaned.text.length > 0) yield* emitPart({ ...part, text: cleaned.text })
+          continue
+        }
+        if (typeof part.text === 'string' && part.text.length > 0) yield* emitPart(part)
       }
-      if (part.kind === 'text') {
-        const gated = textGate.push(part.text)
-        return gated.emit.length > 0 ? [{ ...part, text: gated.emit }] : []
-      }
-      return [part]
     }
-    /** Release whatever the gates still hold; a held echo is dropped here. */
+    /**
+     * Finish the classifier, settle the bottom gate, close the blocks.
+     *
+     * The screen channel already received every prose/reasoning part; what is left
+     * is the notation. A recovered call is promoted here only when no structured
+     * call of the same name exists in this response (promote) or is discarded as an
+     * echo/superseded/undeclared call, so notation never reaches the screen and a
+     * call never executes twice.
+     */
     const flushGates = function* () {
-      const calls = [...blocks.values()]
-        .filter((block) => block.kind === 'tool-call')
-        .map((block) => ({ id: block.id, name: block.name, arguments: block.arguments }))
-      const reasoningRest = reasoningGate.finish()
-      if (reasoningRest.emit.length > 0) yield* emitPart({ kind: 'reasoning', text: reasoningRest.emit })
-      const textRest = textGate.finish(calls)
-      if (textRest.emit.length > 0) yield* emitPart({ kind: 'text', text: textRest.emit })
+      yield* routeParts(classifier.flush())
+      const settled = displayGate.settle(structuredCalls())
+      // A promoted call takes the next free ordinal: a structured call of another
+      // name may already own ordinal 0, and two blocks may not share an index.
+      let nextOrdinal = 0
+      for (const ordinal of toolCalls.keys()) nextOrdinal = Math.max(nextOrdinal, ordinal + 1)
+      for (const promoted of settled.promote) {
+        yield* emitPart({ ...promoted, ordinal: nextOrdinal })
+        nextOrdinal += 1
+      }
+      const classifierStats = classifier.stats
+      if (classifierStats.degraded > 0 || classifierStats.stripped > 0) {
+        displayLogger?.debug?.(
+          `opencode-http-agent: classified body notation (${JSON.stringify(classifierStats)}); ` +
+          `gate promoted ${settled.stats.promoted}, dropped ${settled.dropped.length}`,
+        )
+      }
       resetGates()
     }
 
@@ -1350,9 +1393,6 @@ export class OpencodeHttpAdapter {
         reasoningStarted = false
         emitted = 0
         resetBlocks()
-        // Downstream reducer: the wire field already decided each part's type
-        // (lib/upstream-map.js), so this only forwards parts, in order.
-        const reduce = createPassThroughReducer()
         bootBeacon('stream', { tools: (options.tools ?? []).length })
 
         try {
@@ -1363,16 +1403,17 @@ export class OpencodeHttpAdapter {
             const delta = choice.delta ?? {}
 
             // Upstream mapping (OpenAI / AI SDK boundary): reasoning_content ->
-            // reasoning, tool_calls -> tool-call, content -> text. The downstream
-            // reducer forwards these parts unchanged; nothing here reads prose.
-            for (const part of reduce.push(mapChatDelta(delta, { reasoningField: config.reasoningField.get() }))) {
-              for (const gated of gateParts(part)) yield* emitPart(gated)
+            // reasoning, tool_calls -> tool-call, content -> text. A text payload is
+            // then classified by the restored state machine (lib/stream-parser.js),
+            // and every classified part is routed by the bottom gate.
+            for (const part of mapChatDelta(delta, { reasoningField: config.reasoningField.get() })) {
+              if (part.kind === 'text') yield* routeParts(classifier.push(part.text))
+              else yield* routeParts([part])
             }
 
             if (choice.finish_reason) finishReason = choice.finish_reason
           }
 
-          for (const part of reduce.flush()) yield* emitPart(part)
           yield* flushGates()
           for (const chunk of closeAll()) yield chunk
           if (usage) yield { type: 'usage', usage }
@@ -1411,7 +1452,6 @@ export class OpencodeHttpAdapter {
           //    already produced usable work (measured: 3 of the last 6 sessions
           //    ended on a bare `terminated` with the whole step discarded).
           if (preserveCut && emitted > 0) {
-            for (const part of reduce.flush()) yield* emitPart(part)
             yield* flushGates()
             for (const chunk of closeCut()) yield chunk
             if (usage) yield { type: 'usage', usage }
@@ -1950,3 +1990,9 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
   }
   return true
 }
+
+// Load beacon: written when this module is evaluated in the serving process, so a
+// restart can be verified without spending a model request (a 'stream' beacon is
+// only written once a request actually starts). Both events carry the same VERSION
+// constant, so a beacon line for pid N names the build that pid loaded.
+bootBeacon('load')
