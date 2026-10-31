@@ -49,7 +49,8 @@ import {
   detectRouterConflicts,
   normalizeConflictPolicy,
 } from './conflicts.js'
-import { createInlineTagRouter, sanitizeProtocolText } from './inline-tags.js'
+import { createPassThroughReducer } from './stream-parser.js'
+import { mapChatDelta } from './upstream-map.js'
 
 /** Plugin name; the cordis row uses the `@nolit/dsh-opencode-v2/http` specifier. */
 export const name = 'dsh-opencode-v2-http'
@@ -85,18 +86,9 @@ const FORWARD_ENV_DEFAULT = [
 const TEXT_INDEX = 0
 const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
-/**
- * Block index base for tool calls recovered from inline transcript notation.
- *
- * It sits far above the OpenAI `tool_calls` ordinals (`TOOL_INDEX_BASE + index *
- * 2`) so the two sources can never collide; the assembler keys by index and
- * keeps emission order, so a sparse index is safe (measured against
- * `dsh-llm` `BlockAssembler`).
- */
-const INLINE_TOOL_INDEX_BASE = 1000
 
 /** Version string of this module, for the load beacon. */
-const VERSION = '0.7.5'
+const VERSION = '0.8.0'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
@@ -168,12 +160,6 @@ export const Config = Schema.object({
    * whole turn (the measured 2026-10-31 `terminated` failure).
    */
   streamCutPreserve: Schema.boolean().default(true).volatile(),
-  /**
-   * Split transcript-style tags (`<thinking>`, `[tool call …]`, `<invoke …>`)
-   * that a route leaks into `delta.content` into real reasoning/tool-call
-   * blocks instead of storing them as literal assistant text.
-   */
-  inlineTags: Schema.boolean().default(true).volatile(),
   discoveryCacheMs: Schema.number().default(300000).volatile(),
   autoDiscoverModels: Schema.boolean().default(true).volatile(),
   catalogPath: Schema.string().default('').volatile(),
@@ -1194,30 +1180,57 @@ export class OpencodeHttpAdapter {
     let finishReason = null
     let textStarted = false
     let reasoningStarted = false
-    let inlineToolSeq = 0
     let emitted = 0
-    let router = null
 
     /**
-     * Write one routed part of the model output as block chunks.
-     * @param {object} part - `{ kind: 'text'|'reasoning', text }` or `{ kind: 'tool-call', id, name, arguments }`.
+     * Write one typed part of the model output as block chunks.
+     *
+     * The part's type was decided upstream by the wire field that carried it
+     * (lib/upstream-map.js) and forwarded unchanged by the pass-through reducer;
+     * this function only maps a part onto its block lifecycle.
+     *
+     * @param {object} part - `{ kind: 'text'|'reasoning', text }` or
+     *   `{ kind: 'tool-call', ordinal, id, name, arguments }`.
      * @returns {Generator<object>} the chunks for that part.
      */
     const emitPart = function* (part) {
       if (part.kind === 'tool-call') {
-        const block = open('tool-call', INLINE_TOOL_INDEX_BASE + inlineToolSeq * 2)
-        inlineToolSeq += 1
-        block.id = part.id ?? ''
-        block.name = part.name ?? ''
-        block.arguments = part.arguments ?? '{}'
-        emitted += 1
-        yield { type: 'block-start', index: block.index, blockType: 'tool-call' }
-        yield {
-          type: 'tool-call-delta',
-          index: block.index,
-          id: block.id || `call_${block.index}`,
-          ...(block.name ? { name: block.name } : {}),
-          argumentsDelta: block.arguments,
+        const ordinal = Number.isInteger(part.ordinal) ? part.ordinal : 0
+        let entry = toolCalls.get(ordinal)
+        if (!entry) {
+          entry = { block: open('tool-call', TOOL_INDEX_BASE + ordinal * 2), started: false }
+          toolCalls.set(ordinal, entry)
+        }
+        const block = entry.block
+        if (part.id) block.id = String(part.id)
+        if (part.name) block.name = String(part.name)
+        const args = typeof part.arguments === 'string' ? part.arguments : ''
+        if (!entry.started) {
+          block.arguments += args
+          // Identity first: an arguments-only fragment stays accumulated but silent
+          // until the ordinal has an id or a name.
+          if (!block.id && !block.name) return
+          entry.started = true
+          emitted += 1
+          yield { type: 'block-start', index: block.index, blockType: 'tool-call' }
+          yield {
+            type: 'tool-call-delta',
+            index: block.index,
+            id: block.id || `call_${block.index}`,
+            ...(block.name ? { name: block.name } : {}),
+            argumentsDelta: block.arguments,
+          }
+          return
+        }
+        if (args.length > 0) {
+          block.arguments += args
+          emitted += 1
+          yield {
+            type: 'tool-call-delta',
+            index: block.index,
+            id: block.id || `call_${block.index}`,
+            argumentsDelta: args,
+          }
         }
         return
       }
@@ -1301,19 +1314,12 @@ export class OpencodeHttpAdapter {
         finishReason = null
         textStarted = false
         reasoningStarted = false
-        inlineToolSeq = 0
         emitted = 0
         resetBlocks()
-        router = config.inlineTags.get() === false
-          ? null
-          : createInlineTagRouter({
-            toolNames: new Set(
-              (options.tools ?? [])
-                .map((tool) => tool?.name)
-                .filter((toolName) => typeof toolName === 'string' && toolName.length > 0),
-            ),
-          })
-        bootBeacon('stream', { router: router !== null, tools: (options.tools ?? []).length })
+        // Downstream reducer: the wire field already decided each part's type
+        // (lib/upstream-map.js), so this only forwards parts, in order.
+        const reduce = createPassThroughReducer()
+        bootBeacon('stream', { tools: (options.tools ?? []).length })
 
         try {
           for await (const chunk of chatSseEvents(response.body, signal)) {
@@ -1322,76 +1328,17 @@ export class OpencodeHttpAdapter {
             if (!choice) continue
             const delta = choice.delta ?? {}
 
-            const rawReasoning = delta[config.reasoningField.get()] ?? delta.reasoning ?? delta.reasoning_text
-            const reasoningText = typeof rawReasoning === 'string' ? sanitizeProtocolText(rawReasoning) : rawReasoning
-            if (typeof reasoningText === 'string' && reasoningText.length > 0) {
-              const block = open('reasoning', REASONING_INDEX)
-              if (!reasoningStarted) {
-                reasoningStarted = true
-                yield { type: 'block-start', index: block.index, blockType: 'reasoning' }
-              }
-              block.text += reasoningText
-              emitted += 1
-              yield { type: 'reasoning-delta', index: block.index, text: reasoningText }
-            }
-
-            if (typeof delta.content === 'string' && delta.content.length > 0) {
-              if (router) {
-                const routed = router.push(delta.content)
-                routingTrace(options, routed, delta.content, router.stats)
-                for (const part of routed) yield* emitPart(part)
-              } else {
-                const block = open('text', TEXT_INDEX)
-                if (!textStarted) {
-                  textStarted = true
-                  yield { type: 'block-start', index: block.index, blockType: 'text' }
-                }
-                block.text += delta.content
-                emitted += 1
-                yield { type: 'text-delta', index: block.index, text: delta.content }
-              }
-            }
-
-            for (const call of delta.tool_calls ?? []) {
-              const ordinal = Number(call.index ?? 0)
-              let entry = toolCalls.get(ordinal)
-              if (!entry) {
-                entry = { block: open('tool-call', TOOL_INDEX_BASE + ordinal * 2), started: false }
-                toolCalls.set(ordinal, entry)
-              }
-              const block = entry.block
-              if (call.id) block.id = String(call.id)
-              if (call.function?.name) block.name = String(call.function.name)
-              const args = call.function?.arguments
-              if (!entry.started && (block.id || block.name)) {
-                entry.started = true
-                const initialArgs = typeof args === 'string' ? args : ''
-                block.arguments += initialArgs
-                emitted += 1
-                yield { type: 'block-start', index: block.index, blockType: 'tool-call' }
-                yield {
-                  type: 'tool-call-delta',
-                  index: block.index,
-                  id: block.id || `call_${block.index}`,
-                  ...(block.name ? { name: block.name } : {}),
-                  argumentsDelta: initialArgs,
-                }
-              } else if (typeof args === 'string' && args.length > 0) {
-                block.arguments += args
-                emitted += 1
-                yield {
-                  type: 'tool-call-delta',
-                  index: block.index,
-                  id: block.id || `call_${block.index}`,
-                  argumentsDelta: args,
-                }
-              }
+            // Upstream mapping (OpenAI / AI SDK boundary): reasoning_content ->
+            // reasoning, tool_calls -> tool-call, content -> text. The downstream
+            // reducer forwards these parts unchanged; nothing here reads prose.
+            for (const part of reduce.push(mapChatDelta(delta, { reasoningField: config.reasoningField.get() }))) {
+              yield* emitPart(part)
             }
 
             if (choice.finish_reason) finishReason = choice.finish_reason
           }
 
-          if (router) for (const part of router.flush()) yield* emitPart(part)
+          for (const part of reduce.flush()) yield* emitPart(part)
           for (const chunk of closeAll()) yield chunk
           if (usage) yield { type: 'usage', usage }
           if (options.signal?.aborted) {
@@ -1429,7 +1376,7 @@ export class OpencodeHttpAdapter {
           //    already produced usable work (measured: 3 of the last 6 sessions
           //    ended on a bare `terminated` with the whole step discarded).
           if (preserveCut && emitted > 0) {
-            if (router) for (const part of router.flush()) yield* emitPart(part)
+            for (const part of reduce.flush()) yield* emitPart(part)
             for (const chunk of closeCut()) yield chunk
             if (usage) yield { type: 'usage', usage }
             this.ctx?.logger?.warn?.(
@@ -1571,38 +1518,6 @@ export function repairJson(text) {
   return null
 }
 
-/**
- * Optional routing trace, for when the transcript still shows protocol notation.
- *
- * Off by default: set `OPENCODE_V2_ROUTING_DEBUG=1` and the adapter appends one
- * JSONL line per content delta to `/tmp/opencode-v2-routing.jsonl`, recording the
- * raw delta and the parts it produced. It answers one question that no test can:
- * did the notation arrive as `content` at all, and what did the router decide?
- * Failures here must never affect the stream.
- *
- * @param {object} options - the `GenerateOptions` of the request.
- * @param {object[]} routed - parts returned by the router.
- * @param {string} delta - the raw content delta.
- * @param {object} stats - router counters.
- * @returns {void}
- */
-function routingTrace(options, routed, delta, stats) {
-  if (process.env.OPENCODE_V2_ROUTING_DEBUG === '0') return
-  try {
-    appendFileSync(
-      '/tmp/opencode-v2-routing.jsonl',
-      `${JSON.stringify({
-        at: new Date().toISOString(),
-        model: options?.model,
-        delta: delta.slice(0, 400),
-        parts: routed.map((part) => (part.kind === 'tool-call' ? `tool-call:${part.name}` : part.kind)),
-        stats,
-      })}\n`,
-    )
-  } catch {
-    /* tracing must never break a stream */
-  }
-}
 
 /**
  * Append-only beacon proving which plugin code a process actually loaded.

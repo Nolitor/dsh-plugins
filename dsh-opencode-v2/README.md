@@ -236,7 +236,7 @@ Two defects made a long turn die mid-step. Both are session-record measurements,
 | Symptom (measured) | Cause | Fix |
 |---|---|---|
 | `turn/end` -> `{kind:'error', error:{message:'terminated', code:'OPENCODE_BACKEND'}}` in **3 of the last 6 sessions** | every exception thrown while reading the SSE body (undici `TypeError: terminated`, `ECONNRESET`, `UND_ERR_SOCKET`) was mapped straight to a hard error, so the whole step was discarded | `isTransientStreamError()` separates a transport cut from a request verdict; the request is retried while **nothing** has been emitted (`streamRetries`, default 1), and once output exists it is **preserved** (`streamCutPreserve`, default true) |
-| literal `<thinking>` (31 occurrences in one session) and `[tool call bash #call_...]` / `<invoke ...>` (24-44 per session) stored as assistant **text** | the adapter only read the structured OpenAI fields (`reasoning_content`, `tool_calls`); no inline-tag parser existed | `lib/inline-tags.js` routes those tags into real `reasoning` / `tool-call` blocks (`inlineTags`, default true) |
+| literal `<thinking>` (31 occurrences in one session) and `[tool call bash #call_...]` / `<invoke ...>` stored as assistant **text** | the adapter only read the structured OpenAI fields (`reasoning_content`, `tool_calls`); a text-level tag router was bolted on to compensate | **reverted in 0.8.0**: the router is deleted. The wire field decides the type; content that carries notation is forwarded verbatim as text, so a route that emits tags inside content shows them (measured: 1.7% of 29,940 deltas) instead of being guessed at |
 
 Rules the implementation follows:
 
@@ -245,9 +245,9 @@ Rules the implementation follows:
   and continues. Nothing is silently dropped and no block is left open.
 - **A cut tool call is closed with valid JSON.** `repairJson()` keeps the completed prefix and falls
   back to `{}`; invalid JSON never reaches the tool layer.
-- **Inline routing is byte-preserving.** A delta with no tag is forwarded unchanged; an undeclared
-  tool name stays text; an unterminated `<thinking>` is flushed as reasoning so the literal tag never
-  enters the transcript. `inlineTags: false` restores the old pass-through.
+- **The wire field decides the type.** `delta.reasoning_content` is reasoning, `delta.tool_calls` is a tool
+  call, `delta.content` is text. Decided upstream in `lib/upstream-map.js`, never by reading
+  characters; the downstream reducer forwards each typed part unchanged.
 - **v0.7.6 — a split marker is held, not released.** 0.7.3-0.7.5 held a tag split *inside an opener*
   (and the `<thinking>` body), but **not** a `[tool call …` marker that arrived without its closing
   `]`: that fell through `drainCall()` and was emitted as text, so the notation plus its JSON payload
@@ -261,7 +261,7 @@ Rules the implementation follows:
   A text block that **starts** with the scratchpad now enters the reasoning channel instead, and the
   answer wrapper is unwrapped. A mere mention of the tag inside a sentence stays readable prose.
   Prior art: QwenLM/qwen-code#6023, #6595, windmill-labs/windmill#9750.
-- **v0.7.8 — the regex filter is gone; a state machine parses the stream.** The 0.7.3-0.7.7 router
+- **Historical (0.7.8, removed in 0.8.0) — a state machine parsed the stream.** The 0.7.3-0.7.7 router
   re-scanned and rewrote accumulated text with twelve module-level regexes, so the same input could
   classify differently depending on where the SSE stream split, and notation was hidden by deleting
   body text. It is replaced by `lib/stream-parser.js`: one pass, explicit states `TEXT` / `REASONING` /
@@ -272,13 +272,20 @@ Rules the implementation follows:
   (property-tested over every two-way split and 40 random multi-way splits per fixture). The
   `createInlineTagRouter` regex body and the block-end `sanitizeProtocolText` net are deleted; a
   malformed marker now keeps its prose and a declared call still becomes a real tool call.
+- **v0.8.0 — boundary pipeline; tag guessing is gone.** Every delta is typed at the boundary
+  (`lib/upstream-map.js`): `reasoning_content` (and the `reasoning` / `reasoning_text` aliases) is a reasoning
+  part, `tool_calls` is a tool-call part carrying its ordinal, and `content` is a text part.
+  `lib/stream-parser.js` is now a 55-line pass-through reducer that returns those parts unchanged;
+  `lib/inline-tags.js`, the `inlineTags` option, the per-delta routing trace and every tag
+  pattern are deleted. Measured over 29,940 recorded content deltas: 37.6% pure prose, 1.7%
+  carrying notation — a character scanner was the wrong layer.
 - **Canonical docs.** `README.md` (this file) is the canonical, shipped document — it is the only
   markdown file in the package `files` list, so anything a consumer needs must be here. `VERIFICATION.md`
   (current rounds) and `VERIFICATION-ARCHIVE.md` (rounds through 0.7.3) are the internal evidence trail:
   measured commands, transcripts and before/after tables. They are not shipped, and a version bump is
   not complete until this README carries it.
-- Recovered tool-call blocks use block index `1000 + n * 2` (`INLINE_TOOL_INDEX_BASE`), far from the
-  OpenAI ordinals (`2 + index * 2`), so the two sources can never collide.
+- Tool calls use the OpenAI ordinal: block index `2 + index * 2`. There is no second source
+  any more, so the `1000 + n * 2` inline range and its collision guard are gone.
 - **v0.7.4 — the notation is removed, not merely parsed.** 0.7.3 converted only well-formed
   markers and passed every other shape through, so a stray `</thinking>`, a marker followed by
   prose, or a marker with broken JSON still appeared in the transcript. `sanitizeProtocolText()`
@@ -286,8 +293,8 @@ Rules the implementation follows:
   `[tool call …]` marker is dropped together with its JSON payload when that payload parses. A
   marker whose tool is **not** declared is dropped and never executed. Text with no marker is
   untouched.
-- `OPENCODE_V2_ROUTING_DEBUG=0` **disables** the per-delta trace; the trace is **on by default** and
-  appends one JSONL line per content delta to `/tmp/opencode-v2-routing.jsonl` (raw delta + decision).
+- The per-delta routing trace (`OPENCODE_V2_ROUTING_DEBUG`, `/tmp/opencode-v2-routing.jsonl`) was
+  removed in 0.8.0 together with the router. The boot beacon (`/tmp/opencode-v2-boot.jsonl`) stays.
   The same applies to `OPENCODE_V2_BEACON=0` and `/tmp/opencode-v2-boot.jsonl`. Both guards are
   inverted relative to the 0.7.3 docstring; treat the files as on unless explicitly disabled.
 
@@ -597,10 +604,12 @@ dsh-opencode-v2/
 ├── lib/
 │   ├── index.js          # `opencode` tool + /opencode command
 │   ├── provider.js       # `opencode-agent` LLM route (true streaming)
-│   ├── inline-tags.js    # <thinking> / [tool call ...] / <invoke ...> -> real blocks
+│   ├── upstream-map.js   # OpenAI / AI SDK delta -> typed part (reasoning | text | tool-call)
+│   ├── stream-parser.js  # pass-through reducer: typed parts in, the same parts out
 │   └── shared.js         # argv, ndjson parser, usage mapping/fetch
 └── test/
-    ├── inline-tags.test.mjs # inline transcript-tag router
+    ├── upstream-map.test.mjs   # the wire field decides the part type
+    ├── stream-parser.test.mjs  # pass-through reducer contract
     ├── shared.test.mjs   # argv / parser / usage
     ├── providers.test.mjs# tool + provider halves
     ├── bundle.test.mjs   # package.json <-> cordis.patch.yml contract

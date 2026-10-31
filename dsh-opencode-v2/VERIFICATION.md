@@ -1,9 +1,9 @@
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: ver
 status: active
 updated: 2026-11-01
-summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later. Older rounds live in VERIFICATION-ARCHIVE.md.
+summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.8.0. Older rounds live in VERIFICATION-ARCHIVE.md.
 -->
 # @nolit/dsh-opencode-v2 - Verification (current)
 
@@ -274,3 +274,107 @@ Four invariants, each one a defect this file exists to prevent:
 ### 36.5 Status
 
 applied pending restart - the live 3080 process still runs 0.7.7.
+
+## 37. v0.8.0 — boundary pipeline: the wire field decides the type (measured 2026-11-01)
+
+### 37.1 Why a text scanner was the wrong layer
+
+Measured from the recorded per-delta trace (`/tmp/opencode-v2-routing.jsonl`, 29,940 content deltas, two models):
+
+| Measure | Value |
+|---|---|
+| content deltas traced | 29,940 |
+| pure text, no notation | 11,256 (37.6%) |
+| carried transcript notation | 495 (1.7%) |
+| reasoning deltas, every one re-sanitised per fragment | 11,061 |
+| structured tool-call deltas | 153 |
+
+More than 98% of deltas paid for a scanner that could only ever matter for 1.7%, and every
+reasoning delta was rewritten on the way through. The type is already on the wire.
+
+### 37.2 What changed
+
+| File | Change |
+|---|---|
+| `lib/upstream-map.js` | new: `mapChatDelta(delta)` returns reasoning parts, then text parts, then tool-call parts (ordinal plus this delta's argument fragment) |
+| `lib/stream-parser.js` | 337 -> 55 lines: a pass-through reducer. No tags, no buffers, no state machine; `push(parts)` returns those parts unchanged |
+| `lib/http.js` | one call per delta: `reduce.push(mapChatDelta(delta, { reasoningField }))`; `emitPart` keys tool calls by ordinal; router, sanitiser and routing trace deleted |
+| `lib/inline-tags.js` | deleted |
+| `inlineTags` config | deleted; there is nothing left to toggle |
+| `test/stream-parser.test.mjs` | rewritten: 17 contract tests, including notation text returned verbatim |
+| `test/upstream-map.test.mjs` | new: 10 field-shape tests |
+| `test/http.test.mjs` | 6 tag tests -> 4 boundary tests |
+| `test/inline-tags.test.mjs` | deleted |
+
+### 37.3 Verification
+
+| Check | Result |
+|---|---|
+| baseline before this round | 260 tests, 260 pass, 0 fail |
+| `npm run check` | exit 0, clean |
+| `npm test` | 245/245 pass, 0 fail |
+| `node --check` on the three touched modules | exit 0 |
+
+### 37.4 The consequence, stated plainly
+
+A route that puts transcript notation inside `delta.content` now shows that notation as text.
+The adapter no longer guesses, so the measured 1.7% becomes visible instead of being rewritten.
+That is the deliberate trade: the wire field is authoritative. Correcting such a route belongs to
+the route (use the structured fields) or to a renderer that is told the type — not to a character
+scanner inside the adapter.
+
+### 37.5 Status
+
+applied on disk; the live 3080 process still runs the previous build until restart.
+
+## 37. v0.8.0 — boundary pipeline: the wire field decides the type (measured 2026-11-01)
+
+### 37.1 Why a text scanner was the wrong layer
+
+Measured from the recorded per-delta trace (`/tmp/opencode-v2-routing.jsonl`, 29,940 content deltas, two models):
+
+| Measure | Value |
+|---|---|
+| content deltas traced | 29,940 |
+| pure text, no notation | 11,256 (37.6%) |
+| carried transcript notation | 495 (1.7%) |
+| reasoning deltas, every one re-sanitised per fragment | 11,061 |
+| structured tool-call deltas | 153 |
+
+More than 98% of deltas paid for a scanner that could only ever matter for 1.7%, and every
+reasoning delta was rewritten on the way through. The type is already on the wire.
+
+### 37.2 What changed
+
+| File | Change |
+|---|---|
+| `lib/upstream-map.js` | new: `mapChatDelta(delta)` returns reasoning parts, then text parts, then tool-call parts (ordinal plus this delta's argument fragment) |
+| `lib/stream-parser.js` | 337 -> 55 lines: a pass-through reducer. No tags, no buffers, no state machine; `push(parts)` returns those parts unchanged |
+| `lib/http.js` | one call per delta: `reduce.push(mapChatDelta(delta, { reasoningField }))`; `emitPart` keys tool calls by ordinal; router, sanitiser and routing trace deleted |
+| `lib/inline-tags.js` | deleted |
+| `inlineTags` config | deleted; there is nothing left to toggle |
+| `test/stream-parser.test.mjs` | rewritten: 17 contract tests, including notation text returned verbatim |
+| `test/upstream-map.test.mjs` | new: 10 field-shape tests |
+| `test/http.test.mjs` | 6 tag tests -> 4 boundary tests |
+| `test/inline-tags.test.mjs` | deleted |
+
+### 37.3 Verification
+
+| Check | Result |
+|---|---|
+| baseline before this round | 260 tests, 260 pass, 0 fail |
+| `npm run check` | exit 0, clean |
+| `npm test` | 245/245 pass, 0 fail |
+| `node --check` on the three touched modules | exit 0 |
+
+### 37.4 The consequence, stated plainly
+
+A route that puts transcript notation inside `delta.content` now shows that notation as text.
+The adapter no longer guesses, so the measured 1.7% becomes visible instead of being rewritten.
+That is the deliberate trade: the wire field is authoritative. Correcting such a route belongs to
+the route (use the structured fields) or to a renderer that is told the type — not to a character
+scanner inside the adapter.
+
+### 37.5 Status
+
+applied on disk; the live 3080 process still runs the previous build until restart.

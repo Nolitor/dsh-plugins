@@ -741,7 +741,7 @@ test('streamCutPreserve:false keeps the previous hard error verdict', async () =
   }
 })
 
-test('inline thinking tags in content become a reasoning block, not literal text', async () => {
+test('content is passed through verbatim: a tag-looking delta is never reinterpreted', async () => {
   const events = [
     { choices: [{ delta: { content: '<thinking>plan it</thinking>Hel' } }] },
     { choices: [{ delta: { content: 'lo' } }] },
@@ -756,41 +756,20 @@ test('inline thinking tags in content become a reasoning block, not literal text
       messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
     }))
     const starts = chunks.filter((chunk) => chunk.type === 'block-start').map((chunk) => chunk.blockType)
-    assert.deepEqual(starts, ['reasoning', 'text'])
-    const reasoning = chunks.filter((chunk) => chunk.type === 'reasoning-delta').map((chunk) => chunk.text).join('')
+    assert.deepEqual(starts, ['text'])
     const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
-    assert.equal(reasoning, 'plan it')
-    assert.equal(text, 'Hello')
-    assert.ok(!JSON.stringify(chunks).includes('<thinking>'))
+    assert.equal(text, '<thinking>plan it</thinking>Hello')
+    assert.equal(chunks.filter((chunk) => chunk.type === 'reasoning-delta').length, 0)
   } finally {
     await close()
   }
 })
 
-test('inlineTags:false leaves the tags alone (escape hatch)', async () => {
-  const events = [
-    { choices: [{ delta: { content: '<thinking>x</thinking>y' } }] },
-    { choices: [{ delta: {}, finish_reason: 'stop' }] },
-  ]
-  const { server, state, close } = await startServer({ events })
-  try {
-    const adapter = adapterFor(state, { baseUrl: controlURL(state), inlineTags: false })
-    const chunks = await collect(adapter.stream({
-      provider: 'opencode-http-agent',
-      model: 'opencode-go/minimax-m3.1-flash',
-      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
-    }))
-    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
-    assert.equal(text, '<thinking>x</thinking>y')
-  } finally {
-    await close()
-  }
-})
 
-test('a leaked literal tool call becomes a real tool-call block for a declared tool', async () => {
+test('structured tool_calls deltas accumulate into one real tool-call block', async () => {
   const events = [
-    { choices: [{ delta: { content: 'I will run it.[tool call bash #call_42]: {"command":"ls"}' } }] },
-    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+    { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'bash', arguments: '{"command":' } }] } }] },
+    { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '"ls"}' } }] }, finish_reason: 'tool_calls' }] },
   ]
   const { server, state, close } = await startServer({ events })
   try {
@@ -801,12 +780,12 @@ test('a leaked literal tool call becomes a real tool-call block for a declared t
       messages: [{ role: 'user', content: [{ type: 'text', text: 'list' }] }],
       tools: [{ name: 'bash', description: 'run', parameters: { type: 'object', properties: {} } }],
     }))
-    const call = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
-    assert.equal(call.block.id, 'call_42')
-    assert.equal(call.block.name, 'bash')
-    assert.equal(call.block.arguments, '{"command":"ls"}')
-    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
-    assert.equal(text, 'I will run it.')
+    const end = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    assert.equal(end.block.id, 'call_1')
+    assert.equal(end.block.name, 'bash')
+    assert.equal(end.block.arguments, '{"command":"ls"}')
+    assert.equal(chunks.filter((chunk) => chunk.type === 'text-delta').length, 0)
+    assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'tool-calls' } })
   } finally {
     await close()
   }
@@ -829,38 +808,12 @@ test('repairJson returns valid JSON for a cut argument fragment', () => {
   assert.equal(repairJson(''), null)
 })
 
-// --- last-mile notation stripping (the "screen is a mess" case, 2026-10-31) ---
+// --- boundary contract: the wire field decides the type (measured 2026-11-01) ---
 
-test('a leaked multi-call block never reaches the transcript as text', async () => {
-  const blob = '\n\n[tool call bash #call_1]: {"command":"grep -c x y"}'
-    + '\n[tool call bash #call_2]: {"command":"echo ok"}'
-    + '\n</thinking>\n'
-  const events = [
-    { choices: [{ delta: { content: blob } }] },
-    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
-  ]
-  const { server, state, close } = await startServer({ events })
-  try {
-    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
-    const chunks = await collect(adapter.stream({
-      provider: 'opencode-http-agent',
-      model: 'opencode-go/minimax-m3.1-flash',
-      messages: [{ role: 'user', content: [{ type: 'text', text: 'go' }] }],
-      tools: [{ name: 'bash', description: 'run', parameters: { type: 'object', properties: {} } }],
-    }))
-    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
-    assert.ok(!text.includes('[tool call '), `notation survived: ${JSON.stringify(text)}`)
-    assert.ok(!text.includes('thinking>'), `tag survived: ${JSON.stringify(text)}`)
-    const calls = chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
-    assert.equal(calls.length, 2)
-  } finally {
-    await close()
-  }
-})
-
-test('a stray thinking tag inside reasoning is stripped', async () => {
+test('reasoning_content is reasoning verbatim, including any tag bytes', async () => {
   const events = [
     { choices: [{ delta: { reasoning_content: 'plan it</thinking> and more' } }] },
+    { choices: [{ delta: { content: 'done' } }] },
     { choices: [{ delta: {}, finish_reason: 'stop' }] },
   ]
   const { server, state, close } = await startServer({ events })
@@ -871,24 +824,27 @@ test('a stray thinking tag inside reasoning is stripped', async () => {
       model: 'opencode-go/minimax-m3.1-flash',
       messages: [{ role: 'user', content: [{ type: 'text', text: 'go' }] }],
     }))
+    const starts = chunks.filter((chunk) => chunk.type === 'block-start').map((chunk) => chunk.blockType)
+    assert.deepEqual(starts, ['reasoning', 'text'])
     const reasoning = chunks.filter((chunk) => chunk.type === 'reasoning-delta').map((chunk) => chunk.text).join('')
-    assert.equal(reasoning, 'plan it and more')
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.equal(reasoning, 'plan it</thinking> and more')
+    assert.equal(text, 'done')
   } finally {
     await close()
   }
 })
 
-test('a tool-call marker split across SSE events never reaches the transcript as text', async () => {
-  // Boundaries copied from the stored stream of session e9c75e9a (2026-10-31),
-  // where v0.7.5 leaked the notation into the assistant text block.
+test('a tool-call marker split across SSE events stays text, byte for byte', async () => {
+  // Boundaries copied from the stored stream of session e9c75e9a (2026-10-31).
   const events = [
-    { choices: [{ delta: { content: 'Now I will look.\\n\\n' } }] },
+    { choices: [{ delta: { content: 'Now I will look.\n\n' } }] },
     { choices: [{ delta: { content: '[tool call bash #' } }] },
     { choices: [{ delta: { content: 'chatcmpl-t' } }] },
     { choices: [{ delta: { content: 'ool-f82' } }] },
     { choices: [{ delta: { content: 'dc4b5b1582ac5' } }] },
     { choices: [{ delta: { content: ']: {"command":"ls -la"}' } }] },
-    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] },
   ]
   const { server, state, close } = await startServer({ events })
   try {
@@ -899,13 +855,12 @@ test('a tool-call marker split across SSE events never reaches the transcript as
       messages: [{ role: 'user', content: [{ type: 'text', text: 'list' }] }],
       tools: [{ name: 'bash', description: 'run', parameters: { type: 'object', properties: {} } }],
     }))
-    const call = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
-    assert.equal(call.block.name, 'bash')
-    assert.equal(call.block.arguments, '{"command":"ls -la"}')
     const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
-    assert.equal(text, 'Now I will look.\\n\\n')
-    assert.ok(!/\[tool call /.test(JSON.stringify(chunks)), 'notation leaked into the stream')
+    assert.equal(text, 'Now I will look.\n\n[tool call bash #chatcmpl-tool-f82dc4b5b1582ac5]: {"command":"ls -la"}')
+    assert.equal(chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call').length, 0)
   } finally {
     await close()
   }
 })
+
+
