@@ -1,7 +1,7 @@
 # Failure Ledger — Mistakes Made Here, and the Rule That Prevents a Repeat
 
 <!-- skeleton:
-version: 1.2
+version: 1.3
 kind: rule
 status: active
 updated: 2026-11-01
@@ -34,7 +34,7 @@ change cannot satisfy it, say so before acting, not after.
 | F-9 | A curl probe returned `403 error code: 1010` (Cloudflare) and was nearly read as a credential verdict. | **An edge/WAF status is not an application verdict.** Re-probe with the client the product actually uses before concluding anything. |
 | F-10 | `cp -a` of a profile broke every plugin link (`node_modules/@scope/*` are **relative** symlinks); the isolated boot then reported "cannot resolve" for all bundles. | **Rebuild links as absolute paths** in any profile copy, and label a run invalid-and-discarded when the copy itself is broken. |
 | F-17 | A dropped upstream SSE body (`TypeError: terminated`) was reported as `{kind:'error', code:'OPENCODE_BACKEND'}`, so a step that had already produced usable work was discarded — 3 of the last 6 sessions ended that way, and the owner read it as "the turn keeps dying". | **A transport cut is not a request verdict.** Classify the error (`isTransientStreamError`): retry only while nothing has been emitted, otherwise preserve the partial output and close it with a legal `finish` reason. Never invent a finish kind — read the harness's `FinishReasonMap` first. |
-| F-18 | 0.7.3-0.7.5 held a tag split *inside an opener* but released a `[tool call …` marker that arrived without its closing `]`, so the notation and its JSON payload were emitted as assistant text and printed on screen. `sanitizeProtocolText` could not catch it because it is per-fragment and its `CALL_MARKER` also requires the closing `]` — the net only ever caught strings that were already intact. The split test in `inline-tags.test.mjs` split **after** `]`, so 229/229 stayed green while the screen was dirty. | **A partial marker is held, never released.** Any prefix that can still become a marker must be buffered (bounded by `maxHold`) until the shape is decided; only then convert it or strip its syntax. A sanitiser that runs per fragment cannot be the last line of defence for a stream — test the exact delta boundaries recorded from the live stream, not a single-delta blob. |
+| F-18 | 0.7.3-0.7.5 held a tag split *inside an opener* but released a `[tool call …` marker that arrived without its closing `]`, so the notation and its JSON payload were emitted as assistant text and printed on screen. `sanitizeProtocolText` could not catch it because it is per-fragment and its `CALL_MARKER` also requires the closing `]` — the net only ever caught strings that were already intact. The split test in `inline-tags.test.mjs` split **after** `]`, so the suite (229/229 at 0.7.3, **237/237 at 0.7.5**) stayed green while the screen was dirty. | **A partial marker is held, never released.** Any prefix that can still become a marker must be buffered (bounded by `maxHold`) until the shape is decided; only then convert it or strip its syntax. A sanitiser that runs per fragment cannot be the last line of defence for a stream — test the exact delta boundaries recorded from the live stream, not a single-delta blob. |
 
 ## 3. Live state
 
@@ -51,8 +51,16 @@ change cannot satisfy it, say so before acting, not after.
 |---|---|---|
 | F-15 | A wrong conclusion (F-6) was already committed to a boot card before it was retracted. | **Correct in the same artifact** with a table of what each measurement path proves; never leave a stale conclusion standing because it is "just a card". |
 | F-16 | Numbers were quoted without their unit/derivation ("49 requests" needed the qualifier *per press*, at concurrency 6, one per route). | **A derived number carries its unit and shape**, or it is not reviewable. |
+| F-19 | The 0.7.6 docs were committed at 00:10:07 with a **stale index**: `bootcards/2026-11-01T0007+0900.md` was generated *after* the last `npm run docs:index`, so the committed `INDEX.md` still said "52 indexed / 52 documents" and listed the previous card. `npm run docs:check` therefore **failed on the committed tree** — the gate had run before the last write. | **`npm run docs:check` is the last command before a docs commit.** Order: write/edit docs → generate derived files (`bootcard`, `docs:index`) → `docs:check` → commit. A green check from before the last write proves nothing. |
 
-## 5. Using this file
+## 5. Live service and provider wiring
+
+| # | What happened | Rule now |
+|---|---|---|
+| F-20 | The 3080 service was replaced by `fuser -k 3080/tcp` — SIGKILL by default. The unit (`Type=simple`, `KillMode=control-group`, `Restart=always`, `RestartSec=3`) has no drain, so the in-flight agent turn died with no record, and the restart was reported to nobody. Measured: `Main process exited, code=killed, status=9/KILL` at 00:12:38, **no systemd `Stopping` line** (real stops do log one, e.g. 23:11:14 / 23:33:13 / 23:40:29), no kernel OOM, `MemoryMax=infinity`, restart at 00:12:41. | **Stop the unit, never the port holder.** Use `systemctl --user restart`/`stop` so systemd owns the shutdown, and report the restart with its before/after facts in the same reply. A SIGKILL of the listener is indistinguishable from a crash in the journal and loses whatever the turn was doing. |
+| F-21 | A turn died with `opencode GET /api/provider/opencode-go -> HTTP 404: ProviderNotFoundError`. Cause: `lib/http.js` defaults `backendProviderId` to `opencode-go` and resolves the backend with `GET /api/provider/{id}` when no explicit base URL is set — but the local control plane's auth catalog is `opencode`, `opencode-zen`, `zen`; there is no `opencode-go` provider. | **Resolve a provider id from the live catalog before issuing it.** A default id is a guess; read `/api/provider` (or `auth.json` keys), match it, and on a 404 fall back to a known id instead of failing the turn. |
+
+## 6. Using this file
 
 - Before changing a plugin: read §1. Before measuring: §2. Before touching `~/.dsh`: §3.
 - When a new mistake is made, add it here **with the rule**, not with a narrative. The rule is the

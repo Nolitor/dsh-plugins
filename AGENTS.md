@@ -24,8 +24,8 @@ Older boot cards are historical evidence; open them only for a version/policy de
 ## Latest boot card
 
 <!-- LATEST_BOOT_CARD:START -->
-Latest boot card: [bootcards/2026-11-01T0007+0900.md](bootcards/2026-11-01T0007+0900.md)
-Generated: 2026-11-01T0007+0900 (KST)
+Latest boot card: [bootcards/2026-11-01T0034+0900.md](bootcards/2026-11-01T0034+0900.md)
+Generated: 2026-11-01T0034+0900 (KST)
 Read only this latest card by default; older cards are historical evidence.
 <!-- LATEST_BOOT_CARD:END -->
 

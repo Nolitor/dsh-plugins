@@ -2173,6 +2173,46 @@ intact. `http.js` applied sanitising to reasoning only (`:1322`); text was forwa
 
 ### 34.5 Status
 
-`applied pending restart` — code, tests, artifact and docs are on disk; the running 3080 process
-still serves the pre-0.7.6 module. Known residual: a marker whose JSON payload does not parse
-keeps a harmless textual payload fragment; the notation itself is gone.
+**`done`** — the restart happened and the live transcript was re-measured (§34.6). At the time this
+section was first written the status was `applied pending restart`; that line was measured false at
+00:12:41 and is corrected here rather than deleted.
+
+Restart facts (measured, not inferred):
+
+| Measurement | Value |
+|---|---|
+| Old process | killed at 00:12:38 KST (`code=killed, status=9/KILL`) |
+| Restart | `dsh-web.service` `Restart=always` → scheduled restart, `NRestarts=1` |
+| New process | `MainPID 1861680`, `ExecMainStartTimestamp` 2026-11-01 00:12:41 KST |
+| Listener | `127.0.0.1:3080` owned by `1861680` |
+| Module resolution | `profiles/web/node_modules/@nolit/dsh-opencode-v2` → symlink to this workspace |
+| Patched sources | `lib/inline-tags.js` 00:01:26, `lib/http.js` 00:01:44 — both older than the process start, so 0.7.6 is what the process loaded |
+
+Known residual: a marker whose JSON payload does not parse keeps a harmless textual payload
+fragment; the notation itself is gone.
+
+### 34.6 Post-restart live measurement (2026-11-01 00:13–00:21 KST)
+
+Method: decompress every `~/.dsh/sessions/**/session.v4.jsonl.zstd`, take each `assistant/message`
+event, split on the restart epoch (00:12:41), and count `content[]` parts by type; a `text` part is
+counted as a leak when it matches `\[tool call`, `<invoke` or `<parameter`.
+
+| Window | Assistant messages | `text` parts | `text` parts carrying notation | `tool-call` parts |
+|---|---|---|---|---|
+| Before restart (6 sessions) | 656 | 317 | **165 (52.1%)** | — |
+| After restart (session `8859609a`, route `opencode-go/deepseek-v4.1-flash`) | 15 | 1 | **0 (0.0%)** | 19 |
+
+Per session, before window: `e9c75e9a` 62 msgs / 43 text / 23 leaks; `f8c40e19` 301 / 133 / 40;
+`45134ad1` 117 / 53 / 43; `6d3263c3` 131 / 64 / 51; `a06efaa2` 33 / 15 / 6; `dd6919f9` 12 / 9 / 2.
+After window: `8859609a` 15 / 1 / **0**, with 19 `tool-call` parts — every marker of that window became
+a tool call and none became text.
+
+| Check | Result |
+|---|---|
+| `npm test` on the committed tree, after the restart | **243/243 pass, fail 0** |
+| `npm run docs:check` on the committed tree | **FAILED** — stale `INDEX.md`/`docs/SKELETON.md` (the 00:07 card was generated after the last index run); fixed in the follow-up commit, see F-19 |
+| Artifact hash | `sha256sum` matches `artifacts/SHA256SUMS.opencode-v2` |
+
+Caveat carried forward: 15 post-restart messages with a single 1-character text part is a thin sample
+for the *prose-preserved* half of the fix; that half rests on the unit and route tests (§34.4), not on
+this window.
