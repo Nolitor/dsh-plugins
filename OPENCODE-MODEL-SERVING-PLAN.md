@@ -521,7 +521,7 @@ Two corrections stated plainly:
 Known limitation, measured assumption: an echo line that is **not** at the end of a text part is
 released, not dropped (the parser requires the whole tail). Both real echo cases were terminal.
 
-### Candidate 0.9.0 change set (staged, not applied to the live package)
+### 0.9.0 change set (applied on disk 2026-11-01 04:51, committed a9e9529)
 
 | Step | Change |
 |---|---|
@@ -532,8 +532,13 @@ released, not dropped (the parser requires the whole tail). Both real echo cases
 | 5 | artifact `artifacts/nolit-dsh-opencode-v2-0.9.0.tgz` + `SHA256SUMS.opencode-v2` |
 | 6 | live apply after approval: copy the four files into `dsh-opencode-v2/`, `npm test` there, `systemctl --user restart dsh-web.service`, then verify by pid change + a field that exists only in 0.9.0 + journal activation errors — not by a version string in a log |
 
-Status: **staged in `.runtime-measure/optA`; the live package and service are untouched** (0.8.0,
-serving pid 2008891 since 03:08:33). Live application needs the owner's confirmation.
+Status: **applied on disk, pending restart.** `dsh-opencode-v2/package.json` is 0.9.0 (commit
+`a9e9529`), the artifact is `artifacts/nolit-dsh-opencode-v2-0.9.0.tgz`
+(`546a717457566cb851c09802aa0cedf62847109276c82b76336cbe6bbf88756a`), and the web profile was
+reinstalled with `dsh plugin --profile web add link:...` — pnpm answered "Already up to date" and
+the profile `package.json` is byte-identical (sha256 `7571413c...`), while the link now resolves to
+0.9.0 with `lib/display-clean.js` present. The running service still serves 0.8.0 (pid 2008891,
+started 03:08:33) until the scheduled restart; the mount is not claimed before that restart.
 
 ## 6. Rules restated for the next session
 
