@@ -95,8 +95,10 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 25)
+## boot (newest 5 of 26)
 
+- **active** · 2026-11-01T0200+0900.md · [card](../bootcards/2026-11-01T0200+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-01T0200+0900. Older cards are historical.
 - **active** · 2026-11-01T0112+0900.md · [card](../bootcards/2026-11-01T0112+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-01T0112+0900. Older cards are historical.
 - **active** · 2026-11-01T0034+0900.md · [card](../bootcards/2026-11-01T0034+0900.md)
@@ -105,9 +107,7 @@
   Dated session card (tier 5). State, active task, and handoff for 2026-11-01T0007+0900. Older cards are historical.
 - **active** · 2026-10-31T2129+0900.md · [card](../bootcards/2026-10-31T2129+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-10-31T2129+0900. Older cards are historical.
-- **active** · 2026-10-31T0137+0900.md · [card](../bootcards/2026-10-31T0137+0900.md)
-  opencode-v2 0.7.2 — entitlement sweep removed for plan-based availability (Go/Zen), usage ranking refreshed every 5 days, newly appearing models served at priority 0 with the plan gate intact. Next: TokenEconomizer savings audit, then an OpenRouter API router plugin.
 
 ---
 
-55 indexed (25 boot cards), 0 missing header, 55 total.
+56 indexed (26 boot cards), 0 missing header, 56 total.
