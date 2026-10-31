@@ -1,16 +1,16 @@
 <!-- skeleton:
-version: 1.4
+version: 1.5
 kind: ver
 status: active
 updated: 2026-11-01
-summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1. Older rounds live in VERIFICATION-ARCHIVE.md.
+summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1 and 0.0.1-rc.1. Older rounds live in VERIFICATION-ARCHIVE.md.
 -->
 # @nolit/dsh-opencode-v2 - Verification (current)
 
 > Only the recent rounds live here. Everything up to v0.7.3 is in
 > VERIFICATION-ARCHIVE.md in this directory.
 >
-> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1 on disk (the serving process still runs 0.9.0 until restart)
+> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.1 on disk (serving pid 2199391 still runs 0.0.1 until restart)
 
 ## 33. v0.7.4 — no protocol notation reaches the transcript (measured 2026-10-31 23:20-23:40)
 
@@ -532,4 +532,78 @@ Two things this measurement does **not** claim:
 
 Restart procedure that avoids the cascade: `systemctl --user restart dsh-web.service` (never kill
 the port holder), then `scripts/verify-opencode-v2-restart.sh`.
+
+## 40. v0.0.1-rc.1 — defensive argument accumulation, and a bare-JSON body payload promoted instead of printed (measured 2026-11-01 06:58–07:41 KST)
+
+### 40.1 The measured defect
+
+Source: DSH session `2dc3531f-1b50-406e-bacc-9ce73345e193`, route `opencode-go/deepseek-v4.1-flash`,
+workspace `total_skill`, window 2026-11-01 06:58–07:41 KST.
+
+| Measure | Value |
+|---|---|
+| tool calls in the session | **80** |
+| failed in the host with `Error: invalid arguments: "arguments" must be an object` (`ToolArgsError`, code `INVALID_ARGS`) | **30** |
+| bare JSON tool payloads displayed as assistant text | **4** |
+
+### 40.2 Root causes
+
+| # | Cause | Measured shape |
+|---|---|---|
+| 1 | The route **re-sends the whole arguments object as a second delta** instead of a fragment. The adapter appended the second payload to the first, so the host received two concatenated JSON objects (`{"code":…}{"code":…}`); `JSON.parse` failed, and the host reported "must be an object". | 24 of the 30 second copies were exact duplicates; 6 restated the call with changed content; **3** of those second copies arrived wrapped as `{"arguments":"<json>"}`. |
+| 2 | After the dispatch error the model re-typed the call as a **bare JSON object inside `content`** with no marker. The 0.9.0/0.0.1 gate knew only `[tool call …]`, DSML and thinking notation, so the payload was classified as prose and displayed. | 4 occurrences in that session. |
+
+### 40.3 What changed
+
+| File | Change |
+|---|---|
+| `lib/arguments.js` | **new.** `normalizeArguments(raw, schema)` extracts one-or-more complete JSON snapshots from the raw accumulator, unwraps the `{"arguments": …}` wrapper form, and selects the **last snapshot that fits the declared tool's parameter schema** (keys within `properties`, all `required` present); with no schema it keeps the last complete snapshot. Unparsable input is passed through unchanged so the host still reports it — nothing is silently rewritten. Also `inferToolFromArguments`, `scanJsonValue`, `canonical`. |
+| `lib/http.js` | applies `normalizeArguments` when a tool-call block closes (normal **and** cut paths) and where the gate compares against structured calls. Adds a **held JSON probe**: when the visible text of a response **begins** with `{` or a fenced block, the text is held until it parses, `inferToolFromArguments` infers the tool, and if exactly one declared tool fits the payload is promoted to a real tool-call part and never shown. If nothing matches, the held text is released unchanged; JSON inside prose is never probed. |
+| gate rule | when **every** structured call of that name has unusable arguments, the body payload is promoted as its replacement (the wire call could not execute anyway); otherwise the echo / superseded / undeclared rules apply unchanged. |
+| `test/arguments.test.mjs` | **new**, 15 tests: duplicate / restated / wrapped snapshots, schema selection, passthrough of unparsable input. |
+| `test/http.test.mjs` | **+5 end-to-end**: duplicated snapshots collapse; bare JSON promoted and hidden; unmatched JSON stays text; JSON after prose stays text; body JSON replacing a broken wire call yields exactly one call. |
+
+### 40.4 Tests
+
+| Check | Result |
+|---|---|
+| `npm run check` | exit 0 (includes `node --check lib/arguments.js`) |
+| `npm test` | **277/277 pass**, 0 fail (new: 15 in `arguments.test.mjs`; 5 new end-to-end in `http.test.mjs`) |
+
+### 40.5 Corpus measurement
+
+Source: 267 `opencode-route` sessions, 16,709 tool calls, replayed through the `0.0.1-rc.1` normalizer.
+
+| Measure | Before | After |
+|---|---|---|
+| invalid arguments (`INVALID_ARGS`) | 44 | **0** |
+| snapshot modes | — | valid **16,665** / duplicate **32** / restated **12** |
+| bare JSON text payloads | 4 | 4 matched to a declared tool, **0 displayed** |
+
+### 40.6 The reported session
+
+| Measure | Before | After |
+|---|---|---|
+| invalid arguments | 30 | **0** |
+| bare JSON payloads displayed as prose | 4 | **0** displayed — 4 matched to `run_code` |
+
+### 40.7 Release artifact
+
+| Field | Value |
+|---|---|
+| `package.json` | `0.0.1` -> `0.0.1-rc.1` |
+| `lib/http.js` load-beacon `VERSION` | `0.0.1` -> `0.0.1-rc.1` |
+| artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.1.tgz` |
+| sha256 | `64be56cd99543754caadcc5459b983c597ac53f226cdd145ded4ab7d99a3fc16` (recorded in `artifacts/SHA256SUMS.opencode-v2`) |
+
+The number advanced because the owner instructed this fix round; the rule stays `0.0.1.rc<N>` and
+nothing else moves it.
+
+### 40.8 Status
+
+**`applied on disk, pending restart`.** The running service (`pid 2199391`, started
+2026-11-01 06:52:39 KST) still serves `0.0.1`; the `0.0.1-rc.1` source is on disk and is **not
+live**. No mount is claimed here, and no live traffic has exercised the new normalizer or the JSON
+probe yet.
+
 

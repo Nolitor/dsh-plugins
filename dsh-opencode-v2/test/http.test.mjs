@@ -930,3 +930,135 @@ test('DSML notation leaked into content reaches the parser and never the screen'
   }
 })
 
+
+const RUN_CODE_TOOL = {
+  name: 'run_code',
+  description: 'run code',
+  parameters: { type: 'object', properties: { code: { type: 'string' }, description: { type: 'string' } }, required: ['code'] },
+}
+
+test('duplicated arguments snapshots are collapsed before the host sees them', async () => {
+  // Measured shape: the route re-sends the whole arguments object instead of a
+  // fragment, so the concatenation used to reach the host as two objects and every
+  // dispatch failed with 'invalid arguments: "arguments" must be an object'.
+  const ARGS = '{"code":"const x = 1"}'
+  const events = [
+    { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_dup', function: { name: 'run_code', arguments: ARGS } }] } }] },
+    { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: ARGS } }] } }] },
+    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'go' }] }],
+      tools: [RUN_CODE_TOOL],
+    }))
+    const end = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    assert.deepEqual(JSON.parse(end.block.arguments), { code: 'const x = 1' })
+  } finally {
+    await close()
+  }
+})
+
+test('a body payload that is only a tool-shaped JSON object is promoted, not shown', async () => {
+  const blob = '{"code":"const dsh = 1","description":"probe"}'
+  const events = [
+    { choices: [{ delta: { content: blob } }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'go' }] }],
+      tools: [RUN_CODE_TOOL],
+    }))
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.equal(text, '', 'the JSON payload must not reach the screen')
+    const calls = chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].block.name, 'run_code')
+    assert.deepEqual(JSON.parse(calls[0].block.arguments), JSON.parse(blob))
+  } finally {
+    await close()
+  }
+})
+
+test('a JSON payload that matches no declared tool stays readable text', async () => {
+  const blob = '{"unrelated":true}'
+  const events = [
+    { choices: [{ delta: { content: blob } }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'go' }] }],
+      tools: [RUN_CODE_TOOL],
+    }))
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.equal(text, blob)
+    assert.equal(chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call').length, 0)
+  } finally {
+    await close()
+  }
+})
+
+test('a JSON payload after prose is not reinterpreted as a call', async () => {
+  const prose = 'For example: {"code":"x"} is the shape.'
+  const events = [
+    { choices: [{ delta: { content: prose } }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'go' }] }],
+      tools: [RUN_CODE_TOOL],
+    }))
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.equal(text, prose)
+    assert.equal(chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call').length, 0)
+  } finally {
+    await close()
+  }
+})
+
+test('a body payload that restates a broken wire call replaces it, once', async () => {
+  const ARGS = '{"code":"const x = 1"}'
+  const events = [
+    { choices: [{ delta: { content: ARGS } }] },
+    { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_dup', function: { name: 'run_code', arguments: ARGS } }] } }] },
+    { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: ARGS } }] } }] },
+    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'go' }] }],
+      tools: [RUN_CODE_TOOL],
+    }))
+    const text = chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text).join('')
+    assert.equal(text, '')
+    const calls = chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    assert.equal(calls.length, 1, 'the body copy must not become a second call')
+    assert.deepEqual(JSON.parse(calls[0].block.arguments), { code: 'const x = 1' })
+  } finally {
+    await close()
+  }
+})
+

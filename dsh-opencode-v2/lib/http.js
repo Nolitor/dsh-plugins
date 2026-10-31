@@ -51,6 +51,7 @@ import {
 } from './conflicts.js'
 import { createStreamClassifier } from './stream-parser.js'
 import { createDisplayGate } from './display-gate.js'
+import { inferToolFromArguments, normalizeArguments } from './arguments.js'
 import { stripThinkingTags } from './display-clean.js'
 import { mapChatDelta } from './upstream-map.js'
 
@@ -90,7 +91,7 @@ const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
 /** Version string of this module, for the load beacon. Must match package.json. */
-const VERSION = '0.0.1'
+const VERSION = '0.0.1-rc.1'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
@@ -1123,11 +1124,15 @@ export class OpencodeHttpAdapter {
     // text / reasoning / tool-call parts. BOTTOM: lib/display-gate.js routes those
     // parts to the DSH parser channel (tool-call) or the screen channel (text,
     // reasoning) and drops protocol notation from the screen entirely.
-    const declaredToolNames = new Set(
-      (Array.isArray(options.tools) ? options.tools : [])
-        .map((tool) => (tool && typeof tool.name === 'string' ? tool.name : ''))
-        .filter((value) => value.length > 0),
-    )
+    const declaredTools = (Array.isArray(options.tools) ? options.tools : [])
+      .filter((tool) => tool && typeof tool.name === 'string' && tool.name.length > 0)
+    const declaredToolNames = new Set(declaredTools.map((tool) => tool.name))
+    /** Declared parameter schema of one tool, for snapshot selection. */
+    const schemaFor = (name) => {
+      const tool = declaredTools.find((item) => item.name === name)
+      const parameters = tool?.parameters
+      return parameters && typeof parameters === 'object' ? parameters : null
+    }
     let classifier = createStreamClassifier({ toolNames: declaredToolNames })
     let displayGate = createDisplayGate({ toolNames: declaredToolNames })
     const resetGates = () => {
@@ -1143,6 +1148,28 @@ export class OpencodeHttpAdapter {
       }
       return block
     }
+    /**
+     * Finalize a tool call's arguments before the block is handed to the host.
+     *
+     * Measured 2026-11-01: the route re-sends a complete arguments snapshot instead
+     * of a fragment, so the accumulated string was two concatenated objects and
+     * every dispatch failed with 'invalid arguments: "arguments" must be an object'.
+     * normalizeArguments() collapses that to the last complete snapshot; anything it
+     * cannot parse is passed through unchanged so the host still reports the error.
+     */
+    const finalArguments = (block) => {
+      const normalized = normalizeArguments(block.arguments, schemaFor(block.name))
+      if (normalized.mode === 'duplicate' || normalized.mode === 'restated') {
+        displayLogger?.debug?.(
+          `opencode-http-agent: tool call ${block.name || block.id} arrived as ${normalized.snapshots} snapshots (${normalized.mode}); kept the last`,
+        )
+      } else if (normalized.mode === 'invalid') {
+        displayLogger?.warn?.(
+          `opencode-http-agent: tool call ${block.name || block.id} arguments are not one JSON object; passing them through so the host reports it`,
+        )
+      }
+      return normalized.value
+    }
     const closeAll = function* () {
       for (const block of [...blocks.values()].sort((left, right) => left.index - right.index)) {
         if (block.closed) continue
@@ -1151,7 +1178,7 @@ export class OpencodeHttpAdapter {
           type: 'block-end',
           index: block.index,
           block: block.kind === 'tool-call'
-            ? { type: 'tool-call', id: block.id || `call_${block.index}`, name: block.name, arguments: block.arguments || '{}' }
+            ? { type: 'tool-call', id: block.id || `call_${block.index}`, name: block.name, arguments: finalArguments(block) }
             : { type: block.kind, text: block.text },
         }
       }
@@ -1170,7 +1197,10 @@ export class OpencodeHttpAdapter {
         if (block.closed) continue
         block.closed = true
         if (block.kind === 'tool-call') {
-          const repaired = repairJson(block.arguments) ?? '{}'
+          const normalized = normalizeArguments(block.arguments, schemaFor(block.name))
+          const repaired = normalized.mode === 'invalid'
+            ? (repairJson(block.arguments) ?? '{}')
+            : normalized.value
           chunks.push({
             type: 'block-end',
             index: block.index,
@@ -1277,7 +1307,7 @@ export class OpencodeHttpAdapter {
     /** Structured calls of this response, in the shape the gate decides against. */
     const structuredCalls = () => [...blocks.values()]
       .filter((block) => block.kind === 'tool-call')
-      .map((block) => ({ id: block.id, name: block.name, arguments: block.arguments }))
+      .map((block) => ({ id: block.id, name: block.name, arguments: normalizeArguments(block.arguments, schemaFor(block.name)).value }))
     /**
      * Route classified parts to their destination.
      *
@@ -1286,12 +1316,59 @@ export class OpencodeHttpAdapter {
      * echo once the structured calls of the whole response are known. Prose and
      * reasoning go to the screen, with any remaining wrapper token stripped.
      */
+    /**
+     * A body payload that is nothing but a JSON object may be a tool call the
+     * route failed to send as a structured one (measured 2026-11-01: after every
+     * dispatch error the model re-typed {"code":…,"description":…} as content and
+     * the screen showed it verbatim). The probe holds such a payload until it parses,
+     * then promotes it when the keys match a declared tool's schema; otherwise the
+     * held text is released unchanged. Only a payload that starts the visible text
+     * is probed, so a JSON example inside prose is never reinterpreted.
+     */
+    const MAX_JSON_PROBE = 65536
+    let jsonProbe = ''
+    const fencedBody = (text) => {
+      const match = /^\s```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/.exec(text)
+      return match ? match[1].trim() : null
+    }
+    const holdJsonText = function* (text) {
+      jsonProbe += text
+      const candidates = fencedBody(jsonProbe) !== null ? [fencedBody(jsonProbe)] : [jsonProbe.trim()]
+      for (const body of candidates) {
+        let value = null
+        try { value = JSON.parse(body) } catch { value = null }
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) continue
+        const name = inferToolFromArguments(value, declaredTools)
+        if (name === null) continue
+        displayGate.addCandidate({ kind: 'tool-call', id: '', name, arguments: JSON.stringify(value), source: 'json' })
+        jsonProbe = ''
+        return
+      }
+      if (jsonProbe.length > MAX_JSON_PROBE) {
+        yield* emitPart({ kind: 'text', text: jsonProbe })
+        jsonProbe = ''
+      }
+    }
+    const textBlockEmpty = () => {
+      const block = blocks.get(`text:${TEXT_INDEX}`)
+      return !block || block.text.length === 0
+    }
+    const flushJsonProbe = function* () {
+      if (jsonProbe.length === 0) return
+      const pending = jsonProbe
+      const before = jsonProbe
+      yield* holdJsonText('')
+      if (jsonProbe === before) {
+        yield* emitPart({ kind: 'text', text: pending })
+        jsonProbe = ''
+      }
+    }
     const routeParts = function* (parts) {
       if (!Array.isArray(parts)) return
       for (const part of parts) {
         if (!part || typeof part !== 'object') continue
         if (part.kind === 'tool-call') {
-          if (part.source === 'text') displayGate.addCandidate(part)
+          if (part.source === 'text' || part.source === 'json') displayGate.addCandidate(part)
           else yield* emitPart(part)
           continue
         }
@@ -1300,7 +1377,15 @@ export class OpencodeHttpAdapter {
           if (cleaned.text.length > 0) yield* emitPart({ ...part, text: cleaned.text })
           continue
         }
-        if (typeof part.text === 'string' && part.text.length > 0) yield* emitPart(part)
+        if (typeof part.text === 'string' && part.text.length > 0) {
+          if (jsonProbe.length > 0) { yield* holdJsonText(part.text); continue }
+          const trimmed = part.text.trimStart()
+          if (textBlockEmpty() && (trimmed.startsWith('{') || trimmed.startsWith('```'))) {
+            yield* holdJsonText(part.text)
+            continue
+          }
+          yield* emitPart(part)
+        }
       }
     }
     /**
@@ -1314,6 +1399,7 @@ export class OpencodeHttpAdapter {
      */
     const flushGates = function* () {
       yield* routeParts(classifier.flush())
+      yield* flushJsonProbe()
       const settled = displayGate.settle(structuredCalls())
       // A promoted call takes the next free ordinal: a structured call of another
       // name may already own ordinal 0, and two blocks may not share an index.

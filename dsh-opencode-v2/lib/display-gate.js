@@ -34,10 +34,13 @@ export function stableStringify(value) {
   return '{' + keys.map((key) => JSON.stringify(key) + ':' + stableStringify(value[key])).join(',') + '}'
 }
 
-/** Parse one argument string; returns undefined when it is not JSON. */
+/** Parse one argument string; returns undefined when it is not a JSON object. */
 function parseArgs(value) {
   if (typeof value !== 'string') return undefined
-  try { return JSON.parse(value) } catch { return undefined }
+  try {
+    const parsed = JSON.parse(value)
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined
+  } catch { return undefined }
 }
 
 /**
@@ -121,6 +124,15 @@ export function createDisplayGate(options = {}) {
         }
         const sameName = structured.filter((call) => call && call.name === candidate.name)
         if (sameName.length > 0) {
+          // A wire call whose own arguments never parsed cannot execute (measured:
+          // INVALID_ARGS after a duplicated snapshot). The body payload is then the
+          // only usable statement of that call, so it replaces the broken one.
+          const usable = sameName.filter((call) => parseArgs(call.arguments) !== undefined)
+          if (usable.length === 0) {
+            stats.promoted += 1
+            promote.push({ ...candidate, verdict: 'replacement' })
+            continue
+          }
           stats.superseded += 1
           dropped.push({ ...candidate, verdict: 'superseded' })
           continue

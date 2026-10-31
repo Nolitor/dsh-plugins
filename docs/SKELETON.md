@@ -15,7 +15,7 @@
 
 ## rule
 
-- **1.7** · active · 2026-11-01 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
+- **1.8** · active · 2026-11-01 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
   Every defect and wrong turn this workspace actually made, with the standing rule that keeps it from happening again. Read before changing a plugin, a doc, or a live service.
 - **1.3** · active · 2026-10-31 · [docs/RULES.md](RULES.md)
   Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting — with the failure ledger as required reading.
@@ -95,8 +95,10 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 28)
+## boot (newest 5 of 29)
 
+- **active** · 2026-11-01T0752+0900.md · [card](../bootcards/2026-11-01T0752+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-01T0752+0900. Older cards are historical.
 - **active** · 2026-11-01T0642+0900.md · [card](../bootcards/2026-11-01T0642+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-01T0642+0900. Older cards are historical.
 - **active** · 2026-11-01T0451+0900.md · [card](../bootcards/2026-11-01T0451+0900.md)
@@ -105,9 +107,7 @@
   Dated session card (tier 5). State, active task, and handoff for 2026-11-01T0200+0900. Older cards are historical.
 - **active** · 2026-11-01T0112+0900.md · [card](../bootcards/2026-11-01T0112+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-01T0112+0900. Older cards are historical.
-- **active** · 2026-11-01T0034+0900.md · [card](../bootcards/2026-11-01T0034+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-11-01T0034+0900. Older cards are historical.
 
 ---
 
-58 indexed (28 boot cards), 0 missing header, 58 total.
+59 indexed (29 boot cards), 0 missing header, 59 total.

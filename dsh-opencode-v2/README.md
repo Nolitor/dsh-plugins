@@ -1,10 +1,10 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 2.5
+version: 2.6
 kind: readme
 status: active
 updated: 2026-11-01
-summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended.
+summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose.
 -->
 
 
@@ -18,17 +18,60 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 
 > Measurement of record: [`../OPENCODE-V2-SURFACE-MEASUREMENT.md`](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
 
-## 0. Version — 0.0.1, reset on instruction
+## 0. Version — 0.0.1 baseline, 0.0.1-rc.1 on instruction
 
 | Field | Value |
 |---|---|
-| `package.json` | `0.0.1` (was `0.9.0`) |
-| `lib/http.js` load-beacon `VERSION` | `0.0.1` (was `0.9.0`) |
+| `package.json` | `0.0.1-rc.1` (was `0.0.1`, which was `0.9.0`) |
+| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.1` (was `0.0.1`, which was `0.9.0`) |
 | Versions self-bumped in this history | 26 (`0.1.1` … `0.9.0`) |
+| `0.0.1-rc.1` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.1.tgz` — sha256 `64be56cd99543754caadcc5459b983c597ac53f226cdd145ded4ab7d99a3fc16` |
 
 The owner reset the number and forbade further self-bumps: **the version changes again only on an
 explicit owner instruction, and then only as `0.0.1.rc<N>`**. A release, a fix round or a green test
 run is not an instruction. The load-beacon constant is part of the release, not a log decoration.
+The `0.0.1` baseline stays the reset; the line advances one release-candidate step per instructed
+fix round and nowhere else.
+
+### 0.1 `0.0.1-rc.1` — what changed and why
+
+`0.0.1-rc.1` is **a fix of `0.0.1`, not a new architecture**: the top state machine and the bottom
+parser/screen gate are unchanged; two argument-boundary defects found in live traffic are fixed.
+
+The defect report is session `2dc3531f-1b50-406e-bacc-9ce73345e193` (`opencode-go/deepseek-v4.1-flash`,
+workspace `total_skill`, 2026-11-01 06:58–07:41 KST):
+
+| Measure | Value |
+|---|---|
+| tool calls in the session | **80** |
+| failed in the host with `Error: invalid arguments: "arguments" must be an object` (`ToolArgsError INVALID_ARGS`) | **30** |
+| bare JSON tool payloads shown as prose | **4** |
+
+Root causes and fixes:
+
+| # | Cause | Fix |
+|---|---|---|
+| 1 | the route **re-sends the whole arguments object as a second delta** instead of a fragment; the adapter appended it, so the host received two concatenated JSON objects (`{"code":…}{"code":…}`) and `JSON.parse` failed — hence "must be an object". 24 of the 30 second copies were exact duplicates, 6 restated the call with changed content, and 3 of those copies arrived wrapped as `{"arguments":"<json>"}`. | new `lib/arguments.js`: `normalizeArguments(raw, schema)` parses one-or-more complete JSON snapshots, unwraps the `{"arguments": …}` form, and picks the **last snapshot that fits the declared tool's parameter schema** (keys within `properties`, all `required` present); without a schema it keeps the last complete snapshot. `lib/http.js` applies it when a tool-call block closes (normal and cut paths) and when the gate compares against structured calls. Unparsable arguments pass through unchanged so the host still reports them — nothing is silently rewritten. |
+| 2 | after the dispatch error the model re-typed the call as a bare JSON object inside `content` (no marker). The 0.9.0/0.0.1 gate recognized only `[tool call …]`, DSML and thinking notation, so those payloads were displayed as prose. | a held JSON probe in `lib/http.js`: when the visible text of a response **begins** with `{` or a fenced block, it is held until it parses, the tool is inferred by schema (`inferToolFromArguments`), and if exactly one declared tool fits it is promoted to a real tool-call part and never shown. If nothing matches, the held text is released unchanged; JSON inside prose is never probed. |
+
+Gate rule added: when **every** structured call of that name has unusable arguments, the body payload
+is promoted as its replacement (the wire call could not execute anyway); otherwise the existing
+echo / superseded / undeclared rules apply.
+
+Measured after the fix:
+
+| Measure | Before | After |
+|---|---|---|
+| corpus: 267 `opencode-route` sessions, 16,709 tool calls — invalid arguments | 44 | **0** |
+| snapshot modes in that corpus | — | valid 16,665 / duplicate 32 / restated 12 |
+| bare JSON text payloads (corpus) | 4 | 4 matched to a declared tool, **0 displayed** |
+| reported session `2dc3531f` — invalid arguments | 30 | **0** |
+| reported session — bare JSON payloads displayed as prose | 4 | **0** (4 matched to `run_code`) |
+
+Details and the before/after tables: `VERIFICATION.md` §40.
+
+**Status: applied on disk, pending restart.** The running service (`pid 2199391`, started
+2026-11-01 06:52:39 KST) still serves `0.0.1`; the `0.0.1-rc.1` source is on disk and is **not live**.
 
 ## 1. Measured OpenCode v2.2.0 facts this plugin is built on
 
@@ -353,6 +396,26 @@ Rules the implementation follows:
   (beacon version = source version), `STALE` (differs), `PENDING` (process predates the newest
   source edit), `UNDECIDED` (newer but no beacon). `--wait <seconds>` waits for `MainPID` to
   change; exit codes 0/1/2.
+
+### Tool-call arguments and bare-JSON payloads (v0.0.1-rc.1 — measured 2026-11-01)
+
+Two argument-boundary defects were fixed on the `0.0.1` baseline; the router, the state machine and
+the parser/screen gate are untouched. Source: session `2dc3531f-1b50-406e-bacc-9ce73345e193`
+(80 tool calls, 30 host rejections, 4 payloads shown as prose).
+
+| Piece | Behaviour |
+|---|---|
+| `lib/arguments.js` `normalizeArguments(raw, schema)` | pulls **every complete JSON snapshot** out of the raw accumulator, unwraps the `{"arguments": "<json>"}` form, and chooses against the declared tool schema: the last snapshot whose keys fit `properties` and which carries every `required` key. No schema: the last complete snapshot. Unparsable input is returned unchanged, so the host's own error is preserved. |
+| `lib/http.js` call sites | normalization runs when a tool-call block closes (normal and cut paths) and where the display gate compares a body call against the structured calls. |
+| `lib/http.js` held JSON probe | text that **begins** the visible response with `{` or a fenced block is held until it parses; `inferToolFromArguments` then infers the tool and, when exactly one declared tool fits, the payload is promoted to a real tool-call part and never displayed. No match: the held text is released unchanged. JSON embedded later in prose is never probed. |
+| gate rule | if every structured call of a name has unusable arguments, the body payload is promoted as its replacement; otherwise echo / superseded / undeclared apply as before. |
+
+Measured: corpus of 267 `opencode-route` sessions / 16,709 tool calls — invalid arguments **44 → 0**
+(snapshot modes: 16,665 valid, 32 duplicate, 12 restated); 4 bare-JSON payloads, all matched to a
+declared tool, **none displayed**. The reported session: **30 → 0** invalid and **4 → 0 displayed**
+(4 matched to `run_code`). Tests: `test/arguments.test.mjs` (15) and five end-to-end cases in
+`test/http.test.mjs`; `npm test` 277/277. Status: **applied on disk, pending restart** — serving
+`pid 2199391` is still `0.0.1`. Detail: `VERIFICATION.md` §40, ledger F-28.
 
 ### Session identity and credential choice (v0.5.1 — measured 2026-10-30)
 
