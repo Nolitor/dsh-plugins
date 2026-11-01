@@ -52,6 +52,7 @@ import {
 import { createStreamClassifier } from './stream-parser.js'
 import { createDisplayGate } from './display-gate.js'
 import { inferToolFromArguments, normalizeArguments } from './arguments.js'
+import { createTrace, summarizePart, summarizeRequest } from './trace.js'
 import { stripThinkingTags } from './display-clean.js'
 import { mapChatDelta } from './upstream-map.js'
 
@@ -91,7 +92,7 @@ const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
 /** Version string of this module, for the load beacon. Must match package.json. */
-const VERSION = '0.0.1-rc.4'
+const VERSION = '0.0.1-rc.5'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
@@ -1425,6 +1426,13 @@ export class OpencodeHttpAdapter {
     try {
       backend = await this.resolveBackend(signal)
       const body = buildChatRequest(options, ref, config)
+      // Real-traffic evidence (no bodies, no credentials): a short probe cannot
+      // reproduce the leak because it produces almost no output. Opt out with
+      // OPENCODE_V2_TRACE=0.
+      const trace = createTrace()
+      trace.request({ ...summarizeRequest(body), session: options.sessionId ?? null })
+      const traceCounts = { content: 0, reasoning: 0, 'tool-call': 0, markerDeltas: 0 }
+      const traceChars = { content: 0, reasoning: 0 }
       const headers = sessionHeaders(backend.headers, options, config)
       const send = () => fetch(joinUrl(backend.baseURL, config.chatPath.get()), {
         method: 'POST',
@@ -1493,6 +1501,13 @@ export class OpencodeHttpAdapter {
             // then classified by the restored state machine (lib/stream-parser.js),
             // and every classified part is routed by the bottom gate.
             for (const part of mapChatDelta(delta, { reasoningField: config.reasoningField.get() })) {
+              const summary = summarizePart(part)
+              traceCounts[summary.field] = (traceCounts[summary.field] ?? 0) + 1
+              if (summary.field === 'content' || summary.field === 'reasoning') traceChars[summary.field] += summary.len
+              if (summary.marker) {
+                traceCounts.markerDeltas += 1
+                trace.delta({ ...summary, emitted })
+              }
               if (part.kind === 'text') yield* routeParts(classifier.push(part.text))
               else yield* routeParts([part])
             }
@@ -1508,6 +1523,13 @@ export class OpencodeHttpAdapter {
           } else if (timeout.aborted) {
             yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_TIMEOUT', message: `OpenCode backend exceeded timeoutMs=${config.timeoutMs.get()}` } } }
           } else {
+            trace.finish({
+              finish: finishReason ?? null,
+              parts: { ...traceCounts },
+              chars: { ...traceChars },
+              blocks: blocks.size,
+              toolCalls: [...blocks.values()].filter((block) => block.kind === 'tool-call').length,
+            })
             yield { type: 'finish', reason: finishFromOpenAi(finishReason) }
           }
           return
@@ -1525,6 +1547,7 @@ export class OpencodeHttpAdapter {
           }
           const detail = errorText(error)
           const transient = isTransientStreamError(error)
+          trace.error({ detail: detail.slice(0, 240), transient, emitted, retried })
           // 1. Nothing reached the model yet: retry the request transparently. A
           //    silent retry is invisible to the transcript, so it cannot corrupt it.
           if (transient && emitted === 0 && retried < maxStreamRetries) {

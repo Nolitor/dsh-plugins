@@ -1,16 +1,16 @@
 <!-- skeleton:
-version: 1.8
+version: 1.9
 kind: ver
 status: active
 updated: 2026-11-01
-summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2, 0.0.1-rc.3 and 0.0.1-rc.4 (protocol tokens scrubbed by delimiter shape, not by the DSML text; worst-case one-character feeding 42 -> 3 -> 1, the remaining 1 a measurement-regex false positive). Older rounds live in VERIFICATION-ARCHIVE.md.
+summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2, 0.0.1-rc.3 0.0.1-rc.4 (protocol tokens scrubbed by delimiter shape, not by the DSML text; worst-case one-character feeding 42 -> 3 -> 1, the remaining 1 a measurement-regex false positive) and 0.0.1-rc.5 (synthetic probes rejected as evidence; lib/trace.js records real-traffic shape and scripts/analyze-opencode-trace.mjs reports leak rate by tools/context/system/model). Older rounds live in VERIFICATION-ARCHIVE.md.
 -->
 # @nolit/dsh-opencode-v2 - Verification (current)
 
 > Only the recent rounds live here. Everything up to v0.7.3 is in
 > VERIFICATION-ARCHIVE.md in this directory.
 >
-> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.4 on disk (serving pid 2339788
+> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.5 on disk (serving pid 2339788
 > runs 0.0.1-rc.3 until restart)
 
 ## 33. v0.7.4 — no protocol notation reaches the transcript (measured 2026-10-31 23:20-23:40)
@@ -833,5 +833,88 @@ The number advanced one instructed RC step (`0.0.1-rc.3` -> `0.0.1-rc.4`); the r
 
 **`applied on disk, pending restart`.** Serving `pid 2339788` runs `0.0.1-rc.3`; the rc.4 source
 is on disk only. No mount is claimed here.
+
+
+## 44. v0.0.1-rc.5 — a short probe is not evidence; the leak is traced on real traffic (measured 2026-11-01 10:00-10:45 KST)
+
+### 44.1 Why the synthetic A/B was rejected
+
+The rc.4 A/B replayed the request by hand against the backend, changing headers, tool count and
+system prompt. The owner rejected it as evidence: a short synthetic prompt makes the model emit
+almost no reasoning and almost no text, so **there is nothing to leak**. The defect only appears in
+long, multi-turn, output-heavy turns — the volume and the context are part of the reproduction.
+Re-running those long turns as probes would spend the owner's quota to produce another synthetic
+result. So the A/B cannot prove the fix, and rc.5 does not claim it does.
+
+### 44.2 The A/B, recorded as a negative result
+
+The A/B still measured something usable: it **rules out the request headers**. Same endpoint
+`https://opencode.ai/inference/go/openai/v1/chat/completions`, on `beam-free` and on
+`deepseek-v4.1-flash`:
+
+| Variant | Structured `tool_calls` | Content protocol markers |
+|---|---|---|
+| session header on | yes | **0** |
+| session header off | — | **HTTP 400** (the header is required, and is already sent) |
+| directory + client headers | yes | **0** |
+| non-stream request | yes | **0** |
+| `tool_choice: required` + `parallel_tool_calls: false` | yes | **0** |
+| combinations of the above | yes | **0** |
+| 38 tools declared | yes | **0** |
+| long system prompt | yes | **0** |
+| markup-primed history | yes | **0** |
+
+Both models returned structured tool calls in every variant; none put protocol notation into
+`content`. Conclusion: **the headers are not the cause**, and a short probe cannot be the
+instrument.
+
+### 44.3 Design: trace real traffic instead of buying probe turns
+
+`lib/trace.js` (wired into `lib/http.js` right where the request is issued and each mapped part is
+produced) records only the **shape** of a request and only a bounded excerpt of the deltas that
+actually carry notation:
+
+| Record | Contents |
+|---|---|
+| `request` | model, message count, context chars, tools count, `hasSystem`, stream, maxTokens, toolChoice, effort, session id |
+| `delta` | **only when** a protocol marker is detected: field (content / reasoning / tool-call), length, marker flag, excerpt of at most **400** characters |
+| `finish` | counts by field, content/reasoning chars, blocks, tool-call count |
+| `error` | transport detail (truncated) plus retry counters |
+
+| Property | Value |
+|---|---|
+| default path | `/tmp/opencode-v2-trace.jsonl` |
+| disable | `OPENCODE_V2_TRACE=0` (also `off` / `false`) |
+| size cap | **8 MB** — appends stop past it, nothing is rotated or deleted |
+| privacy | no prompt text, no message bodies, no credentials; bodies are summarised into counts |
+| failure mode | every write is swallowed; a trace error never breaks a turn |
+
+### 44.4 Analysis: `scripts/analyze-opencode-trace.mjs`
+
+The analyser reads the trace, groups the lines by request, and prints the leak rate **by tool
+count** (0 / 1 / 8 / 20 / 38 / 64), **by context chars**, **by system-prompt presence** and **by
+model**, then the first leaking excerpts. With no hit it prints
+`no leaking request in this trace yet` and keeps the trace growing — the metric appears when real
+work produces it, and is not estimated in advance.
+
+### 44.5 Tests and artifact
+
+| Check | Result |
+|---|---|
+| `npm test` | **291/291 pass**, 0 fail (286 before; `test/trace.test.mjs` adds **5**) |
+| `npm run check` | exit 0 |
+| new test coverage | kill switch; one compact line per record; bounded excerpt; no prompt body copied; marker-family recognition |
+| artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.5.tgz` |
+| sha256 | `970e0c70cefc4ebcb0ce3dc767dc824939f6a6ea3e14f1807ea9124ed8fa7609` |
+
+The number advanced one instructed RC step (`0.0.1-rc.4` -> `0.0.1-rc.5`); the rule stays
+`0.0.1.rc<N>` and nothing else moves it.
+
+### 44.6 Status
+
+**`applied on disk, pending restart`.** No live leak verdict is claimed for rc.5. The rc.5 change
+is an instrument: the next real occurrence lands in `/tmp/opencode-v2-trace.jsonl` and is analysed
+by the script, instead of being argued from a probe. Ledger entry: F-32.
+
 
 

@@ -1,10 +1,10 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 2.9
+version: 3.0
 kind: readme
 status: active
 updated: 2026-11-01
-summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose. 0.0.1-rc.2 makes the top classifier recognize the tool-call marker by shape (any bracket style, name/id from the head or the declared parameter schema, any pipe glyph) instead of a literal list, scrubs model-written tags and DSML tokens from the screen, and de-duplicates promoted calls by id; measured screen leaks 301 -> 4 on whole-string feeding. 0.0.1-rc.3 makes recognition stream-safe: a bounded hold for trailing marker/DSML/parameter fragments, a PARAM_BODY state and orphan-DSML scrub stop chunk-boundary leaks (strict screen leaks 42 -> 3 fed one character at a time; turn 16 4/6 -> 0/6). 0.0.1-rc.4 scrubs any pipe-wrapped protocol token by delimiter shape instead of only DSML, treats `thought` as a thinking wrapper, and lets the chunk-boundary hold keep any character inside a pending `<…` fragment, so a split token cannot leak; worst-case chunking leaks 42 -> 3 -> 1, and the remaining 1 is a measurement-regex false positive (a pair of markdown pipes).
+summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose. 0.0.1-rc.2 makes the top classifier recognize the tool-call marker by shape (any bracket style, name/id from the head or the declared parameter schema, any pipe glyph) instead of a literal list, scrubs model-written tags and DSML tokens from the screen, and de-duplicates promoted calls by id; measured screen leaks 301 -> 4 on whole-string feeding. 0.0.1-rc.3 makes recognition stream-safe: a bounded hold for trailing marker/DSML/parameter fragments, a PARAM_BODY state and orphan-DSML scrub stop chunk-boundary leaks (strict screen leaks 42 -> 3 fed one character at a time; turn 16 4/6 -> 0/6). 0.0.1-rc.4 scrubs any pipe-wrapped protocol token by delimiter shape instead of only DSML, treats `thought` as a thinking wrapper, and lets the chunk-boundary hold keep any character inside a pending `<…` fragment, so a split token cannot leak; worst-case chunking leaks 42 -> 3 -> 1, and the remaining 1 is a measurement-regex false positive (a pair of markdown pipes). 0.0.1-rc.5 is an evidence round, not a new classifier: the owner rejected the synthetic A/B as proof (a short prompt produces almost no reasoning or text, so there is nothing to leak), so lib/trace.js records real traffic shape (request: model/messages/context chars/tools/system/stream/maxTokens/toolChoice/effort/session; delta: field/length/marker and an excerpt of at most 400 chars only when notation is detected; finish: counts; error: transport detail and retry counters), capped at 8 MB at /tmp/opencode-v2-trace.jsonl and disabled with OPENCODE_V2_TRACE=0, never storing prompts, message bodies or credentials; scripts/analyze-opencode-trace.mjs groups it by request and reports the leak rate by tool count, context chars, system prompt and model.
 -->
 
 
@@ -18,17 +18,18 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 
 > Measurement of record: [`../OPENCODE-V2-SURFACE-MEASUREMENT.md`](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
 
-## 0. Version — 0.0.1 baseline, 0.0.1-rc.4 on instruction
+## 0. Version — 0.0.1 baseline, 0.0.1-rc.5 on instruction
 
 | Field | Value |
 |---|---|
-| `package.json` | `0.0.1-rc.4` (was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
-| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.4` (was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `package.json` | `0.0.1-rc.5` (was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.5` (was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
 | Versions self-bumped in this history | 26 (`0.1.1` … `0.9.0`) |
 | `0.0.1-rc.1` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.1.tgz` — sha256 `64be56cd99543754caadcc5459b983c597ac53f226cdd145ded4ab7d99a3fc16` |
 | `0.0.1-rc.2` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.2.tgz` — sha256 `29260240b776708a524e90c5e6b4071557beeb9f6b18908c4ad09befda85e8e3` |
 | `0.0.1-rc.3` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.3.tgz` — sha256 `54e7b84380cf9373d991ce4f4ddc2fdd67987831a42865c3d2a5eadd9542f32b` |
 | `0.0.1-rc.4` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.4.tgz` — sha256 `19212774f7f4fc8d001e980e3d9c25509510c54804670b4480f2f41cb3693be1` |
+| `0.0.1-rc.5` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.5.tgz` — sha256 `970e0c70cefc4ebcb0ce3dc767dc824939f6a6ea3e14f1807ea9124ed8fa7609` |
 
 The owner reset the number and forbade further self-bumps: **the version changes again only on an
 explicit owner instruction, and then only as `0.0.1.rc<N>`** (packaged as `0.0.1-rc.<N>`). A release,
@@ -36,10 +37,11 @@ a fix round or a green test run is not an instruction. The load-beacon constant 
 release, not a log decoration. The `0.0.1` baseline stays the reset; the line advances one
 release-candidate step per instructed fix round and nowhere else.
 
-Four instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
+Five instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
 accumulation, §0.1), `0.0.1-rc.1` → `0.0.1-rc.2` (shape-based marker classification, §0.2),
-`0.0.1-rc.2` → `0.0.1-rc.3` (stream-safe recognition at chunk boundaries, §0.3) and
-`0.0.1-rc.3` → `0.0.1-rc.4` (protocol tokens are a delimiter family, not a DSML family, §0.4).
+`0.0.1-rc.2` → `0.0.1-rc.3` (stream-safe recognition at chunk boundaries, §0.3),
+`0.0.1-rc.3` → `0.0.1-rc.4` (protocol tokens are a delimiter family, not a DSML family, §0.4) and
+`0.0.1-rc.4` → `0.0.1-rc.5` (real-traffic trace instead of synthetic probes, §0.5).
 None of those numbers came from a green suite or a defect found on our own; each was the one RC
 step the owner's instruction allowed.
 
@@ -222,6 +224,72 @@ Tests: `npm test` **286/286**, `npm run check` exit 0. Artifact
 
 **Status: applied on disk, pending restart.** Serving `pid 2339788` runs `0.0.1-rc.3`; the
 `0.0.1-rc.4` source is on disk only. No mount is claimed. Detail: `VERIFICATION.md` §43, ledger F-31.
+
+### 0.5 `0.0.1-rc.5` — a probe cannot reproduce the leak, so rc.5 traces real traffic
+
+`0.0.1-rc.5` is an **evidence round, not a new classifier**: the parser, the gate, the
+argument normaliser and the chunk-boundary hold are the rc.4 code. What changed is how the
+defect is measured.
+
+#### The owner's objection to the synthetic A/B
+
+The A/B was replayed to test whether request **headers** cause the leak, and the owner rejected it
+as evidence: a short synthetic prompt makes the model produce almost no reasoning and almost no
+text, so **there is nothing to leak**. The leak needs long, multi-turn, output-heavy work; a probe
+neither reproduces the volume nor the context. Re-running those long turns as probes would burn
+the owner's quota for a result that is still synthetic.
+
+The A/B is therefore kept only as a **negative result** — headers are not the cause:
+
+| Variant (same endpoint `https://opencode.ai/inference/go/openai/v1/chat/completions`) | Result |
+|---|---|
+| `x-opencode-session` header on vs off | same structured `tool_calls`, **zero** content markers; without the header the endpoint answers **HTTP 400**, so the header is required and is already sent |
+| directory + client headers | **zero** content markers |
+| non-stream request | **zero** content markers |
+| `tool_choice: required` + `parallel_tool_calls: false` | **zero** content markers |
+| the above in combination | **zero** content markers |
+| 38 tools declared | **zero** content markers |
+| long system prompt | **zero** content markers |
+| markup-primed history | **zero** content markers |
+
+Run on both `beam-free` and `deepseek-v4.1-flash`: every variant returned structured
+`tool_calls`, and none put protocol notation into `content`. So the six header/shape variants are
+ruled out, and the cause has to be found in **real** long turns.
+
+#### The real-traffic trace — `lib/trace.js`
+
+The adapter now records what real work already produces. Per request it writes only the **shape**,
+never the body:
+
+| Record | Fields |
+|---|---|
+| `request` | model, message count, context chars, tools count, `hasSystem`, stream, maxTokens, toolChoice, effort, session id |
+| `delta` | written **only when protocol notation is detected**: field (content / reasoning / tool-call), length, marker flag, and an excerpt of at most **400** characters |
+| `finish` | counts by field, content/reasoning chars, blocks, tool-call count |
+| `error` | the transport detail (truncated) and the retry counters |
+
+- Path: `/tmp/opencode-v2-trace.jsonl` (override with `OPENCODE_V2_TRACE=<path>`).
+- Kill switch: `OPENCODE_V2_TRACE=0` disables it entirely.
+- Cap: appends stop at **8 MB**, so a forgotten trace cannot fill the disk.
+- Privacy: **no prompt text, no message bodies, no credentials** — counts, flags and a bounded
+  marker excerpt only.
+
+#### The analyser — `scripts/analyze-opencode-trace.mjs`
+
+`node scripts/analyze-opencode-trace.mjs [trace]` groups the lines by request and prints the leak
+rate **by tool count, by context chars, by system-prompt presence and by model**, plus the first
+leaking excerpts. Until real long work produces a hit it prints **"no leaking request in this trace
+yet"** — it does not invent a number.
+
+Tests: `test/trace.test.mjs` (**5** tests) pins the kill switch, one compact line per record, the
+bounded excerpt, that no prompt body is copied, and the marker-family recognition.
+`npm test` **291/291**, `npm run check` exit 0. Artifact
+`artifacts/nolit-dsh-opencode-v2-0.0.1-rc.5.tgz`, sha256
+`970e0c70cefc4ebcb0ce3dc767dc824939f6a6ea3e14f1807ea9124ed8fa7609`.
+
+**Status: applied on disk, pending restart.** No live verdict about the leak is claimed in rc.5;
+the trace exists so that the next real occurrence is analysable instead of argued about. Detail:
+`VERIFICATION.md` §44, ledger F-32.
 
 ## 1. Measured OpenCode v2.2.0 facts this plugin is built on
 
@@ -973,6 +1041,7 @@ dsh-opencode-v2/
 │   ├── stream-parser.js  # TOP: explicit state machine, content -> typed parts
 │   ├── display-gate.js   # BOTTOM: parser channel vs screen channel
 │   ├── display-clean.js  # retained: stripThinkingTags only; off the stream path
+│   ├── trace.js          # opt-in real-traffic shape trace (OPENCODE_V2_TRACE=0 disables, 8 MB cap)
 │   └── shared.js         # argv, ndjson parser, usage mapping/fetch
 └── test/
     ├── upstream-map.test.mjs   # the wire field decides the part type
@@ -981,5 +1050,9 @@ dsh-opencode-v2/
     ├── shared.test.mjs   # argv / parser / usage
     ├── providers.test.mjs# tool + provider halves
     ├── bundle.test.mjs   # package.json <-> cordis.patch.yml contract
+    ├── trace.test.mjs    # kill switch, compact lines, bounded excerpt, no body copied
     └── helpers/dsh-tools-stub.mjs
+
+# scripts/analyze-opencode-trace.mjs (workspace root) summarises the trace:
+# leak rate by tool count, context chars, system prompt and model
 ```
