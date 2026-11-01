@@ -92,7 +92,7 @@ const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
 /** Version string of this module, for the load beacon. Must match package.json. */
-const VERSION = '0.0.1-rc.5'
+const VERSION = '0.0.1-rc.6'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
@@ -577,10 +577,13 @@ export function buildChatRequest(options, ref, config) {
         append('assistant', text)
       }
     } else if (message.role === 'tool') {
-      append('tool', text)
-      const last = messages[messages.length - 1]
-      if (last?.role === 'tool') last.tool_call_id = String(message.toolCallId)
-    } else if (message.role === 'developer') {
+      // A tool result must keep its call id even when the output was empty; the
+      // previous append() dropped empty content and mis-assigned the id.
+      messages.push({ role: 'tool', content: text, tool_call_id: String(message.toolCallId) })
+    } else if (message.role === 'system' || message.role === 'developer') {
+      // DSH's loop-built history carries the system prompt as a leading
+      // system-role message (GenerateOptions.messages[0]); mapping it to 'user'
+      // silently removed every system instruction from the model.
       append('system', text)
     } else {
       append('user', text)

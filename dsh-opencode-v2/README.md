@@ -1,10 +1,10 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 3.0
+version: 3.1
 kind: readme
 status: active
 updated: 2026-11-01
-summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose. 0.0.1-rc.2 makes the top classifier recognize the tool-call marker by shape (any bracket style, name/id from the head or the declared parameter schema, any pipe glyph) instead of a literal list, scrubs model-written tags and DSML tokens from the screen, and de-duplicates promoted calls by id; measured screen leaks 301 -> 4 on whole-string feeding. 0.0.1-rc.3 makes recognition stream-safe: a bounded hold for trailing marker/DSML/parameter fragments, a PARAM_BODY state and orphan-DSML scrub stop chunk-boundary leaks (strict screen leaks 42 -> 3 fed one character at a time; turn 16 4/6 -> 0/6). 0.0.1-rc.4 scrubs any pipe-wrapped protocol token by delimiter shape instead of only DSML, treats `thought` as a thinking wrapper, and lets the chunk-boundary hold keep any character inside a pending `<…` fragment, so a split token cannot leak; worst-case chunking leaks 42 -> 3 -> 1, and the remaining 1 is a measurement-regex false positive (a pair of markdown pipes). 0.0.1-rc.5 is an evidence round, not a new classifier: the owner rejected the synthetic A/B as proof (a short prompt produces almost no reasoning or text, so there is nothing to leak), so lib/trace.js records real traffic shape (request: model/messages/context chars/tools/system/stream/maxTokens/toolChoice/effort/session; delta: field/length/marker and an excerpt of at most 400 chars only when notation is detected; finish: counts; error: transport detail and retry counters), capped at 8 MB at /tmp/opencode-v2-trace.jsonl and disabled with OPENCODE_V2_TRACE=0, never storing prompts, message bodies or credentials; scripts/analyze-opencode-trace.mjs groups it by request and reports the leak rate by tool count, context chars, system prompt and model.
+summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose. 0.0.1-rc.2 makes the top classifier recognize the tool-call marker by shape (any bracket style, name/id from the head or the declared parameter schema, any pipe glyph) instead of a literal list, scrubs model-written tags and DSML tokens from the screen, and de-duplicates promoted calls by id; measured screen leaks 301 -> 4 on whole-string feeding. 0.0.1-rc.3 makes recognition stream-safe: a bounded hold for trailing marker/DSML/parameter fragments, a PARAM_BODY state and orphan-DSML scrub stop chunk-boundary leaks (strict screen leaks 42 -> 3 fed one character at a time; turn 16 4/6 -> 0/6). 0.0.1-rc.4 scrubs any pipe-wrapped protocol token by delimiter shape instead of only DSML, treats `thought` as a thinking wrapper, and lets the chunk-boundary hold keep any character inside a pending `<…` fragment, so a split token cannot leak; worst-case chunking leaks 42 -> 3 -> 1, and the remaining 1 is a measurement-regex false positive (a pair of markdown pipes). 0.0.1-rc.5 is an evidence round, not a new classifier: the owner rejected the synthetic A/B as proof (a short prompt produces almost no reasoning or text, so there is nothing to leak), so lib/trace.js records real traffic shape (request: model/messages/context chars/tools/system/stream/maxTokens/toolChoice/effort/session; delta: field/length/marker and an excerpt of at most 400 chars only when notation is detected; finish: counts; error: transport detail and retry counters), capped at 8 MB at /tmp/opencode-v2-trace.jsonl and disabled with OPENCODE_V2_TRACE=0, never storing prompts, message bodies or credentials; scripts/analyze-opencode-trace.mjs groups it by process and request and reports the leak rate by tool count, context chars, system prompt and model. 0.0.1-rc.6 is driven by what that trace then measured: process 2397320 served 29 real requests on deepseek-v4.1-flash, 17 (58.6%) carried protocol notation (34 content deltas, 1 reasoning), 559-580 messages and ~1.07-1.10M context chars each, tools=1, max_tokens 384000, effort high — and hasSystem=false on 29 of 29, which exposed a real role-mapping defect: DSH's loop-built history carries the system prompt as a leading system-role message and every unknown role was mapped to `user`, so the model never saw its system instructions. rc.6 maps `system` to the OpenAI system slot (developer still maps to system) and sends an empty tool result with its tool_call_id instead of dropping it.
 -->
 
 
@@ -18,18 +18,19 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 
 > Measurement of record: [`../OPENCODE-V2-SURFACE-MEASUREMENT.md`](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
 
-## 0. Version — 0.0.1 baseline, 0.0.1-rc.5 on instruction
+## 0. Version — 0.0.1 baseline, 0.0.1-rc.6 on instruction
 
 | Field | Value |
 |---|---|
-| `package.json` | `0.0.1-rc.5` (was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
-| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.5` (was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `package.json` | `0.0.1-rc.6` (was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.6` (was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
 | Versions self-bumped in this history | 26 (`0.1.1` … `0.9.0`) |
 | `0.0.1-rc.1` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.1.tgz` — sha256 `64be56cd99543754caadcc5459b983c597ac53f226cdd145ded4ab7d99a3fc16` |
 | `0.0.1-rc.2` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.2.tgz` — sha256 `29260240b776708a524e90c5e6b4071557beeb9f6b18908c4ad09befda85e8e3` |
 | `0.0.1-rc.3` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.3.tgz` — sha256 `54e7b84380cf9373d991ce4f4ddc2fdd67987831a42865c3d2a5eadd9542f32b` |
 | `0.0.1-rc.4` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.4.tgz` — sha256 `19212774f7f4fc8d001e980e3d9c25509510c54804670b4480f2f41cb3693be1` |
 | `0.0.1-rc.5` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.5.tgz` — sha256 `970e0c70cefc4ebcb0ce3dc767dc824939f6a6ea3e14f1807ea9124ed8fa7609` |
+| `0.0.1-rc.6` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.6.tgz` — sha256 `b95379ad0f13b78699fa8a4b526ca586fc0ad2d945628d487bea0e24d311b1b9` |
 
 The owner reset the number and forbade further self-bumps: **the version changes again only on an
 explicit owner instruction, and then only as `0.0.1.rc<N>`** (packaged as `0.0.1-rc.<N>`). A release,
@@ -37,11 +38,12 @@ a fix round or a green test run is not an instruction. The load-beacon constant 
 release, not a log decoration. The `0.0.1` baseline stays the reset; the line advances one
 release-candidate step per instructed fix round and nowhere else.
 
-Five instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
+Six instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
 accumulation, §0.1), `0.0.1-rc.1` → `0.0.1-rc.2` (shape-based marker classification, §0.2),
 `0.0.1-rc.2` → `0.0.1-rc.3` (stream-safe recognition at chunk boundaries, §0.3),
-`0.0.1-rc.3` → `0.0.1-rc.4` (protocol tokens are a delimiter family, not a DSML family, §0.4) and
-`0.0.1-rc.4` → `0.0.1-rc.5` (real-traffic trace instead of synthetic probes, §0.5).
+`0.0.1-rc.3` → `0.0.1-rc.4` (protocol tokens are a delimiter family, not a DSML family, §0.4),
+`0.0.1-rc.4` → `0.0.1-rc.5` (real-traffic trace instead of synthetic probes, §0.5) and
+`0.0.1-rc.5` → `0.0.1-rc.6` (the system prompt actually reaches the model, §0.6).
 None of those numbers came from a green suite or a defect found on our own; each was the one RC
 step the owner's instruction allowed.
 
@@ -274,22 +276,79 @@ never the body:
 - Privacy: **no prompt text, no message bodies, no credentials** — counts, flags and a bounded
   marker excerpt only.
 
+#### What the first real trace showed — the system prompt was sent as a user message
+
+The owner ran five real turns on rc.5 (process **2397320**, `deepseek-v4.1-flash`). The trace
+recorded **29** requests; **17** of them (**58.6%**) carried protocol notation in streamed deltas —
+**34** marker deltas in `content` and **1** in `reasoning`. The request shape was the same every
+time: 559-580 messages, ~1.07-1.10 million context characters, tools=1, max_tokens 384000,
+effort high — and **hasSystem=false on 29 of 29** requests.
+
+That last flag was not a trace bug. DSH's loop-built history carries the system prompt as a
+**leading message with role `system`** (`dsh-llm` `types.d.ts` documents this), but
+`dsh-opencode-v2` mapped every role it did not name to `user`. The whole system prompt therefore
+went to the model as a user message and the model ran without its system instructions — a real
+adapter defect that no unit fixture had exercised, found by reading the shape of real traffic.
+§0.6 fixes it.
+
 #### The analyser — `scripts/analyze-opencode-trace.mjs`
 
-`node scripts/analyze-opencode-trace.mjs [trace]` groups the lines by request and prints the leak
-rate **by tool count, by context chars, by system-prompt presence and by model**, plus the first
-leaking excerpts. Until real long work produces a hit it prints **"no leaking request in this trace
-yet"** — it does not invent a number.
+`node scripts/analyze-opencode-trace.mjs [trace] [--pid <pid>] [--since <iso>]` lists **every
+process** in the trace with its request count, leaking count and largest context, then reports the
+leak rate **by tool count, by context chars, by system-prompt presence and by model**, plus the
+first leaking excerpts. It defaults to the **busiest** process; `--pid` selects another and
+`--since` cuts the trace at a timestamp. Unit-test processes also write trace lines (they run the
+same adapter), so to isolate real traffic pick the process with the **largest `maxChars`** — that
+is the turn the owner actually ran. Until real long work produces a hit it prints
+**"no leaking request in this trace yet"**; it does not invent a number.
 
 Tests: `test/trace.test.mjs` (**5** tests) pins the kill switch, one compact line per record, the
 bounded excerpt, that no prompt body is copied, and the marker-family recognition.
-`npm test` **291/291**, `npm run check` exit 0. Artifact
-`artifacts/nolit-dsh-opencode-v2-0.0.1-rc.5.tgz`, sha256
+`npm test` **291/291** in rc.5 (**293/293** in rc.6); `npm run check` exit 0 in both.
+Artifact for the rc.5 evidence round: `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.5.tgz`, sha256
 `970e0c70cefc4ebcb0ce3dc767dc824939f6a6ea3e14f1807ea9124ed8fa7609`.
 
 **Status: applied on disk, pending restart.** No live verdict about the leak is claimed in rc.5;
 the trace exists so that the next real occurrence is analysable instead of argued about. Detail:
-`VERIFICATION.md` §44, ledger F-32.
+`VERIFICATION.md` §44, ledger F-32; the defect the trace exposed is §0.6 below, ledger F-33.
+
+### 0.6 `0.0.1-rc.6` — the system prompt was sent as a user message, so the model ran without instructions
+
+rc.5's trace did its job. The owner ran five real turns on rc.5 and reported a large improvement,
+but the trace still showed new artifacts and remaining issues — and it exposed a defect the
+parser work had hidden: on **29 of 29** real requests `hasSystem` was **false**.
+
+DSH's loop-built history puts the system prompt in a **leading message whose role is `system`**
+(`dsh-llm` `types.d.ts` documents that shape). The adapter mapped `assistant`, `tool` and
+`developer` and fell through to `user` for everything else — including `system`. The entire
+system prompt was therefore sent as a **user message**: the model never saw its system
+instructions, and the leak rate measured on that traffic (17 of 29 requests, 58.6%) is the rate of
+a model running off-format. No unit fixture had covered the leading system message; the trace
+did.
+
+`0.0.1-rc.6` makes the request faithful to the host's own types:
+
+| # | Fix | Behaviour |
+|---|---|---|
+| a | `system` role | `message.role === 'system'` now maps to the OpenAI `system` role; `developer` still maps to `system` |
+| b | empty tool result | an empty tool result is still sent **with its `tool_call_id`** — the previous `append()` dropped empty content and could mis-assign the id |
+
+Both are covered by new tests: a leading system-role message keeps the system slot, and an empty
+tool result keeps its call id.
+
+| Check | Result |
+|---|---|
+| `npm test` | **293/293 pass**, 0 fail (291 before; the two role/tool tests are new) |
+| `npm run check` | exit 0 |
+| artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.6.tgz` |
+| sha256 | `b95379ad0f13b78699fa8a4b526ca586fc0ad2d945628d487bea0e24d311b1b9` |
+
+The trace stays on: the system-prompt flag is now expected to read `true` on the next real
+traffic, and the leak rate is re-read from the same trace after the restart (`--pid` selects the
+serving process, `--since` a window).
+
+**Status: applied on disk, pending restart.** The defect was confirmed on real traffic and fixed
+in the request builder; no mount is claimed here. Detail: `VERIFICATION.md` §45, ledger F-33.
 
 ## 1. Measured OpenCode v2.2.0 facts this plugin is built on
 

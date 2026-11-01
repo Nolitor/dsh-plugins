@@ -1,16 +1,16 @@
 <!-- skeleton:
-version: 1.9
+version: 2.0
 kind: ver
 status: active
 updated: 2026-11-01
-summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2, 0.0.1-rc.3 0.0.1-rc.4 (protocol tokens scrubbed by delimiter shape, not by the DSML text; worst-case one-character feeding 42 -> 3 -> 1, the remaining 1 a measurement-regex false positive) and 0.0.1-rc.5 (synthetic probes rejected as evidence; lib/trace.js records real-traffic shape and scripts/analyze-opencode-trace.mjs reports leak rate by tools/context/system/model). Older rounds live in VERIFICATION-ARCHIVE.md.
+summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2, 0.0.1-rc.3, 0.0.1-rc.4 (protocol tokens scrubbed by delimiter shape, not by the DSML text; worst-case one-character feeding 42 -> 3 -> 1, the remaining 1 a measurement-regex false positive), 0.0.1-rc.5 (synthetic probes rejected as evidence; lib/trace.js records real-traffic shape) and 0.0.1-rc.6 (the rc.5 trace measured hasSystem=false on 29/29 real requests and a 58.6% leak rate; system-role messages now keep the system slot and empty tool results keep their call id; 293/293). Older rounds live in VERIFICATION-ARCHIVE.md.
 -->
 # @nolit/dsh-opencode-v2 - Verification (current)
 
 > Only the recent rounds live here. Everything up to v0.7.3 is in
 > VERIFICATION-ARCHIVE.md in this directory.
 >
-> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.5 on disk (serving pid 2339788
+> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.6 on disk (serving pid 2339788
 > runs 0.0.1-rc.3 until restart)
 
 ## 33. v0.7.4 — no protocol notation reaches the transcript (measured 2026-10-31 23:20-23:40)
@@ -915,6 +915,73 @@ The number advanced one instructed RC step (`0.0.1-rc.4` -> `0.0.1-rc.5`); the r
 **`applied on disk, pending restart`.** No live leak verdict is claimed for rc.5. The rc.5 change
 is an instrument: the next real occurrence lands in `/tmp/opencode-v2-trace.jsonl` and is analysed
 by the script, instead of being argued from a probe. Ledger entry: F-32.
+
+## 45. v0.0.1-rc.6 — the trace found a real defect: the system prompt was sent as a user message (measured 2026-11-01 10:50-11:20 KST)
+
+### 45.1 What the rc.5 trace measured on real traffic
+
+rc.5 shipped the trace, and the owner then ran **five real turns** on it. The report was a large
+improvement plus new artifacts and remaining issues; the trace of those turns is the first
+quantitative picture of this defect on real traffic (process **2397320**, model
+`deepseek-v4.1-flash`):
+
+| Measure | Value |
+|---|---|
+| requests recorded | **29** |
+| requests carrying protocol notation in a streamed delta | **17** (**58.6%**) |
+| marker deltas | **34** `content` / **1** `reasoning` |
+| messages per request | **559-580** |
+| context characters | **~1.07-1.10 million** |
+| tools declared | **1** |
+| max_tokens | **384000** |
+| effort | **high** |
+| `hasSystem` | **false — 29 of 29** |
+
+The suite confirms the request shape: `tools=1`, `maxTokens=384000`, `effort=high`,
+`stream=true`, one model, across all 29 requests.
+
+### 45.2 The defect the flag exposed
+
+`hasSystem=false` was not a trace bug. DSH's loop-built history carries the system prompt as a
+**leading message with role `system`** — `dsh-llm` `types.d.ts` documents exactly that shape — and
+`buildChatRequest()` mapped `assistant`, `tool` and `developer`, then fell through to `user` for
+**every other role**, `system` included. The whole system prompt was therefore sent to the model
+as a **user message** and the model ran without its system instructions. That is invisible in a
+unit fixture that only passes `options.system` (which was mapped correctly); it appears only in
+DSH's loop-built history, i.e. in real traffic. The 58.6% leak rate is the rate of a model running
+off-format.
+
+### 45.3 What rc.6 changed
+
+| # | Fix | Behaviour |
+|---|---|---|
+| a | `system` role | `message.role === 'system'` maps to the OpenAI `system` role; `developer` still maps to `system` |
+| b | empty tool result | an empty tool result is still pushed with its `tool_call_id`; the old `append()` dropped empty content and the id could be mis-assigned |
+
+New tests in `test/http.test.mjs`: `a leading system-role message keeps the system slot` (asserts
+`messages[0].role === 'system'` and the exact content) and `an empty tool result keeps its call
+id` (asserts the `tool` message exists with `tool_call_id === 'call_1'`).
+
+### 45.4 Measurement
+
+| Check | Result |
+|---|---|
+| `npm test` | **293/293 pass**, 0 fail (291 before; **2** new) |
+| `npm run check` | exit 0 |
+| artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.6.tgz` |
+| sha256 | `b95379ad0f13b78699fa8a4b526ca586fc0ad2d945628d487bea0e24d311b1b9` |
+| trace reader | lists every process; `--pid` / `--since`; leak rate by tools / context / system / model; first leaking excerpts |
+
+The number advanced one instructed RC step (`0.0.1-rc.5` -> `0.0.1-rc.6`); the rule stays
+`0.0.1.rc<N>` and nothing else moves it.
+
+### 45.5 Status
+
+**`applied on disk, pending restart`.** Confirmed on real traffic, fixed in the request builder;
+no mount and no post-fix leak rate are claimed here. After the restart, the same trace should show
+`hasSystem=true`, and the leak rate is re-read with
+`node scripts/analyze-opencode-trace.mjs --pid <serving pid>`. Ledger entry: F-33.
+
 
 
 

@@ -1062,3 +1062,42 @@ test('a body payload that restates a broken wire call replaces it, once', async 
   }
 })
 
+
+test('a leading system-role message keeps the system slot', () => {
+  // DSH loop-built history: GenerateOptions.messages[0].role === 'system'. Mapping
+  // it to 'user' silently dropped every system instruction from the model.
+  const body = buildChatRequest(
+    {
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      messages: [
+        { role: 'system', content: [{ type: 'text', text: 'SYSTEM RULES' }] },
+        { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      ],
+    },
+    { id: 'deepseek-v4.1-flash' },
+    Config({ reasoningField: 'reasoning_content', effortField: 'reasoning_effort' }),
+  )
+  assert.equal(body.messages[0].role, 'system')
+  assert.equal(body.messages[0].content, 'SYSTEM RULES')
+  assert.equal(body.messages[1].role, 'user')
+})
+
+test('an empty tool result keeps its call id', () => {
+  const body = buildChatRequest(
+    {
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      messages: [
+        { role: 'assistant', content: [{ type: 'tool-call', id: 'call_1', name: 'bash', arguments: '{}' }] },
+        { role: 'tool', toolCallId: 'call_1', content: [] },
+      ],
+    },
+    { id: 'deepseek-v4.1-flash' },
+    Config({ reasoningField: 'reasoning_content', effortField: 'reasoning_effort' }),
+  )
+  const tool = body.messages.find((message) => message.role === 'tool')
+  assert.ok(tool, 'the empty tool result must still be sent')
+  assert.equal(tool.tool_call_id, 'call_1')
+})
+
