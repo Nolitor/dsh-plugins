@@ -1,17 +1,17 @@
 <!-- skeleton:
-version: 1.6
+version: 1.7
 kind: ver
 status: active
 updated: 2026-11-01
-summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1 and 0.0.1-rc.2. Older rounds live in VERIFICATION-ARCHIVE.md.
+summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2 and 0.0.1-rc.3 (chunk-boundary recognition; worst-case one-character feeding 42 -> 3 strict leaks, turn 16 4/6 -> 0/6). Older rounds live in VERIFICATION-ARCHIVE.md.
 -->
 # @nolit/dsh-opencode-v2 - Verification (current)
 
 > Only the recent rounds live here. Everything up to v0.7.3 is in
 > VERIFICATION-ARCHIVE.md in this directory.
 >
-> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.2 on disk (serving pid 2251772
-> still runs 0.0.1-rc.1 until restart)
+> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.3 on disk (serving pid 2325852
+> still runs 0.0.1-rc.2 until restart)
 
 ## 33. v0.7.4 — no protocol notation reaches the transcript (measured 2026-10-31 23:20-23:40)
 
@@ -687,7 +687,87 @@ The number advanced one instructed RC step (`0.0.1-rc.1` → `0.0.1-rc.2`); the 
 
 ### 41.7 Status
 
-**`applied on disk, pending restart`.** Serving `pid 2251772` still runs `0.0.1-rc.1`; the
-`0.0.1-rc.2` source is on disk only. No mount is claimed here.
+**`applied on disk, pending restart` at the time.** The service was restarted afterwards;
+later measurement shows `pid 2325852` runs `0.0.1-rc.2`, and `0.0.1-rc.3` (round 42) supersedes it
+on disk only. No mount is claimed here.
+
+## 42. v0.0.1-rc.3 — a whole-string test cannot prove a stream; recognise at chunk boundaries (measured 2026-11-01 09:22–09:31 KST)
+
+### 42.1 Live evidence: turn 16 on rc.2
+
+The owner said work continued after every update but the screen still showed the marker. Measured on
+rc.2 (serving `pid 2325852`, 09:22–09:31 KST), **turn 16** of session
+`2dc3531f-1b50-406e-bacc-9ce73345e193` still leaked the notation even though the call executed:
+
+| Step | Shape on screen |
+|---|---|
+| 3 | `<tool call run_code #call_00_…]: {json}` |
+| 4 | `<tool call run_code #call_00_…]: {json}` |
+| 6 | `<tool call run_code #call_00_…]: {json}` |
+| 8 | bare code body — the `<parameter name="code">` opener was removed, the value kept |
+
+**3 of the 6** assistant messages in that turn leaked. The turn still completed because the wire
+call was present: the defect was display, not execution.
+
+### 42.2 Why: the classifier needed the whole marker in the buffer
+
+The classifier recognised the marker only when the complete marker was present. A real SSE stream
+splits it, so `<tool ca` was emitted as prose before it could be recognised; the remainder no longer
+sat at a line start, so the marker never opened. The replay proves the shape dependence:
+
+| Replay of the same turn-16 text | Result |
+|---|---|
+| one string | **0 leaks** — the bug is invisible |
+| one character at a time | **4 of 6 messages leaked** — the live failure reproduces |
+
+That is why rc.2 looked fixed in tests and still failed live: the rc.2 suite fed whole strings.
+
+### 42.3 What changed in rc.3
+
+`0.0.1-rc.3` keeps the parser and the gate; it makes recognition stream-safe.
+
+| # | Piece | Behaviour |
+|---|---|---|
+| a | bounded hold | a trailing fragment that could still become a marker (`<tool ca`, `<tool`, `[`+tool…), a DSML tag (`</｜DSML｜ calls>`, `<｜DSML｜ invoke name="bash">`, `</│DSML│`, doubled pipes, attribute quotes) or a parameter tag (`<parameter`, `<│DSML│parameter`) is held until the shape is decided |
+| b | `PARAM_BODY` | a new state drops a standalone parameter tag and its value, so a removed opener cannot leave the code body on screen |
+| c | orphan scrub | removes DSML tokens whose `<` was consumed in an earlier chunk |
+| d | same hold | the hold also covers piped and attribute-bearing tokens; it is not limited to plain markers |
+
+The hold is bounded and the buffered fragment is flushed on `final`, so a genuine trailing prefix is
+delayed, not lost.
+
+### 42.4 Worst-case chunking measurement
+
+Each of **3,689** assistant text messages across all `opencode-route` sessions was fed **one
+character at a time**:
+
+| Measure | rc.2 baseline | rc.3 |
+|---|---|---|
+| strict screen leaks (line-start marker, DSML token, parameter tag) | **42** | **3** — all 3 are prose that quotes the notation inside backticks |
+| whole-string feeding, strict leaks | **4** | **3** (same prose) |
+| calls promoted from body payloads | — | **28** |
+| turn 16, one character at a time | **4/6 messages leaked** | **0/6** leaked, calls still promoted |
+
+The earlier rc.2 corpus figures (**301 -> 4**) were measured with whole-string feeding. They are not a
+chunked measurement and must not be quoted as one. Under chunking, rc.2 leaks 42 times; rc.3 leaks 3,
+and all 3 are prose that quotes the notation in backticks rather than an actual marker.
+
+### 42.5 Tests and artifact
+
+| Check | Result |
+|---|---|
+| `npm test` | **286/286 pass**, 0 fail |
+| `npm run check` | exit 0 |
+| new regressions | marker split into single characters; standalone parameter tag split; DSML opener with attributes split; every two-way split of a mixed payload leaves no marker on screen |
+| artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.3.tgz` |
+| sha256 | `54e7b84380cf9373d991ce4f4ddc2fdd67987831a42865c3d2a5eadd9542f32b` |
+
+The number advanced one instructed RC step (`0.0.1-rc.2` → `0.0.1-rc.3`); the rule stays
+`0.0.1.rc<N>` and nothing else moves it.
+
+### 42.6 Status
+
+**`applied on disk, pending restart`.** Serving `pid 2325852` runs `0.0.1-rc.2`; the rc.3 source
+is on disk only. No mount is claimed here.
 
 

@@ -1,10 +1,10 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 2.7
+version: 2.8
 kind: readme
 status: active
 updated: 2026-11-01
-summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose. 0.0.1-rc.2 makes the top classifier recognize the tool-call marker by shape (any bracket style, name/id from the head or the declared parameter schema, any pipe glyph) instead of a literal list, scrubs model-written tags and DSML tokens from the screen, and de-duplicates promoted calls by id; measured screen leaks 301 -> 4.
+summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose. 0.0.1-rc.2 makes the top classifier recognize the tool-call marker by shape (any bracket style, name/id from the head or the declared parameter schema, any pipe glyph) instead of a literal list, scrubs model-written tags and DSML tokens from the screen, and de-duplicates promoted calls by id; measured screen leaks 301 -> 4 on whole-string feeding. 0.0.1-rc.3 makes recognition stream-safe: a bounded hold for trailing marker/DSML/parameter fragments, a PARAM_BODY state and orphan-DSML scrub stop chunk-boundary leaks (strict screen leaks 42 -> 3 fed one character at a time; turn 16 4/6 -> 0/6).
 -->
 
 
@@ -18,15 +18,16 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 
 > Measurement of record: [`../OPENCODE-V2-SURFACE-MEASUREMENT.md`](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
 
-## 0. Version — 0.0.1 baseline, 0.0.1-rc.2 on instruction
+## 0. Version — 0.0.1 baseline, 0.0.1-rc.3 on instruction
 
 | Field | Value |
 |---|---|
-| `package.json` | `0.0.1-rc.2` (was `0.0.1-rc.1`, which was `0.0.1`) |
-| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.2` (was `0.0.1-rc.1`, which was `0.0.1`) |
+| `package.json` | `0.0.1-rc.3` (was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.3` (was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
 | Versions self-bumped in this history | 26 (`0.1.1` … `0.9.0`) |
 | `0.0.1-rc.1` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.1.tgz` — sha256 `64be56cd99543754caadcc5459b983c597ac53f226cdd145ded4ab7d99a3fc16` |
 | `0.0.1-rc.2` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.2.tgz` — sha256 `29260240b776708a524e90c5e6b4071557beeb9f6b18908c4ad09befda85e8e3` |
+| `0.0.1-rc.3` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.3.tgz` — sha256 `54e7b84380cf9373d991ce4f4ddc2fdd67987831a42865c3d2a5eadd9542f32b` |
 
 The owner reset the number and forbade further self-bumps: **the version changes again only on an
 explicit owner instruction, and then only as `0.0.1.rc<N>`** (packaged as `0.0.1-rc.<N>`). A release,
@@ -34,10 +35,11 @@ a fix round or a green test run is not an instruction. The load-beacon constant 
 release, not a log decoration. The `0.0.1` baseline stays the reset; the line advances one
 release-candidate step per instructed fix round and nowhere else.
 
-Two instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
-accumulation, §0.1) and `0.0.1-rc.1` → `0.0.1-rc.2` (shape-based marker classification, §0.2).
-Neither number came from a green suite or a defect found on our own; each was the one RC step the
-owner's instruction allowed.
+Three instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
+accumulation, §0.1), `0.0.1-rc.1` → `0.0.1-rc.2` (shape-based marker classification, §0.2) and
+`0.0.1-rc.2` → `0.0.1-rc.3` (stream-safe recognition at chunk boundaries, §0.3).
+None of those numbers came from a green suite or a defect found on our own; each was the one RC
+step the owner's instruction allowed.
 
 ### 0.1 `0.0.1-rc.1` — what changed and why
 
@@ -128,8 +130,53 @@ execute), the mixed payload becomes **1 call** with the correct id and JSON argu
 characters shown**, and the 6,427-character final payload collapses to **2 distinct calls** after
 id de-duplication.
 
-**Status: applied on disk, pending restart.** Serving `pid 2251772` still runs `0.0.1-rc.1`; the
-`0.0.1-rc.2` source is on disk only. No mount is claimed. Detail: `VERIFICATION.md` §41, ledger F-29.
+**Status at the time: applied on disk, pending restart.** The service was restarted afterwards;
+later measurement shows serving `pid 2325852` runs `0.0.1-rc.2`, and `0.0.1-rc.3` supersedes it
+on disk only. No mount is claimed. Detail: `VERIFICATION.md` §41, ledger F-29.
+
+### 0.3 `0.0.1-rc.3` — the classifier was tested on whole strings; a stream splits the marker
+
+The owner was right that work continued after every update: the calls executed, but the marker was
+also printed. Measured on rc.2 (serving `pid 2325852`, 09:22–09:31 KST), turn 16 of session
+`2dc3531f-1b50-406e-bacc-9ce73345e193` still showed the marker on screen — steps 3, 4 and 6 printed
+`<tool call run_code #call_00_…]: {json}`, and step 8 printed a bare code body (the
+`<parameter name="code">` opener removed, the value kept). **3 of the 6** assistant messages in
+that turn leaked; the turn still completed because the wire call was present.
+
+Root cause: the classifier recognised the marker **only when the whole marker was in the buffer**. A
+real SSE stream splits it, so `<tool ca` was emitted as prose before it could be recognised; the
+remainder no longer sat at a line start, so the marker never opened. Replaying the same text as one
+string hid the bug (**0 leaks**); replaying it one character at a time reproduced it (**4 of 6
+messages**). That is why rc.2 looked fixed in tests and still failed live.
+
+`0.0.1-rc.3` keeps the parser and the gate and fixes recognition at chunk boundaries:
+
+| # | Mitigation |
+|---|---|
+| a | bounded hold of a trailing fragment that could still become a marker (`<tool ca`, `<tool`, `[`+tool…), a DSML tag (`</｜DSML｜ calls>`, `<｜DSML｜ invoke name="bash">`, `</│DSML│`, doubled pipes, attribute quotes) or a parameter tag (`<parameter`, `<│DSML│parameter`) |
+| b | a new `PARAM_BODY` state drops a standalone parameter tag and its value |
+| c | scrub removes orphan DSML tokens whose `<` was consumed in an earlier chunk |
+| d | the same hold applies to piped and attribute-bearing tokens |
+
+Measured under worst-case chunking — each of **3,689** assistant text messages across all
+`opencode-route` sessions fed **one character at a time**:
+
+| Measure | rc.2 baseline | rc.3 |
+|---|---|---|
+| strict screen leaks (line-start marker, DSML token, parameter tag) | **42** | **3** — all 3 are prose that quotes the notation inside backticks |
+| whole-string feeding, strict leaks | **4** | **3** (same prose) |
+| calls promoted from body payloads | — | **28** |
+| turn 16, one character at a time | **4/6 messages leaked** | **0/6** leaked, calls still promoted |
+
+The earlier rc.2 corpus figures (301 -> 4) were measured with **whole-string** feeding. They are not
+a chunked measurement and are not repeated here as one.
+
+Tests: `npm test` **286/286**, `npm run check` exit 0. New regressions cover a marker split into
+single characters, a standalone parameter tag split across deltas, a DSML opener with attributes
+split across deltas, and every two-way split of a mixed payload leaving no marker on screen.
+
+**Status: applied on disk, pending restart.** Serving `pid 2325852` runs `0.0.1-rc.2`; the
+`0.0.1-rc.3` source is on disk only. No mount is claimed. Detail: `VERIFICATION.md` §42, ledger F-30.
 
 ## 1. Measured OpenCode v2.2.0 facts this plugin is built on
 
@@ -455,7 +502,7 @@ Rules the implementation follows:
   source edit), `UNDECIDED` (newer but no beacon). `--wait <seconds>` waits for `MainPID` to
   change; exit codes 0/1/2.
 
-### Tool-call arguments, body payloads and the tolerant marker family (v0.0.1-rc.1 / rc.2 — measured 2026-11-01)
+### Tool-call arguments, body payloads and the tolerant marker family (v0.0.1-rc.1 / rc.2 / rc.3 — measured 2026-11-01)
 
 Two argument-boundary defects were fixed on the `0.0.1` baseline; the router, the state machine and
 the parser/screen gate are untouched. Source: session `2dc3531f-1b50-406e-bacc-9ce73345e193`
@@ -502,8 +549,36 @@ prose. Calls promoted from those payloads: **24**; duplicate restatements droppe
 reported session the marker-only payload is dropped (nothing to execute), the mixed payload becomes
 1 call with the correct id and JSON arguments and 0 characters shown, and the 6,427-character final
 payload collapses to 2 distinct calls. Tests: `npm test` **282/282**; `npm run check` exit 0.
-Status: **applied on disk, pending restart** — serving `pid 2251772` still runs `0.0.1-rc.1`.
+Status at the time: **applied on disk, pending restart** — serving `pid 2251772` was still
+`0.0.1-rc.1`. Later measurement: `pid 2325852` runs `0.0.1-rc.2`; rc.3 is on disk only.
 Detail: `VERIFICATION.md` §41, ledger F-29.
+
+**rc.2's tests fed whole strings, so they missed the live shape.** On rc.2 (serving
+`pid 2325852`, 09:22–09:31 KST) turn 16 of session `2dc3531f…` still showed notation on screen:
+steps 3, 4 and 6 printed `<tool call run_code #call_00_…]: {json}`, and step 8 printed a bare code
+body whose `<parameter name="code">` opener was gone. **3 of 6** assistant messages leaked; the wire
+call was present, so the turn still completed. The classifier recognised the marker only when the
+whole marker was in the buffer, but a real SSE stream splits it: `<tool ca` went out as prose before
+it could be recognised, and the rest no longer sat at a line start. Replaying the text as one string
+hid this (0 leaks); feeding it one character at a time reproduced it (4 of 6 messages).
+
+`0.0.1-rc.3` fixes the boundary in four pieces:
+
+| Piece | Behaviour (rc.3) |
+|---|---|
+| bounded hold | a trailing fragment that could still become a marker (`<tool ca`, `<tool`, `[`+tool…), a DSML tag (`</｜DSML｜ calls>`, `<｜DSML｜ invoke name="bash">`, `</│DSML│`, doubled pipes, attribute quotes) or a parameter tag (`<parameter`, `<│DSML│parameter`) is held until the shape is decided |
+| `PARAM_BODY` | a standalone parameter tag is dropped together with its value, so a removed opener cannot leave the code body on screen |
+| orphan scrub | DSML tokens whose `<` was consumed in an earlier chunk are removed |
+| same hold everywhere | the hold also covers piped and attribute-bearing tokens, not only plain ones |
+
+Measured worst-case chunking (3,689 assistant text messages, one character at a time): strict screen
+leaks **42 -> 3** (all 3 are prose quoting the notation inside backticks), calls promoted from body
+payloads **28**, turn 16 **4/6 -> 0/6**, whole-string feed **4 -> 3**. The earlier rc.2 whole-string
+figures (301 -> 4 corpus-wide) stay whole-string measurements and are not chunked evidence. Tests
+**286/286** (`npm test`), `npm run check` exit 0; new regressions cover single-character marker
+splitting, a split standalone parameter tag, a split attribute-bearing DSML opener, and every two-way
+split of a mixed payload. Status: **applied on disk, pending restart** — serving `pid 2325852` runs
+`0.0.1-rc.2`; rc.3 source is on disk only, no mount claimed. Detail: `VERIFICATION.md` §42, ledger F-30.
 
 ### Session identity and credential choice (v0.5.1 — measured 2026-10-30)
 

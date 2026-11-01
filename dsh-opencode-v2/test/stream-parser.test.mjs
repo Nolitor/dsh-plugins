@@ -176,3 +176,49 @@ test('an unknown name is inferred from the argument schema', () => {
   assert.equal(calls[0].name, 'run_code')
 })
 
+
+function classifyCharByChar(text) {
+  const classifier = createStreamClassifier({ toolNames: new Set(['run_code']), tools: NEW_TOOLS })
+  const parts = []
+  for (const ch of text) parts.push(...classifier.push(ch))
+  parts.push(...classifier.flush())
+  return { parts, stats: classifier.stats }
+}
+
+test('a tool marker split into single characters never reaches the screen', () => {
+  const source = 'prose\n<tool call run_code #call_x]: {"code":"a"}'
+  const { parts } = classifyCharByChar(source)
+  assert.equal(textOf(parts).includes('tool call'), false)
+  assert.equal(callsOf(parts).length, 1)
+  assert.deepEqual(JSON.parse(callsOf(parts)[0].arguments), { code: 'a' })
+})
+
+test('a standalone parameter tag is dropped even when split', () => {
+  const source = 'done.\n<parameter name="code">const x = 1</parameter>'
+  const { parts } = classifyCharByChar(source)
+  assert.equal(textOf(parts), 'done.\n')
+  assert.equal(callsOf(parts).length, 0)
+})
+
+test('a DSML opener with attributes split across deltas is not printed', () => {
+  const source = 'x\n<｜DSML｜ invoke name="bash">\n\n'
+  const { parts } = classifyCharByChar(source)
+  assert.equal(textOf(parts).includes('DSML'), false)
+  assert.equal(textOf(parts).includes('invoke'), false)
+})
+
+test('every two-way split of a mixed payload leaves no marker on screen', () => {
+  const source = 'a\n<tool_call #call_1>\n</│DSML│ parameter name="code">const x = 1</│DSML│>'
+  for (let cut = 1; cut < source.length; cut += 1) {
+    const classifier = createStreamClassifier({ toolNames: new Set(['run_code']), tools: NEW_TOOLS })
+    const parts = [
+      ...classifier.push(source.slice(0, cut)),
+      ...classifier.push(source.slice(cut)),
+      ...classifier.flush(),
+    ]
+    const shown = textOf(parts)
+    assert.equal(/tool[ _-]?call/i.test(shown), false, 'marker printed at cut ' + cut)
+    assert.equal(shown.includes('DSML'), false, 'DSML printed at cut ' + cut)
+  }
+})
+

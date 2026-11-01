@@ -87,6 +87,13 @@ const STATE_TOOL_HEAD = 'tool-head'
 const STATE_TOOL_ARGS = 'tool-args'
 const STATE_DSML_ARGS = 'dsml-args'
 const STATE_INVOKE_HEAD = 'invoke-head'
+const STATE_PARAM = 'param-body'
+
+// A parameter tag standing on its own (no call marker before it) is still notation:
+// measured live, a cut response ended with <parameter name="code">…</parameter> and
+// the code body was printed as prose.
+const PARAM_OPEN = /^<(?:[｜│|]{1,2}\s*DSML\s*[｜│|]{1,2}\s*)?parameter\b/i
+const PARAM_ANY_CLOSE = /<\/(?:(?:[｜│|]{1,2}\s*DSML\s*[｜│|]{1,2}\s*)?parameter|[｜│|]{1,2}\s*DSML\s*[｜│|]{1,2})\s*>/i
 
 /**
  * Create the classifier.
@@ -134,6 +141,10 @@ export function createStreamClassifier(options = {}) {
     if (dsml) { stats.stray += dsml.length; out = out.replace(DSML_ANY, '') }
     const tags = out.match(TOOL_TAG)
     if (tags) { stats.stray += tags.length; out = out.replace(TOOL_TAG, '') }
+    // Orphan tail of a DSML tag whose '<' was consumed with an earlier chunk.
+    const orphan = /[｜│|]{1,2}\s*DSML\s*[｜│|]{1,2}\s*(?:calls|invoke|tool_calls|parameter)?\s*>/gi
+    const found = out.match(orphan)
+    if (found) { stats.stray += found.length; out = out.replace(orphan, '') }
     return out
   }
 
@@ -183,12 +194,14 @@ export function createStreamClassifier(options = {}) {
         from = at + 1
       }
     }
-    // A model-written call marker in another bracket style: [<tool[ _-]call ...
+    // A model-written call marker in another bracket style, or a standalone
+    // parameter tag: [<tool[ _-]call ..., <parameter ..., <│DSML│parameter ...
     for (let at = 0; at < s.length; at += 1) {
       const ch = s[at]
       if (ch !== '<' && ch !== '[') continue
       if (at !== 0 && s[at - 1] !== '\n') continue
-      if (TOOL_MARK.test(s.slice(at, at + 24)) && (best < 0 || at < best)) best = at
+      const head = s.slice(at, at + 40)
+      if ((TOOL_MARK.test(s.slice(at, at + 24)) || PARAM_OPEN.test(head)) && (best < 0 || at < best)) best = at
     }
     return best
   }
@@ -203,6 +216,57 @@ export function createStreamClassifier(options = {}) {
       }
     }
     return size
+  }
+
+  /**
+   * Length of a trailing fragment that could still become a tool-call marker.
+   *
+   * Without this, a marker split across two deltas leaks: the prefix "<tool ca" is
+   * emitted as prose, the rest no longer sits at a line start, and the whole marker
+   * reaches the screen (measured live on rc.2, turn 16: 4 of 6 messages).
+   */
+  function markerPrefixLength(s) {
+    const nl = s.lastIndexOf('\n')
+    const tail = nl >= 0 ? s.slice(nl + 1) : s
+    if (tail.length === 0 || tail.length > 14) return 0
+    if (tail[0] !== '<' && tail[0] !== '[') return 0
+    const body = tail.slice(1)
+    return /^\s*t(?:o(?:o(?:l(?:[ _-]?(?:c(?:a(?:l(?:l)?)?)?)?)?)?)?)?$/i.test(body) ? tail.length : 0
+  }
+
+  /**
+   * Length of a trailing fragment that could still become a DSML tag.
+   *
+   * The token is reproduced with any pipe glyph and any wrapper (</｜DSML｜ calls>,
+   * <｜DSML｜ invoke …>). A partial tag emitted as prose left orphan fragments on
+   * screen: measured 38 messages when the stream is fed one character at a time.
+   */
+  function dsmlPrefixLength(s) {
+    const nl = s.lastIndexOf('\n')
+    const tail = nl >= 0 ? s.slice(nl + 1) : s
+    const lt = tail.lastIndexOf('<')
+    if (lt < 0) return 0
+    const frag = tail.slice(lt)
+    if (frag.length === 0 || frag.length > 26) return 0
+    const body = frag.slice(1).replace(/[｜│|]{1,2}\s*(?:DSML)?\s*[｜│|]{1,2}/gi, 'DSML')
+    // A single pipe glyph, or tag attributes (name="bash"), may still be incomplete.
+    if (!/^[\/a-z\s｜│|="'0-9_.-]*$/i.test(body)) return 0
+    return frag.length
+  }
+
+  /** Length of a trailing fragment that could still become a parameter tag. */
+  function paramPrefixLength(s) {
+    const nl = s.lastIndexOf('\n')
+    const tail = nl >= 0 ? s.slice(nl + 1) : s
+    if (tail.length === 0 || tail.length > 22) return 0
+    if (tail[0] !== '<') return 0
+    const body = tail.slice(1)
+      .replace(/[｜│|]{1,2}\s*(?:DSML)?\s*[｜│|]{1,2}/gi, '')
+      .replace(/[｜│|]{1,2}/g, '')
+      .replace(/^\s+/, '')
+      .toLowerCase()
+    if (!/^[a-z]*$/.test(body)) return 0
+    return 'parameter'.startsWith(body) ? tail.length : 0
   }
 
   function strayPrefixLength(s) {
@@ -279,6 +343,11 @@ export function createStreamClassifier(options = {}) {
         closer = '</analysis>'
         state = STATE_REASONING
         stats.thinking += 1
+      } else if (PARAM_OPEN.test(buf.slice(0, 40))) {
+        const tagEnd = buf.indexOf('>')
+        buf = tagEnd >= 0 ? buf.slice(tagEnd + 1) : ''
+        state = STATE_PARAM
+        stats.stray += 1
       } else {
         state = STATE_INVOKE_HEAD
         invokeName = ''
@@ -290,7 +359,13 @@ export function createStreamClassifier(options = {}) {
       buf = ''
       return false
     }
-    const hold = Math.max(openerPrefixLength(buf), strayPrefixLength(buf))
+    const hold = Math.max(
+      openerPrefixLength(buf),
+      strayPrefixLength(buf),
+      dsmlPrefixLength(buf),
+      markerPrefixLength(buf),
+      paramPrefixLength(buf),
+    )
     if (hold > 0) {
       text(out, buf.slice(0, buf.length - hold))
       buf = buf.slice(buf.length - hold)
@@ -463,6 +538,29 @@ export function createStreamClassifier(options = {}) {
     return args
   }
 
+  /**
+   * PARAM_BODY: a parameter tag standing on its own. Its value is call payload, not
+   * prose (measured: a cut response left <parameter name="code">…</parameter> and the
+   * code body was printed). Drop the body; keep only a bounded tail for the closer.
+   */
+  function stepParam(out, final) {
+    const m = PARAM_ANY_CLOSE.exec(buf)
+    if (m) {
+      buf = buf.slice(m.index + m[0].length)
+      state = STATE_TEXT
+      return true
+    }
+    if (final || buf.length > maxHold) {
+      stats.stray += 1
+      buf = ''
+      state = STATE_TEXT
+      return false
+    }
+    const hold = Math.min(buf.length, 24)
+    buf = buf.slice(buf.length - hold)
+    return false
+  }
+
   /** INVOKE_HEAD: an XML-shaped call block. */
   function stepInvokeHead(out, final) {
     const open = /^<(?:antml:)?invoke\s+name="([^"]+)"\s*>/.exec(buf)
@@ -513,6 +611,7 @@ export function createStreamClassifier(options = {}) {
     if (state === STATE_TOOL_HEAD) return stepToolHead(out, final)
     if (state === STATE_TOOL_ARGS) return stepToolArgs(out, final)
     if (state === STATE_DSML_ARGS) return stepDsmlArgs(out, final)
+    if (state === STATE_PARAM) return stepParam(out, final)
     return stepInvokeHead(out, final)
   }
 
