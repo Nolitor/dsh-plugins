@@ -18,6 +18,32 @@ export const PINNED_SECTION_NAME = 'tokeneconomizer:pinned-rules'
 export const DEFAULT_PINNED_RULES_ORDER = 50
 
 /**
+ * The constant routing guidance mounted when Think-in-Code is on.
+ *
+ * Two lines, and deliberately constant. This text is part of the request's first message, so a
+ * value that varied per session or per turn would rewrite the head of the cached prefix.
+ */
+export const THINK_IN_CODE_RULES = [
+  'For a large inspection (many files, long logs, wide searches), write one short script and run it',
+  'instead of reading file after file: keep only the few lines of result that answer the question.',
+].join('\n')
+
+/**
+ * Compose the pinned section text from the person's own rules and the routing guidance.
+ *
+ * Both parts are constants, so the composed text is stable for a whole session; when both are
+ * empty the caller mounts no section at all rather than an empty one.
+ * @param {string} rules - the configured pinned rules, or an empty string.
+ * @param {boolean} thinkInCode - whether the routing guidance is on.
+ * @returns {string} the section text, or an empty string when there is nothing to pin.
+ */
+export function composePinnedText(rules, thinkInCode) {
+  const parts = [String(rules ?? '').trim(), thinkInCode ? THINK_IN_CODE_RULES : '']
+    .filter(Boolean)
+  return parts.join('\n\n')
+}
+
+/**
  * Build the pinned-rules section descriptor.
  *
  * The text is a constant, so the rendered system prompt cannot drift between requests, and

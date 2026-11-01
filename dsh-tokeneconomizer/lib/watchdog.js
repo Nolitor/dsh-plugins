@@ -13,7 +13,10 @@ export const DEFAULT_FAILURE_THRESHOLD = 3
 export const DEFAULT_WINDOW = 5
 
 /** Progress-free budget of one step. */
-export const DEFAULT_THRESHOLD_MS = 180000
+export const DEFAULT_THRESHOLD_MS = 600000
+
+/** Fraction of the budget after which one soft warning is emitted, before the budget expires. */
+export const DEFAULT_WARN_RATIO = 0.5
 
 /**
  * Canonical form of a call's arguments: two calls that differ only in key order are one call.
@@ -90,12 +93,38 @@ export function createLoopBreaker(options = {}) {
  *
  * Progress restarts the budget without recreating the timer, so a stream of frames does not
  * churn timers; the timer only fires when the budget is really exhausted.
- * @param {{ thresholdMs?: number, onTimeout?: (elapsedMs: number) => void }} [options] - the
- *   budget and the expiry handler.
+ *
+ * While a tool call is in flight the TURN budget is held, because a running tool is activity even
+ * though it commits no session event. It is replaced by a separate TOOL budget that starts when
+ * the call starts, so a slow or spinning tool still expires inside `toolThresholdMs`. Setting
+ * `toolThresholdMs: 0` restores the historical "a running tool never expires" behaviour.
+ *
+ * The warning tier is separate from the expiry: `onWarn` fires once per budget at `warnMs`, and
+ * the caller decides whether the expiry is a notice or an interrupt.
+ * @param {{ thresholdMs?: number, warnMs?: number, onWarn?: (elapsedMs: number) => void,
+ *   onTimeout?: (elapsedMs: number) => void }} [options] - the budget, the soft-warning point,
+ *   and the two handlers.
  * @returns {object} the watchdog.
  */
 export function createWatchdog(options = {}) {
   const thresholdMs = options.thresholdMs ?? DEFAULT_THRESHOLD_MS
+  const warnMs = Math.min(
+    options.warnMs ?? Math.floor(thresholdMs * DEFAULT_WARN_RATIO),
+    thresholdMs,
+  )
+  /*
+   * The tool budget. While a tool call is in flight the turn budget is held, and this
+   * separate budget runs from the moment the tool started. `0` disables it and restores
+   * the historical "a running tool is activity" behaviour.
+   */
+  const toolThresholdMs = options.toolThresholdMs === undefined
+    ? thresholdMs
+    : Math.max(0, options.toolThresholdMs)
+  const toolWarnMs = Math.min(
+    options.toolWarnMs ?? Math.floor(toolThresholdMs * DEFAULT_WARN_RATIO),
+    toolThresholdMs,
+  )
+  const onWarn = options.onWarn ?? (() => {})
   const onTimeout = options.onTimeout ?? (() => {})
   /** The live timer, or null when the watchdog is idle. */
   let timer = null
@@ -103,6 +132,14 @@ export function createWatchdog(options = {}) {
   let lastProgressAt = 0
   /** Whether the budget is currently armed. */
   let armed = false
+  /** Whether the current budget already emitted its one soft warning. */
+  let warned = false
+  /** Whether a tool call is in flight, which holds the turn budget and runs the tool budget. */
+  let suspended = false
+  /** When the in-flight tool call started. */
+  let suspendedAt = 0
+  /** Whether the current tool budget already emitted its one soft warning. */
+  let toolWarned = false
 
   /**
    * Stop the budget and clear the timer.
@@ -112,35 +149,82 @@ export function createWatchdog(options = {}) {
     if (timer !== null) clearTimeout(timer)
     timer = null
     armed = false
+    warned = false
+    suspended = false
+    suspendedAt = 0
+    toolWarned = false
   }
 
   /**
-   * Re-arm the timer for the remaining budget, or report the expiry.
+   * Arm the timer for the next interesting point: the soft warning, or the expiry.
    * @returns {void}
    */
   function schedule() {
-    disarm()
-    const remaining = thresholdMs - (Date.now() - lastProgressAt)
-    if (remaining <= 0) {
-      armed = true
-      onTimeout(thresholdMs)
+    if (timer !== null) {
+      clearTimeout(timer)
+      timer = null
+    }
+    if (!armed) return
+    if (suspended) {
+      // The turn budget is held, but the tool budget keeps running from the tool start.
+      if (toolThresholdMs === 0) return
+      const toolElapsed = Date.now() - suspendedAt
+      if (toolElapsed >= toolThresholdMs) {
+        armed = false
+        suspended = false
+        onTimeout(toolThresholdMs, { phase: 'tool' })
+        return
+      }
+      const untilToolWarn = toolWarned ? Number.POSITIVE_INFINITY : toolWarnMs - toolElapsed
+      const untilToolDeadline = toolThresholdMs - toolElapsed
+      timer = setTimeout(onDeadline, Math.max(0, Math.min(untilToolWarn, untilToolDeadline)))
+      timer.unref?.()
       return
     }
-    armed = true
-    timer = setTimeout(onDeadline, remaining)
+    const elapsed = Date.now() - lastProgressAt
+    if (elapsed >= thresholdMs) {
+      armed = false
+      onTimeout(thresholdMs, { phase: 'turn' })
+      return
+    }
+    const untilWarn = warned ? Number.POSITIVE_INFINITY : warnMs - elapsed
+    const untilDeadline = thresholdMs - elapsed
+    timer = setTimeout(onDeadline, Math.max(0, Math.min(untilWarn, untilDeadline)))
     timer.unref?.()
   }
 
   /**
-   * The timer deadline: report the expiry, or wait for the rest of the budget.
+   * The timer deadline: warn once, report the expiry, or wait for the rest of the budget.
    * @returns {void}
    */
   function onDeadline() {
     timer = null
-    if (Date.now() - lastProgressAt >= thresholdMs) {
-      armed = false
-      onTimeout(thresholdMs)
+    if (!armed) return
+    if (suspended) {
+      if (toolThresholdMs === 0) return
+      const toolElapsed = Date.now() - suspendedAt
+      if (toolElapsed >= toolThresholdMs) {
+        armed = false
+        suspended = false
+        onTimeout(toolThresholdMs, { phase: 'tool' })
+        return
+      }
+      if (!toolWarned && toolElapsed >= toolWarnMs) {
+        toolWarned = true
+        onWarn(toolElapsed, { phase: 'tool' })
+      }
+      schedule()
       return
+    }
+    const elapsed = Date.now() - lastProgressAt
+    if (elapsed >= thresholdMs) {
+      armed = false
+      onTimeout(thresholdMs, { phase: 'turn' })
+      return
+    }
+    if (!warned && elapsed >= warnMs) {
+      warned = true
+      onWarn(elapsed, { phase: 'turn' })
     }
     schedule()
   }
@@ -152,6 +236,9 @@ export function createWatchdog(options = {}) {
      */
     arm() {
       lastProgressAt = Date.now()
+      warned = false
+      suspended = false
+      armed = true
       schedule()
     },
     /**
@@ -161,6 +248,31 @@ export function createWatchdog(options = {}) {
      */
     progress() {
       lastProgressAt = Date.now()
+      warned = false
+      if (armed) schedule()
+    },
+    /**
+     * Stop the budget while a tool call is in flight, so a long tool or a question waiting on
+     * the person is never mistaken for a stuck step.
+     * @returns {void}
+     */
+    suspend() {
+      suspended = true
+      suspendedAt = Date.now()
+      toolWarned = false
+      schedule()
+    },
+    /**
+     * Resume the budget after a tool call returned, measuring from now.
+     * @returns {void}
+     */
+    resume() {
+      if (!suspended) return
+      suspended = false
+      suspendedAt = 0
+      toolWarned = false
+      lastProgressAt = Date.now()
+      warned = false
       if (armed) schedule()
     },
     /** Stop the budget. */
@@ -172,6 +284,10 @@ export function createWatchdog(options = {}) {
     /** @returns {boolean} whether the budget is armed. */
     get armed() {
       return armed
+    },
+    /** @returns {boolean} whether a tool call currently holds the budget open. */
+    get suspended() {
+      return suspended
     },
   }
 }

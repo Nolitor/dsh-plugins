@@ -59,8 +59,10 @@ import {
   writeExport,
 } from './bridge.js'
 import { createDedupStore, SHORT_HASH_CHARS } from './dedup.js'
-import { createPrefixGuard, pinnedSection } from './prefix.js'
+import { composePinnedText, createPrefixGuard, pinnedSection } from './prefix.js'
+import { repoKeyFor } from './repokey.js'
 import { createLoopBreaker, createWatchdog } from './watchdog.js'
+import { createInterruptRecorder, WATCHDOG_ISSUER } from './interrupt-bridge.js'
 import {
   classifyTool,
   TIER_HOT,
@@ -68,6 +70,9 @@ import {
   tierForTurn,
   TIER_DEFAULTS,
 } from './tiering.js'
+
+/** One process-wide recorder: the interrupt registry it points at is process-wide too. */
+const interruptRecorder = createInterruptRecorder()
 
 /** Cordis plugin name; must equal package.json `name` and the cordis.patch.yml row id. */
 export const name = 'dsh-tokeneconomizer'
@@ -116,11 +121,18 @@ export const DEFAULTS = Object.freeze({
   loopBreakerThreshold: 3,
   /** Number of remembered calls. */
   loopBreakerWindow: 5,
-  /** Interrupt a step that commits no progress within this budget. */
+  /** Watch a step that commits no progress, and warn before its budget expires. */
   watchdog: true,
   /** Progress-free budget of one step. */
-  watchdogThresholdMs: 180000,
-  /** What the watchdog does when the budget is exhausted. */
+  watchdogThresholdMs: 600000,
+  /**
+   * Budget of one in-flight tool call. The turn budget is held while a tool runs, so this
+   * separate budget is what expires a slow or spinning tool. `0` disables it.
+   */
+  watchdogToolThresholdMs: 600000,
+  /** Point inside the budget where one soft warning is emitted. */
+  watchdogWarnMs: 300000,
+  /** What the watchdog does when the budget is exhausted; `warn` never ends the turn. */
   watchdogAction: 'interrupt',
   /** Whether assistant stream frames count as progress. */
   watchdogProgress: 'any',
@@ -136,6 +148,22 @@ export const DEFAULTS = Object.freeze({
   tierTailChars: TIER_DEFAULTS.tailChars,
   /** Shortest output worth grading; below this the summary costs more than it saves. */
   tierMinChars: TIER_DEFAULTS.minChars,
+  /** Pin the constant routing guidance that sends large inspections through one script. */
+  thinkInCode: true,
+  /** Recall this repository's earlier sessions before the first answer of a new one. */
+  recallPriorSessions: true,
+  /** Maximum number of earlier sessions quoted in the recall block. */
+  recallLimit: 3,
+  /** Maximum characters of the recall block; turn `recallPriorSessions` off to disable it. */
+  recallMaxChars: 900,
+  /** Write the decompressed session export the engine's fold reads. */
+  exportSessions: true,
+  /**
+   * `apply` saves tokens and records evidence; `observe` keeps recording evidence but injects
+   * nothing — no pinned rules, no recall, no pointer substitution, no loop guard, no surface
+   * rewrite — so disabling the savings never stops the tracking.
+   */
+  mode: 'apply',
 })
 
 /** Names a config object may carry; anything else is a typo, not a setting. */
@@ -146,6 +174,7 @@ const ENUM_SETTINGS = Object.freeze({
   headless: Object.freeze(['auto', 'always', 'never']),
   watchdogAction: Object.freeze(['warn', 'interrupt']),
   watchdogProgress: Object.freeze(['any', 'committed']),
+  mode: Object.freeze(['apply', 'observe']),
 })
 
 /** Settings that must be integers no smaller than the listed value. */
@@ -227,6 +256,13 @@ export function resolveConfig(config = {}) {
     throw new TypeError(
       `tokeneconomizer: tierWarmTurns (${resolved.tierWarmTurns}) must be greater than tierHotTurns (${resolved.tierHotTurns})`,
     )
+  }
+  // The warning point is derived from the budget, not an independent bound: a deployment that
+  // shortens `watchdogThresholdMs` (a test, a tight sandbox) should not also have to shorten the
+  // warning point, and a warning at or past the budget would simply never fire. Clamp instead of
+  // failing the row — this knob is advisory, so a late warning is a worse bug than a clamped one.
+  if (resolved.watchdogWarnMs >= resolved.watchdogThresholdMs) {
+    resolved.watchdogWarnMs = Math.max(1, Math.floor(resolved.watchdogThresholdMs / 2))
   }
   return resolved
 }
@@ -322,6 +358,18 @@ function userMessage(text) {
 export function apply(ctx, config) {
   if (isInert()) return
   config = resolveConfig(config ?? {})
+  // Load the interrupt registry now: the deadline handler records synchronously, before cancel.
+  void interruptRecorder.init()
+
+  /**
+   * Whether this session may change what the model sees.
+   *
+   * `observe` still records evidence (the engine hooks, the usage counters, the export), because
+   * that is what a later fold learns from. It only stops the four injection points: the pinned
+   * prompt section, the recall block, the pointer/guard substitutions, and the surface rewrite.
+   * @returns {boolean} true when savings may be applied.
+   */
+  const applying = () => config.mode !== 'observe'
 
   const stateHome = String(config.stateHome ?? '')
   const bins = launchers({
@@ -386,6 +434,8 @@ export function apply(ctx, config) {
       tiered: 0,
       tieredTurn: 0,
       requests: 0,
+      /** Whether this session already spent its one prior-session recall. */
+      recallDone: false,
     }
     sessions.set(sid, state)
     // Every observer is registered before the first await: `agent/created` is awaited before the
@@ -424,16 +474,29 @@ export function apply(ctx, config) {
   function mount(state) {
     state.watchdog = createWatchdog({
       thresholdMs: config.watchdogThresholdMs,
-      onTimeout: () => onWatchdogTimeout(state),
+      warnMs: config.watchdogWarnMs,
+      // `Infinity` is the config-visible way to disable the tool budget: the settings
+      // validator requires a positive number, so `0` is not expressible from config.
+      toolThresholdMs: Number.isFinite(config.watchdogToolThresholdMs)
+        ? config.watchdogToolThresholdMs
+        : 0,
+      onWarn: (elapsedMs, meta) => onWatchdogWarn(state, elapsedMs, meta),
+      onTimeout: (budgetMs, meta) => onWatchdogTimeout(state, budgetMs, meta),
     })
-    const rules = String(config.pinnedRules ?? '')
-    if (rules) {
-      state.agent.ctx.systemPrompt.section(pinnedSection(rules, config.pinnedRulesOrder))
+    // The pinned text is a constant for the whole session: the person's own rules plus, when it
+    // is on, the routing guidance that sends a large inspection through one script. Mounting an
+    // empty section would be noise, so an empty composition mounts nothing.
+    const pinned = composePinnedText(config.pinnedRules, config.thinkInCode)
+    if (applying() && pinned) {
+      state.agent.ctx.systemPrompt.section(pinnedSection(pinned, config.pinnedRulesOrder))
     }
     state.agent.ctx.on('tools/post-execute', async (exec, result, next) => {
       DELIVERY.agentPost += 1
       const decision = await next()
       if (state.closed) return decision
+      // Observe mode keeps the routing counters and the evidence hooks, but hands the tool result
+      // through untouched: no breaker prompt, no pointer substitution.
+      if (!applying()) return decision
       if (exec.agent && String(exec.agent.id) !== state.sid) return decision
       const trip = observeBreaker(state, exec, result)
       if (trip !== undefined) breakLoop(state, exec, trip)
@@ -479,7 +542,7 @@ export function apply(ctx, config) {
       timeoutMs: opts.cliTimeoutMs,
       env: createEnv(),
     })
-    const text = config.microskills ? answer?.microskills?.text ?? '' : ''
+    const text = applying() && config.microskills ? answer?.microskills?.text ?? '' : ''
     if (text) {
       state.agent.ctx.systemPrompt.context({
         name: 'tokeneconomizer:microskills',
@@ -491,7 +554,7 @@ export function apply(ctx, config) {
         required: true,
       })
     }
-    if (config.toolprune) {
+    if (applying() && config.toolprune) {
       const visible = new Set(ctx.tools.definitions().map((def) => def.name))
       const deny = (answer?.toolprune?.proposal ?? []).filter((t) => visible.has(t))
       if (deny.length) state.agent.ctx.tools.restrict({ deny })
@@ -573,7 +636,7 @@ export function apply(ctx, config) {
    * @returns {void}
    */
   function applyTiering(state) {
-    if (!config.tiering || state.closed) return
+    if (!applying() || !config.tiering || state.closed) return
     const session = state.agent.session
     const currentTurn = state.turn
     if (!currentTurn) return
@@ -666,7 +729,13 @@ export function apply(ctx, config) {
       while (state.meta.size > META_INDEX_LIMIT) {
         state.meta.delete(state.meta.keys().next().value)
       }
-      state.watchdog.progress()
+      // A tool is now running: it commits no session event until it returns, and a question
+      // waiting on the person can block for minutes. Hold the budget instead of expiring it.
+      state.watchdog.suspend()
+      return
+    }
+    if (event.type === 'tool/result') {
+      state.watchdog.resume()
       return
     }
     if (event.type === 'system/message') {
@@ -689,7 +758,111 @@ export function apply(ctx, config) {
       state.watchdog.disarm()
       return
     }
+    if (event.type === 'user/message') {
+      // The first prompt of a session is the only cheap statement of intent, so the recall runs
+      // once, on it, and reports into the transcript instead of the pinned prefix. Approval
+      // notices and the plugin's own injected blocks also arrive as `user/message`, but they are
+      // not a person's request: searching with them would recall the wrong thing, so the budget
+      // stays unspent until a real prompt arrives.
+      const source = event.data?.source?.kind
+      const genuine = source === undefined || source === null || source === 'user'
+      if (genuine && !state.recallDone && config.recallPriorSessions) {
+        state.recallDone = true
+        void recallPrior(state, contentText(event.data.content))
+      }
+      state.watchdog.progress()
+      return
+    }
     state.watchdog.progress()
+  }
+
+  /**
+   * Quote the earlier sessions of this repository into the transcript.
+   *
+   * DSH owns the FTS5 index behind `ctx.sessionQuery`; this plugin never opens that database, it
+   * only asks the service for a page. The repository key widens an exact-`cwd` match so a session
+   * started in a subdirectory still recalls work done at the checkout root.
+   * @param {object} state - per-agent state.
+   * @param {string} query - the first prompt of this session.
+   * @returns {Promise<void>} resolves when the recall is delivered or skipped.
+   */
+  async function recallPrior(state, query) {
+    if (!applying()) return
+    // Reading an optional service must never throw: a Context without the reflect accessor (or a
+    // composition without the query service) simply has no recall.
+    if (typeof ctx.get !== 'function') return
+    let service
+    try {
+      service = ctx.get('sessionQuery')
+    } catch {
+      return
+    }
+    if (!service || typeof service.searchSessions !== 'function') return
+    const text = String(query ?? '').trim()
+    if (!text) return
+    let key = ''
+    try {
+      key = repoKeyFor(state.cwd)
+    } catch {
+      key = ''
+    }
+    let page
+    try {
+      page = await service.searchSessions({
+        query: text.slice(0, 400),
+        limit: Math.max(config.recallLimit * 4, 8),
+        eventFilters: [{ kind: 'type', values: ['user/message', 'assistant/message'] }],
+      })
+    } catch {
+      // Search is opt-in in a shipped composition and may be disabled; a session without recall
+      // is the normal case, not an error.
+      return
+    }
+    const hits = (page?.items ?? [])
+      .filter(hit => String(hit?.header?.id ?? '') !== state.sid)
+      .filter(hit => {
+        const cwd = hit?.header?.cwd
+        if (typeof cwd !== 'string' || !cwd) return false
+        if (cwd === state.cwd) return true
+        if (!key) return false
+        try {
+          return repoKeyFor(cwd) === key
+        } catch {
+          return false
+        }
+      })
+      .slice(0, config.recallLimit)
+    const block = formatRecall(hits, config.recallMaxChars)
+    if (!block || state.closed) return
+    try {
+      state.agent.inject(userMessage(block))
+    } catch {
+      /* fail open: the recall is advisory */
+    }
+  }
+
+  /**
+   * Render the recall block, bounded in characters.
+   * @param {object[]} hits - the accepted search hits.
+   * @param {number} maxChars - the block budget.
+   * @returns {string} the block, or an empty string when nothing is quotable.
+   */
+  function formatRecall(hits, maxChars) {
+    const lines = []
+    for (const hit of hits) {
+      const id = String(hit?.header?.id ?? '').trim()
+      const snippet = String(hit?.bestMatch?.snippet ?? '')
+        .replace(/\s+/g, ' ')
+        .trim()
+      if (!id || !snippet) continue
+      lines.push(`- ${id}: ${snippet.slice(0, 180)}`)
+    }
+    if (lines.length === 0) return ''
+    const header = 'Earlier sessions of this workspace matched this request '
+      + '(recalled from the harness index; verify before relying on it):'
+    const block = `${header}\n${lines.join('\n')}`
+    if (block.length <= maxChars) return block
+    return `${block.slice(0, Math.max(1, maxChars - 4)).trimEnd()}\n ...`
   }
 
   /**
@@ -755,6 +928,7 @@ export function apply(ctx, config) {
    * @returns {void}
    */
   function breakLoop(state, exec, trip) {
+    if (!applying()) return
     const text = `The same command (${exec.name}) failed ${trip.count} times in a row with the same error. `
       + 'Automated execution was stopped; please advise how to proceed.'
     try {
@@ -771,17 +945,43 @@ export function apply(ctx, config) {
   }
 
   /**
+   * Report one soft warning: the budget is part spent, and the turn keeps running.
+   *
+   * This is the jab, not the punch. It exists so a genuinely stuck step is visible without the
+   * plugin ever deciding on its own that a long reasoning turn is stuck.
+   * @param {object} state - per-agent state.
+   * @param {number} elapsedMs - milliseconds without progress.
+   * @returns {void}
+   */
+  function onWatchdogWarn(state, elapsedMs, meta) {
+    if (state.closed) return
+    const what = meta?.phase === 'tool' ? 'tool call' : 'turn'
+    noticeUser(state, `watchdog: ${what} made no progress for ${Math.round(elapsedMs)} ms — warning only, the turn continues`)
+  }
+
+  /**
    * Report a step that committed no progress within the watchdog budget.
+   *
+   * The default action is `warn`: the notice is written and the budget restarts, so a long
+   * reasoning turn or a slow tool is never killed. `interrupt` stays available as an explicit
+   * opt-in for deployments that want the old behaviour.
    * @param {object} state - per-agent state.
    * @returns {void}
    */
-  function onWatchdogTimeout(state) {
+  function onWatchdogTimeout(state, budgetMs = config.watchdogThresholdMs, meta) {
     if (state.closed) return
-    const action = config.watchdogAction === 'interrupt' ? 'interrupted' : 'warned'
-    notice(state, `watchdog: no progress for ${config.watchdogThresholdMs} ms, action=${action}`)
-    if (config.watchdogAction !== 'interrupt') return
+    if (!applying() || config.watchdogAction !== 'interrupt') {
+      noticeUser(state, `watchdog: no progress for ${budgetMs} ms — still watching, the turn is not interrupted`)
+      state.watchdog.progress()
+      return
+    }
+    const what = meta?.phase === 'tool' ? 'tool call' : 'turn'
+    // Record the interrupt first so the turn-exit reason names a system issuer instead of an
+    // anonymous abort. Fail-open: a missing registry must never stop the cancel below.
+    const record = interruptRecorder.record(state.sid, WATCHDOG_ISSUER)
+    noticeUser(state, `watchdog: ${what} made no progress for ${budgetMs} ms, action=interrupted (` + (record.recorded ? record.wording : 'registry unavailable') + ')')
     try {
-      state.agent.cancel({ kind: 'hook', reason: 'tokeneconomizer/watchdog' }, { keepInbox: true })
+      state.agent.cancel({ kind: 'hook', reason: WATCHDOG_ISSUER }, { keepInbox: true })
     } catch {
       /* fail open: a turn that already ended needs no cancel */
     }
@@ -795,6 +995,8 @@ export function apply(ctx, config) {
    * @returns {void}
    */
   function onToolResult(state, exec, result) {
+    // The PostToolUse hook is a trace: it is what the engine folds into evidence, so observe mode
+    // keeps delivering it. Only the guard's redirect back into the conversation is gated.
     if (isInert() || !config.loopguard) return
     if (exec.agent && String(exec.agent.id) !== state.sid) return
     DELIVERY.hookCalls += 1
@@ -816,7 +1018,7 @@ export function apply(ctx, config) {
       })
       if (Object.keys(out).length === 0) DELIVERY.hookEmpty += 1
       const redirect = out?.hookSpecificOutput?.additionalContext
-      if (redirect) {
+      if (redirect && applying()) {
         try {
           state.agent.inject(await userMessage(redirect))
         } catch {
@@ -836,6 +1038,7 @@ export function apply(ctx, config) {
    */
   function scheduleExport(state) {
     if (state.closed) return
+    if (!config.exportSessions) return
     const now = Date.now()
     if (now - state.lastExport < 30000) return
     if (state.timer) return
@@ -852,10 +1055,22 @@ export function apply(ctx, config) {
 
   /**
    * Write this session's export.
+   *
+   * The export is the only copy of the session the Python engine can read: DSH's own store is
+   * zstd-framed, and the engine's fold takes a plain JSONL path. Turning `exportSessions` off
+   * therefore stops the periodic duplicate but also leaves the fold nothing new to read, so the
+   * caller is told rather than left to discover it.
    * @param {object} state - per-agent state.
-   * @returns {string} the export path.
+   * @returns {string} the export path, or an empty string when exporting is off.
    */
   function writeSession(state) {
+    if (!config.exportSessions) {
+      if (!state.exportOffNoticed) {
+        state.exportOffNoticed = true
+        notice(state, 'export: exportSessions is off, so the engine fold has no new transcript for this session')
+      }
+      return ''
+    }
     const session = state.agent.session
     ensureExportDir(exportDir)
     const path = writeExport(exportDir, {
@@ -934,6 +1149,28 @@ export function apply(ctx, config) {
   function notice(state, text) {
     if (state.closed) return
     process.stderr.write(`[tokeneconomizer] ${text}\n`)
+  }
+
+  /**
+   * Surface one notice to the model and to the person's transcript, not just the log.
+   *
+   * A warning that only reaches stderr is invisible in the Web GUI, which is where people
+   * actually watch a stalled turn. The text is queued as model-facing context, so it lands in
+   * the transcript as one short block instead of rewriting anything already sent.
+   * @param {object} state - per-agent state.
+   * @param {string} text - the notice.
+   * @returns {void}
+   */
+  function noticeUser(state, text) {
+    notice(state, text)
+    // Observe mode is silent by design: the warning still reaches the log, but nothing is added
+    // to the conversation.
+    if (state.closed || !applying()) return
+    try {
+      state.agent.inject(userMessage(`[tokeneconomizer] ${text}`))
+    } catch {
+      /* fail open: a notice is advisory */
+    }
   }
 }
 

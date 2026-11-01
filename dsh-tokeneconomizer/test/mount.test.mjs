@@ -160,7 +160,13 @@ test('the module exports the loader contract', () => {
 
 test('the host-local settings are validated', () => {
   assert.equal(resolveConfig({}).dedup, true)
+  // Advisory by default: only an explicit `interrupt` may end a turn.
   assert.equal(resolveConfig({}).watchdogAction, 'interrupt')
+  assert.equal(resolveConfig({}).mode, 'apply')
+  assert.throws(() => resolveConfig({ mode: 'off' }), /mode/)
+  // The warning point is derived from the budget, so a short budget clamps it instead of failing.
+  assert.equal(resolveConfig({ watchdogThresholdMs: 20 }).watchdogWarnMs, 10)
+  assert.equal(resolveConfig({}).watchdogWarnMs, 300000)
   assert.throws(() => resolveConfig({ watchdogAction: 'sometimes' }), /watchdogAction/)
   assert.throws(() => resolveConfig({ watchdogProgress: 'sometimes' }), /watchdogProgress/)
   assert.throws(() => resolveConfig({ dedup: 'yes' }), /dedup/)
@@ -228,20 +234,38 @@ test('the pinned rules are mounted as a prompt section', async () => {
   const agent = fakeAgent('session-pinned', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
   assert.equal(agent.calls.sections.length, 1)
-  assert.equal(agent.calls.sections[0].text, 'stay on task')
+  // The person's rules come first, then the constant routing guidance; both are constants, so the
+  // composed text cannot drift between requests.
+  assert.ok(agent.calls.sections[0].text.startsWith('stay on task'))
+  assert.match(agent.calls.sections[0].text, /write one short script/)
   assert.equal(agent.calls.sections[0].order, 50)
   assert.equal(agent.calls.sections[0].interpolate, false)
   // The learned facts stay a context: they belong to the runtime snapshot, not to the system slot.
   assert.deepEqual(agent.calls.context, [])
 })
 
-test('no pinned rules means no section', async () => {
+test('no pinned rules still mounts the Think-in-Code routing, and thinkInCode off mounts nothing', async () => {
   const ctx = fakeContext()
   const home = mkdtempSync(join(tmpdir(), 'te-dsh-nopinned-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y') })
   const agent = fakeAgent('session-nopinned', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
-  assert.deepEqual(agent.calls.sections, [])
+  // The routing guidance is a constant, so the section exists even with no configured rules.
+  assert.equal(agent.calls.sections.length, 1)
+  assert.match(agent.calls.sections[0].text, /write one short script/)
+  assert.equal(agent.calls.sections[0].interpolate, false)
+
+  const off = fakeContext()
+  const offHome = mkdtempSync(join(tmpdir(), 'te-dsh-nopinned-off-'))
+  apply(off, {
+    stateHome: offHome,
+    tePath: join(offHome, 'x'),
+    hookPath: join(offHome, 'y'),
+    thinkInCode: false,
+  })
+  const offAgent = fakeAgent('session-nopinned-off', offHome)
+  await off.listeners.get('agent/created')({ agent: offAgent, source: 'startup' })
+  assert.deepEqual(offAgent.calls.sections, [])
 })
 
 test('a repeated tool output is replaced by a pointer', async () => {
@@ -380,10 +404,10 @@ test('a new user message clears the loop chain', async () => {
   assert.equal(agent.calls.cancelled.length, 0)
 })
 
-test('a step without progress trips the watchdog', async () => {
+test('watchdogAction warn is advisory and never interrupts the turn', async () => {
   const ctx = fakeContext()
   const home = mkdtempSync(join(tmpdir(), 'te-dsh-watchdog-'))
-  apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y'), watchdogThresholdMs: 20 })
+  apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y'), watchdogThresholdMs: 20, watchdogAction: 'warn' })
   const agent = fakeAgent('session-watchdog', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
 
@@ -391,9 +415,58 @@ test('a step without progress trips the watchdog', async () => {
     emit(agent, { type: 'turn/start', data: { turn: 1 } })
     await wait(80)
   })
-  assert.match(output, /watchdog: no progress/)
+  assert.match(output, /made no progress/)
+  // The default is advisory: the turn keeps running, and the warning reaches the transcript so a
+  // person watching the Web GUI actually sees it.
+  assert.equal(agent.calls.cancelled.length, 0)
+  assert.ok(agent.calls.injected.some(m => /made no progress/.test(m.content[0].text)))
+})
+
+test('watchdogAction interrupt is the opt-in that stops the turn', async () => {
+  const ctx = fakeContext()
+  const home = mkdtempSync(join(tmpdir(), 'te-dsh-watchdog-int-'))
+  apply(ctx, {
+    stateHome: home,
+    tePath: join(home, 'x'),
+    hookPath: join(home, 'y'),
+    watchdogThresholdMs: 20,
+    watchdogAction: 'interrupt',
+  })
+  const agent = fakeAgent('session-watchdog-int', home)
+  await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
+
+  const output = await captureStderr(async () => {
+    emit(agent, { type: 'turn/start', data: { turn: 1 } })
+    await wait(80)
+  })
+  assert.match(output, /made no progress/)
   assert.equal(agent.calls.cancelled.length, 1)
-  assert.deepEqual(agent.calls.cancelled[0].cause, { kind: 'hook', reason: 'tokeneconomizer/watchdog' })
+  assert.deepEqual(agent.calls.cancelled[0].cause, { kind: 'hook', reason: 'watchdog_timeout' })
+})
+
+test('a slow tool is caught by its own budget instead of holding the turn open', async () => {
+  const ctx = fakeContext()
+  const home = mkdtempSync(join(tmpdir(), 'te-dsh-watchdog-suspend-'))
+  apply(ctx, {
+    stateHome: home,
+    tePath: join(home, 'x'),
+    hookPath: join(home, 'y'),
+    watchdogThresholdMs: 1000,
+    watchdogToolThresholdMs: 20,
+    watchdogAction: 'interrupt',
+  })
+  const agent = fakeAgent('session-watchdog-suspend', home)
+  await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
+
+  const output = await captureStderr(async () => {
+    emit(agent, { type: 'turn/start', data: { turn: 1 } })
+    emit(agent, toolCall('slow', 1))
+    // The turn budget (1000 ms) is held; the 20 ms tool budget is what expires.
+    await wait(80)
+  })
+  assert.equal(agent.calls.cancelled.length, 1)
+  assert.deepEqual(agent.calls.cancelled[0].cause, { kind: 'hook', reason: 'watchdog_timeout' })
+  assert.match(output, /tool call made no progress/)
 })
 
 test('a watch that only warns does not interrupt the turn', async () => {
@@ -413,7 +486,7 @@ test('a watch that only warns does not interrupt the turn', async () => {
     emit(agent, { type: 'turn/start', data: { turn: 1 } })
     await wait(80)
   })
-  assert.match(output, /watchdog: no progress/)
+  assert.match(output, /made no progress/)
   assert.equal(agent.calls.cancelled.length, 0)
 })
 
