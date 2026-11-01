@@ -23,12 +23,34 @@ import {
 const policy = { ...TIER_DEFAULTS }
 
 test('the newest turns are hot, the middle ones warm, the old ones cold', () => {
-  assert.equal(tierForTurn(20, 20, policy), TIER_HOT)
-  assert.equal(tierForTurn(16, 20, policy), TIER_HOT, 'five turns back is still hot')
-  assert.equal(tierForTurn(15, 20, policy), TIER_WARM)
-  assert.equal(tierForTurn(6, 20, policy), TIER_WARM)
-  assert.equal(tierForTurn(5, 20, policy), TIER_COLD)
-  assert.equal(tierForTurn(1, 20, policy), TIER_COLD)
+  // Boundaries come from TIER_DEFAULTS, never from literals: `age = currentTurn - turn`,
+  // hot while `age < hotTurns` (6), warm while `age < warmTurns` (15), else cold.
+  // Derived so a boundary change is one edit, not five assertions to hunt down.
+  const cur = 20
+  const hot = TIER_DEFAULTS.hotTurns
+  const warm = TIER_DEFAULTS.warmTurns
+  assert.equal(tierForTurn(cur, cur, policy), TIER_HOT, 'the current turn is hot')
+  assert.equal(tierForTurn(cur - (hot - 1), cur, policy), TIER_HOT, 'the last hot turn is still hot')
+  assert.equal(tierForTurn(cur - hot, cur, policy), TIER_WARM, 'one past the hot boundary is warm')
+  assert.equal(tierForTurn(cur - (warm - 1), cur, policy), TIER_WARM, 'the last warm turn is still warm')
+  assert.equal(tierForTurn(cur - warm, cur, policy), TIER_COLD, 'one past the warm boundary is cold')
+  assert.equal(tierForTurn(1, cur, policy), TIER_COLD, 'the first turn is cold')
+})
+
+test('the documented six-turn window holds', () => {
+  // The operator-facing promise: turns 1-6 in memory, 7-15 an index, 16+ in the log.
+  // Stated against a fresh session so the numbers are the ones a person sees.
+  assert.deepEqual(
+    [1, 2, 3, 4, 5, 6].map((t) => tierForTurn(t, 6, policy)),
+    [TIER_HOT, TIER_HOT, TIER_HOT, TIER_HOT, TIER_HOT, TIER_HOT],
+    'turn 6 leaves all six of its turns whole',
+  )
+  // At turn 7 the first turn ages out of hot into the index.
+  assert.equal(tierForTurn(1, 7, policy), TIER_WARM)
+  assert.equal(tierForTurn(2, 7, policy), TIER_HOT)
+  // The index window closes at turn 16, where the oldest turn is evicted.
+  assert.equal(tierForTurn(1, 16, policy), TIER_COLD)
+  assert.equal(tierForTurn(2, 16, policy), TIER_WARM)
 })
 
 test('a hot output is never touched', () => {

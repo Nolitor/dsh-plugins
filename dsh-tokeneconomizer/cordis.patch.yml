@@ -43,7 +43,11 @@
         # full fidelity, the middle turns keep their structure, the old turns
         # leave the model context and stay in the session log.
         tiering: true
-        tierHotTurns: 5
+        # Turns 1-6 stay byte-identical in the model context; turns 7-15 become a
+        # structural index; 16+ leave the context and stay in the durable log.
+        # The boundary is `age = currentTurn - turn`, hot while `age < hotTurns`, so 6
+        # is what keeps the sixth turn whole.
+        tierHotTurns: 6
         tierWarmTurns: 15
         tierHeadChars: 2000
         tierTailChars: 600

@@ -61,6 +61,7 @@ import {
 import { createDedupStore, SHORT_HASH_CHARS } from './dedup.js'
 import { composePinnedText, createPrefixGuard, pinnedSection } from './prefix.js'
 import { repoKeyFor } from './repokey.js'
+import { mergeSettings, readSettingsFile } from './settings.js'
 import { createLoopBreaker, createWatchdog } from './watchdog.js'
 import { createInterruptRecorder, WATCHDOG_ISSUER } from './interrupt-bridge.js'
 import {
@@ -384,7 +385,18 @@ function userMessage(text) {
  */
 export function apply(ctx, config) {
   if (isInert()) return
-  config = resolveConfig(config ?? {})
+  // Settings warnings go to stderr, never through noticeUser(): that helper injects a
+  // user message, which would restart the watchdog budget the warning is about.
+  const settingsWarn = (text) => process.stderr.write(`[tokeneconomizer] ${text}\n`)
+  const composed = resolveConfig(config ?? {})
+  // The external settings file is merged ON TOP of the composed Cordis config, because a
+  // patch `config` replaces the whole config and a layer underneath could never win a key.
+  // Reading it here (not at import) keeps a test that rewrites DSH_HOME honest, and every
+  // rejection is a warning that costs one key rather than the plugin.
+  const file = readSettingsFile({ warn: settingsWarn })
+  config = Object.keys(file.values).length > 0
+    ? mergeSettings(composed, file.values, resolveConfig, settingsWarn)
+    : composed
   // Load the interrupt registry now: the deadline handler records synchronously, before cancel.
   void interruptRecorder.init()
 

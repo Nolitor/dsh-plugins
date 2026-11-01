@@ -35,7 +35,7 @@ export const KIND_LOG = 'log'
 
 /** Default policy: five hot turns, ten warm turns, then cold. */
 export const TIER_DEFAULTS = Object.freeze({
-  hotTurns: 5,
+  hotTurns: 6,
   warmTurns: 15,
   headChars: 2000,
   tailChars: 600,

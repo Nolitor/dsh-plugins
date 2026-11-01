@@ -59,16 +59,23 @@ dsh --profile web --dump-config | grep tierMinChars   # authoritative resolved v
 
 | Key | Current | Meaning |
 |---|---|---|
-| `tierHotTurns` | `5` | turns kept byte-identical (in-memory, full fidelity) |
+| `tierHotTurns` | `6` | turns kept byte-identical (in-memory, full fidelity) |
 | `tierWarmTurns` | `15` | turns after which an output becomes a structural index |
 | `tierMinChars` | `3700` | smallest output worth rewriting; below this the summary can be larger than the original |
 | `tierHeadChars` | `2000` | head bytes retained in a warm summary |
 | `tierTailChars` | `600` | tail bytes retained in a warm summary |
 
-Owner's stated intent — *turns 1-6 in memory, 7-15 index, 16+ to the log* — maps to
-`tierHotTurns: 6` with `tierWarmTurns: 15` unchanged. The code's `age = currentTurn - turn`, with
-`age < hotTurns` as hot, makes `6` the correct value for that sentence; today's `5` keeps only five
-turns whole.
+**Applied 2026-11-02.** The owner's intent — *turns 1-6 in memory, 7-15 index, 16+ to the log* —
+is `tierHotTurns: 6` with `tierWarmTurns: 15`. Because `age = currentTurn - turn` and hot means
+`age < hotTurns`, a value of `6` is what keeps the sixth turn whole; the previous `5` left it in the
+index. Verified boundary behaviour:
+
+| Current turn | Turn 1 | Turn 6 | Turn 16 |
+|---|---|---|---|
+| 6 | hot | hot | — |
+| 7 | warm | hot | — |
+| 15 | warm | warm | — |
+| 16 | cold | warm | hot |
 
 ### Watchdog
 
@@ -114,6 +121,24 @@ One file, resolved from `TOKENECONOMIZER_HOME` (default `~/.tokeneconomizer`), n
   }
 }
 ```
+
+### Status: IMPLEMENTED 2026-11-02
+
+`lib/settings.js` reads `$DSH_HOME/tokeneconomizer.json` (or `$TE_CONFIG` when set) and merges it
+on top of the composed Cordis config. Thirteen tests cover it, including the cases that matter most:
+a malformed file, a future `version`, an unknown key, and a value the strict resolver rejects all
+cost **only that key** and never throw.
+
+```jsonc
+{
+  "version": 1,
+  "tierHotTurns": 6,
+  "tierMinChars": 3700
+}
+```
+
+Keys are the **flat camelCase names the Cordis row already uses** — the same 35 names — so there is
+no translation table and no fourth place for a value to drift.
 
 ### Precedence (revised after measurement)
 

@@ -214,7 +214,7 @@ tool output by two things and then acts:
 
 | Tier | Turns | What happens to a log | What happens to code |
 |---|---|---|---|
-| hot | the newest `tierHotTurns` (5) | untouched, byte-identical | untouched, byte-identical |
+| hot | the newest `tierHotTurns` (6) | untouched, byte-identical | untouched, byte-identical |
 | warm | up to `tierWarmTurns` (15) | replaced by a structural summary: the head, the tail, and an index of file names, status codes, schema keys, error and warning counts | kept whole: it is the work, not noise |
 | cold | older than that | evicted: the model context keeps a pointer to the turn and step | evicted: the model context keeps a pointer to the turn and step |
 
