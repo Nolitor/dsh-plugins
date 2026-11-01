@@ -1,17 +1,17 @@
 <!-- skeleton:
-version: 1.7
+version: 1.8
 kind: ver
 status: active
 updated: 2026-11-01
-summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2 and 0.0.1-rc.3 (chunk-boundary recognition; worst-case one-character feeding 42 -> 3 strict leaks, turn 16 4/6 -> 0/6). Older rounds live in VERIFICATION-ARCHIVE.md.
+summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2, 0.0.1-rc.3 and 0.0.1-rc.4 (protocol tokens scrubbed by delimiter shape, not by the DSML text; worst-case one-character feeding 42 -> 3 -> 1, the remaining 1 a measurement-regex false positive). Older rounds live in VERIFICATION-ARCHIVE.md.
 -->
 # @nolit/dsh-opencode-v2 - Verification (current)
 
 > Only the recent rounds live here. Everything up to v0.7.3 is in
 > VERIFICATION-ARCHIVE.md in this directory.
 >
-> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.3 on disk (serving pid 2325852
-> still runs 0.0.1-rc.2 until restart)
+> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.4 on disk (serving pid 2339788
+> runs 0.0.1-rc.3 until restart)
 
 ## 33. v0.7.4 — no protocol notation reaches the transcript (measured 2026-10-31 23:20-23:40)
 
@@ -767,7 +767,71 @@ The number advanced one instructed RC step (`0.0.1-rc.2` → `0.0.1-rc.3`); the 
 
 ### 42.6 Status
 
-**`applied on disk, pending restart`.** Serving `pid 2325852` runs `0.0.1-rc.2`; the rc.3 source
+**`applied on disk, pending restart` at the time.** The owner restarted onto rc.3 afterwards
+(serving `pid 2339788`, 09:42:39 KST); `0.0.1-rc.4` (round 43) supersedes it on disk only. No mount
+is claimed here.
+
+## 43. v0.0.1-rc.4 — not every protocol token is DSML; scrub by delimiter shape (measured 2026-11-01 09:42–10:01 KST)
+
+### 43.1 Live evidence: turns 17-25 on rc.3
+
+The owner restarted onto rc.3 (serving `pid 2339788`, 09:42:39 KST) and ran **nine more turns**
+(17-25). Tool errors: **none** — every intended call executed. Two assistant messages still printed
+protocol tokens, and **neither token was DSML**:
+
+| Turn | Step | Token on screen |
+|---|---|---|
+| 18 | 6 | `<｜End of thought｜>` |
+| 20 | 3 | `<｜thought>` and `</thought>` |
+
+### 43.2 Why: the scrub was keyed to one vendor token
+
+The scrub recognised only **DSML-shaped** tokens (`｜DSML｜`) and only think/thinking/analysis
+wrappers. The model also writes other pipe-wrapped tokens (`<｜thought>`, `<｜End of thought｜>`)
+and a `thought` wrapper; those matched neither rule, so they reached the screen. Keying a scrub to
+one vendor token is an enumeration, and the model had moved to another token in the same notation
+family.
+
+### 43.3 What changed in rc.4
+
+| # | Piece | Behaviour |
+|---|---|---|
+| a | generic protocol-token scrub | removes **any** `<｜…｜>` / `<│…│>` token regardless of its text, including single-sided forms such as `<｜thought>` |
+| b | wrapper family | `thought` joins think/thinking/analysis: `<thought>` opens a reasoning block, `</thought>` closes it, and both are stripped from prose |
+| c | chunk-boundary hold | the pending `<…` prefix hold accepts **any** character, so a split token is held, not printed |
+
+### 43.4 Measurement
+
+Every assistant text message across all `opencode-route` sessions was fed **one character at a
+time** (worst-case chunking):
+
+| Measure | rc.2 | rc.3 | rc.4 |
+|---|---|---|---|
+| strict screen leaks (line-start marker, protocol token, parameter tag) | **42** | **3** | **1** — a false positive of the measurement regex (a pair of markdown pipes, not notation) |
+| body calls promoted | — | **28** | **28** |
+
+Whole-string feeding: **4 -> 1**. Prose identity: **2,728** messages without notation stay
+byte-identical. Live replay: turn 18 step 6 (`<｜End of thought｜>`) and turn 20 step 3
+(`<｜thought>` / `</thought>`) replay through rc.4 with **no residue** — both clean, including the
+single-sided form. Latest traffic: the **33** assistant messages since rc.3 (turns 17-25) contain
+**1** regex false positive and **no real notation**.
+
+### 43.5 Tests and artifact
+
+| Check | Result |
+|---|---|
+| `npm test` | **286/286 pass**, 0 fail |
+| `npm run check` | exit 0 |
+| regression coverage | suite unchanged at 286; the two live shapes and the single-sided token replay clean |
+| artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.4.tgz` |
+| sha256 | `19212774f7f4fc8d001e980e3d9c25509510c54804670b4480f2f41cb3693be1` |
+
+The number advanced one instructed RC step (`0.0.1-rc.3` -> `0.0.1-rc.4`); the rule stays
+`0.0.1.rc<N>` and nothing else moves it.
+
+### 43.6 Status
+
+**`applied on disk, pending restart`.** Serving `pid 2339788` runs `0.0.1-rc.3`; the rc.4 source
 is on disk only. No mount is claimed here.
 
 

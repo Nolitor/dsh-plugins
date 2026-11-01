@@ -39,10 +39,11 @@ const STRAY = [
   '</thinking>', '<thinking>', '</antml:thinking>', '<antml:thinking>',
   '</analysis>', '<analysis>', '</antml:analysis>', '<antml:analysis>',
   '</summary>', '<summary>', '</antml:summary>', '<antml:summary>',
+  '</thought>', '<thought>',
 ]
 const MAX_STRAY = Math.max(...STRAY.map((tag) => tag.length))
-const THINKING_CLOSE = /<\/(?:antml:)?think(?:ing)?>/i
-const THINKING_OPEN = /<(?:antml:)?think(?:ing)?>/i
+const THINKING_CLOSE = /<\/(?:antml:)?(?:think(?:ing)?|thought)>/i
+const THINKING_OPEN = /<(?:antml:)?(?:think(?:ing)?|thought)>/i
 const ANALYSIS_OPEN = /<(?:antml:)?analysis>/i
 const ANALYSIS_CLOSE = /<\/(?:antml:)?analysis>/i
 
@@ -71,6 +72,9 @@ const DSML_PARAM = new RegExp(
   'g',
 )
 const DSML_ANY = new RegExp('<\\/?' + DSML_PIPES + '[^>]*>', 'g')
+// Any remaining "<｜…｜>" protocol token, whatever it says: <｜thought>, <｜End of
+// thought｜>, <｜tool▁calls▁begin｜>. Measured live on rc.3 (turn 18/20).
+const PROTO_TOKEN = /<\/?[｜│|]{1,2}[^<>]{0,60}[｜│|]{0,2}>/g
 // A tool-call marker in any bracket/delimiter style the model mixes up:
 //   [tool call name #id], <tool call name #id>, <tool_call #id>, <tool-call ...
 const TOOL_MARK = /^[<\[]\s*tool[ _-]?call\b/i
@@ -145,6 +149,8 @@ export function createStreamClassifier(options = {}) {
     const orphan = /[｜│|]{1,2}\s*DSML\s*[｜│|]{1,2}\s*(?:calls|invoke|tool_calls|parameter)?\s*>/gi
     const found = out.match(orphan)
     if (found) { stats.stray += found.length; out = out.replace(orphan, '') }
+    const proto = out.match(PROTO_TOKEN)
+    if (proto) { stats.stray += proto.length; out = out.replace(PROTO_TOKEN, '') }
     return out
   }
 
@@ -248,9 +254,8 @@ export function createStreamClassifier(options = {}) {
     if (lt < 0) return 0
     const frag = tail.slice(lt)
     if (frag.length === 0 || frag.length > 26) return 0
-    const body = frag.slice(1).replace(/[｜│|]{1,2}\s*(?:DSML)?\s*[｜│|]{1,2}/gi, 'DSML')
-    // A single pipe glyph, or tag attributes (name="bash"), may still be incomplete.
-    if (!/^[\/a-z\s｜│|="'0-9_.-]*$/i.test(body)) return 0
+    // Inside '<' … '>' any character can still arrive: token text, attributes, quotes.
+    if (/[<>]/.test(frag.slice(1))) return 0
     return frag.length
   }
 

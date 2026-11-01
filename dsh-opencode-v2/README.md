@@ -1,10 +1,10 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 2.8
+version: 2.9
 kind: readme
 status: active
 updated: 2026-11-01
-summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose. 0.0.1-rc.2 makes the top classifier recognize the tool-call marker by shape (any bracket style, name/id from the head or the declared parameter schema, any pipe glyph) instead of a literal list, scrubs model-written tags and DSML tokens from the screen, and de-duplicates promoted calls by id; measured screen leaks 301 -> 4 on whole-string feeding. 0.0.1-rc.3 makes recognition stream-safe: a bounded hold for trailing marker/DSML/parameter fragments, a PARAM_BODY state and orphan-DSML scrub stop chunk-boundary leaks (strict screen leaks 42 -> 3 fed one character at a time; turn 16 4/6 -> 0/6).
+summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose. 0.0.1-rc.2 makes the top classifier recognize the tool-call marker by shape (any bracket style, name/id from the head or the declared parameter schema, any pipe glyph) instead of a literal list, scrubs model-written tags and DSML tokens from the screen, and de-duplicates promoted calls by id; measured screen leaks 301 -> 4 on whole-string feeding. 0.0.1-rc.3 makes recognition stream-safe: a bounded hold for trailing marker/DSML/parameter fragments, a PARAM_BODY state and orphan-DSML scrub stop chunk-boundary leaks (strict screen leaks 42 -> 3 fed one character at a time; turn 16 4/6 -> 0/6). 0.0.1-rc.4 scrubs any pipe-wrapped protocol token by delimiter shape instead of only DSML, treats `thought` as a thinking wrapper, and lets the chunk-boundary hold keep any character inside a pending `<…` fragment, so a split token cannot leak; worst-case chunking leaks 42 -> 3 -> 1, and the remaining 1 is a measurement-regex false positive (a pair of markdown pipes).
 -->
 
 
@@ -18,16 +18,17 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 
 > Measurement of record: [`../OPENCODE-V2-SURFACE-MEASUREMENT.md`](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
 
-## 0. Version — 0.0.1 baseline, 0.0.1-rc.3 on instruction
+## 0. Version — 0.0.1 baseline, 0.0.1-rc.4 on instruction
 
 | Field | Value |
 |---|---|
-| `package.json` | `0.0.1-rc.3` (was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
-| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.3` (was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `package.json` | `0.0.1-rc.4` (was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.4` (was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
 | Versions self-bumped in this history | 26 (`0.1.1` … `0.9.0`) |
 | `0.0.1-rc.1` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.1.tgz` — sha256 `64be56cd99543754caadcc5459b983c597ac53f226cdd145ded4ab7d99a3fc16` |
 | `0.0.1-rc.2` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.2.tgz` — sha256 `29260240b776708a524e90c5e6b4071557beeb9f6b18908c4ad09befda85e8e3` |
 | `0.0.1-rc.3` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.3.tgz` — sha256 `54e7b84380cf9373d991ce4f4ddc2fdd67987831a42865c3d2a5eadd9542f32b` |
+| `0.0.1-rc.4` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.4.tgz` — sha256 `19212774f7f4fc8d001e980e3d9c25509510c54804670b4480f2f41cb3693be1` |
 
 The owner reset the number and forbade further self-bumps: **the version changes again only on an
 explicit owner instruction, and then only as `0.0.1.rc<N>`** (packaged as `0.0.1-rc.<N>`). A release,
@@ -35,9 +36,10 @@ a fix round or a green test run is not an instruction. The load-beacon constant 
 release, not a log decoration. The `0.0.1` baseline stays the reset; the line advances one
 release-candidate step per instructed fix round and nowhere else.
 
-Three instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
-accumulation, §0.1), `0.0.1-rc.1` → `0.0.1-rc.2` (shape-based marker classification, §0.2) and
-`0.0.1-rc.2` → `0.0.1-rc.3` (stream-safe recognition at chunk boundaries, §0.3).
+Four instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
+accumulation, §0.1), `0.0.1-rc.1` → `0.0.1-rc.2` (shape-based marker classification, §0.2),
+`0.0.1-rc.2` → `0.0.1-rc.3` (stream-safe recognition at chunk boundaries, §0.3) and
+`0.0.1-rc.3` → `0.0.1-rc.4` (protocol tokens are a delimiter family, not a DSML family, §0.4).
 None of those numbers came from a green suite or a defect found on our own; each was the one RC
 step the owner's instruction allowed.
 
@@ -175,8 +177,51 @@ Tests: `npm test` **286/286**, `npm run check` exit 0. New regressions cover a m
 single characters, a standalone parameter tag split across deltas, a DSML opener with attributes
 split across deltas, and every two-way split of a mixed payload leaving no marker on screen.
 
-**Status: applied on disk, pending restart.** Serving `pid 2325852` runs `0.0.1-rc.2`; the
-`0.0.1-rc.3` source is on disk only. No mount is claimed. Detail: `VERIFICATION.md` §42, ledger F-30.
+**Status at the time: applied on disk, pending restart.** Serving `pid 2325852` ran `0.0.1-rc.2`;
+the `0.0.1-rc.3` source was on disk only. The owner restarted onto rc.3 afterwards (serving
+`pid 2339788`, 09:42:39 KST); `0.0.1-rc.4` (§0.4) now supersedes it on disk only. No mount is
+claimed. Detail: `VERIFICATION.md` §42, ledger F-30.
+
+### 0.4 `0.0.1-rc.4` — not every protocol token is DSML; scrub by delimiter shape
+
+The owner restarted onto rc.3 (serving `pid 2339788`, 09:42:39 KST) and ran **nine more turns**
+(17-25). Tool errors: **none**. Two messages still showed protocol tokens, and **neither was
+DSML**: turn 18 step 6 printed `<｜End of thought｜>`, and turn 20 step 3 printed `<｜thought>` and
+`</thought>`.
+
+Root cause: the scrub recognised only **DSML-shaped** tokens (`｜DSML｜`) and only
+think/thinking/analysis wrappers. The model also writes other pipe-wrapped tokens
+(`<｜thought>`, `<｜End of thought｜>`) and a `thought` wrapper, so those fell through.
+
+`0.0.1-rc.4` fixes the family, not the instances:
+
+| # | Mitigation |
+|---|---|
+| a | a generic protocol-token scrub removes **any** `<｜…｜>` / `<│…│>` token regardless of its text |
+| b | `thought` is accepted as a thinking wrapper (`<thought>` opens reasoning, `</thought>` closes it) alongside think/thinking/analysis, and both are stripped from prose |
+| c | the chunk-boundary prefix hold now accepts **any** character inside a pending `<…` fragment, so a split token cannot leak |
+
+Measured under worst-case chunking — every assistant text message across all `opencode-route`
+sessions fed **one character at a time**:
+
+| Measure | rc.2 | rc.3 | rc.4 |
+|---|---|---|---|
+| strict screen leaks, one character at a time | **42** | **3** | **1** — a false positive of the measurement regex (a pair of markdown pipes, not notation) |
+| body calls promoted | — | **28** | **28** |
+
+Whole-string feeding: **4 → 1**. Prose identity: **2,728** messages without notation stay
+byte-identical. Latest traffic: the **33** assistant messages since rc.3 (turns 17-25) contain
+**1** regex false positive and **no real notation**. Replaying the two live shapes through rc.4 —
+turn 18 step 6 (`<｜End of thought｜>`) and turn 20 step 3 (`<｜thought>` / `</thought>`) — leaves
+**no residue**; both are clean, including the single-sided `<｜thought>` form. Corpus worst-case
+chunking stays at the same **1** regex false positive.
+
+Tests: `npm test` **286/286**, `npm run check` exit 0. Artifact
+`artifacts/nolit-dsh-opencode-v2-0.0.1-rc.4.tgz`, sha256
+`19212774f7f4fc8d001e980e3d9c25509510c54804670b4480f2f41cb3693be1`.
+
+**Status: applied on disk, pending restart.** Serving `pid 2339788` runs `0.0.1-rc.3`; the
+`0.0.1-rc.4` source is on disk only. No mount is claimed. Detail: `VERIFICATION.md` §43, ledger F-31.
 
 ## 1. Measured OpenCode v2.2.0 facts this plugin is built on
 
@@ -579,6 +624,31 @@ figures (301 -> 4 corpus-wide) stay whole-string measurements and are not chunke
 splitting, a split standalone parameter tag, a split attribute-bearing DSML opener, and every two-way
 split of a mixed payload. Status: **applied on disk, pending restart** — serving `pid 2325852` runs
 `0.0.1-rc.2`; rc.3 source is on disk only, no mount claimed. Detail: `VERIFICATION.md` §42, ledger F-30.
+
+**Not every protocol token is DSML, so the scrub keys on delimiter shape.** After rc.3 the owner
+restarted (serving `pid 2339788`, 09:42:39 KST) and ran nine more turns (17-25) with **0 tool
+errors**, yet two messages still leaked tokens that are **not DSML**: turn 18 step 6 printed
+`<｜End of thought｜>`, and turn 20 step 3 printed `<｜thought>` and `</thought>`. The scrub knew
+`｜DSML｜` and the think/thinking/analysis wrappers only, so the model's other pipe-wrapped tokens
+and its `thought` wrapper passed through.
+
+`0.0.1-rc.4` replaces the enumeration with family rules:
+
+| Piece | Behaviour (rc.4) |
+|---|---|
+| generic token scrub | removes **any** `<｜…｜>` / `<│…│>` token, whatever its text — including single-sided forms such as `<｜thought>` — and does not depend on the token crossing a delta whole |
+| wrapper family | `thought` is a thinking wrapper next to think/thinking/analysis: `<thought>` opens a reasoning block, `</thought>` closes it, and both are stripped from prose |
+| hold | the trailing `<…` prefix hold accepts **any** character, so a token split across deltas is held, not printed |
+
+Measured under worst-case chunking (one character at a time, all `opencode-route` sessions):
+strict screen leaks **42 -> 3 -> 1** (rc.2 / rc.3 / rc.4), and the remaining 1 is a false positive
+of the measurement regex (a pair of markdown pipes, not notation); whole-string feeding **4 -> 1**;
+body calls promoted **28**; **2,728** messages without notation stay byte-identical. Replaying the
+two live shapes — turn 18 step 6 and turn 20 step 3 — through rc.4 leaves **no residue**. The
+**33** assistant messages since rc.3 contain 1 regex false positive and no real notation. Tests
+`npm test` **286/286**, `npm run check` exit 0. Status: **applied on disk, pending restart** —
+serving `pid 2339788` runs `0.0.1-rc.3`; rc.4 is on disk only, no mount claimed.
+Detail: `VERIFICATION.md` §43, ledger F-31.
 
 ### Session identity and credential choice (v0.5.1 — measured 2026-10-30)
 
