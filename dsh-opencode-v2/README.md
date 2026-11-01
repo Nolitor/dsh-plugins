@@ -18,12 +18,12 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 
 > Measurement of record: [`../OPENCODE-V2-SURFACE-MEASUREMENT.md`](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
 
-## 0. Version — 0.0.1 baseline, 0.0.1-rc.7 on instruction
+## 0. Version — 0.0.1 baseline, 0.0.1-rc.8 on instruction
 
 | Field | Value |
 |---|---|
-| `package.json` | `0.0.1-rc.7` (was `0.0.1-rc.6`, which was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
-| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.7` (was `0.0.1-rc.6`, which was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `package.json` | `0.0.1-rc.8` (was `0.0.1-rc.7`, which was `0.0.1-rc.6`, which was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.8` (was `0.0.1-rc.7`, which was `0.0.1-rc.6`, which was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
 | Versions self-bumped in this history | 26 (`0.1.1` … `0.9.0`) |
 | `0.0.1-rc.1` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.1.tgz` — sha256 `64be56cd99543754caadcc5459b983c597ac53f226cdd145ded4ab7d99a3fc16` |
 | `0.0.1-rc.2` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.2.tgz` — sha256 `29260240b776708a524e90c5e6b4071557beeb9f6b18908c4ad09befda85e8e3` |
@@ -32,6 +32,7 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 | `0.0.1-rc.5` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.5.tgz` — sha256 `970e0c70cefc4ebcb0ce3dc767dc824939f6a6ea3e14f1807ea9124ed8fa7609` |
 | `0.0.1-rc.6` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.6.tgz` — sha256 `b95379ad0f13b78699fa8a4b526ca586fc0ad2d945628d487bea0e24d311b1b9` |
 | `0.0.1-rc.7` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.7.tgz` — sha256 `79e6ddf7d0fa7e640654783b7fd243d8a36295c68ebd07747530790322a2d442` |
+| `0.0.1-rc.8` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.8.tgz` — sha256 `a417272025669427fd7bdcb4f114a4092ba188c55212782cf1451b66c5d63ac1` |
 
 The owner reset the number and forbade further self-bumps: **the version changes again only on an
 explicit owner instruction, and then only as `0.0.1.rc<N>`** (packaged as `0.0.1-rc.<N>`). A release,
@@ -39,13 +40,14 @@ a fix round or a green test run is not an instruction. The load-beacon constant 
 release, not a log decoration. The `0.0.1` baseline stays the reset; the line advances one
 release-candidate step per instructed fix round and nowhere else.
 
-Seven instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
+Eight instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
 accumulation, §0.1), `0.0.1-rc.1` → `0.0.1-rc.2` (shape-based marker classification, §0.2),
 `0.0.1-rc.2` → `0.0.1-rc.3` (stream-safe recognition at chunk boundaries, §0.3),
 `0.0.1-rc.3` → `0.0.1-rc.4` (protocol tokens are a delimiter family, not a DSML family, §0.4),
 `0.0.1-rc.4` → `0.0.1-rc.5` (real-traffic trace instead of synthetic probes, §0.5),
 `0.0.1-rc.5` → `0.0.1-rc.6` (the system prompt actually reaches the model, §0.6) and
-`0.0.1-rc.6` → `0.0.1-rc.7` (a call in the reasoning channel is promoted, not dropped, §0.7).
+`0.0.1-rc.6` → `0.0.1-rc.7` (a call in the reasoning channel is promoted, not dropped, §0.7) and
+`0.0.1-rc.7` → `0.0.1-rc.8` (assistant history is prose only, §0.8).
 None of those numbers came from a green suite or a defect found on our own; each was the one RC
 step the owner's instruction allowed.
 
@@ -414,6 +416,48 @@ and the marker does not reach the screen, and reasoning prose without a marker s
 the recovered-call count is a replay of recorded traffic, not a live rate. After the restart the
 same trace should show the reasoning marker deltas falling while the `tool_calls` finish count
 rises. Detail: `VERIFICATION.md` §46, ledger F-34.
+
+### 0.8 `0.0.1-rc.8` — assistant history is prose only
+
+The rc.7 traffic left two owner-visible symptoms: turns that **restated tool calls in a loop**
+(session `edeabe91`, 2026-11-02 07:02–07:06 KST) and protocol notation that still reached the
+screen (the same session's final step printed a run of `</run_code>` / `</function>` closers as
+reasoning; session `bca2c2f7` is the second reference).
+
+Measured on those two sessions by rebuilding the request body from the recorded transcript:
+
+| Measure (one request built from the whole session) | `bca2c2f7` | `edeabe91` |
+|---|---|---|
+| wire characters, before → after | 634,761 → **388,841** (−38.7%) | 133,684 → **66,405** (−50.3%) |
+| `<thinking>` wrappers sent back to the route | **73** → 0 | 12 → 0 |
+| rendered `[tool call <name> #<id>]: <json>` echoes | **122** → 0 | 13 → 0 |
+| assistant messages whose `content` is `null` (call-only) | 0 → 69 | 0 → 8 |
+
+Root cause: `buildChatRequest()` serialized **every** assistant block with
+`provider.js blocksToText()`. Reasoning became `<thinking>…</thinking>`, each tool-call block became
+`[tool call <name> #<id>]: <json>`, and that string was sent as the assistant `content` **next to**
+the structured `tool_calls` field — so the route received every prior call twice and every prior
+reasoning block wrapped in the notation the classifier is supposed to strip. The model then keeps
+writing that notation (the leak) and re-states calls it has already made (the loop).
+
+| # | Piece | Behaviour |
+|---|---|---|
+| a | new `assistantHistoryText(blocks)` | assistant `content` is the **text blocks only**; reasoning and call notation are never re-sent |
+| b | call-only message | `content: null` with the structured `tool_calls` — no phantom echo line |
+| c | reasoning-only message | not sent at all: it carried nothing the conversation contract needs |
+| d | classifier element scrub | a bare protocol element tag is erased in place: `function(s)`, `invoke`, `calls`, `tool(_call|_result)`, `parameter(s)`, `argument(s)`, `result(s)`, `output(s)` **plus every declared tool name**, so `</run_code>` and `</bash>` are notation |
+| e | split closer | a trailing partial tag (`</run_co`) is held and never printed as prose |
+
+| Check | Result |
+|---|---|
+| `npm test` | **298/298 pass**, 0 fail (295 before; **3** new) |
+| `npm run check` | exit 0 |
+| artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.8.tgz` |
+| sha256 | `a417272025669427fd7bdcb4f114a4092ba188c55212782cf1451b66c5d63ac1` |
+
+**Status: applied on disk, pending restart.** The body figures are a rebuild of recorded transcripts,
+not live requests: the serving process must be restarted before the wire changes. Detail:
+`VERIFICATION.md` §47, ledger F-35.
 
 ## 1. Measured OpenCode v2.2.0 facts this plugin is built on
 

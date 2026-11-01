@@ -92,7 +92,7 @@ const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
 /** Version string of this module, for the load beacon. Must match package.json. */
-const VERSION = '0.0.1-rc.7'
+const VERSION = '0.0.1-rc.8'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
@@ -552,6 +552,33 @@ export function parseBanner(text) {
   return { url: url[1].replace(/\/+$/, ''), password: password ? password[1] : '' }
 }
 
+/**
+ * The assistant prose that is legal to re-send on the wire.
+ *
+ * Assistant history must carry *prose only*: the route already receives the calls
+ * as structured `tool_calls`, and reasoning is not part of the conversation
+ * contract. Rendering the whole block list (provider.js `blocksToText`) sent every
+ * prior call twice - once as a wire field and once as `[tool call <name> #<id>]:
+ * <json>` prose - plus a `<thinking>` wrapper around every reasoning block.
+ *
+ * Measured 2026-11-01/02 on the owner's own traffic: session `bca2c2f7` sent 73
+ * `<thinking>` wrappers and 122 rendered calls, session `edeabe91` 12 and 13. That
+ * teaches the model to keep writing the protocol notation it is being shown (the
+ * leak the classifier then has to strip) and shows each call twice, which is the
+ * shape that makes a turn restate a call it already made.
+ *
+ * @param {object[]} blocks - DSH content blocks of one assistant message.
+ * @returns {string} the text blocks joined, without reasoning or call notation.
+ */
+export function assistantHistoryText(blocks) {
+  const parts = []
+  for (const block of blocks ?? []) {
+    if (!block || block.type !== 'text') continue
+    if (typeof block.text === 'string' && block.text.length > 0) parts.push(block.text)
+  }
+  return parts.join('\n')
+}
+
 /** Build the OpenAI-compatible request body from DSH `GenerateOptions`. */
 export function buildChatRequest(options, ref, config) {
   const messages = []
@@ -571,11 +598,14 @@ export function buildChatRequest(options, ref, config) {
           type: 'function',
           function: { name: block.name, arguments: block.arguments },
         }))
+      const prose = assistantHistoryText(message.content).trim()
       if (toolCalls.length > 0) {
-        messages.push({ role: 'assistant', content: text || null, tool_calls: toolCalls })
-      } else {
-        append('assistant', text)
+        messages.push({ role: 'assistant', content: prose || null, tool_calls: toolCalls })
+      } else if (prose.length > 0) {
+        append('assistant', prose)
       }
+      // A message that held only reasoning (or only a call) contributes nothing
+      // else: no wrapper, no rendered call, no phantom empty message.
     } else if (message.role === 'tool') {
       // A tool result must keep its call id even when the output was empty; the
       // previous append() dropped empty content and mis-assigned the id.

@@ -133,6 +133,18 @@ test('stray closers are removed from prose', () => {
   assert.equal(textOf(parts), 'done now')
 })
 
+test('model-written element closers are removed, even split across deltas', () => {
+  // Measured live 2026-11-02 (session edeabe91, step 14): a cut response ended with
+  // a run of </run_code>/</function> closers that reached the screen as reasoning.
+  const source = 'parse JSONL.\n\n</run_code>\r\n\n</function>\r\n</function>'
+  const { parts } = classify(source)
+  assert.equal(textOf(parts).trim(), 'parse JSONL.')
+  const perChar = classify('parse JSONL.\n\n</run_code>\r\n\n</function>', 1)
+  assert.equal(textOf(perChar.parts).trim(), 'parse JSONL.')
+  const mixed = classify('a</run_code>b<function>c</tool_call>d')
+  assert.equal(textOf(mixed.parts), 'abcd')
+})
+
 const NEW_TOOLS = [{ name: 'run_code', parameters: { type: 'object', properties: { code: {}, description: {} }, required: ['code'] } }]
 function classifyWithTools(text) {
   const classifier = createStreamClassifier({ toolNames: new Set(['run_code']), tools: NEW_TOOLS })

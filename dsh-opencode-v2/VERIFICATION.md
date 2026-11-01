@@ -1,17 +1,17 @@
 <!-- skeleton:
-version: 2.1
+version: 2.2
 kind: ver
 status: active
-updated: 2026-11-01
-summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2, 0.0.1-rc.3, 0.0.1-rc.4 (protocol tokens scrubbed by delimiter shape, not by the DSML text; worst-case one-character feeding 42 -> 3 -> 1, the remaining 1 a measurement-regex false positive), 0.0.1-rc.5 (synthetic probes rejected as evidence; lib/trace.js records real-traffic shape), 0.0.1-rc.6 (the rc.5 trace measured hasSystem=false on 29/29 real requests and a 58.6% leak rate; system-role messages now keep the system slot and empty tool results keep their call id) and 0.0.1-rc.7 (rc.6 traffic: 155 requests, hasSystem=true 155/155, 56 (36.1%) still leaking mostly in reasoning because only the content channel was classified; reasoning now goes through the same classifier, replay recovers 21 calls and 3 of 6 stalled steps; 295/295). Older rounds live in VERIFICATION-ARCHIVE.md.
+updated: 2026-11-02
+summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2, 0.0.1-rc.3, 0.0.1-rc.4 (protocol tokens scrubbed by delimiter shape, not by the DSML text; worst-case one-character feeding 42 -> 3 -> 1, the remaining 1 a measurement-regex false positive), 0.0.1-rc.5 (synthetic probes rejected as evidence; lib/trace.js records real-traffic shape), 0.0.1-rc.6 (the rc.5 trace measured hasSystem=false on 29/29 real requests and a 58.6% leak rate; system-role messages now keep the system slot and empty tool results keep their call id) and 0.0.1-rc.7 (rc.6 traffic: 155 requests, hasSystem=true 155/155, 56 (36.1%) still leaking mostly in reasoning because only the content channel was classified; reasoning now goes through the same classifier, replay recovers 21 calls and 3 of 6 stalled steps; 295/295) and 0.0.1-rc.8 (assistant history is prose only: the wire no longer carries `<thinking>` wrappers or rendered `[tool call ...]` echoes, -38.7% / -50.3% body size on two recorded sessions, and bare element closers are scrubbed; 298/298). Older rounds live in VERIFICATION-ARCHIVE.md.
 -->
 # @nolit/dsh-opencode-v2 - Verification (current)
 
 > Only the recent rounds live here. Everything up to v0.7.3 is in
 > VERIFICATION-ARCHIVE.md in this directory.
 >
-> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.7 on disk (serving pid 2422772
-> runs 0.0.1-rc.6 until restart)
+> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.8 on disk (serving pid 2482449
+> runs 0.0.1-rc.7 until restart)
 
 ## 33. v0.7.4 — no protocol notation reaches the transcript (measured 2026-10-31 23:20-23:40)
 
@@ -1056,3 +1056,70 @@ Ledger entry: F-34.
 
 
 
+
+## 47. v0.0.1-rc.8 — assistant history carried the protocol notation back to the model (measured 2026-11-02 07:09-07:20 KST)
+
+### 47.1 What the owner reported
+
+Two reference sessions on the live `opencode-http-agent` route (`opencode-go/deepseek-v4.1-flash`):
+`edeabe91` showed a turn that **kept restating tool calls** until it was aborted (07:02-07:06 KST),
+and its last step printed a run of `</run_code>` / `</function>` closers on screen; `bca2c2f7`
+(05:52-06:55 KST) was named as the filtering reference.
+
+### 47.2 Measured root cause
+
+`buildChatRequest()` serialized **every** assistant block through `provider.js blocksToText()`. The
+route therefore received, for every earlier assistant message, the reasoning body wrapped as
+`<thinking>...</thinking>` and each tool-call block rendered as `[tool call <name> #<id>]: <json>` —
+**in addition to** the structured `tool_calls` field of the same message.
+
+The request body was rebuilt from the recorded transcripts (no live request was spent):
+
+| Measure | `bca2c2f7` | `edeabe91` |
+|---|---|---|
+| wire characters, before -> after | 634,761 -> **388,841** (-38.7%) | 133,684 -> **66,405** (-50.3%) |
+| `<thinking>` wrappers | 73 -> **0** | 12 -> **0** |
+| rendered `[tool call ...]` echoes | 122 -> **0** | 13 -> **0** |
+| assistant messages with `content: null` | 0 -> 69 | 0 -> 8 |
+| wire messages | 240 -> 240 | 34 -> **33** |
+
+Because the notation is also what the classifier strips from the display, sending it back is a
+feedback loop: the model copies the shape it is shown, and a call appears twice, which is the
+shape that makes a turn restate it.
+
+### 47.3 Second defect — element closers reached the screen
+
+`scrub()` erased think/analysis/summary/thought tokens, `<parameter>`/`<invoke>` tags and piped
+DSML tokens, but a **bare `</NAME>` closer** was not notation to it. Measured in `edeabe91` step 14,
+the stored reasoning part ends with:
+
+```
+parse JSONL.\r\n\r\n</run_code>\r\n\r\n</function>\r\n</function> ...
+```
+
+### 47.4 What rc.8 changed
+
+| # | Piece | Behaviour |
+|---|---|---|
+| a | `assistantHistoryText(blocks)` (new, exported) | assistant `content` is the text blocks only |
+| b | call-only assistant message | `content: null` + structured `tool_calls` |
+| c | reasoning-only assistant message | not sent |
+| d | `elementTagRegex(toolNames)` in `lib/stream-parser.js` | erases a bare element tag for `function(s)`, `function_call(s)`, `invoke(s)`, `call(s)`, `tool(s)`, `tool_call(s)`, `tool_result(s)`, `parameter(s)`, `argument(s)`, `result(s)`, `output(s)`, `function_result(s)`, `function_output`, `code_result` **and every declared tool name** |
+| e | split closer hold | a trailing partial tag (`</run_co`) is held by `strayPrefixLength()` and never printed |
+
+### 47.5 Tests and artifact
+
+| Check | Result |
+|---|---|
+| `npm test` | **298/298 pass**, 0 fail (295 before; **3** new) |
+| `npm run check` | exit 0 |
+| new tests | `model-written element closers are removed, even split across deltas`; `assistant history carries prose only: no thinking wrapper, no rendered call`; `assistantHistoryText keeps prose and drops every other block` |
+| artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.8.tgz` |
+| sha256 | `a417272025669427fd7bdcb4f114a4092ba188c55212782cf1451b66c5d63ac1` |
+
+The number advanced one instructed RC step (`0.0.1-rc.7` -> `0.0.1-rc.8`).
+
+### 47.6 Status
+
+**`applied on disk, pending restart`.** The body figures are a rebuild of recorded transcripts, not
+live requests; the serving process must be restarted before the wire changes. Ledger entry: F-35.

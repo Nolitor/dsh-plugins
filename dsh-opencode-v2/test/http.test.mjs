@@ -37,7 +37,7 @@ import {
   usageFromOpenAi,
   usageFromTokens,
 } from '../lib/http.js'
-import { buildChatRequest } from '../lib/http.js'
+import { assistantHistoryText, buildChatRequest } from '../lib/http.js'
 
 const json = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json' })
@@ -1099,6 +1099,55 @@ test('an empty tool result keeps its call id', () => {
   const tool = body.messages.find((message) => message.role === 'tool')
   assert.ok(tool, 'the empty tool result must still be sent')
   assert.equal(tool.tool_call_id, 'call_1')
+})
+
+test('assistant history carries prose only: no thinking wrapper, no rendered call', () => {
+  // Measured 2026-11-02 on the owner's traffic: blocksToText() re-rendered every
+  // assistant block, so the wire carried 73 '<thinking>' wrappers and 122
+  // '[tool call <name> #<id>]: <json>' echoes in one session - each call stated
+  // twice (wire field + prose) and the model shown the notation it then copies.
+  const body = buildChatRequest(
+    {
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      messages: [
+        {
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'weigh it' },
+            { type: 'text', text: 'Reading now.' },
+            { type: 'tool-call', id: 'call_1', name: 'read', arguments: '{"file_path":"a.md"}' },
+          ],
+        },
+        { role: 'assistant', content: [{ type: 'tool-call', id: 'call_2', name: 'bash', arguments: '{"command":"ls"}' }] },
+        { role: 'assistant', content: [{ type: 'reasoning', text: 'only thinking' }] },
+        { role: 'tool', toolCallId: 'call_1', content: [{ type: 'text', text: 'ok' }] },
+      ],
+    },
+    { id: 'deepseek-v4.1-flash' },
+    Config({ reasoningField: 'reasoning_content', effortField: 'reasoning_effort' }),
+  )
+  const wire = JSON.stringify(body.messages.filter((message) => message.role !== 'tool'))
+  assert.equal(wire.includes('<thinking>'), false, 'no reasoning wrapper on the wire')
+  assert.equal(wire.includes('[tool call '), false, 'no rendered call on the wire')
+  assert.equal(body.messages[0].content, 'Reading now.')
+  assert.equal(body.messages[0].tool_calls[0].id, 'call_1')
+  assert.equal(body.messages[1].content, null, 'a call-only message carries no prose')
+  assert.equal(body.messages[1].tool_calls[0].function.name, 'bash')
+  assert.equal(body.messages.length, 3, 'a reasoning-only assistant message is not sent')
+})
+
+test('assistantHistoryText keeps prose and drops every other block', () => {
+  assert.equal(
+    assistantHistoryText([
+      { type: 'reasoning', text: 'thought' },
+      { type: 'text', text: 'one' },
+      { type: 'tool-call', id: 'c', name: 'bash', arguments: '{}' },
+      { type: 'text', text: 'two' },
+    ]),
+    'one\ntwo',
+  )
+  assert.equal(assistantHistoryText([]), '')
 })
 
 

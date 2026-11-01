@@ -80,6 +80,34 @@ const PROTO_TOKEN = /<\/?[｜│|]{1,2}[^<>]{0,60}[｜│|]{0,2}>/g
 const TOOL_MARK = /^[<\[]\s*tool[ _-]?call\b/i
 // Model-written call tags and parameter tags that must never reach the screen.
 const TOOL_TAG = /<\/?(?:tool[ _-]?call|invoke|parameter)\b[^>]*>/gi
+/**
+ * Element names the model writes as XML for a call and that must never reach the
+ * screen. TOOL_TAG covers the marker/parameter family with attributes; this list
+ * covers the bare closers, which were reaching the display: measured live
+ * 2026-11-02 (session edeabe91, step 14) a cut response ended with a run of
+ * `</run_code>` / `</function>` closers and they were printed as reasoning.
+ * Declared tool names are added too, so `</run_code>` and `</bash>` are treated as
+ * notation for every tool the route actually offers.
+ */
+const PROTOCOL_ELEMENTS = [
+  'function', 'functions', 'function_call', 'function_calls',
+  'function_result', 'function_results', 'function_output',
+  'invoke', 'invokes', 'calls', 'call', 'tool', 'tools',
+  'tool_call', 'tool_calls', 'tool_result', 'tool_results',
+  'parameter', 'parameters', 'argument', 'arguments',
+  'result', 'results', 'output', 'outputs', 'code_result',
+]
+/** Longest XML tag still held while its tail could grow into a closer. */
+const MAX_ELEMENT_TAG = 64
+const escapeRe = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+/** One regex over every bare protocol element tag, plus the declared tools. */
+function elementTagRegex(toolNames) {
+  const names = new Set(PROTOCOL_ELEMENTS)
+  for (const name of toolNames ?? []) {
+    if (typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(name)) names.add(name.toLowerCase())
+  }
+  return new RegExp('<\\/?\\s*(?:' + [...names].map(escapeRe).join('|') + ')\\s*>', 'gi')
+}
 const PLAIN_PARAM = /<(?:[｜│|]{1,2}\s*DSML\s*[｜│|]{1,2}\s*)?parameter\s+name="([^"]+)"(?:\s+string="(true|false)")?\s*>([\s\S]*?)<\/(?:[｜│|]{1,2}\s*DSML\s*[｜│|]{1,2}\s*)?parameter>/g
 const MAX_HEAD = 8192
 
@@ -133,6 +161,7 @@ export function createStreamClassifier(options = {}) {
   let closer = null
 
   const declared = (name) => toolNames.size > 0 && toolNames.has(name)
+  const elementTag = elementTagRegex(toolNames)
 
   /** Remove protocol syntax that must never reach the display channel. */
   function scrub(value) {
@@ -145,6 +174,8 @@ export function createStreamClassifier(options = {}) {
     if (dsml) { stats.stray += dsml.length; out = out.replace(DSML_ANY, '') }
     const tags = out.match(TOOL_TAG)
     if (tags) { stats.stray += tags.length; out = out.replace(TOOL_TAG, '') }
+    const elements = out.match(elementTag)
+    if (elements) { stats.stray += elements.length; out = out.replace(elementTag, '') }
     // Orphan tail of a DSML tag whose '<' was consumed with an earlier chunk.
     const orphan = /[｜│|]{1,2}\s*DSML\s*[｜│|]{1,2}\s*(?:calls|invoke|tool_calls|parameter)?\s*>/gi
     const found = out.match(orphan)
@@ -288,6 +319,15 @@ export function createStreamClassifier(options = {}) {
     for (let n = 1; n <= Math.min(dsmlTail.length + 2, s.length); n++) {
       const tail = s.slice(s.length - n)
       if (dsmlTail.startsWith(tail) || ('</' + DSML_TOKEN).startsWith(tail)) { size = Math.max(size, n); break }
+    }
+    // A partial element closer at the tail ("</run_co") is held so a closer split
+    // across deltas cannot print its head as prose.
+    const lt = s.lastIndexOf('<')
+    if (lt >= 0) {
+      const frag = s.slice(lt)
+      if (frag.length >= 1 && frag.length <= MAX_ELEMENT_TAG && !frag.includes('>') && /^<\/?[A-Za-z_][A-Za-z0-9_.:-]*$/.test(frag)) {
+        size = Math.max(size, frag.length)
+      }
     }
     return size
   }

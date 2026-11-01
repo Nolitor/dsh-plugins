@@ -15,8 +15,8 @@
 
 ## rule
 
-- **2.4** · active · 2026-11-01 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
-  Every defect and wrong turn this workspace actually made, including a literal marker whitelist that missed a new notation family, a stream recogniser tested only on whole payloads and a scrub keyed to one vendor token that missed the model's other pipe-wrapped tokens, and a synthetic A/B probe offered as evidence for a streaming defect that only appears in long output-heavy turns, a role map that sent DSH's leading system-role message to the model as `user` so every system instruction was lost, and a body-call classifier that ran only on the content channel while calls written into `reasoning_content` were stripped and dropped, with the standing rule that keeps it from happening again. Read before changing a plugin, a doc, or a live service.
+- **2.5** · active · 2026-11-02 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
+  Every defect and wrong turn this workspace actually made, including a literal marker whitelist that missed a new notation family, a stream recogniser tested only on whole payloads and a scrub keyed to one vendor token that missed the model's other pipe-wrapped tokens, and a synthetic A/B probe offered as evidence for a streaming defect that only appears in long output-heavy turns, a role map that sent DSH's leading system-role message to the model as `user` so every system instruction was lost, a body-call classifier that ran only on the content channel while calls written into `reasoning_content` were stripped and dropped, and an assistant-history serializer that re-sent the model its own protocol notation (rendered calls and `<thinking>` wrappers) while the scrub knew each notation's openers but not its bare closers, with the standing rule that keeps it from happening again. Read before changing a plugin, a doc, or a live service.
 - **1.3** · active · 2026-10-31 · [docs/RULES.md](RULES.md)
   Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting — with the failure ledger as required reading.
 
@@ -97,8 +97,10 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 35)
+## boot (newest 5 of 36)
 
+- **active** · 2026-11-02T0715+0900.md · [card](../bootcards/2026-11-02T0715+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-02T0715+0900. Older cards are historical.
 - **active** · 2026-11-01T1237+0900.md · [card](../bootcards/2026-11-01T1237+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-01T1237+0900. Older cards are historical.
 - **active** · 2026-11-01T1122+0900.md · [card](../bootcards/2026-11-01T1122+0900.md)
@@ -107,9 +109,7 @@
   Dated session card (tier 5). State, active task, and handoff for 2026-11-01T1050+0900. Older cards are historical.
 - **active** · 2026-11-01T1003+0900.md · [card](../bootcards/2026-11-01T1003+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-01T1003+0900. Older cards are historical.
-- **active** · 2026-11-01T0940+0900.md · [card](../bootcards/2026-11-01T0940+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-11-01T0940+0900. Older cards are historical.
 
 ---
 
-66 indexed (35 boot cards), 0 missing header, 66 total.
+67 indexed (36 boot cards), 0 missing header, 67 total.
