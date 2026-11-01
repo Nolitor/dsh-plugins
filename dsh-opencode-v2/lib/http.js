@@ -92,7 +92,7 @@ const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
 /** Version string of this module, for the load beacon. Must match package.json. */
-const VERSION = '0.0.1-rc.6'
+const VERSION = '0.0.1-rc.7'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
@@ -1137,10 +1137,17 @@ export class OpencodeHttpAdapter {
       const parameters = tool?.parameters
       return parameters && typeof parameters === 'object' ? parameters : null
     }
-    let classifier = createStreamClassifier({ toolNames: declaredToolNames })
+    let classifier = createStreamClassifier({ toolNames: declaredToolNames, tools: declaredTools })
+    // The model also writes calls into the reasoning channel (measured: 5 of 6
+    // leaking requests on rc.6 had the marker in reasoning, and when such a call was
+    // not promoted the step produced no tool call at all - the "model spacing out"
+    // the owner reported). Reasoning text goes through the same classifier; prose
+    // stays reasoning, a recovered call is promoted.
+    let reasoningClassifier = createStreamClassifier({ toolNames: declaredToolNames, tools: declaredTools })
     let displayGate = createDisplayGate({ toolNames: declaredToolNames })
     const resetGates = () => {
-      classifier = createStreamClassifier({ toolNames: declaredToolNames })
+      classifier = createStreamClassifier({ toolNames: declaredToolNames, tools: declaredTools })
+      reasoningClassifier = createStreamClassifier({ toolNames: declaredToolNames, tools: declaredTools })
       displayGate = createDisplayGate({ toolNames: declaredToolNames })
     }
     const open = (kind, index) => {
@@ -1367,6 +1374,23 @@ export class OpencodeHttpAdapter {
         jsonProbe = ''
       }
     }
+    /**
+     * Route parts that came from the reasoning channel: prose stays reasoning, any
+     * call the classifier recovers is queued for the parser channel.
+     */
+    const routeReasoning = function* (parts) {
+      if (!Array.isArray(parts)) return
+      for (const part of parts) {
+        if (!part || typeof part !== 'object') continue
+        if (part.kind === 'tool-call') {
+          displayGate.addCandidate({ ...part, source: 'text' })
+          continue
+        }
+        if (typeof part.text === 'string' && part.text.length > 0) {
+          yield* emitPart({ kind: 'reasoning', text: part.text })
+        }
+      }
+    }
     const routeParts = function* (parts) {
       if (!Array.isArray(parts)) return
       for (const part of parts) {
@@ -1378,7 +1402,7 @@ export class OpencodeHttpAdapter {
         }
         if (part.kind === 'reasoning') {
           const cleaned = stripThinkingTags(typeof part.text === 'string' ? part.text : '')
-          if (cleaned.text.length > 0) yield* emitPart({ ...part, text: cleaned.text })
+          if (cleaned.text.length > 0) yield* routeReasoning(reasoningClassifier.push(cleaned.text))
           continue
         }
         if (typeof part.text === 'string' && part.text.length > 0) {
@@ -1403,6 +1427,7 @@ export class OpencodeHttpAdapter {
      */
     const flushGates = function* () {
       yield* routeParts(classifier.flush())
+      yield* routeReasoning(reasoningClassifier.flush())
       yield* flushJsonProbe()
       const settled = displayGate.settle(structuredCalls())
       // A promoted call takes the next free ordinal: a structured call of another

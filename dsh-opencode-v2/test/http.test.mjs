@@ -1101,3 +1101,52 @@ test('an empty tool result keeps its call id', () => {
   assert.equal(tool.tool_call_id, 'call_1')
 })
 
+
+test('a tool call written into reasoning_content is promoted, not shown', async () => {
+  // Measured on rc.6: 5 of 6 leaking requests carried the marker in reasoning, and
+  // when such a call was not promoted the model produced no tool call at all.
+  const events = [
+    { choices: [{ delta: { reasoning_content: 'I will list.\n[tool call bash #call_r]: {"command":"ls"}' } }] },
+    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'list' }] }],
+      tools: [{ name: 'bash', description: 'run', parameters: { type: 'object', properties: { command: {} }, required: ['command'] } }],
+    }))
+    const reasoning = chunks.filter((chunk) => chunk.type === 'reasoning-delta').map((chunk) => chunk.text).join('')
+    assert.equal(reasoning.includes('tool call'), false, 'the marker must not reach the screen')
+    const calls = chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    assert.equal(calls.length, 1, 'the call must reach the parser channel')
+    assert.equal(calls[0].block.name, 'bash')
+    assert.deepEqual(JSON.parse(calls[0].block.arguments), { command: 'ls' })
+  } finally {
+    await close()
+  }
+})
+
+test('reasoning prose without a marker stays reasoning', async () => {
+  const events = [
+    { choices: [{ delta: { reasoning_content: 'weighing the options' } }] },
+    { choices: [{ delta: { content: 'done' }, finish_reason: 'stop' }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'go' }] }],
+    }))
+    const reasoning = chunks.filter((chunk) => chunk.type === 'reasoning-delta').map((chunk) => chunk.text).join('')
+    assert.equal(reasoning, 'weighing the options')
+    assert.equal(chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call').length, 0)
+  } finally {
+    await close()
+  }
+})
+

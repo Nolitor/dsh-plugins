@@ -1,10 +1,10 @@
 # @nolit/dsh-opencode-v2
 <!-- skeleton:
-version: 3.1
+version: 3.2
 kind: readme
 status: active
 updated: 2026-11-01
-summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose. 0.0.1-rc.2 makes the top classifier recognize the tool-call marker by shape (any bracket style, name/id from the head or the declared parameter schema, any pipe glyph) instead of a literal list, scrubs model-written tags and DSML tokens from the screen, and de-duplicates promoted calls by id; measured screen leaks 301 -> 4 on whole-string feeding. 0.0.1-rc.3 makes recognition stream-safe: a bounded hold for trailing marker/DSML/parameter fragments, a PARAM_BODY state and orphan-DSML scrub stop chunk-boundary leaks (strict screen leaks 42 -> 3 fed one character at a time; turn 16 4/6 -> 0/6). 0.0.1-rc.4 scrubs any pipe-wrapped protocol token by delimiter shape instead of only DSML, treats `thought` as a thinking wrapper, and lets the chunk-boundary hold keep any character inside a pending `<…` fragment, so a split token cannot leak; worst-case chunking leaks 42 -> 3 -> 1, and the remaining 1 is a measurement-regex false positive (a pair of markdown pipes). 0.0.1-rc.5 is an evidence round, not a new classifier: the owner rejected the synthetic A/B as proof (a short prompt produces almost no reasoning or text, so there is nothing to leak), so lib/trace.js records real traffic shape (request: model/messages/context chars/tools/system/stream/maxTokens/toolChoice/effort/session; delta: field/length/marker and an excerpt of at most 400 chars only when notation is detected; finish: counts; error: transport detail and retry counters), capped at 8 MB at /tmp/opencode-v2-trace.jsonl and disabled with OPENCODE_V2_TRACE=0, never storing prompts, message bodies or credentials; scripts/analyze-opencode-trace.mjs groups it by process and request and reports the leak rate by tool count, context chars, system prompt and model. 0.0.1-rc.6 is driven by what that trace then measured: process 2397320 served 29 real requests on deepseek-v4.1-flash, 17 (58.6%) carried protocol notation (34 content deltas, 1 reasoning), 559-580 messages and ~1.07-1.10M context chars each, tools=1, max_tokens 384000, effort high — and hasSystem=false on 29 of 29, which exposed a real role-mapping defect: DSH's loop-built history carries the system prompt as a leading system-role message and every unknown role was mapped to `user`, so the model never saw its system instructions. rc.6 maps `system` to the OpenAI system slot (developer still maps to system) and sends an empty tool result with its tool_call_id instead of dropping it.
+summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose. 0.0.1-rc.2 makes the top classifier recognize the tool-call marker by shape (any bracket style, name/id from the head or the declared parameter schema, any pipe glyph) instead of a literal list, scrubs model-written tags and DSML tokens from the screen, and de-duplicates promoted calls by id; measured screen leaks 301 -> 4 on whole-string feeding. 0.0.1-rc.3 makes recognition stream-safe: a bounded hold for trailing marker/DSML/parameter fragments, a PARAM_BODY state and orphan-DSML scrub stop chunk-boundary leaks (strict screen leaks 42 -> 3 fed one character at a time; turn 16 4/6 -> 0/6). 0.0.1-rc.4 scrubs any pipe-wrapped protocol token by delimiter shape instead of only DSML, treats `thought` as a thinking wrapper, and lets the chunk-boundary hold keep any character inside a pending `<…` fragment, so a split token cannot leak; worst-case chunking leaks 42 -> 3 -> 1, and the remaining 1 is a measurement-regex false positive (a pair of markdown pipes). 0.0.1-rc.5 is an evidence round, not a new classifier: the owner rejected the synthetic A/B as proof (a short prompt produces almost no reasoning or text, so there is nothing to leak), so lib/trace.js records real traffic shape (request: model/messages/context chars/tools/system/stream/maxTokens/toolChoice/effort/session; delta: field/length/marker and an excerpt of at most 400 chars only when notation is detected; finish: counts; error: transport detail and retry counters), capped at 8 MB at /tmp/opencode-v2-trace.jsonl and disabled with OPENCODE_V2_TRACE=0, never storing prompts, message bodies or credentials; scripts/analyze-opencode-trace.mjs groups it by process and request and reports the leak rate by tool count, context chars, system prompt and model. 0.0.1-rc.6 is driven by what that trace then measured: process 2397320 served 29 real requests on deepseek-v4.1-flash, 17 (58.6%) carried protocol notation (34 content deltas, 1 reasoning), 559-580 messages and ~1.07-1.10M context chars each, tools=1, max_tokens 384000, effort high — and hasSystem=false on 29 of 29, which exposed a real role-mapping defect: DSH's loop-built history carries the system prompt as a leading system-role message and every unknown role was mapped to `user`, so the model never saw its system instructions. rc.6 maps `system` to the OpenAI system slot (developer still maps to system) and sends an empty tool result with its tool_call_id instead of dropping it. 0.0.1-rc.7 answers the next trace (serving pid 2422772, 155 requests): 155/155 now carry the system prompt (the rc.6 fix verified) and 138 ended with structured tool_calls, but 56 requests (36.1%) still carried protocol notation, now mostly in `reasoning_content` — the adapter classified only the content channel for body calls, so a call the model wrote into reasoning was stripped of its wrapper tokens and lost, the step produced no tool call and the turn stalled; rc.7 sends reasoning through the same classifier, so prose stays reasoning while a recovered call is queued for the parser channel.
 -->
 
 
@@ -18,12 +18,12 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 
 > Measurement of record: [`../OPENCODE-V2-SURFACE-MEASUREMENT.md`](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
 
-## 0. Version — 0.0.1 baseline, 0.0.1-rc.6 on instruction
+## 0. Version — 0.0.1 baseline, 0.0.1-rc.7 on instruction
 
 | Field | Value |
 |---|---|
-| `package.json` | `0.0.1-rc.6` (was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
-| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.6` (was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `package.json` | `0.0.1-rc.7` (was `0.0.1-rc.6`, which was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.7` (was `0.0.1-rc.6`, which was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
 | Versions self-bumped in this history | 26 (`0.1.1` … `0.9.0`) |
 | `0.0.1-rc.1` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.1.tgz` — sha256 `64be56cd99543754caadcc5459b983c597ac53f226cdd145ded4ab7d99a3fc16` |
 | `0.0.1-rc.2` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.2.tgz` — sha256 `29260240b776708a524e90c5e6b4071557beeb9f6b18908c4ad09befda85e8e3` |
@@ -31,6 +31,7 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 | `0.0.1-rc.4` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.4.tgz` — sha256 `19212774f7f4fc8d001e980e3d9c25509510c54804670b4480f2f41cb3693be1` |
 | `0.0.1-rc.5` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.5.tgz` — sha256 `970e0c70cefc4ebcb0ce3dc767dc824939f6a6ea3e14f1807ea9124ed8fa7609` |
 | `0.0.1-rc.6` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.6.tgz` — sha256 `b95379ad0f13b78699fa8a4b526ca586fc0ad2d945628d487bea0e24d311b1b9` |
+| `0.0.1-rc.7` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.7.tgz` — sha256 `79e6ddf7d0fa7e640654783b7fd243d8a36295c68ebd07747530790322a2d442` |
 
 The owner reset the number and forbade further self-bumps: **the version changes again only on an
 explicit owner instruction, and then only as `0.0.1.rc<N>`** (packaged as `0.0.1-rc.<N>`). A release,
@@ -38,12 +39,13 @@ a fix round or a green test run is not an instruction. The load-beacon constant 
 release, not a log decoration. The `0.0.1` baseline stays the reset; the line advances one
 release-candidate step per instructed fix round and nowhere else.
 
-Six instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
+Seven instructed fix rounds have moved the line so far: `0.0.1` → `0.0.1-rc.1` (argument
 accumulation, §0.1), `0.0.1-rc.1` → `0.0.1-rc.2` (shape-based marker classification, §0.2),
 `0.0.1-rc.2` → `0.0.1-rc.3` (stream-safe recognition at chunk boundaries, §0.3),
 `0.0.1-rc.3` → `0.0.1-rc.4` (protocol tokens are a delimiter family, not a DSML family, §0.4),
-`0.0.1-rc.4` → `0.0.1-rc.5` (real-traffic trace instead of synthetic probes, §0.5) and
-`0.0.1-rc.5` → `0.0.1-rc.6` (the system prompt actually reaches the model, §0.6).
+`0.0.1-rc.4` → `0.0.1-rc.5` (real-traffic trace instead of synthetic probes, §0.5),
+`0.0.1-rc.5` → `0.0.1-rc.6` (the system prompt actually reaches the model, §0.6) and
+`0.0.1-rc.6` → `0.0.1-rc.7` (a call in the reasoning channel is promoted, not dropped, §0.7).
 None of those numbers came from a green suite or a defect found on our own; each was the one RC
 step the owner's instruction allowed.
 
@@ -291,6 +293,27 @@ went to the model as a user message and the model ran without its system instruc
 adapter defect that no unit fixture had exercised, found by reading the shape of real traffic.
 §0.6 fixes it.
 
+#### What the rc.6 trace showed — the calls were in the reasoning channel
+
+After rc.6 the owner restarted (serving **pid 2422772**) and reported that the visible markup was
+gone, but that tool calls often failed and the model frequently just sat there ("spacing out").
+The trace of **155** real requests on `deepseek-v4.1-flash` shows both halves:
+
+| Measure | Value |
+|---|---|
+| traced requests | **155** |
+| `hasSystem` | **true — 155 of 155** (the rc.6 fix, verified) |
+| ended with structured `tool_calls` | **138** |
+| ended with `stop` | **10** |
+| no finish record | **7** |
+| requests still carrying protocol notation in a streamed delta | **56** (**36.1%**) |
+
+and the notation had moved channel: it is now mostly in the **reasoning** stream — for example
+`</thinking>\n[tool call` and `</|DSML| parameter>`, plus one runaway request with **7,275**
+marker deltas in reasoning. That is the stall: the adapter classified only the **content** channel
+for body calls; reasoning was merely stripped of think tokens, so a tool call the model wrote into
+`reasoning_content` was never promoted — the step produced no tool call at all and the turn
+looked stalled. §0.7 fixes it.
 #### The analyser — `scripts/analyze-opencode-trace.mjs`
 
 `node scripts/analyze-opencode-trace.mjs [trace] [--pid <pid>] [--since <iso>]` lists **every
@@ -304,7 +327,8 @@ is the turn the owner actually ran. Until real long work produces a hit it print
 
 Tests: `test/trace.test.mjs` (**5** tests) pins the kill switch, one compact line per record, the
 bounded excerpt, that no prompt body is copied, and the marker-family recognition.
-`npm test` **291/291** in rc.5 (**293/293** in rc.6); `npm run check` exit 0 in both.
+`npm test` **291/291** in rc.5, **293/293** in rc.6, **295/295** in rc.7; `npm run check` exit 0
+throughout.
 Artifact for the rc.5 evidence round: `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.5.tgz`, sha256
 `970e0c70cefc4ebcb0ce3dc767dc824939f6a6ea3e14f1807ea9124ed8fa7609`.
 
@@ -349,6 +373,47 @@ serving process, `--since` a window).
 
 **Status: applied on disk, pending restart.** The defect was confirmed on real traffic and fixed
 in the request builder; no mount is claimed here. Detail: `VERIFICATION.md` §45, ledger F-33.
+
+### 0.7 `0.0.1-rc.7` — a tool call written into reasoning is promoted, not dropped
+
+The rc.6 traffic made the remaining failure precise. Of the 155 traced requests, **138** ended with
+structured `tool_calls`, **10** with `stop` and **7** had no finish record; **56 (36.1%)** still
+carried protocol notation, and now almost all of it was in the **reasoning** channel. When the
+model writes its call there, the old adapter stripped the wrapper tokens from reasoning for the
+screen and kept only the prose — the call itself was dropped. The step had no tool call to execute,
+so the turn sat until it ended: the "spacing out" the owner saw.
+
+Replaying the owner's two sessions through the rc.7 classifier (`c889802e`, `ec259449`):
+
+| Session | Assistant messages with markers in reasoning | Calls recovered | No-wire-call steps recovered |
+|---|---|---|---|
+| `ec259449` | **30** | **21** | **3** of 6 |
+| `c889802e` | **3** | 0 | 0 |
+
+`0.0.1-rc.7` feeds the reasoning channel through the **same** classifier as content:
+
+| # | Piece | Behaviour |
+|---|---|---|
+| a | reasoning classification | reasoning text goes through a classifier instance identical to the content one, so a body call written in `reasoning_content` is recognised |
+| b | prose stays reasoning | text without a marker is emitted as a `reasoning-delta` unchanged |
+| c | recovered call | a recovered call is queued for the **parser** channel with `source: 'text'`, so the bottom gate promotes or discards it by the usual rules |
+| d | wrapper tokens | `<thinking>` / `</thinking>` and the pipe-wrapped protocol tokens are still stripped; the marker never reaches the screen |
+| e | state reset | the reasoning classifier is a **second instance** and is reset together with the content classifier and the gate between retries |
+
+Two new end-to-end tests cover the fix: a tool call written into `reasoning_content` is promoted
+and the marker does not reach the screen, and reasoning prose without a marker stays reasoning.
+
+| Check | Result |
+|---|---|
+| `npm test` | **295/295 pass**, 0 fail (293 before; **2** new) |
+| `npm run check` | exit 0 |
+| artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.7.tgz` |
+| sha256 | `79e6ddf7d0fa7e640654783b7fd243d8a36295c68ebd07747530790322a2d442` |
+
+**Status: applied on disk, pending restart.** The serving process (pid 2422772) still runs rc.6;
+the recovered-call count is a replay of recorded traffic, not a live rate. After the restart the
+same trace should show the reasoning marker deltas falling while the `tool_calls` finish count
+rises. Detail: `VERIFICATION.md` §46, ledger F-34.
 
 ## 1. Measured OpenCode v2.2.0 facts this plugin is built on
 

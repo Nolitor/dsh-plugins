@@ -1,17 +1,17 @@
 <!-- skeleton:
-version: 2.0
+version: 2.1
 kind: ver
 status: active
 updated: 2026-11-01
-summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2, 0.0.1-rc.3, 0.0.1-rc.4 (protocol tokens scrubbed by delimiter shape, not by the DSML text; worst-case one-character feeding 42 -> 3 -> 1, the remaining 1 a measurement-regex false positive), 0.0.1-rc.5 (synthetic probes rejected as evidence; lib/trace.js records real-traffic shape) and 0.0.1-rc.6 (the rc.5 trace measured hasSystem=false on 29/29 real requests and a 58.6% leak rate; system-role messages now keep the system slot and empty tool results keep their call id; 293/293). Older rounds live in VERIFICATION-ARCHIVE.md.
+summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2, 0.0.1-rc.3, 0.0.1-rc.4 (protocol tokens scrubbed by delimiter shape, not by the DSML text; worst-case one-character feeding 42 -> 3 -> 1, the remaining 1 a measurement-regex false positive), 0.0.1-rc.5 (synthetic probes rejected as evidence; lib/trace.js records real-traffic shape), 0.0.1-rc.6 (the rc.5 trace measured hasSystem=false on 29/29 real requests and a 58.6% leak rate; system-role messages now keep the system slot and empty tool results keep their call id) and 0.0.1-rc.7 (rc.6 traffic: 155 requests, hasSystem=true 155/155, 56 (36.1%) still leaking mostly in reasoning because only the content channel was classified; reasoning now goes through the same classifier, replay recovers 21 calls and 3 of 6 stalled steps; 295/295). Older rounds live in VERIFICATION-ARCHIVE.md.
 -->
 # @nolit/dsh-opencode-v2 - Verification (current)
 
 > Only the recent rounds live here. Everything up to v0.7.3 is in
 > VERIFICATION-ARCHIVE.md in this directory.
 >
-> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.6 on disk (serving pid 2339788
-> runs 0.0.1-rc.3 until restart)
+> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.7 on disk (serving pid 2422772
+> runs 0.0.1-rc.6 until restart)
 
 ## 33. v0.7.4 — no protocol notation reaches the transcript (measured 2026-10-31 23:20-23:40)
 
@@ -981,6 +981,77 @@ The number advanced one instructed RC step (`0.0.1-rc.5` -> `0.0.1-rc.6`); the r
 no mount and no post-fix leak rate are claimed here. After the restart, the same trace should show
 `hasSystem=true`, and the leak rate is re-read with
 `node scripts/analyze-opencode-trace.mjs --pid <serving pid>`. Ledger entry: F-33.
+
+## 46. v0.0.1-rc.7 — the model wrote its tool calls into reasoning, and the adapter dropped them (measured 2026-11-01 11:20-12:35 KST)
+
+### 46.1 Traffic on rc.6: the markup is gone, the turns stall
+
+After rc.6 the owner restarted (serving **pid 2422772**) and reported that the visible markup was
+gone but that **tool calls often fail** and the model frequently just sits there ("spacing out").
+The trace of **155** real requests on `deepseek-v4.1-flash` quantifies both halves:
+
+| Measure | Value |
+|---|---|
+| traced requests | **155** |
+| `hasSystem` | **true — 155 of 155** (the rc.6 role fix, verified on live traffic) |
+| finish: structured `tool_calls` | **138** |
+| finish: `stop` | **10** |
+| no finish record | **7** |
+| requests with protocol notation in a streamed delta | **56** (**36.1%**) |
+
+The notation had moved channel. Examples now sit in the **reasoning** stream:
+`</thinking>\\n[tool call`, `</|DSML| parameter>`, and one runaway request produced **7,275**
+marker deltas in reasoning. The visible screen was clean because reasoning wrapper tokens were
+stripped — which is exactly why the loss was silent.
+
+### 46.2 Root cause: only the content channel was classified
+
+Body-call classification ran on the **content** channel only. Reasoning was passed through a
+strip of think tokens for the screen and nothing else, so a tool call the model wrote into
+`reasoning_content` was reduced to prose: the call was never promoted, the step produced no tool
+call, and the turn had nothing to execute — the "spacing out" the owner saw. Replay of the
+owner's two sessions through the rc.7 classifier:
+
+| Session | Assistant messages with markers in reasoning | Calls recovered | No-wire-call steps recovered |
+|---|---|---|---|
+| `ec259449` | **30** | **21** | **3** of 6 |
+| `c889802e` | **3** | 0 | 0 |
+
+So the stalls are recoverable in practice, not a model failure: `ec259449` had six steps that
+emitted no wire tool call, and three of them are fixed by classifying reasoning alone.
+
+### 46.3 What rc.7 changed
+
+Reasoning now goes through the **same** classifier as content, as a separate instance that is
+reset with the others:
+
+| # | Piece | Behaviour |
+|---|---|---|
+| a | reasoning classification | a second `createStreamClassifier` receives the reasoning text (after think-token stripping), so a body call written in `reasoning_content` is recognised |
+| b | prose stays reasoning | parts without a marker are emitted as `reasoning-delta`, byte-identical |
+| c | recovered call | queued for the **parser** channel with `source: 'text'`; the bottom gate promotes it only when no structured call of the same name exists, so nothing executes twice |
+| d | wrapper tokens | `<thinking>` / `</thinking>` and pipe-wrapped protocol tokens are still stripped; no marker reaches the screen |
+| e | reset | the reasoning classifier is reset together with the content classifier and the gate on retry |
+
+### 46.4 Tests and artifact
+
+| Check | Result |
+|---|---|
+| `npm test` | **295/295 pass**, 0 fail (293 before; **2** new end-to-end) |
+| `npm run check` | exit 0 |
+| new tests | `a tool call written into reasoning_content is promoted, not shown`; `reasoning prose without a marker stays reasoning` |
+| artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.7.tgz` |
+| sha256 | `79e6ddf7d0fa7e640654783b7fd243d8a36295c68ebd07747530790322a2d442` |
+
+The number advanced one instructed RC step (`0.0.1-rc.6` -> `0.0.1-rc.7`); the rule stays
+`0.0.1.rc<N>` and nothing else moves it.
+
+### 46.5 Status
+
+**`applied on disk, pending restart`.** The serving process (pid 2422772) runs rc.6; the
+recovered-call figure is a replay of recorded traffic, not a live rate. After the restart the
+same trace should show reasoning marker deltas falling while the `tool_calls` finish count rises.
+Ledger entry: F-34.
 
 
 
