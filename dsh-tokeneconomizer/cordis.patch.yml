@@ -29,8 +29,14 @@
         loopBreaker: true
         loopBreakerThreshold: 3
         loopBreakerWindow: 5
+        # The watchdog interrupts: a step or tool call that commits no progress inside its
+        # budget ends the turn instead of only warning. `watchdogAction: 'warn'` restores the
+        # advisory behaviour. A tool call in flight holds the TURN budget but runs its own
+        # TOOL budget, so a slow or spinning tool still expires; `Infinity` disables it.
         watchdog: true
-        watchdogThresholdMs: 180000
+        watchdogThresholdMs: 600000
+        watchdogToolThresholdMs: 600000
+        watchdogWarnMs: 300000
         watchdogAction: 'interrupt'
         watchdogProgress: 'any'
         # Turn-based hierarchical memory for tool outputs: the newest turns keep
@@ -41,7 +47,33 @@
         tierWarmTurns: 15
         tierHeadChars: 2000
         tierTailChars: 600
-        tierMinChars: 1200
+        # Measured on the live corpus. The warm summary carries a floor of
+        # head + tail + index + header, and that floor is content-dependent:
+        # 2,764 chars on a plain log, 3,517 on a path-dense one. Grading an
+        # output below the crossover makes the model-visible context LARGER.
+        # 1200 inflated 341 of 645 rewrites (+245,927 chars). 3000 still left
+        # one inflating case (3,045 -> 3,053). Across 645 real rewrites the
+        # largest inflating input is 3,045 chars, so 3700 clears it with ~650
+        # chars of margin. Cost versus 3000: 55 rewrites skipped, 22,999 chars
+        # of saving given up, 0 inflating. 3700 and above measure 0 inflation.
+        tierMinChars: 3700
+        # Constant routing guidance pinned in the system prompt: a large inspection goes
+        # through one script instead of many reads, so only the result enters the context.
+        thinkInCode: true
+        # Prior-session recall through the harness's own FTS5 index (`ctx.sessionQuery`).
+        # This plugin never opens that database; recall is scoped by the repository key, so a
+        # session started in a subdirectory still finds work done at the checkout root.
+        recallPriorSessions: true
+        recallLimit: 3
+        recallMaxChars: 900
+        # The decompressed export is the only copy of a session the Python engine can read.
+        # Turning this off stops the duplicate but also leaves the fold nothing new to read.
+        exportSessions: true
+        # `apply` saves tokens and records evidence. `observe` records the same evidence (engine
+        # hooks, usage, export) but injects nothing: no pinned rules, no recall, no pointer
+        # substitution, no loop-guard redirect, no surface rewrite. Disabling the savings never
+        # stops the tracking, so a later re-enable has history to work with.
+        mode: 'apply'
         hookTimeoutMs: 8000
         cliTimeoutMs: 20000
         headless: auto

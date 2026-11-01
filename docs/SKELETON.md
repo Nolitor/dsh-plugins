@@ -15,8 +15,8 @@
 
 ## rule
 
-- **2.5** · active · 2026-11-02 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
-  Every defect and wrong turn this workspace actually made, including a literal marker whitelist that missed a new notation family, a stream recogniser tested only on whole payloads and a scrub keyed to one vendor token that missed the model's other pipe-wrapped tokens, and a synthetic A/B probe offered as evidence for a streaming defect that only appears in long output-heavy turns, a role map that sent DSH's leading system-role message to the model as `user` so every system instruction was lost, a body-call classifier that ran only on the content channel while calls written into `reasoning_content` were stripped and dropped, and an assistant-history serializer that re-sent the model its own protocol notation (rendered calls and `<thinking>` wrappers) while the scrub knew each notation's openers but not its bare closers, with the standing rule that keeps it from happening again. Read before changing a plugin, a doc, or a live service.
+- **2.7** · active · 2026-11-02 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
+  Every defect and wrong turn this workspace actually made, including a literal marker whitelist that missed a new notation family, a stream recogniser tested only on whole payloads and a scrub keyed to one vendor token that missed the model's other pipe-wrapped tokens, and a synthetic A/B probe offered as evidence for a streaming defect that only appears in long output-heavy turns, a role map that sent DSH's leading system-role message to the model as `user` so every system instruction was lost, a body-call classifier that ran only on the content channel while calls written into `reasoning_content` were stripped and dropped, and an assistant-history serializer that re-sent the model its own protocol notation (rendered calls and `<thinking>` wrappers) while the scrub knew each notation's openers but not its bare closers, with the standing rule that keeps it from happening again, and a headless side-call profile that pointed at an account provider while the bundle had disabled the three services that provider needs, so the identical sign-in error came from two different missing dependencies. Read before changing a plugin, a doc, or a live service.
 - **1.3** · active · 2026-10-31 · [docs/RULES.md](RULES.md)
   Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting — with the failure ledger as required reading.
 
@@ -56,12 +56,12 @@
 
 ## measurement
 
+- **1.3** · measured · 2026-11-02 · [TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md](../TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md)
+  What the DSH TokenEconomizer bridge actually saved: the 2026-10-30 dark-lever measurement, the tiered-memory and routing fixes built from it, the 2026-11-02 re-measurement that found 1.03M chars of real tiering saving with 53% self-inflation, the toolprune lever that is real but capped near 1.2k tokens per request, and the adopted tierMinChars 3700 floor chosen from the measured maximum inflating input.
 - **1.1** · measured · 2026-10-30 · [OPENCODE-V2-HTTP-API-MEASUREMENT.md](../OPENCODE-V2-HTTP-API-MEASUREMENT.md)
   Measured the OpenCode v2.2.0 HTTP server (130 endpoints, SSE event stream) and later corrected the DSH adapter policy: session/prompt is an OpenCode agent harness, so pure model serving uses the OpenAI-compatible backend directly and the local server only for catalog/provider/credential control.
 - **1.3** · measured · 2026-10-30 · [OPENCODE-V2-SURFACE-MEASUREMENT.md](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
   Measured opencode v2.2.0 CLI surface: event schema, session-export tokens, removed flags, and per-model reasoning variants (re-measured 2026-10-30, preflight rules); corrects the 0919 boot card.
-- **1.1** · measured · 2026-10-30 · [TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md](../TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md)
-  Measured what the installed DSH TokenEconomizer bridge actually saved (nothing), why each lever is dark, the tool-event routing check that withdrew the earlier defect claim, and the tiered-memory and usage-ledger fixes built from it.
 - **1.0** · measured · 2026-10-29 · [DSH-PARENT-CAPABILITY-MEASUREMENT.md](../DSH-PARENT-CAPABILITY-MEASUREMENT.md)
   Measured whether usage, a cluster host controller, and cache nesting can be added as one DSH plugin, and whether the DeepSeek API supplies them; verified by isolated mount.
 - **1.0** · measured · 2026-10-29 · [FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md](../FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md)
@@ -97,19 +97,19 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 36)
+## boot (newest 5 of 38)
 
+- **active** · 2026-11-02T0747+0900.md · [card](../bootcards/2026-11-02T0747+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-02T0747+0900. Older cards are historical.
+- **active** · 2026-11-02T0739+0900.md · [card](../bootcards/2026-11-02T0739+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-02T0739+0900. Older cards are historical.
 - **active** · 2026-11-02T0715+0900.md · [card](../bootcards/2026-11-02T0715+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-02T0715+0900. Older cards are historical.
 - **active** · 2026-11-01T1237+0900.md · [card](../bootcards/2026-11-01T1237+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-01T1237+0900. Older cards are historical.
 - **active** · 2026-11-01T1122+0900.md · [card](../bootcards/2026-11-01T1122+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-01T1122+0900. Older cards are historical.
-- **active** · 2026-11-01T1050+0900.md · [card](../bootcards/2026-11-01T1050+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-11-01T1050+0900. Older cards are historical.
-- **active** · 2026-11-01T1003+0900.md · [card](../bootcards/2026-11-01T1003+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-11-01T1003+0900. Older cards are historical.
 
 ---
 
-67 indexed (36 boot cards), 0 missing header, 67 total.
+69 indexed (38 boot cards), 0 missing header, 69 total.

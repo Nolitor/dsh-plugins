@@ -46,7 +46,9 @@ test('a warm log becomes a structural summary that keeps head, tail and index', 
     'Running tests for src/app.ts',
     'error: cannot read config.json',
     'exit code: 2',
-    ...Array.from({ length: 200 }, (_, i) => `line ${i} of noise`),
+    // Above TIER_DEFAULTS.minChars (3,700): a fixture below the floor would be skipped
+    // by the gate and this test would assert nothing about summarization.
+    ...Array.from({ length: 240 }, (_, i) => `line ${i} of noise`),
     'the last line',
   ].join('\n')
   const summary = tierContent({ text, kind: KIND_LOG, tier: TIER_WARM, turn: 10, step: 3, name: 'bash', policy })

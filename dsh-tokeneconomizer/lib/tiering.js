@@ -39,7 +39,7 @@ export const TIER_DEFAULTS = Object.freeze({
   warmTurns: 15,
   headChars: 2000,
   tailChars: 600,
-  minChars: 1200,
+  minChars: 3700,
 })
 
 /** Tools whose output is code: kept whole through the warm tier. */
@@ -47,6 +47,9 @@ const CODE_TOOLS = new Set([
   'read', 'read_file', 'edit', 'write', 'apply_patch', 'patch', 'grep', 'glob',
   'list', 'ls', 'diff', 'view', 'notebookread', 'notebookedit', 'str_replace',
   'str_replace_editor', 'working_directory', 'skill', 'present',
+  // A script runner returns the analysis a read would have returned. Its output is code-shaped,
+  // so summarizing it into a structural index would drop the lines the call was made for.
+  'ctx_execute', 'ctx_execute_file', 'run_code', 'sandbox',
 ])
 
 /** Shell commands that read a file rather than run something. */

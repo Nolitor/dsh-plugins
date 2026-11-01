@@ -18,7 +18,7 @@
  *
  * Windows is not supported by the POSIX launchers; run the verification from WSL.
  */
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -195,6 +195,32 @@ export function main(argv = process.argv.slice(2)) {
   const { tree, applied } = vendor({ root, source, sha, refresh: argv.includes('--refresh') })
   const launchers = writeLaunchers(root, tree)
   const checked = verify(launchers, { root })
+  // Install-time migration: fold the sessions that ran before this plugin was mounted, so the
+  // first new session already has evidence. Bounded on purpose — a fold may run the engine's
+  // paid proposer, so the default takes the newest sessions only and a full pass stays an
+  // explicit operator decision (`te-dsh cold-start --all`).
+  let migration = { skipped: 'verification failed' }
+  if (checked.ok) {
+    if (argv.includes('--no-migrate')) {
+      migration = { skipped: '--no-migrate' }
+    } else {
+      const limit = flag('--migrate-limit', '20')
+      const result = spawnSync(process.execPath, [
+        join(HERE, '..', 'bin', 'te-dsh.mjs'),
+        'cold-start',
+        '--limit', limit,
+        '--home', root,
+      ], { encoding: 'utf8', timeout: 600_000 })
+      migration = {
+        limit: Number(limit),
+        status: result.status,
+        folded: /"folded":\s*(\d+)/.exec(result.stdout ?? '')?.[1] ?? null,
+        skippedFolded: /"skippedFolded":\s*(\d+)/.exec(result.stdout ?? '')?.[1] ?? null,
+        stderr: (result.stderr ?? '').trim() || undefined,
+        next: 'te-dsh cold-start --all  migrates every remaining session',
+      }
+    }
+  }
   process.stdout.write(`${JSON.stringify({
     tree,
     sha,
@@ -202,6 +228,7 @@ export function main(argv = process.argv.slice(2)) {
     launchers,
     verified: checked.ok,
     detail: checked.detail,
+    migration,
   }, null, 2)}\n`)
   return checked.ok ? 0 : 1
 }

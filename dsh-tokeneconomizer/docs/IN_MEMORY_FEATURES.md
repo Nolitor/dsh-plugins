@@ -1,11 +1,11 @@
 # Host-Local In-Memory Features
 
 <!-- skeleton:
-version: 1.1
+version: 1.2
 kind: spec
 status: active
-updated: 2026-10-30
-summary: Architecture of the four host-local, in-memory features of the DSH bridge: tool-result hash deduplication, the KV-cache-safe prompt slot, the loop breaker with its thinking watchdog, and the turn-based tiered memory for tool outputs.
+updated: 2026-10-31
+summary: Architecture of the host-local features of the DSH bridge: tool-result hash deduplication, the KV-cache-safe prompt slot with its constant routing text, the loop breaker with its advisory thinking watchdog, the turn-based tiered memory, the observe/apply mode split, and the full configuration reference.
 -->
 
 ## 1. What this document answers
@@ -168,15 +168,30 @@ this plugin and not from the person.
 
 ### 5.2 Thinking watchdog
 
-The watchdog measures the time since the session last committed progress.
+The watchdog measures the time since the session last committed progress. It is **advisory by
+default**: it warns, and it does not end the turn.
 
 | Element | Value |
 |---|---|
-| Budget | `watchdogThresholdMs` (default 180000) |
+| Budget | `watchdogThresholdMs` (default 600000) |
+| Warning point | `watchdogWarnMs` (default 300000), one notice per budget |
 | Arm | `turn/start` |
 | Progress | committed session events, and — with `watchdogProgress: 'any'` — assistant stream frames |
+| Hold | a tool call in flight `suspend()`s the budget; `tool/result` `resume()`s it from now |
 | Release | `turn/end`, agent disposal |
-| Action | `watchdogAction: 'interrupt'` cancels the turn; `'warn'` only writes a stderr line |
+| Action | `warn` (default) writes a notice and restarts the budget; `interrupt` cancels the turn |
+
+Two measurements drove this shape, and both describe a defect that existed before `0.2.0`:
+
+- A turn **waiting on a person** (`ask_user_question` measured at 530 s and 460 s) or on a long
+  tool (measured maximum 600 s) commits no session event for minutes. The budget kept running, so a
+  working turn was cancelled as if it were stuck.
+- Reasoning turns measured intra-turn gaps of 186 s, 261 s and 281 s, all cancelled by the old
+  180 s budget. The intervention was the defect.
+
+The warning reaches the transcript as one short model-facing block (`noticeUser`), not only stderr,
+because a warning nobody sees in the Web GUI is not a warning. `mode: observe` keeps the stderr line
+and drops the injection.
 
 Stream frames count as progress by default, because a reasoning model that thinks for minutes
 still emits frames; a stricter `'committed'` mode is available for deployments that want a
@@ -230,15 +245,22 @@ non-positive number, an out-of-range order, or an unknown enum value fails the r
 | `loopBreakerThreshold` | integer ≥ `2` | `3` | consecutive identical failures that trip the breaker |
 | `loopBreakerWindow` | integer ≥ `2` | `5` | remembered calls |
 | `watchdog` | boolean | `true` | enable the thinking watchdog |
-| `watchdogThresholdMs` | number > 0 | `180000` | progress-free budget of one step |
-| `watchdogAction` | `warn` \| `interrupt` | `interrupt` | what the watchdog does when the budget is exhausted |
+| `watchdogThresholdMs` | number > 0 | `600000` | progress-free budget of one step |
+| `watchdogWarnMs` | number < `watchdogThresholdMs` | `300000` | point inside the budget for the one warning |
+| `watchdogAction` | `warn` \| `interrupt` | `warn` | what the watchdog does when the budget is exhausted |
 | `watchdogProgress` | `any` \| `committed` | `any` | whether assistant stream frames count as progress |
 | `tiering` | boolean | `true` | grade old tool outputs by turn and evict the cold ones |
 | `tierHotTurns` | number > 0 | `5` | turns kept at full fidelity |
 | `tierWarmTurns` | number > `tierHotTurns` | `15` | turns kept as a structural summary |
 | `tierHeadChars` | number > 0 | `2000` | characters kept from the head of a warm-tier output |
 | `tierTailChars` | number > 0 | `600` | characters kept from the tail of a warm-tier output |
-| `tierMinChars` | number > 0 | `1200` | shortest output worth grading |
+| `tierMinChars` | number > 0 | `3000` | shortest output worth grading; the warm summary's own floor is ~2.96 KB |
+| `thinkInCode` | boolean | `true` | pin the constant routing text that sends one large inspection through one script |
+| `recallPriorSessions` | boolean | `true` | recall this repository's earlier sessions once, on the first real prompt |
+| `recallLimit` | number > 0 | `3` | earlier sessions quoted in the recall block |
+| `recallMaxChars` | number > 0 | `900` | character budget of the recall block |
+| `exportSessions` | boolean | `true` | write the decompressed export the engine's fold reads |
+| `mode` | `apply` \| `observe` | `apply` | `observe` records evidence but injects nothing |
 
 The bundle row in `cordis.patch.yml` carries the same keys with the same defaults.
 

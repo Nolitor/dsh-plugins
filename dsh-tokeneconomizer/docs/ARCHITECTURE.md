@@ -1,11 +1,11 @@
 # DSH bridge architecture
 
 <!-- skeleton:
-version: 1.2
+version: 1.3
 kind: spec
 status: active
-updated: 2026-10-30
-summary: Measured DSH 0.2.2 extension points, per-event lifecycle contract, tool-mask semantics, DSH trace reader schema, host-local in-memory features, tiered memory for tool outputs, state and ledger formats, and verified limits.
+updated: 2026-10-31
+summary: Measured DSH 0.2.2 extension points, per-event lifecycle contract, tool-mask semantics, DSH trace reader schema, prior-session recall through the harness FTS5 service, the observe/apply mode split, host-local in-memory features, tiered memory, state and ledger formats, and verified limits.
 -->
 
 ## 1. Isolation boundary
@@ -204,6 +204,52 @@ Two properties keep them compatible with the engine-backed half:
 The observers are registered in `agent/created`, before the first `await`, so the session's first
 tool calls are observed. The engine's own hooks still run in their measured order: `SessionStart`
 is delivered before any later hook of the session.
+
+## 8a. Prior-session recall: DSH owns the index
+
+An earlier design would have built a second SQLite index of the session corpus. Measurement killed
+it, and what replaced it reuses the harness:
+
+- DSH already ships `@deepseek-ai/dsh-session-query-sqlite`, an FTS5 index of session history with
+  `cwd` scoping, ranked ordering and cursor paging. Its derived database is closed to writers: a
+  foreign table or a foreign `application_id` is rejected at open, and `busy_timeout` is `0`, so a
+  second process gets `SQLITE_BUSY` immediately. It is a single-owner derived index.
+- Its documents are one per indexed event, and it does **not** index compaction events,
+  `system/message`, `session/title` or request envelopes.
+- Indexing happens on the first search, not at boot; 36 sessions took 5.7 s cold and produced a
+  47 MB database (≈1.3 MB per session).
+
+So the plugin reads the service instead of the file. It never opens the database, never creates a
+table, and never writes a row:
+
+```
+first genuine user/message of a session
+  -> ctx.get('sessionQuery').searchSessions({ query, limit, eventFilters })
+  -> keep hits whose cwd matches, or whose repository key matches (subdirectory sessions)
+  -> one agent.inject() of at most recallMaxChars
+```
+
+`lib/repokey.js` supplies that repository key. It reproduces the engine's rule exactly — normalized
+`origin` remote, else the real path of the main checkout, else the directory — with `node:fs` and
+`node:crypto` and no git subprocess, and it is verified against the engine's own keys on disk.
+
+Four constraints shape the recall:
+
+| Constraint | Reason |
+|---|---|
+| once per session, on the first real prompt | approval notices and the plugin's own injections also arrive as `user/message`; searching with them recalls the wrong thing |
+| `agent.inject()`, never the pinned section | the pinned section is part of the cached prefix; per-session text there would invalidate it |
+| bounded by `recallLimit` and `recallMaxChars` | a recall that floods the context costs more than it saves |
+| silent when search is disabled | the shipped composition mounts the index with `openAt: never`, so a recall that cannot search is a normal case, not an error |
+
+## 8b. `mode`: savings off without stopping the trace
+
+`mode: observe` keeps every observer, every engine hook, the usage counters and the export, and
+drops only the injection points (pinned section, micro-skills context, tool restriction, recall,
+pointer substitution, loop-guard redirect, surface rewrite, watchdog injection and cancel). That
+split lets a deployment turn the savings off for a while — or disable the bundle entirely and
+re-enable it later — without losing the evidence a fold needs. The re-enable path is covered by the
+migration guards in [OPERATIONS.md](OPERATIONS.md) §3.1.
 
 ## 9. What was verified, and what was not
 

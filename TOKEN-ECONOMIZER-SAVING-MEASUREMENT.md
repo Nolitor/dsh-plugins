@@ -1,14 +1,20 @@
 # TokenEconomizer saving measurement (DSH bridge, 2026-10-30)
 
 <!-- skeleton:
-version: 1.1
+version: 1.3
 kind: measurement
 status: measured
-updated: 2026-10-30
-summary: Measured what the installed DSH TokenEconomizer bridge actually saved (nothing), why each lever is dark, the tool-event routing check that withdrew the earlier defect claim, and the tiered-memory and usage-ledger fixes built from it.
+updated: 2026-11-02
+summary: What the DSH TokenEconomizer bridge actually saved: the 2026-10-30 dark-lever measurement, the tiered-memory and routing fixes built from it, the 2026-11-02 re-measurement that found 1.03M chars of real tiering saving with 53% self-inflation, the toolprune lever that is real but capped near 1.2k tokens per request, and the adopted tierMinChars 3700 floor chosen from the measured maximum inflating input.
 -->
 
-## 0. Verdict
+> **Superseded verdict.** Section 0 below is the **2026-10-30** reading: every lever dark, about
+> zero saved. That was correct for the route in use then, and it is **no longer the current
+> state**. Section 8 is the 2026-11-02 re-measurement over the live corpus: tiering saves for
+> real, the minimum-size gate was raised to stop it inflating, and toolprune turns out to apply
+> but only bounds at roughly 1.2k tokens per request. Read Section 8 before quoting Section 0.
+
+## 0. Verdict (2026-10-30)
 
 The bridge is installed, mounted and live, and it saved **approximately zero tokens** so far.
 Every lever is dark, and the reason is measured, not guessed:
@@ -190,3 +196,139 @@ node scripts/measure-token-saving.mjs
 
 Reads `DSH_HOME` (default `~/.dsh`) and `TOKENECONOMIZER_HOME` (default
 `~/.tokeneconomizer`); both are read-only. `--json <file>` writes the same numbers as JSON.
+
+## 8. Re-measurement, 2026-11-02: what the plugin saves now
+
+Read-only over `~/.dsh/sessions` (153 session files; 65 synthetic fixtures and 2 audit sessions
+excluded, 88 real sessions counted) plus the engine state. Nothing under `~/.dsh` or
+`~/.tokeneconomizer` was written by the measurement.
+
+**Method, and the trap it avoids.** A rewrite counts as the plugin's only when the record carries
+`surfaceOp: {op: 'replace'}` **and** its replacement text matches a TokenEconomizer code path
+(`lib/tiering.js` warm/cold, `lib/dedup.js` pointer). The harness's own pruner
+(`@deepseek-ai/dsh-compaction-tool-result-pruner`) writes the *identical* `compaction/prune` plus
+`surfaceOp` shape, so a text grep conflates the two. Oracle check: at the nominal split the prior
+audit's numbers reproduce exactly (641 rewrites / 339 inflating / +245,070 chars), which validates
+the classifier before it is used on new data.
+
+### 8.1 The cutover was 12:39:06, not 12:00
+
+`tierMinChars` 1200 -> 3000 was written at **12:16:39**, but the process that loads plugin code and
+config restarted at **12:39:06**. Splitting at the nominal noon boundary misclassifies 3 rewrites as
+"after" that provably ran the old code — one has `charsBefore=1856`, impossible under a 3000 floor.
+All numbers below split at **12:39:06**.
+
+### 8.2 Tiering: real saving, and the inflation is fixed
+
+| Era | rewrites | charsBefore | charsAfter | net saved | inflating | chars added |
+|---|---|---|---|---|---|---|
+| `minChars=1200` (before 12:39:06) | 644 | 2,823,115 | 1,790,732 | +1,032,383 | **341 (52.95%)** | **+245,927** |
+| `minChars=3000` (from 12:39:06) | 1 | 3,028 | 2,763 | +265 | 0 | 0 |
+
+The `minChars=3000` era has **n=1**, which is not evidence of anything. The fix is therefore proven
+by counterfactual over the 644 real era-A rewrites instead of by the after-era:
+
+* inputs below 3000 that the new floor would **skip**: 360, of which **340 were inflating**,
+  avoiding **+245,919 chars** of self-inflicted growth;
+* inputs at or above 3000 that would still run: 284, netting **+1,276,730 chars**, with 1 inflation
+  case (+8 chars).
+
+**Inflation rate 52.95% -> 0.35%.** The raise does kill it, because 340 of 341 inflation cases were
+inputs under 3000.
+
+> **Residual: 3000 is not fully clear of the floor.** The summary's own size is content-dependent —
+> the index can emit up to 20 file paths and 12 headings — so the floor is not a constant. Measured
+> lower bound with a benign log: 2,764 chars. Measured with an adversarial path-dense log: **3,517**
+> chars, where a 3,045-char input still produced a 3,517-char replacement (+472, inflated) and was
+> applied. The other audit's real-data sample put the floor at 1,973-3,609.
+
+#### 8.2.1 Adopted: `tierMinChars` 3000 -> 3700 (2026-11-02)
+
+**Adopted on 2026-11-02.** The value lives in two places that must agree: the code default
+(`lib/tiering.js`, `TIER_DEFAULTS.minChars`) and the plugin's own bundle patch
+(`cordis.patch.yml`, `tierMinChars`). The live value resolves from the bundle patch, not from the
+user profile patch, so a change to the profile alone would silently miss.
+
+Re-measured over 645 real warm rewrites before choosing the number:
+
+| Floor | Rewrites kept | Net chars saved | Inflating |
+|---|---|---|---|
+| 3000 | 285 | 1,276,995 | **1** |
+| 3500 | 243 | 1,263,015 | 0 |
+| 3600 | 236 | 1,258,533 | 0 |
+| **3700 (adopted)** | **230** | **1,253,996** | **0** |
+| 4000 | 205 | 1,230,406 | 0 |
+
+Across those 645 rewrites the largest inflating input is **3,045 chars** (3,045 -> 3,053), so 3,700
+clears every observed inflation case with ~650 chars of margin, and 3,500 would also have sufficed.
+**Cost of the raise versus 3,000:** 55 rewrites skipped and **22,999 chars** of legitimate saving
+given up, in exchange for removing the last inflation.
+
+> **Correction to an earlier statement in this section.** An intermediate pass of this measurement
+> reported a 3,893-char inflation case reaching 6,579 chars, which would have argued for a floor
+> above 3,900. That row was a **classification error**, not a data point: the filter matched any
+> tool result whose text merely *contained* `warm tier` without requiring the replacement to begin
+> with the marker, so it captured an unrelated log. Under the strict classifier (the same one that
+> passes the oracle check) the true worst inflating input is 3,045. The lower figure is correct;
+> the 6,579 row is withdrawn.
+
+A fixed floor is a **bound on input size**, not on output size: content denser than anything in the
+corpus can in principle still inflate. It is a practical gate chosen from measured data, not a
+structural guarantee. The structural alternative — refusing the rewrite whenever
+`summary.length >= text.length` — is the safer invariant and remains unimplemented.
+
+| Lever | Rewrites (era A) | Saved | Inflating |
+|---|---|---|---|
+| Warm/cold tiering | 644 | 1,032,383 chars | 341 |
+| Exact-duplicate dedup | 42 | 55,960 chars | 0 |
+| Cold evictions (subset of tiering) | 32 | 106,455 chars | 0 |
+| **Harness pruner (NOT this plugin)** | 179 | 2,563,567 chars | — |
+
+### 8.3 Why the after-era is nearly empty (absence is structural, not a failure)
+
+The plugin is live: the newest rewrite is **2026-11-01T12:50:08**, and the engine journal records
+`[tokeneconomizer] TokenEconomizer nudged this turn (judge-stuck@0.82)` at 2026-11-02 07:25:50.
+The after-era is empty because **no warm-tier opportunity exists yet**: the warm tier begins at turn
+age >= `hotTurns` (5), and every real session that *started* after the cutover has at most 3 turns.
+Sessions with 22+ turns were all created before it, so they carry the old code for their whole life.
+Re-run the audit once a post-cutover session passes turn 5.
+
+### 8.4 toolprune: the mask is real, the ceiling is ~1.2k tokens per request
+
+This corrects the earlier "5 proposals, 0 tools removed, 0 tokens saved" reading, which measured
+the wrong artifact.
+
+* **Mechanism is a hard mask, not advice.** `lib/index.js:557-561` calls
+  `ctx.tools.restrict({ deny })`; DSH compiles it into the scoped tool layer, and the single
+  `visible` map it filters feeds both the model-facing schema list and dispatch. It is not a
+  settings file and not approval-gated.
+* **It actually removed tools three times**, each with the removed set a subset of the proposal and
+  an empty added set: `n=17 -> 15` (`cli_worker`, `working_directory`) twice on 2026-10-29, and
+  `n=15 -> 12` (`agy_worker`, `subagent_antigravity`, `subagent_opencode`) on 2026-10-30.
+* **Calls to a proposed name after the first proposal: 0.** The pruning held.
+* **The trap:** in the current PTC preset a request declares exactly **one** tool (`run_code`), so
+  there is nothing prunable in the `tools` array. The pruning lands in the **system prompt**, whose
+  TypeScript bindings for the five names are what disappears. Measuring the tools array alone
+  yields a truthful "0 removed" and a false "nothing happened".
+* **Measured A/B**, same repository, preset and mode, only the agent origin differs: main agent
+  `48210` system-prompt chars, first request `14149` tokens; subagents `53901` chars and
+  `16153`/`16054` tokens with all five names present. Delta **5691 chars ~ 1059-1210 tokens per
+  request (7.5-7.9% of a first request)**.
+* **The gate that limits it:** `agent/created` returns early for `origin === 'subagent'`
+  (`lib/index.js:408`), so toolprune never runs in a subagent session — and most traffic in this
+  corpus is subagent traffic.
+
+**Verdict on toolprune:** real, applied, and bounded at roughly **1.2k tokens per non-subagent
+request, zero in every subagent session**. Worth keeping, not worth optimising further.
+
+### 8.5 What changed as a result, and what still needs a decision
+
+Applied and measured on disk: `tierMinChars` 1200 -> 3000, `watchdogThresholdMs` 180000 -> 600000
+with `watchdogAction: interrupt`, `thinkInCode`, `recallPriorSessions`, and `run_code` added to the
+code-shaped tool set. The resolved live config carries every one of these (`dsh --profile web
+--dump-config`), and 72 of 73 plugin tests pass (1 skipped without `TE_DSH_TEST_HOME`).
+
+Resolved since: `tierMinChars` was raised from 3000 to **3700** on 2026-11-02 (Section 8.2.1). The
+number comes from the measured maximum inflating input (3,045 chars) plus margin, not from a round
+default. Still open: whether to replace the fixed floor with the structural invariant
+`summary.length >= text.length` (Section 8.2.1).

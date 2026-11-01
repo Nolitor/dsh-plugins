@@ -1,11 +1,11 @@
 # Operations
 
 <!-- skeleton:
-version: 1.2
+version: 1.3
 kind: spec
 status: active
-updated: 2026-10-30
-summary: Bootstrap, profile install, cold start, verification, rollback, the configuration reference, and the live-state rules for the DSH TokenEconomizer bridge.
+updated: 2026-10-31
+summary: Bootstrap with its bounded install-time migration, profile install and FTS recall activation, guarded cold start, purge, verification, rollback, the configuration reference, and the live-state rules for the DSH TokenEconomizer bridge.
 -->
 
 ## 0. Rules that apply to every step
@@ -65,17 +65,41 @@ plugin mounted shows up there after `agent/disposed` folds it.
 ## 3. Cold start (learn from sessions that already ran)
 
 ```sh
-node bin/te-dsh.mjs cold-start --dry-run      # list what would be folded
-node bin/te-dsh.mjs cold-start                # decompress, import, fold
+node bin/te-dsh.mjs cold-start --dry-run      # list what would be folded, write nothing
+node bin/te-dsh.mjs cold-start                # oldest-first, guarded, fold the rest
 node bin/te-dsh.mjs cold-start --limit 20     # newest 20 only
+node bin/te-dsh.mjs cold-start --only <key>   # one repository, from the dry run
 ```
 
 It walks `$DSH_HOME/sessions/<project>/<session>/session.v*.jsonl.zstd`, decompresses with Node's
 `zstdDecompressSync` (Node ≥ 22.15), writes
 `$TOKENECONOMIZER_HOME/dsh-sessions/<id>.jsonl`, and calls
 `te --host dsh --cwd <cwd> dsh-import <export>` once per session. A log modified in the last
-minute is skipped unless `--all`, because the harness may still be writing it. Folded sessions are
-keyed by id, so a second run folds nothing twice.
+minute is skipped unless `--all`, because the harness may still be writing it.
+
+`bootstrap` runs the same command for the newest 20 sessions after it verifies the launchers, so an
+install already has evidence; `--no-migrate` skips that and `--migrate-limit N` changes the bound.
+The bound exists because a fold may run the engine's paid proposer.
+
+### 3.1 Three guards, and why each exists
+
+`te dsh-import` writes the session record **before** it folds, starting from `turns: []`. A second
+import of a session the engine already knows therefore erases that record, and the engine's own
+`folded.json` check cannot prevent it because the check happens after the write. The migration does
+the checking itself:
+
+| Guard | Skips | Override |
+|---|---|---|
+| already folded | a session id present in any `repos/<key>/dsh/folded.json` | `--reimport` |
+| already recorded | a session whose `sessions/<id>.json` carries turns | `--reimport` |
+| working directory gone | a session whose `cwd` no longer exists — a throwaway test tree would otherwise become a repository that never was, feeding its noise into the tool-prune evidence | `--include-missing` |
+
+Measured on one real state root: of 127 stored sessions, 68 were already folded, 2 already
+recorded, 47 belonged to deleted `/tmp` trees, 1 was still being written, leaving **9 real
+sessions** to migrate. A full run orders oldest-first so the evidence lands in the order it
+happened; `--limit` takes the newest N instead.
+
+Re-running a migration is therefore safe, and a disable→enable cycle needs no special handling.
 
 The engine folds each session: micro-skills evidence, tool-prune evidence and the ledger record.
 What a session taught is available from the next session start; the loop guard needs five
@@ -83,6 +107,25 @@ ended-green turns before it has a repository envelope.
 
 `DSH_HOME` decides the source tree; `--dsh-home` overrides it; `--home` (or
 `TOKENECONOMIZER_HOME`) decides where the engine state goes. Both are honored by every command.
+
+### 3.2 Purging the engine state
+
+```sh
+node bin/te-dsh.mjs purge --all --dry-run     # plan: paths, file counts, bytes
+node bin/te-dsh.mjs purge --all --yes         # delete
+node bin/te-dsh.mjs purge --exports --yes     # only $TOKENECONOMIZER_HOME/dsh-sessions
+```
+
+`--state` removes the engine's per-repository state, the session records and the launchers;
+`--exports` removes the decompressed session copies. The state-root directory itself stays — it is
+the shell every launcher resolves against. Without `--yes` the command only prints the plan and
+exits non-zero, so a typo cannot delete anything.
+
+Two things `purge` deliberately cannot do:
+
+- **DSH's session logs are not touched.** They belong to the harness, so the `user/message` blocks
+  this plugin injected and the tool-result surfaces it rewrote stay in those transcripts.
+- **The state root is emptied, not deleted** — same reason.
 
 ## 4. Configure the mechanisms
 
@@ -133,7 +176,7 @@ never touch the newest ones:
 | `tierWarmTurns` | `15` | turns kept as a structural summary (head, tail, and an index of files and status codes) |
 | `tierHeadChars` | `2000` | characters kept from the head of a warm-tier output |
 | `tierTailChars` | `600` | characters kept from the tail of a warm-tier output |
-| `tierMinChars` | `1200` | shortest output worth grading |
+| `tierMinChars` | `3000` | shortest output worth grading; measured floor is ~2.96 KB, below it the warm summary is larger than the original |
 
 `TE_DIAG=1` writes the tool-event delivery counters to `<state root>/diagnostics.json`. It is
 the routing check: a route that runs its tool calls outside the harness never delivers a

@@ -1,7 +1,7 @@
 {
   "name": "@nolit/dsh-tokeneconomizer",
-  "version": "0.1.0",
-  "description": "TokenEconomizer for the DeepSeek Harness: session micro-skills, evidence-based tool pruning applied as an in-memory restriction, and a tool-loop guard, bridged to the stdlib-only Python engine through its own te/te-hook launchers, plus three host-local in-memory features: tool-result hash deduplication, a KV-cache-safe prompt slot, and a loop breaker with a thinking watchdog. Zero runtime imports outside node: builtins.",
+  "version": "0.2.0",
+  "description": "TokenEconomizer for the DeepSeek Harness: session micro-skills, evidence-based tool pruning applied as an in-memory restriction, and a tool-loop guard, bridged to the stdlib-only Python engine through its own te/te-hook launchers, plus host-local in-memory features: tool-result hash deduplication, a KV-cache-safe prompt slot with constant Think-in-Code routing, a loop breaker with an advisory thinking watchdog, turn-based output tiering, prior-session recall through the harness's own FTS5 index, and the engine's repository-key mapping. Zero runtime imports outside node: builtins.",
   "keywords": [
     "dsh",
     "deepseek-harness",
@@ -22,6 +22,7 @@
       "default": "./lib/index.js"
     },
     "./bridge": "./lib/bridge.js",
+    "./repokey": "./lib/repokey.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
     "./locale/en.json": "./locale/en.json",
@@ -48,7 +49,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/bridge.js && node --check lib/dedup.js && node --check lib/prefix.js && node --check lib/watchdog.js && node --check bin/te-dsh.mjs && node --check scripts/bootstrap.mjs",
+    "check": "node --check lib/index.js && node --check lib/bridge.js && node --check lib/dedup.js && node --check lib/prefix.js && node --check lib/repokey.js && node --check lib/tiering.js && node --check lib/watchdog.js && node --check bin/te-dsh.mjs && node --check scripts/bootstrap.mjs",
     "bootstrap": "node scripts/bootstrap.mjs",
     "cold-start": "node bin/te-dsh.mjs cold-start"
   }
