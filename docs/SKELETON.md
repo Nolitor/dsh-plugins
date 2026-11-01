@@ -92,6 +92,8 @@
 
 ## other
 
+- **1.0** · active · 2026-11-02 · [docs/LIGHTPANDA-CDP.md](LIGHTPANDA-CDP.md)
+  Durable record of the shared Lightpanda CDP browser daemon (127.0.0.1:9333) — what runs where, measured baselines, guarantees, known limits, agent integration paths, and how to reproduce the deployment.
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
@@ -110,4 +112,4 @@
 
 ---
 
-65 indexed (35 boot cards), 0 missing header, 65 total.
+66 indexed (35 boot cards), 0 missing header, 66 total.
