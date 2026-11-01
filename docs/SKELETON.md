@@ -17,7 +17,7 @@
 
 - **2.7** · active · 2026-11-02 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
   Every defect and wrong turn this workspace actually made, including a literal marker whitelist that missed a new notation family, a stream recogniser tested only on whole payloads and a scrub keyed to one vendor token that missed the model's other pipe-wrapped tokens, and a synthetic A/B probe offered as evidence for a streaming defect that only appears in long output-heavy turns, a role map that sent DSH's leading system-role message to the model as `user` so every system instruction was lost, a body-call classifier that ran only on the content channel while calls written into `reasoning_content` were stripped and dropped, and an assistant-history serializer that re-sent the model its own protocol notation (rendered calls and `<thinking>` wrappers) while the scrub knew each notation's openers but not its bare closers, with the standing rule that keeps it from happening again, and a headless side-call profile that pointed at an account provider while the bundle had disabled the three services that provider needs, so the identical sign-in error came from two different missing dependencies. Read before changing a plugin, a doc, or a live service.
-- **1.3** · active · 2026-10-31 · [docs/RULES.md](RULES.md)
+- **1.4** · active · 2026-11-02 · [docs/RULES.md](RULES.md)
   Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting — with the failure ledger as required reading.
 
 ## spec

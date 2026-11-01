@@ -18,6 +18,7 @@ summary: Tier-1 auto-loaded entry. Points to detailed rules, the doc skeleton in
 | 2 | project rules | [docs/RULES.md](docs/RULES.md) | **read before acting** |
 | 3 | doc index | [docs/SKELETON.md](docs/SKELETON.md) | to find which doc answers your question |
 | 4 | session card | latest boot card below | current state, active task |
+| 5 | cross-project | [docs/CROSS-PROJECT-COLLABORATION.md](dsh-command-skill/docs/CROSS-PROJECT-COLLABORATION.md) | any change touching the interrupt boundary or `projects/total_skill` |
 
 Older boot cards are historical evidence; open them only for a version/policy delta.
 
@@ -39,6 +40,9 @@ Read only this latest card by default; older cards are historical evidence.
 5. **Sidebar Manager drift gate** — run `node scripts/audit-installed-vs-packaged.mjs` before
    any version-up.
 6. **Docs** — English, and every doc needs a `<!-- skeleton: -->` header; run `npm run docs:index`.
+7. **Cross-project contract** — `total_skill` is a separate repository joined to this one at
+   runtime. Duplicate command/skill names are a **hard mount failure**; read the contract before
+   touching `/interrupt`, `interrupt-guide`, or the watchdog bridge.
 
 ## Commands
 

@@ -1,10 +1,10 @@
 # DSH Plugins — Detailed Rules
 
 <!-- skeleton:
-version: 1.3
+version: 1.4
 kind: rule
 status: active
-updated: 2026-10-31
+updated: 2026-11-02
 summary: Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting — with the failure ledger as required reading.
 -->
 
@@ -55,6 +55,26 @@ summary: Detailed project rules (tier 2): measurement, live-state gates, single-
   `web boot: N entries did not activate`. Route probes, a 200 on the client bundle and
   `node --check` all pass while a client module is unloadable (measured 2026-10-30).
 
+## 4.1 Cross-project boundary (`projects/total_skill`)
+
+`total_skill` is a **separate git repository** that the live profile symlinks into the same process.
+The binding contract lives in
+[dsh-command-skill/docs/CROSS-PROJECT-COLLABORATION.md](../dsh-command-skill/docs/CROSS-PROJECT-COLLABORATION.md);
+this section is the short form.
+
+- **The coupling is an absolute path.** `dsh-tokeneconomizer/lib/interrupt-bridge.js` imports
+  `file:///home/minami/Workspace/projects/total_skill/src/interrupt-core.js`. Moving or renaming
+  that file breaks the watchdog's attribution **silently** (the bridge is fail-open and reports
+  `registry unavailable` only in the notice text).
+- **A source edit in either repository is live on the next process start, not now.** Both packages
+  are `link:`; the ESM cache is per-process, so a restart is required and must be stated.
+- **`interrupt` and `interrupt-guide` are shared registrations.** Standing up a second plugin that
+  registers either is a hard mount failure — it needs the 4-step replacement in §4, not a second
+  declaration.
+- **No contract version exists yet.** The bridge checks shape only. Any signature change in
+  `interrupt-core.js` is a silent break until a handshake is added.
+- **Verify the boundary, don't infer it:** `node dsh-command-skill/scripts/verify-contract.mjs`
+  reports which interrupt surfaces are mounted and whether the absolute imports still resolve.
 ## 5. Sandbox scripts never write through a symlink
 
 A script that builds an isolated tree must not `mkdir -p`, `ln -sfn`, or glob **through a

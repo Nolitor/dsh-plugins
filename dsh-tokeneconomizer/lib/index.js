@@ -299,6 +299,33 @@ export function isHeadless(mode, argv = process.argv) {
 export const MESSAGE_SOURCE = Object.freeze({ kind: 'tokeneconomizer' })
 
 /**
+ * Whether a session event carries a message this plugin injected.
+ *
+ * Two shapes reach `onEvent`, and the source does not live in the same place in either:
+ *
+ *   user/message        -> event.data.source.kind
+ *   agent/inbox/spliced -> event.data.inserted[].source.kind
+ *
+ * The splice shape is the one that matters. `agent.inject()` is synchronous: it splices the
+ * inbox and appends `agent/inbox/spliced` inside the same tick, so the watchdog's own warning
+ * comes back through `onEvent` before `onWatchdogWarn` even returns. Guarding only
+ * `data.source` therefore misses it entirely (measured: 4 warnings, 0 cancels).
+ *
+ * The splice event also carries genuine user input, so the array must be inspected entry by
+ * entry rather than treated as this plugin's own wholesale.
+ * @param {object} event - one session event.
+ * @returns {boolean} true when every message in the event came from this plugin.
+ */
+export function isOwnNotice (event) {
+  const data = event?.data
+  if (!data) return false
+  if (data.source?.kind === MESSAGE_SOURCE.kind) return true
+  const inserted = data.inserted
+  if (!Array.isArray(inserted) || inserted.length === 0) return false
+  return inserted.every((message) => message?.source?.kind === MESSAGE_SOURCE.kind)
+}
+
+/**
  * Tool-event delivery counters, one per registration path.
  *
  * The harness dispatches `tools/result` and `tools/post-execute` through a scope carrier, so a
@@ -770,10 +797,15 @@ export function apply(ctx, config) {
         state.recallDone = true
         void recallPrior(state, contentText(event.data.content))
       }
-      state.watchdog.progress()
+      // A message this plugin injected is not progress, whichever shape carried it.
+      if (!isOwnNotice(event)) state.watchdog.progress()
       return
     }
-    state.watchdog.progress()
+    // Most events are real activity and restart the budget, but the plugin's own notices are
+    // not activity: counting them reset the budget that was about to expire, so the watchdog
+    // warned forever and never reached its timeout (measured 2026-11-02: 24 warnings, 0
+    // interrupts; the regression is commit 3254ebf, which swapped notice() for noticeUser()).
+    if (!isOwnNotice(event)) state.watchdog.progress()
   }
 
   /**
