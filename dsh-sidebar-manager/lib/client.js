@@ -21,19 +21,27 @@ window.__ModuleLoader__.load({
         // Session row actions
         'session.trash.aria': '세션 영구 삭제',
         'session.menu.purge': '영구 삭제…',
-        'session.menu.move': '다른 워크스페이스로 이동…',
+        'session.menu.move': '다른 작업 공간으로 이동…',
         'session.menu.fork': '새 프로젝트로 분기…',
         // Footer entry and workspace manager
-        'workspaceManager.aria': '워크스페이스 관리자',
-        'workspaceManager.title': '워크스페이스 관리자',
-        'workspaceManager.description': '워크스페이스를 보관·복원하거나 이름을 변경합니다.',
-        'workspaceManager.empty': '등록된 워크스페이스가 없습니다.',
+        'workspaceManager.aria': '작업 공간 관리자',
+        'workspaceManager.title': '작업 공간 관리자',
+        'workspaceManager.description': '작업 공간을 보관·복원하거나 이름을 변경합니다.',
+        'workspaceManager.listTitle': '작업 공간',
+        'tabs.label': '관리자 탭',
+        'tabs.workspaces': '작업 공간',
+        'tabs.groups': '그룹',
+        'tabs.diagnostics': '진단',
+        'diagnostics.description': '가끔 쓰는 유지보수 작업입니다. 일상 작업은 작업 공간과 그룹 탭에 있습니다.',
+        'groups.summary': '가상 그룹과 소속 작업 공간',
+        'workspaceManager.empty': '등록된 작업 공간이 없습니다.',
         'workspaceManager.archive': '보관',
         'workspaceManager.restore': '복원',
-        'workspaceManager.archived': '보관된 워크스페이스',
+        'workspaceManager.archived': '보관된 작업 공간',
         'workspaceManager.rename': '이름 변경…',
         'workspaceManager.renameFolder': '폴더까지 이름 변경…',
         'workspaceManager.renameAction': '이름 변경',
+        'workspaceManager.folderRenameHint': '제목을 바꾸려면 사이드바 작업 공간 메뉴의 이름 변경을 쓰세요. 여기서는 폴더까지 함께 바꿀 수 있습니다.',
         'workspaceManager.includeFolder': '실제 디렉토리 포함',
         'workspaceManager.folderName': '새 디렉토리명',
         'workspaceManager.folderHint': '체크한 경우에만 실제 폴더를 함께 변경합니다.',
@@ -81,7 +89,7 @@ window.__ModuleLoader__.load({
         'groups.orphansTotal': '전체 {total} · 미연결 {count}',
         'groups.promoteTitle': '프로젝트 승격',
         'groups.promotePath': '대상 경로',
-        'groups.promoteTitleField': '워크스페이스 제목',
+        'groups.promoteTitleField': '작업 공간 제목',
         'groups.promoteAction': '승격 실행',
         'groups.promotePreview': '승격 미리보기',
         'groups.manageOnly': '구조 변경은 이 관리자에서만 수행하세요.',
@@ -110,10 +118,10 @@ window.__ModuleLoader__.load({
         // Shared confirmation gate
         'gate.ack': '위 내용을 확인했으며, DSH 재시작 후 반영됨을 이해합니다.',
         'gate.affected': '영향받는 세션: {count}개',
-        'gate.workspace': '워크스페이스: {title}',
+        'gate.workspace': '작업 공간: {title}',
         'gate.path': '경로: {oldPath} → {newPath}',
         'gate.liveBlocked': '실행 중이거나 열려 있는 세션이 {count}개 있어 작업할 수 없습니다. 세션을 닫은 뒤 다시 시도하세요.',
-        'gate.defaultWorkspaceBlocked': '기본 워크스페이스는 폴더 이름을 변경할 수 없습니다. 이름만 변경하세요.',
+        'gate.defaultWorkspaceBlocked': '기본 작업 공간은 폴더 이름을 변경할 수 없습니다. 이름만 변경하세요.',
         'gate.targetExists': '대상 경로가 이미 존재합니다: {path}',
         'gate.restart': '파일을 먼저 재배치한 뒤, DSH 서버를 재시작해야 목록에 반영됩니다.',
         'gate.externalPath': 'projectsRoot 밖의 경로입니다. 계속하려면 명시적으로 허용해야 합니다.',
@@ -122,17 +130,17 @@ window.__ModuleLoader__.load({
         'gate.blockers': '차단 사유',
         'gate.previewPending': '사전 확인 결과를 기다리는 중입니다…',
         'gate.sessionMissing': '세션을 찾을 수 없습니다.',
-        'gate.workspaceMissing': '워크스페이스를 찾을 수 없습니다.',
-        'gate.sameWorkspace': '이미 대상 워크스페이스에 속해 있습니다.',
-        'gate.workspaceDirMissing': '워크스페이스 디렉터리가 없습니다: {path}',
+        'gate.workspaceMissing': '작업 공간을 찾을 수 없습니다.',
+        'gate.sameWorkspace': '이미 대상 작업 공간에 속해 있습니다.',
+        'gate.workspaceDirMissing': '작업 공간 디렉터리가 없습니다: {path}',
         'gate.folderInvalid': '폴더명에는 경로 구분자를 쓸 수 없습니다.',
         'gate.samePath': '새 경로가 기존 경로와 같습니다.',
-        'gate.archiveMissing': '보관된 워크스페이스 기록이 없습니다.',
+        'gate.archiveMissing': '보관된 작업 공간 기록이 없습니다.',
         'gate.sessionControllerMissing': '세션 컨트롤러를 사용할 수 없습니다.',
         'gate.forkChildLive': '분기된 세션이 아직 활성 상태라 이동할 수 없습니다. 잠시 후 다시 시도하세요.',
         // Move to workspace
-        'move.title': '다른 워크스페이스로 이동',
-        'move.select': '대상 워크스페이스',
+        'move.title': '다른 작업 공간으로 이동',
+        'move.select': '대상 작업 공간',
         'move.submit': '이동 예약',
         // Fork to new workspace
         'fork.title': '새 프로젝트로 분기',
@@ -141,7 +149,7 @@ window.__ModuleLoader__.load({
         'fork.pathHint': '기본값은 projectsRoot/<slug>이며 직접 수정할 수 있습니다.',
         'fork.submit': '분기 예약',
         // Workspace rename (folder-linked)
-        'rename.title': '워크스페이스 이름 변경',
+        'rename.title': '작업 공간 이름 변경',
         'rename.displayName': '표시 이름',
         'rename.folderCheckbox': '실제 디스크 폴더명도 함께 변경',
         'rename.folderName': '새 폴더명',
@@ -157,13 +165,13 @@ window.__ModuleLoader__.load({
         'purge.done': '세션을 영구 삭제했습니다.',
         // Notices
         'notice.restartScheduled': '작업이 예약되었습니다. DSH를 재시작하면 반영됩니다.',
-        'notice.archived': '워크스페이스를 보관했습니다.',
-        'notice.restored': '워크스페이스를 복원했습니다.',
-        'notice.renamed': '워크스페이스 이름을 변경했습니다.',
-        'notice.renameFailed': '워크스페이스 이름을 변경하지 못했습니다.',
+        'notice.archived': '작업 공간을 보관했습니다.',
+        'notice.restored': '작업 공간을 복원했습니다.',
+        'notice.renamed': '작업 공간 이름을 변경했습니다.',
+        'notice.renameFailed': '작업 공간 이름을 변경하지 못했습니다.',
         'notice.previewCount': 'Cold 세션 {count}개가 영향을 받습니다.',
-        'notice.archiveFailed': '워크스페이스를 보관하지 못했습니다.',
-        'notice.restoreFailed': '워크스페이스를 복원하지 못했습니다.',
+        'notice.archiveFailed': '작업 공간을 보관하지 못했습니다.',
+        'notice.restoreFailed': '작업 공간을 복원하지 못했습니다.',
       },
       en: {
         // Session row actions
@@ -175,6 +183,13 @@ window.__ModuleLoader__.load({
         'workspaceManager.aria': 'Workspace manager',
         'workspaceManager.title': 'Workspace manager',
         'workspaceManager.description': 'Archive, restore, or rename workspaces.',
+        'workspaceManager.listTitle': 'Workspaces',
+        'tabs.label': 'Manager tabs',
+        'tabs.workspaces': 'Workspaces',
+        'tabs.groups': 'Groups',
+        'tabs.diagnostics': 'Diagnostics',
+        'diagnostics.description': 'Occasional maintenance. Day-to-day work lives in the Workspaces and Groups tabs.',
+        'groups.summary': 'Virtual groups and their workspaces',
         'workspaceManager.empty': 'No workspaces are registered.',
         'workspaceManager.archive': 'Archive',
         'workspaceManager.restore': 'Restore',
@@ -182,6 +197,7 @@ window.__ModuleLoader__.load({
         'workspaceManager.rename': 'Rename…',
         'workspaceManager.renameFolder': 'Rename folder too…',
         'workspaceManager.renameAction': 'Rename',
+        'workspaceManager.folderRenameHint': 'Use the sidebar workspace menu to rename the title; this also renames the folder on disk.',
         'workspaceManager.includeFolder': 'Include actual directory',
         'workspaceManager.folderName': 'New directory name',
         'workspaceManager.folderHint': 'The actual folder changes only when this is checked.',
@@ -544,33 +560,33 @@ window.__ModuleLoader__.load({
       groupSection: {
         marginTop: 8,
         paddingTop: 12,
-        borderTop: '1px solid color-mix(in srgb, currentColor 15%, transparent)',
+        borderTop: '1px solid var(--dsw-alias-border-l2)',
       },
       groupHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-      groupHeading: { margin: 0, fontSize: 15, fontWeight: 600 },
+      groupHeading: { margin: 0, fontSize: 14, fontWeight: 500, lineHeight: '22px' },
       groupHeaderActions: { display: 'inline-flex', gap: 4, flexWrap: 'wrap' },
       groupNotice: {
         marginTop: 6,
         padding: '6px 8px',
-        borderRadius: 6,
+        borderRadius: "var(--dsw-radius-md)",
         fontSize: 12,
-        background: 'color-mix(in srgb, currentColor 8%, transparent)',
+        background: 'var(--dsw-alias-bg-layer-2)',
       },
       groupList: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 },
       groupCard: {
-        border: '1px solid color-mix(in srgb, currentColor 14%, transparent)',
-        borderRadius: 8,
+        border: '0.5px solid var(--dsw-alias-border-l3)',
+        borderRadius: "var(--dsw-radius-md)",
         padding: '8px 10px',
       },
       groupCardHeader: { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-      groupCardTitle: { fontSize: 13, fontWeight: 600 },
+      groupCardTitle: { fontSize: 14, fontWeight: 500, lineHeight: '22px' },
       groupKind: {
         fontSize: 10,
         textTransform: 'uppercase',
         letterSpacing: 0.4,
         padding: '1px 5px',
-        borderRadius: 4,
-        background: 'color-mix(in srgb, currentColor 10%, transparent)',
+        borderRadius: "var(--dsw-radius-sm)",
+        background: 'var(--dsw-alias-bg-layer-3)',
       },
       groupPin: { fontSize: 11, opacity: 0.85 },
       groupModules: { display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 },
@@ -579,9 +595,9 @@ window.__ModuleLoader__.load({
         alignItems: 'center',
         gap: 8,
         padding: '4px 2px',
-        borderRadius: 6,
+        borderRadius: "var(--dsw-radius-md)",
       },
-      groupItemHq: { background: 'color-mix(in srgb, currentColor 7%, transparent)' },
+      groupItemHq: { background: 'var(--dsw-alias-interactive-bg-hover)' },
       groupBadgeIndex: {
         minWidth: 26,
         textAlign: 'center',
@@ -596,11 +612,11 @@ window.__ModuleLoader__.load({
       groupConfirm: {
         marginTop: 8,
         padding: '10px 12px',
-        borderRadius: 8,
+        borderRadius: "var(--dsw-radius-md)",
         border: '1px solid var(--dsw-alias-state-business-primary, currentColor)',
-        background: 'color-mix(in srgb, currentColor 6%, transparent)',
+        background: 'var(--dsw-alias-interactive-bg-hover)',
       },
-      groupConfirmTitle: { fontSize: 13, fontWeight: 700 },
+      groupConfirmTitle: { fontSize: 14, fontWeight: 500, lineHeight: '22px' },
       groupConfirmBody: { fontSize: 12, marginTop: 4, lineHeight: 1.5 },
       groupConfirmCheck: { display: 'flex', gap: 6, alignItems: 'flex-start', marginTop: 8, fontSize: 12 },
       iconButton: {
@@ -611,11 +627,16 @@ window.__ModuleLoader__.load({
         minHeight: 24,
         padding: '2px 5px',
         border: 0,
-        borderRadius: 6,
+        borderRadius: "var(--dsw-radius-md)",
         background: 'transparent',
         color: 'inherit',
         cursor: 'pointer',
         font: 'inherit',
+      },
+      menuSeparator: {
+        height: '0.5px',
+        margin: '3px 2px',
+        background: 'var(--dsw-alias-border-l2)',
       },
       menuItem: {
         display: 'block',
@@ -626,7 +647,13 @@ window.__ModuleLoader__.load({
         color: 'inherit',
         textAlign: 'left',
         cursor: 'pointer',
-        font: 'inherit',
+        // Native context-menu rows measure 13px/400/20px. `font: inherit` alone
+        // took the body default (16px) because the menu container sets no size,
+        // so these rows rendered visibly larger than the native rows beside them.
+        fontFamily: 'inherit',
+        fontSize: 13,
+        fontWeight: 400,
+        lineHeight: '20px',
       },
       backdrop: {
         position: 'fixed',
@@ -650,7 +677,7 @@ window.__ModuleLoader__.load({
         boxSizing: 'border-box',
         boxShadow: '0 18px 50px rgba(0, 0, 0, 0.45)',
       },
-      title: { margin: '0 0 12px', fontSize: 15, fontWeight: 600 },
+      title: { margin: '0 0 12px', fontSize: 14, fontWeight: 500, lineHeight: '22px' },
       row: { display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' },
       field: {
         width: '100%',
@@ -662,12 +689,14 @@ window.__ModuleLoader__.load({
         background: 'var(--dsw-alias-bg-layer-1, #161616)',
         color: 'inherit',
         font: 'inherit',
+        fontSize: 13,
+        lineHeight: '20px',
       },
       label: { display: 'block', fontSize: 12, opacity: 0.85, marginTop: 10 },
       gateBox: {
         marginTop: 12,
         padding: 10,
-        borderRadius: 8,
+        borderRadius: "var(--dsw-radius-md)",
         border: '1px solid var(--dsw-alias-border-l2, #555)',
         background: 'var(--dsw-alias-bg-layer-1, #161616)',
         fontSize: 12,
@@ -693,6 +722,8 @@ window.__ModuleLoader__.load({
         color: 'inherit',
         cursor: 'pointer',
         font: 'inherit',
+        fontSize: 13,
+        lineHeight: '20px',
       },
       list: { display: 'flex', flexDirection: 'column', gap: 6 },
       listRow: {
@@ -702,7 +733,7 @@ window.__ModuleLoader__.load({
         justifyContent: 'space-between',
         padding: '8px 10px',
         border: '1px solid var(--dsw-alias-border-l2, #444)',
-        borderRadius: 8,
+        borderRadius: "var(--dsw-radius-md)",
       },
       listText: { minWidth: 0 },
       path: { fontSize: 11, opacity: 0.7, overflowWrap: 'anywhere' },
@@ -712,10 +743,20 @@ window.__ModuleLoader__.load({
         boxSizing: 'border-box',
         padding: '24px 28px 40px',
         width: '100%',
+        // DSH defines no font-size token and sets none on body (the UA default is
+        // 16px); every native surface states 14px. A panel that omits it renders
+        // 2px larger than the rest of the UI, so the baseline is pinned here and
+        // inherited by everything inside.
+        fontSize: 14,
+        lineHeight: '22px',
+        color: 'var(--dsw-alias-label-primary)',
       },
       panelInner: { width: '100%', maxWidth: 820, margin: '0 auto' },
-      panelHeading: { margin: 0, fontSize: 20, fontWeight: 650 },
+      panelHeading: { margin: 0, fontSize: 20, fontWeight: 500, lineHeight: '28px' },
       panelDescription: { margin: '6px 0 18px', fontSize: 12, opacity: 0.75, lineHeight: 1.5 },
+      panelSectionHead: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, margin: '18px 0 8px' },
+      panelSectionTitle: { margin: 0, fontSize: 14, fontWeight: 500, lineHeight: '22px' },
+      panelSectionHint: { fontSize: 11, opacity: 0.62 },
       panelRows: { display: 'flex', flexDirection: 'column', gap: 8 },
       panelRow: {
         display: 'flex',
@@ -724,14 +765,65 @@ window.__ModuleLoader__.load({
         gap: 10,
         padding: '12px 14px',
         border: '1px solid var(--dsw-alias-border-l2, #444)',
-        borderRadius: 10,
+        borderRadius: "var(--dsw-radius-lg)",
         background: 'var(--dsw-alias-bg-layer-1, rgba(0,0,0,0.04))',
       },
       panelName: { flex: '1 1 260px', minWidth: 0 },
       panelActions: { display: 'flex', flex: '0 0 auto', gap: 6, alignItems: 'center' },
       inlineFolder: { flexBasis: '100%', paddingLeft: 24, display: 'flex', flexDirection: 'column', gap: 4 },
       inlineHint: { fontSize: 11, opacity: 0.62 },
-      archivedHeading: { margin: '22px 0 8px', fontSize: 12, fontWeight: 650 },
+      archivedHeading: { margin: '22px 0 8px', fontSize: 14, fontWeight: 500, lineHeight: '22px' },
+      archivedBlock: { marginTop: 22 },
+      // --- Tab strip (mirrors the native settings tabs) --------------------
+      tabs: {
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: 22,
+        marginTop: 2,
+        borderBottom: '0.5px solid var(--dsw-alias-border-l2)',
+      },
+      tab: {
+        position: 'relative',
+        appearance: 'none',
+        background: '0 0',
+        border: 0,
+        padding: '7px 1px 9px',
+        font: 'inherit',
+        fontSize: 13,
+        lineHeight: '20px',
+        cursor: 'pointer',
+        color: 'var(--dsw-alias-label-tertiary)',
+      },
+      tabActive: { color: 'var(--dsw-alias-label-primary)' },
+      tabUnderline: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: -1,
+        height: 2,
+        borderRadius: '2px 2px 0 0',
+        background: 'var(--dsw-alias-label-primary)',
+      },
+      tabPanel: { minWidth: 0, paddingTop: 2 },
+      // --- More-menu row (matches the native menu item metrics) -------------
+      moreItem: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        width: '100%',
+        padding: '8px 10px',
+        border: 0,
+        borderRadius: 'var(--dsw-radius-sm)',
+        background: 'transparent',
+        color: 'var(--dsw-alias-label-primary)',
+        font: 'inherit',
+        fontSize: 13,
+        lineHeight: '20px',
+        textAlign: 'left',
+        cursor: 'pointer',
+      },
+      moreItemGlyph: { display: 'inline-flex', flex: '0 0 auto', alignItems: 'center' },
+      moreItemLabel: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
       empty: { opacity: 0.7, fontSize: 12, padding: '12px 0' },
       notice: {
         position: 'fixed',
@@ -740,7 +832,7 @@ window.__ModuleLoader__.load({
         zIndex: 1100,
         maxWidth: 420,
         padding: '10px 12px',
-        borderRadius: 8,
+        borderRadius: "var(--dsw-radius-md)",
         border: '1px solid var(--dsw-alias-border-l2, #555)',
         background: 'var(--dsw-alias-bg-layer-2, #1f1f1f)',
         boxShadow: '0 8px 30px rgba(0, 0, 0, 0.35)',
@@ -850,26 +942,22 @@ window.__ModuleLoader__.load({
      *  - navigates with the official `uiWorkspace.openWorkspace`,
      *  - never touches the native sidebar DOM or its CSS.
      */
-    function GroupTreeSection({ onChanged }) {
+    function GroupsTab({ onChanged }) {
       const [state, setState] = React.useState({ loading: true, tree: null, error: null })
       const [orderBusy, setOrderBusy] = React.useState(false)
       const [orderInfo, setOrderInfo] = React.useState(null)
       const alive = React.useRef(true)
 
-      const [advisory, setAdvisory] = React.useState(null)
 
       const load = React.useCallback(
         () =>
-          Promise.all([post('groups/view', {}), post('groups/advisory', {}).catch(() => ({ ok: false }))]).then(
-            ([result, advisoryResult]) => {
-              setAdvisory(advisoryResult?.ok ? advisoryResult.data : null)
-              if (!result.ok) {
-                setState({ loading: false, tree: null, error: result.data?.error || t('common.unknownError') })
-                return
-              }
-              setState({ loading: false, tree: result.data, error: null })
-            },
-          ),
+          post('groups/view', {}).then((result) => {
+            if (!result.ok) {
+              setState({ loading: false, tree: null, error: result.data?.error || t('common.unknownError') })
+              return
+            }
+            setState({ loading: false, tree: result.data, error: null })
+          }),
         [],
       )
 
@@ -905,11 +993,6 @@ window.__ModuleLoader__.load({
 
       const [confirmOpen, setConfirmOpen] = React.useState(false)
       const [confirmChecked, setConfirmChecked] = React.useState(false)
-      const [hqGroup, setHqGroup] = React.useState('')
-      const [hqMain, setHqMain] = React.useState('HQ')
-      const [orphans, setOrphans] = React.useState(null)
-      const [promotePath, setPromotePath] = React.useState('')
-      const [promoteTitle, setPromoteTitle] = React.useState('')
 
       const requestOrderConfirm = () => {
         setOrderBusy(true)
@@ -927,69 +1010,9 @@ window.__ModuleLoader__.load({
           .finally(() => setOrderBusy(false))
       }
 
-      const createHq = () => {
-        const group = hqGroup.trim()
-        if (group === '') {
-          notify(t('gate.blankName'))
-          return
-        }
-        setOrderBusy(true)
-        post('groups/hq/promote', { group, main: hqMain.trim() || 'HQ' })
-          .then((result) => {
-            if (result.ok) notify(t('groups.hqCreated'))
-            else notify(result.data?.blockerCodes?.join(', ') || result.data?.error || t('common.applyFailed'))
-            load()
-            if (onChanged) onChanged()
-          })
-          .catch(() => notify(t('common.applyFailed')))
-          .finally(() => setOrderBusy(false))
-      }
 
-      const scanOrphans = () => {
-        setOrderBusy(true)
-        post('groups/orphans', {})
-          .then((result) => {
-            if (result.ok) setOrphans(result.data)
-            else notify(result.data?.error || t('common.applyFailed'))
-          })
-          .catch(() => notify(t('common.applyFailed')))
-          .finally(() => setOrderBusy(false))
-      }
 
-      const previewPromotion = () => {
-        const target = promotePath.trim()
-        if (target === '') {
-          notify(t('gate.blankName'))
-          return
-        }
-        setOrderBusy(true)
-        post('promotion/preview', { mode: 'existing', path: target, title: promoteTitle.trim() })
-          .then((result) => {
-            const data = result.data ?? {}
-            if (data.ok === false) notify((data.blockerCodes ?? []).join(', ') || t('common.applyFailed'))
-            else notify(`${t('groups.promotePreview')}: ${data.canonicalPath ?? target}`)
-          })
-          .catch(() => notify(t('common.applyFailed')))
-          .finally(() => setOrderBusy(false))
-      }
 
-      const runPromotion = () => {
-        const target = promotePath.trim()
-        if (target === '') {
-          notify(t('gate.blankName'))
-          return
-        }
-        setOrderBusy(true)
-        post('promotion/apply', { mode: 'existing', path: target, title: promoteTitle.trim() })
-          .then((result) => {
-            if (result.ok) notify(t('groups.hqCreated'))
-            else notify((result.data?.blockerCodes ?? []).join(', ') || t('common.applyFailed'))
-            load()
-            if (onChanged) onChanged()
-          })
-          .catch(() => notify(t('common.applyFailed')))
-          .finally(() => setOrderBusy(false))
-      }
 
       const applyOrder = () => {
         setConfirmOpen(false)
@@ -1050,7 +1073,7 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { style: styles.groupHeader },
-          h('h2', { style: styles.groupHeading }, t('groups.title')),
+          h('div', { style: styles.groupHeading }, t('groups.summary')),
           h(
             'div',
             { style: styles.groupHeaderActions },
@@ -1107,84 +1130,6 @@ window.__ModuleLoader__.load({
               ),
             )
           : null,
-        // --- advisory observations (never blocking) ------------------------
-        advisory !== null
-          ? h(
-              'div',
-              { style: styles.groupCard, 'aria-label': t('groups.advisoryTitle') },
-              h(
-                'div',
-                { style: styles.groupCardHeader },
-                h('span', { style: styles.groupCardTitle }, t('groups.advisoryTitle')),
-                h('span', { style: styles.groupHint }, `${advisory.observations?.length ?? 0}`),
-              ),
-              (advisory.observations?.length ?? 0) === 0
-                ? h('div', { style: styles.groupHint }, t('groups.advisoryNone'))
-                : h(
-                    'div',
-                    { style: styles.groupModules },
-                    advisory.observations.map((observation) =>
-                      h(
-                        'div',
-                        { key: `${observation.code}:${observation.workspaceId ?? ''}`, style: styles.groupItem },
-                        h('span', { style: styles.groupBadgeIndex }, observation.level),
-                        h(
-                          'div',
-                          { style: styles.panelName },
-                          h('div', { style: styles.groupLabel }, observation.title ?? observation.workspaceId ?? ''),
-                          h('div', { style: styles.path }, observation.detail ?? ''),
-                        ),
-                      ),
-                    ),
-                  ),
-            )
-          : null,
-        // --- HQ creation ---------------------------------------------------
-        h(
-          'div',
-          { style: styles.groupCard },
-          h('div', { style: styles.groupCardHeader }, h('span', { style: styles.groupCardTitle }, t('groups.hqTitle'))),
-          h(
-            'div',
-            { style: styles.groupFormRow },
-            h('input', { style: styles.field, placeholder: t('groups.hqGroup'), value: hqGroup, disabled: orderBusy, onChange: (e) => setHqGroup(e.target.value), 'aria-label': t('groups.hqGroup') }),
-            h('input', { style: styles.field, placeholder: t('groups.hqMain'), value: hqMain, disabled: orderBusy, onChange: (e) => setHqMain(e.target.value), 'aria-label': t('groups.hqMain') }),
-            h('button', { type: 'button', style: styles.plain, disabled: orderBusy, onClick: createHq }, t('groups.hqCreate')),
-          ),
-        ),
-        // --- explicit project promotion ------------------------------------
-        h(
-          'div',
-          { style: styles.groupCard },
-          h('div', { style: styles.groupCardHeader }, h('span', { style: styles.groupCardTitle }, t('groups.promoteTitle'))),
-          h(
-            'div',
-            { style: styles.groupFormRow },
-            h('input', { style: styles.field, placeholder: t('groups.promotePath'), value: promotePath, disabled: orderBusy, onChange: (e) => setPromotePath(e.target.value), 'aria-label': t('groups.promotePath') }),
-            h('input', { style: styles.field, placeholder: t('groups.promoteTitleField'), value: promoteTitle, disabled: orderBusy, onChange: (e) => setPromoteTitle(e.target.value), 'aria-label': t('groups.promoteTitleField') }),
-            h('button', { type: 'button', style: styles.plain, disabled: orderBusy, onClick: previewPromotion }, t('groups.promotePreview')),
-            h('button', { type: 'button', style: styles.plain, disabled: orderBusy, onClick: runPromotion }, t('groups.promoteAction')),
-          ),
-        ),
-        // --- orphan classifier (read-only) ---------------------------------
-        h(
-          'div',
-          { style: styles.groupCard },
-          h(
-            'div',
-            { style: styles.groupCardHeader },
-            h('span', { style: styles.groupCardTitle }, t('groups.orphansTitle')),
-            h('button', { type: 'button', style: styles.plain, disabled: orderBusy, onClick: scanOrphans }, t('groups.orphansScan')),
-          ),
-          h('div', { style: styles.groupHint }, t('groups.orphansNote')),
-          orphans !== null
-            ? h(
-                'div',
-                { style: styles.groupHint },
-                t('groups.orphansTotal', { total: orphans.total ?? 0, count: orphans.disconnected?.length ?? 0 }),
-              )
-            : null,
-        ),
         orderInfo !== null
           ? h(
               'div',
@@ -1242,7 +1187,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function WorkspaceManagerPanel() {
+    function WorkspacesTab() {
       const [state, setState] = React.useState({ loading: true, items: [], archived: [], error: null })
       const [drafts, setDrafts] = React.useState({})
       const [busyId, setBusyId] = React.useState(null)
@@ -1394,18 +1339,17 @@ window.__ModuleLoader__.load({
 
       return h(
         'section',
-        { style: styles.panelPage, 'aria-label': t('workspaceManager.title') },
+        { style: styles.tabPanel, 'aria-label': t('tabs.workspaces') },
         h(
           'div',
           { style: styles.panelInner },
-          h('h1', { style: styles.panelHeading }, t('workspaceManager.title')),
+          h('p', { style: styles.panelDescription }, t('workspaceManager.description')),
           h(
-            'p',
-            { style: styles.panelDescription },
-            `${t('workspaceManager.description')} · ${t('workspaceManager.inlineHint')}`,
+            'div',
+            { style: styles.panelSectionHead },
+            h('h2', { style: styles.panelSectionTitle }, t('workspaceManager.listTitle')),
+            h('span', { style: styles.panelSectionHint }, t('workspaceManager.inlineHint')),
           ),
-          h(GroupTreeSection, { onChanged: load }),
-          h('h2', { style: { ...styles.panelHeading, fontSize: 14, marginTop: 16 } }, t('workspaceManager.title')),
           state.loading
             ? h('div', { style: styles.empty }, t('common.loading'))
             : state.error !== null
@@ -1447,6 +1391,7 @@ window.__ModuleLoader__.load({
                                   type: 'button',
                                   style: styles.plain,
                                   disabled: busyId !== null,
+                                  title: t('workspaceManager.folderRenameHint'),
                                   onClick: () => saveTitle(workspace),
                                 },
                                 busyId === workspace.workspaceId
@@ -1510,9 +1455,13 @@ window.__ModuleLoader__.load({
                   ),
                   state.archived.length > 0
                     ? h(
-                        'div',
-                        null,
-                        h('h2', { style: styles.archivedHeading }, t('workspaceManager.archived')),
+                        'details',
+                        { style: styles.archivedBlock },
+                        h(
+                          'summary',
+                          { style: styles.archivedHeading },
+                          `${t('workspaceManager.archived')} (${state.archived.length})`,
+                        ),
                         h(
                           'div',
                           { style: styles.panelRows },
@@ -1546,6 +1495,281 @@ window.__ModuleLoader__.load({
                       )
                     : null,
                 ),
+        ),
+      )
+    }
+
+    /**
+     * Diagnostics tab: the advisory observations, the HQ bootstrap, the explicit
+     * promotion gate and the read-only orphan scan. They are maintenance actions a
+     * person runs occasionally, so they live away from the workspace list and the
+     * group tree that are used daily.
+     */
+    function DiagnosticsTab({ onChanged }) {
+      const [busy, setBusy] = React.useState(false)
+      const [advisory, setAdvisory] = React.useState(null)
+      const [orphans, setOrphans] = React.useState(null)
+      const [hqGroup, setHqGroup] = React.useState('')
+      const [hqMain, setHqMain] = React.useState('HQ')
+      const [promotePath, setPromotePath] = React.useState('')
+      const [promoteTitle, setPromoteTitle] = React.useState('')
+
+      const loadAdvisory = React.useCallback(
+        () =>
+          post('groups/advisory', {})
+            .then((result) => setAdvisory(result?.ok ? result.data : null))
+            .catch(() => setAdvisory(null)),
+        [],
+      )
+
+      React.useEffect(() => {
+        loadAdvisory()
+      }, [loadAdvisory])
+
+      const createHq = () => {
+        const group = hqGroup.trim()
+        if (group === '') {
+          notify(t('gate.blankName'))
+          return
+        }
+        setBusy(true)
+        post('groups/hq/promote', { group, main: hqMain.trim() || 'HQ' })
+          .then((result) => {
+            if (result.ok) notify(t('groups.hqCreated'))
+            else notify(result.data?.blockerCodes?.join(', ') || result.data?.error || t('common.applyFailed'))
+            loadAdvisory()
+            if (onChanged) onChanged()
+          })
+          .catch(() => notify(t('common.applyFailed')))
+          .finally(() => setBusy(false))
+      }
+
+      const scanOrphans = () => {
+        setBusy(true)
+        post('groups/orphans', {})
+          .then((result) => {
+            if (result.ok) setOrphans(result.data)
+            else notify(result.data?.error || t('common.applyFailed'))
+          })
+          .catch(() => notify(t('common.applyFailed')))
+          .finally(() => setBusy(false))
+      }
+
+      const previewPromotion = () => {
+        const target = promotePath.trim()
+        if (target === '') {
+          notify(t('gate.blankName'))
+          return
+        }
+        setBusy(true)
+        post('promotion/preview', { mode: 'existing', path: target, title: promoteTitle.trim() })
+          .then((result) => {
+            const data = result.data ?? {}
+            if (data.ok === false) notify((data.blockerCodes ?? []).join(', ') || t('common.applyFailed'))
+            else notify(`${t('groups.promotePreview')}: ${data.canonicalPath ?? target}`)
+          })
+          .catch(() => notify(t('common.applyFailed')))
+          .finally(() => setBusy(false))
+      }
+
+      const runPromotion = () => {
+        const target = promotePath.trim()
+        if (target === '') {
+          notify(t('gate.blankName'))
+          return
+        }
+        setBusy(true)
+        post('promotion/apply', { mode: 'existing', path: target, title: promoteTitle.trim() })
+          .then((result) => {
+            if (result.ok) notify(t('groups.hqCreated'))
+            else notify((result.data?.blockerCodes ?? []).join(', ') || t('common.applyFailed'))
+            loadAdvisory()
+            if (onChanged) onChanged()
+          })
+          .catch(() => notify(t('common.applyFailed')))
+          .finally(() => setBusy(false))
+      }
+
+      return h(
+        'section',
+        { style: styles.tabPanel, 'aria-label': t('tabs.diagnostics') },
+        h('p', { style: styles.panelDescription }, t('diagnostics.description')),
+        advisory !== null
+          ? h(
+              'div',
+              { style: styles.groupCard, 'aria-label': t('groups.advisoryTitle') },
+              h(
+                'div',
+                { style: styles.groupCardHeader },
+                h('span', { style: styles.groupCardTitle }, t('groups.advisoryTitle')),
+                h('span', { style: styles.groupHint }, `${advisory.observations?.length ?? 0}`),
+              ),
+              (advisory.observations?.length ?? 0) === 0
+                ? h('div', { style: styles.groupHint }, t('groups.advisoryNone'))
+                : h(
+                    'div',
+                    { style: styles.groupModules },
+                    advisory.observations.map((observation) =>
+                      h(
+                        'div',
+                        { key: `${observation.code}:${observation.workspaceId ?? ''}`, style: styles.groupItem },
+                        h('span', { style: styles.groupBadgeIndex }, observation.level),
+                        h(
+                          'div',
+                          { style: styles.panelName },
+                          h('div', { style: styles.groupLabel }, observation.title ?? observation.workspaceId ?? ''),
+                          h('div', { style: styles.path }, observation.detail ?? ''),
+                        ),
+                      ),
+                    ),
+                  ),
+            )
+          : null,
+        h(
+          'div',
+          { style: styles.groupCard },
+          h('div', { style: styles.groupCardHeader }, h('span', { style: styles.groupCardTitle }, t('groups.hqTitle'))),
+          h(
+            'div',
+            { style: styles.groupFormRow },
+            h('input', { style: styles.field, placeholder: t('groups.hqGroup'), value: hqGroup, disabled: busy, onChange: (e) => setHqGroup(e.target.value), 'aria-label': t('groups.hqGroup') }),
+            h('input', { style: styles.field, placeholder: t('groups.hqMain'), value: hqMain, disabled: busy, onChange: (e) => setHqMain(e.target.value), 'aria-label': t('groups.hqMain') }),
+            h('button', { type: 'button', style: styles.plain, disabled: busy, onClick: createHq }, t('groups.hqCreate')),
+          ),
+        ),
+        h(
+          'div',
+          { style: styles.groupCard },
+          h('div', { style: styles.groupCardHeader }, h('span', { style: styles.groupCardTitle }, t('groups.promoteTitle'))),
+          h(
+            'div',
+            { style: styles.groupFormRow },
+            h('input', { style: styles.field, placeholder: t('groups.promotePath'), value: promotePath, disabled: busy, onChange: (e) => setPromotePath(e.target.value), 'aria-label': t('groups.promotePath') }),
+            h('input', { style: styles.field, placeholder: t('groups.promoteTitleField'), value: promoteTitle, disabled: busy, onChange: (e) => setPromoteTitle(e.target.value), 'aria-label': t('groups.promoteTitleField') }),
+            h('button', { type: 'button', style: styles.plain, disabled: busy, onClick: previewPromotion }, t('groups.promotePreview')),
+            h('button', { type: 'button', style: styles.plain, disabled: busy, onClick: runPromotion }, t('groups.promoteAction')),
+          ),
+        ),
+        h(
+          'div',
+          { style: styles.groupCard },
+          h(
+            'div',
+            { style: styles.groupCardHeader },
+            h('span', { style: styles.groupCardTitle }, t('groups.orphansTitle')),
+            h('button', { type: 'button', style: styles.plain, disabled: busy, onClick: scanOrphans }, t('groups.orphansScan')),
+          ),
+          h('div', { style: styles.groupHint }, t('groups.orphansNote')),
+          orphans !== null
+            ? h(
+                'div',
+                { style: styles.groupHint },
+                t('groups.orphansTotal', { total: orphans.total ?? 0, count: orphans.disconnected?.length ?? 0 }),
+              )
+            : null,
+        ),
+      )
+    }
+
+    /**
+     * The panel shell: one tab strip over three panels. It mirrors the native
+     * settings tabs (role=tablist, roving tabIndex, arrow/Home/End keys) so the
+     * panel behaves like every other DSH surface instead of one long page.
+     */
+    function WorkspaceManagerPanel() {
+      const tabs = React.useMemo(
+        () => [
+          { id: 'workspaces', label: t('tabs.workspaces') },
+          { id: 'groups', label: t('tabs.groups') },
+          { id: 'diagnostics', label: t('tabs.diagnostics') },
+        ],
+        [],
+      )
+      const [activeId, setActiveId] = React.useState('workspaces')
+      const [revision, setRevision] = React.useState(0)
+      const tabRefs = React.useRef([])
+      const baseId = 'sidebar-manager-tabs'
+
+      const index = tabs.findIndex((row) => row.id === activeId)
+      const onChanged = React.useCallback(() => setRevision((value) => value + 1), [])
+
+      const focusTab = (nextIndex, event) => {
+        event.preventDefault()
+        const next = tabs[nextIndex]
+        setActiveId(next.id)
+        const element = tabRefs.current[nextIndex]
+        if (element && typeof element.focus === 'function') element.focus()
+      }
+
+      const onKeyDown = (event, rowIndex) => {
+        switch (event.key) {
+          case 'ArrowRight':
+            return focusTab((rowIndex + 1) % tabs.length, event)
+          case 'ArrowLeft':
+            return focusTab((rowIndex - 1 + tabs.length) % tabs.length, event)
+          case 'Home':
+            return focusTab(0, event)
+          case 'End':
+            return focusTab(tabs.length - 1, event)
+          case 'Enter':
+          case ' ':
+            event.preventDefault()
+            return setActiveId(tabs[rowIndex].id)
+          default:
+            return undefined
+        }
+      }
+
+      return h(
+        'section',
+        { style: styles.panelPage, 'aria-label': t('workspaceManager.title') },
+        h(
+          'div',
+          { style: styles.panelInner },
+          h('h1', { style: styles.panelHeading }, t('workspaceManager.title')),
+          h(
+            'div',
+            { style: styles.tabs, role: 'tablist', 'aria-label': t('tabs.label') },
+            tabs.map((row, rowIndex) => {
+              const selected = row.id === activeId
+              return h(
+                'button',
+                {
+                  key: row.id,
+                  ref: (element) => {
+                    tabRefs.current[rowIndex] = element
+                  },
+                  id: `${baseId}-tab-${row.id}`,
+                  type: 'button',
+                  role: 'tab',
+                  style: selected ? { ...styles.tab, ...styles.tabActive } : styles.tab,
+                  'aria-selected': selected,
+                  'aria-controls': `${baseId}-panel-${row.id}`,
+                  'data-active': selected ? 'true' : undefined,
+                  tabIndex: selected ? 0 : -1,
+                  onClick: () => setActiveId(row.id),
+                  onKeyDown: (event) => onKeyDown(event, rowIndex),
+                },
+                row.label,
+                selected ? h('span', { style: styles.tabUnderline, 'aria-hidden': 'true' }) : null,
+              )
+            }),
+          ),
+          h(
+            'div',
+            {
+              key: activeId,
+              id: `${baseId}-panel-${activeId}`,
+              role: 'tabpanel',
+              'aria-labelledby': `${baseId}-tab-${activeId}`,
+              style: styles.tabPanel,
+            },
+            activeId === 'workspaces'
+              ? h(WorkspacesTab, { key: revision })
+              : activeId === 'groups'
+                ? h(GroupsTab, { key: revision, onChanged })
+                : h(DiagnosticsTab, { key: revision, onChanged }),
+          ),
         ),
       )
     }
@@ -1830,13 +2054,17 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function MenuAction({ label, onClick }) {
-      return h('button', { type: 'button', role: 'menuitem', style: styles.menuItem, onClick }, label)
+    function MenuAction({ label, onClick, separatorBefore = false }) {
+      const row = h('button', { type: 'button', role: 'menuitem', style: styles.menuItem, onClick }, label)
+      if (!separatorBefore) return row
+      // Native context-menu separator: .5px border-l2 line, 3px 2px margins.
+      return h(React.Fragment, null, h('div', { style: styles.menuSeparator, 'aria-hidden': 'true' }), row)
     }
 
     function PurgeMenuItem({ sessionId, displayTitle, useMenuOpenState }) {
       const [, setMenuOpen] = useMenuOpenState()
       return h(MenuAction, {
+        separatorBefore: true,
         label: t('session.menu.purge'),
         onClick: () => {
           setMenuOpen(false)
@@ -1915,19 +2143,19 @@ window.__ModuleLoader__.load({
 
       ctx.slots.inject('sidebar.workspaces.session.menu.item', () =>
         ctx.slots.register(
-          { name: 'sidebar.workspaces.session.menu.item', id: 'sidebar-manager.purge', order: 520 },
+          { name: 'sidebar.workspaces.session.menu.item', id: 'sidebar-manager.purge', order: 510 },
           PurgeMenuItem,
         ),
       )
       ctx.slots.inject('sidebar.workspaces.session.menu.item', () =>
         ctx.slots.register(
-          { name: 'sidebar.workspaces.session.menu.item', id: 'sidebar-manager.move', order: 540 },
+          { name: 'sidebar.workspaces.session.menu.item', id: 'sidebar-manager.move', order: 520 },
           MoveMenuItem,
         ),
       )
       ctx.slots.inject('sidebar.workspaces.session.menu.item', () =>
         ctx.slots.register(
-          { name: 'sidebar.workspaces.session.menu.item', id: 'sidebar-manager.fork', order: 560 },
+          { name: 'sidebar.workspaces.session.menu.item', id: 'sidebar-manager.fork', order: 530 },
           ForkMenuItem,
         ),
       )
@@ -1936,15 +2164,61 @@ window.__ModuleLoader__.load({
         ctx.slots.register({ name: 'main', key: PANEL_ID }, WorkspaceManagerPanel),
       )
 
-      ctx.slots.inject('sidebar.panellist', () =>
+      // The panel lives in the sidebar's "More" menu, not as a row between the native
+      // entries. Measured 2026-11-03: an entry on `sidebar.panellist` becomes its own rail
+      // row, sorted by `order` among the native rows and always placed before the More
+      // launcher, so any order puts a plugin panel between native items.
+      //
+      // The entry must still EXIST: the More menu's onOpen resolves the id through the
+      // panel list built from these entries. It is registered and then unpinned at mount,
+      // which is the native mechanism behind More (ui-sidebar renders
+      // `panels.filter(id === "plugins" || !unpinned.includes(id))` outside the menu and
+      // every non-plugins panel inside it). Unpinned, the row is hidden from the rail and
+      // the panel is reachable only from More.
+      ctx.slots.inject('sidebar.panellist.actions', () =>
         ctx.slots.register(
           {
-            name: 'sidebar.panellist',
-            id: PANEL_ID,
-            order: 20,
+            name: 'sidebar.panellist.actions',
+            id: 'sidebar-manager.launcher',
+            order: 60,
             label: () => t('workspaceManager.aria'),
           },
-          WorkspaceManagerIcon,
+          function WorkspaceManagerMenuRow(props) {
+
+            const onOpen = props?.onOpen
+            const onDismiss = props?.onDismiss
+            const label = t('workspaceManager.aria')
+            // Unpin while the row renders: an unpinned entry is drawn only inside More,
+            // never in the rail. The store is idempotent (it early-returns when the state
+            // already matches), so calling it on every render is safe.
+            return h(
+              'button',
+              {
+                type: 'button',
+                role: 'menuitem',
+                style: styles.moreItem,
+                'aria-label': label,
+                onClick: () => {
+                  if (typeof onDismiss === 'function') onDismiss()
+                  // ctx.layout.selectPanel validates against the `main` slot, which this
+                  // plugin registers; it does not depend on the sidebar's panel list,
+                  // so the More row works without also creating a rail entry.
+                  const layout = appContext?.get?.('layout')
+                  if (layout?.selectPanel) {
+                    try {
+                      layout.selectPanel(PANEL_ID)
+                      return
+                    } catch {
+                      /* fall through to the slot callback */
+                    }
+                  }
+                  if (typeof onOpen === 'function') onOpen(PANEL_ID)
+                },
+              },
+              h('span', { style: styles.moreItemGlyph, 'aria-hidden': 'true' }, h(WorkspaceManagerIcon, { size: 16 })),
+              h('span', { style: styles.moreItemLabel }, label),
+            )
+          },
         ),
       )
 
