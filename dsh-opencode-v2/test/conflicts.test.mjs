@@ -158,7 +158,11 @@ test('apply registers the native adapter when the namespace is clear', async () 
     assert.equal(state.registrations.length, 1)
     assert.deepEqual(state.registrations[0].providers, ['opencode-http-agent'])
     assert.equal(state.registrations[0].adapter.standDown, false)
-    assert.deepEqual(state.directory.map((entry) => entry.provider), ['opencode-http-agent'])
+    // The generic "Models" settings form is deliberately not advertised: this
+    // plugin ships its own panel over the same row, and rendering both gave
+    // operators two competing screens. See apply() for the reason the panel's
+    // save path does not depend on this directory.
+    assert.deepEqual(state.directory, [], 'the raw auto-form must stay unregistered')
     assert.deepEqual(state.warnings, [])
     dispose()
     assert.equal(state.releases, 1)

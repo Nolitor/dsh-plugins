@@ -94,13 +94,20 @@ const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
 /** Version string of this module, for the load beacon. Must match package.json. */
-const VERSION = '0.0.1-rc.9'
+const VERSION = '0.0.1-rc.10'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
   baseUrl: Schema.string().default('').volatile(),
-  /** Basic-auth password for the local control-plane server. */
-  password: Schema.string().default('').volatile(),
+  /**
+   * Basic-auth password for the local control-plane server.
+   *
+   * `role('secret')` is not decoration: the host redacts settings values through
+   * `redactSecrets()`, which removes only fields whose schema declares that role.
+   * Without it this value rides the settings response into the browser verbatim
+   * (measured 2026-11-03 against dsh-settings: 0 secrets declared, plaintext kept).
+   */
+  password: Schema.string().default('').role('secret').volatile(),
   /**
    * Reaction when a legacy OpenCode provider (`opencode-go` / `opencode`, e.g.
    * llm-pi-ai) is already registered, or another instance owns this provider.
@@ -132,8 +139,11 @@ export const Config = Schema.object({
   backendProviderId: Schema.string().default('opencode-go').volatile(),
   /** Explicit OpenAI-compatible backend root; empty resolves from `/api/provider/{id}`. */
   backendBaseUrl: Schema.string().default('').volatile(),
-  /** Explicit bearer token; empty uses OPENCODE_API_KEY or the local credential store. */
-  apiKey: Schema.string().default('').volatile(),
+  /**
+   * Explicit bearer token; empty uses OPENCODE_API_KEY or the local credential store.
+   * Secret for the same reason as `password` above.
+   */
+  apiKey: Schema.string().default('').role('secret').volatile(),
   apiKeyEnv: Schema.string().default('OPENCODE_API_KEY').volatile(),
   /**
    * Credential-store label to pin for the backend credential (e.g. `Personal`).
@@ -1983,7 +1993,7 @@ export function apply(ctx, config) {
   }
 
   let registration = null
-  let directory = null
+
   let warmed = false
   let busy = false
   let released = false
@@ -1997,15 +2007,20 @@ export function apply(ctx, config) {
     } finally {
       busy = false
     }
-    if (!directory) {
-      try {
-        directory = ctx.llm.registerConfigurableProviders([
-          { provider: providerId, displayName: 'OpenCode Go (direct)', settingsNs: name, settingsPath: [] },
-        ])
-      } catch (error) {
-        log(`dsh-opencode-v2-http: could not advertise the configurable provider: ${error instanceof Error ? error.message : String(error)}`)
-      }
-    }
+    // The generic settings form is deliberately NOT advertised.
+    //
+    // `registerConfigurableProviders` makes the Models settings tab render one row
+    // per directory entry, and that row is a raw form over every volatile field of
+    // the owning namespace - 40 fields here. This plugin already ships a purpose
+    // built panel (`lib/client.js`, the "OpenCode V2" section) editing the same row,
+    // so advertising the directory gave operators two competing screens over one
+    // persistence layer, differing in what they show and when they refresh.
+    //
+    // Removing the entry hides only that form. The panel keeps working: the host
+    // settings service resolves a namespace through `configEditor.entries()` (the
+    // loader tree), never through this directory (verified 2026-11-03), so
+    // `ctx.settings.update('dsh-opencode-v2-http', ...)` still persists allow-list and
+    // plan changes. `configurableProviders` stays declared for `dispose()`.
     if (!warmed) {
       warmed = true
       try {
@@ -2047,12 +2062,6 @@ export function apply(ctx, config) {
   const dispose = () => {
     if (released) return
     released = true
-    try {
-      directory?.()
-    } catch {
-      /* already released */
-    }
-    directory = null
     try {
       registration?.()
     } catch {

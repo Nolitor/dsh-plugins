@@ -10,8 +10,8 @@ summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and late
 > Only the recent rounds live here. Everything up to v0.7.3 is in
 > VERIFICATION-ARCHIVE.md in this directory.
 >
-> Live runtime: DSH 0.2.2-alpha.2 - Node v24.22.1 - plugin 0.0.1-rc.8 on disk (serving pid 2482449
-> runs 0.0.1-rc.7 until restart)
+> Live runtime: DSH 0.2.2-alpha.3 - Node v24.22.1 - plugin 0.0.1-rc.10 on disk (serving pid 834087
+> runs 0.0.1-rc.9 until restart)
 
 ## 33. v0.7.4 — no protocol notation reaches the transcript (measured 2026-10-31 23:20-23:40)
 
@@ -1197,4 +1197,49 @@ No code change was made. The old records stay as historical evidence.
 `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.9.tgz` sha256
 `46b95607e34a6916cc34c3f23c4eb1c3f66cc391f84904c1ed5a3873b1b270f9`. The serving process must be
 restarted before the new reservation takes effect.
+
+
+## 49. v0.0.1-rc.10 — one settings surface, native styling, README as a manual (measured 2026-11-03 21:0x KST)
+
+### 49.1 The three defects
+
+| Defect | Measured evidence |
+|---|---|
+| README was the changelog | 1275 lines; §0-§0.8 occupied lines 21-463 and §0.9 sat at EOF. The plugin inspector renders this file. |
+| Two settings surfaces | `registerConfigurableProviders` made the Models tab render all 40 volatile fields of `dsh-opencode-v2-http` beside the plugin's own panel. |
+| Credentials readable | `redactSecrets(Config, { password, apiKey })` reported **0 secrets** and returned both values verbatim. |
+| Panel hand-styled | 4 literal `rgba()` colours, 14 inline style objects, **no** stylesheet injection. |
+
+### 49.2 What changed
+
+- `README.md` is an operator manual (overview, three provided surfaces, configuration through the single panel, install). All engineering history moved to `CHANGELOG.md`, including the four defect-narrative subsections that used to live inline in the README body.
+- The `registerConfigurableProviders` call is gone. Verified first that this cannot break saving: `dsh-settings.write()` resolves the namespace through `configEditor.entries()` (the loader tree); `dsh-config-editor.entries()` filters `loader.entries()` and never touches `ctx.llm`.
+- `password` and `apiKey` are `.role('secret')`.
+- `lib/client.js` rewritten against the native conventions measured in `dsh-client-ui-settings-subagent`: a single `<style data-plugin-css>` tag, `--dsw-*` tokens only, two titled cards, badge-name-route row geometry, and a segmented Plan control.
+
+### 49.3 Verification
+
+```
+redactSecrets(Config, { password, apiKey })
+  before: secrets declared 0, password "SUPER-SECRET-PW" returned verbatim
+  after : secrets declared 2, password undefined, apiKey undefined
+
+client contract (test/client.test.mjs, 6 tests)
+  stylesheet injected via data-plugin-css ....... ok
+  every view class defined in the stylesheet .... ok
+  no hardcoded colours (css and view) ........... ok
+  ko/en dictionaries in parity (33 keys each) ... ok
+  every t() key present in both ................. ok
+  exactly one settings.section registration ..... ok
+
+state.directory after apply(): []  (was ['opencode-http-agent'])
+suite: 311/311
+```
+
+### 49.4 Status
+
+**`applied on disk, pending restart`.** Artifact
+`artifacts/nolit-dsh-opencode-v2-0.0.1-rc.10.tgz` sha256
+`33f193b33de486f161c497db63356698944cb2b2c485d91daf7604f3283315d6`. The serving process keeps the old README
+rendering, the duplicate form and the unstyled panel until `dsh-web.service` restarts.
 
