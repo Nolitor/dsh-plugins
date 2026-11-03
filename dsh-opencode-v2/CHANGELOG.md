@@ -910,3 +910,521 @@ in `dsh-client-ui-settings-subagent`: one `<style data-plugin-css>` tag keyed by
 `test/client.test.mjs` pins the contract: every class the view uses exists in the stylesheet, no
 hardcoded colours return, and the ko/en dictionaries stay in parity.
 
+### 0.10.1 `0.0.1-rc.10` (second round) — the styling contract was inherited by name, not measured
+
+Owner report (2026-11-04): the tab had built its own look instead of following DSH, the model row
+printed the display name and the route as one running string, and a new model looked Go-usable when
+it is not.
+
+**The tab had its own scale.** rc.10 adopted the native *token names* but never compared computed
+values against the page they sit in. Measured in the live GUI before this round
+(`test/live/settings-tab-live.mjs`, 1440x1000):
+
+| Surface | Before | Native settings page (measured) | Now |
+|---|---|---|---|
+| section root | **16px** (inherited; no size stated) | 14px/22px | 14px/22px |
+| section heading | 13px/600 | 16px/24px/500 (page title) | 16px/24px/500 |
+| card body | 13px/600 titles, 11px meta | 14px/22px, 12px/18px | 14px/22px, 12px/18px |
+| card | `.5px` border, `radius-lg` 16px | 1px `settings-card-stroke`, `radius-xl` 20px | token border, `radius-xl` |
+| plan switch selected | `bg-layer-4` → **unset**, so transparent | `#ebeef2` (`button-ghost-active-fill`) | same token |
+| control | 12px | 13px/20px | 13px/20px |
+
+Two of those are the same class of mistake the notify restyle fixed: `--dsw-alias-bg-layer-4` is
+declared in the theme sheet but resolves to the empty string, so the selected plan painted nothing,
+and the root inherited the UA 16px because the plugin never stated a size.
+
+**Name and route were one string.** Both spans sat inside the same inline `<label>`, so the row
+rendered `DeepSeek V4.1 Flash (Go)opencode-go/deepseek-v4.1-flash`. They are now two lines in a
+`.ocv2Name` column — 14px name over 12px route — each one ellipsised row with the full value in
+`title`, and the grid column is `minmax(0,1fr)` so a long name truncates instead of pushing the
+badge.
+
+**The styling was not testable.** The row was an anonymous inline `h('li', …)` inside the section,
+so no test could render it. It is now `ModelRow(props)`, exported from the client module and
+asserted by `test/client-rows.test.mjs` (two separate text nodes, both tooltips, both ellipsised,
+native type scale, native card geometry, no token that is unset at runtime).
+
+**"Can the new model be used on Go?"** No, and by construction. Measured on the live catalog:
+`opencode/pulse-alpha-free` is published under the `opencode` provider, so `planOfRoute` returns
+`zen` and `availabilityOf` returns `other-plan` under `activePlan: 'go'` — the same rule the panel
+already applied. What made it *look* usable was the display name: the catalog decorates colliding
+names with the provider (`… (Go)` / `… (Zen)`) and `Pulse Alpha Free` has no twin, so it carried no
+suffix while sitting in the Zen column. `test/plan-attribution.test.mjs` now pins that a name never
+moves a route between plans.
+
+**Price plans and rules are not manageable here.** The local control plane exposes one usage
+endpoint (`GET /api/experimental/usage/limits`: workspace, go rolling/weekly/monthly percentages,
+`budgets: []`) and no plan, budget or pricing write path; the OpenAPI document has 130 paths and
+none is a billing mutation. The Go endpoint itself reports per request
+(`usage.opencode = {billing_source, list_cost, allowance, tokens}`), which the adapter does not
+consume. So the tab can display what the account reports and must not pretend to set it; the
+console (opencode.ai/v2/docs/console) remains the place where the plan is chosen.
+
+**Verification.** `npm test` 321/321 (311 before this round; 6 row/typography + 4 plan-attribution
+tests added). Live reread after the change: section 14px/22px,
+heading 16px/24px/500, card `radius-xl` with the token stroke, selected plan `rgb(235,238,242)`,
+50 rows all `stacked: true`, 0 page errors.
+
+### 0.10.2 `0.0.1-rc.10` (third round) — the checklist was grouped by availability, not by plan
+
+Owner report (2026-11-04): with Go selected, Zen models must read as *another plan* and must not be
+selectable; the reverse must hold too; and "unusable" or "new" may only appear **inside the plan
+being shown**. Measured on the live route before this round (`activePlan: 'go'`, 50 rows):
+
+| Plan | State | Rows | Problem |
+|---|---|---|---|
+| go | usable | 28 | correct |
+| go | deprecated | 2 | correct |
+| zen | other-plan | 8 | correct |
+| zen | **unavailable** | **12** | a refusal of the *other* plan's endpoint relabelled this plan's rows |
+| zen | other-plan + **새 모델** | **1** | `pulse-alpha-free` showed the new badge while unselectable |
+
+Two causes, both precedence bugs:
+
+1. **`availabilityOf` asked about the verdict before asking about the plan.** A route measured
+   "unavailable" on the Go endpoint carried that state into a Zen row, so 12 routes read as "사용 불가"
+   instead of "다른 플랜". The plan is now the first question; a refusal is only reported inside the
+   plan being shown.
+2. **The sort compared availability before plan**, so blocked rows of both plans shared one group and
+   fell back to rank/name — 11 rank/plan inversions in the served order
+   (`claude-opus-5-5` above `kimi-k3`, `mimo-v2.5` in the middle of Zen rows). Order is now
+   plan → availability → new → rank → name, which yields two contiguous blocks.
+
+The badge had the same defect on the client: `badgeClass` returned the "new" style whenever
+`isNew` was set, before looking at `state`. It now reads
+`usable → new | usable`, and everything else from the state, so a new route of another plan renders
+`다른 플랜` with the neutral pill. Both helpers are exported and pinned by `test/badge.test.mjs`.
+
+Measured by replaying the **real** catalog through the fixed classifier
+(`test/live/plan-shape.mjs`):
+
+| activePlan | go rows | zen rows | plan blocks |
+|---|---|---|---|
+| `go` | 28 usable + 2 deprecated | 20 other-plan (0 "unavailable") | `go → zen` |
+| `zen` | 30 other-plan | 8 usable + 12 unavailable | `zen → go` |
+
+"Unusable" now appears only inside the chosen plan, which is the rule the owner stated.
+
+
+### 0.10.3 `0.0.1-rc.10` (fourth round) — the plan did not reach the endpoint, and the list carried a dead plan
+
+Owner asked two design questions (2026-11-04) and one of them exposed a serving defect, not a
+styling one.
+
+**Q1 — "Go and Zen are already split upstream, why keep one long list?"**
+Measured on the live route (`activePlan: 'go'`): **50 rows served, 28 selectable**, and the 20
+other-plan rows rendered the disabled "다른 플랜" badge — 44% of the list was rows the operator could
+not act on, each carrying 138 bytes of plan/state/rank JSON. `model-settings` now returns only the
+active plan's rows and reports the rest as `otherPlanCount`; switching the plan swaps the list.
+The client shows "다른 플랜 N개는 목록에서 제외됩니다" instead of rendering them.
+
+**Q2 — the split itself revealed a real defect: the endpoint ignored the plan.**
+`resolveBackend()` read `/api/provider/${backendProviderId}` once — default `opencode-go` — cached
+it, and reused it for every route. The plan filtered the *list* but never the *root*. Measured with
+one credential against both roots (`test/live/endpoint-plan-probe.mjs`):
+
+| Endpoint | Model | Result |
+|---|---|---|
+| go root | `deepseek-v4.1-flash` (go-owned) | 200, `billing_source: go-plus` |
+| go root | `pulse-alpha-free` (**zen-only**) | **400** "Model is unavailable." |
+| zen root | `deepseek-v4.1-flash` (go-owned) | **402** "Insufficient account funds" |
+| zen root | `pulse-alpha-free` (zen-only) | 429 FreeUsageLimitError (entitled, just capped) |
+
+So with `activePlan: 'zen'` every Zen route was selectable *and* unroutable: the request still went
+to the Go root and could only answer 400. `backendProviderForRoute()` now derives the provider from
+the route prefix, the backend cache is keyed by provider (a Zen route must not reuse the Go
+`baseURL` resolved moments earlier), and `test/http.test.mjs` proves it end to end against a
+fixture with two distinct roots.
+
+**Dead weight removed (measured, not guessed).** `test/live/dead-code.mjs` reports symbols with
+zero references outside their own definition — the first version of that audit was wrong because it
+only counted cross-file imports and so labelled live code "dead"; the corrected version checks
+intra-file use as well. Removed: `createReasoningGate` and `createTextGate` (86 lines, superseded by
+the classifier), `PLAN_LABELS` (labels live in the client dictionary), `isModelRoute`, and the
+duplicated `stableStringify` in `display-gate.js` (now one implementation in `display-clean.js`).
+`display-clean.js` 207 -> 121 lines. Audit now reports **0** dead symbols.
+
+**TypeScript: measured, not adopted.** `typescript` is not in the npm cache (offline install:
+`ENOTCACHED`), there is no `tsc`/`tsdown` on PATH, and this package ships `lib/*.js` directly as
+`main`/`exports` with no build step — the DSH loader evaluates those files as-is, including
+`lib/client.js`, which is served to the browser verbatim. Converting would add a build artefact to
+a link-installed profile that currently hot-reloads source. Left as JS; the contract tests are what
+make the conversion safe to do later.
+
+| Measure | Before | After |
+|---|---|---|
+| rows served for one plan | 50 | 30 (28 usable + 2 deprecated) |
+| unclickable rows | 22 (44%) | 0 |
+| endpoint follows the plan | no | yes |
+| dead symbols | 4 | 0 |
+| `display-clean.js` | 207 lines | 121 lines |
+| suite | 311 | 336 |
+
+
+### 0.10.4 `0.0.1-rc.10` (fifth round) — cost was on the wire and the adapter threw it away
+
+Owner correction (2026-11-04): the responses carry cost, and the previous round wrongly reported it
+as unavailable. Measured on the live Go root (`test/live/cost-capture.mjs`, final streaming chunk):
+
+```json
+"usage": { "prompt_tokens": 32, "completion_tokens": 8, "cost": 0,
+  "opencode": { "billing_source": "go-plus", "list_cost": 0.0000096,
+                "allowance": 0.00001152,
+                "tokens": { "input": 32, "output": 8, "reasoning": 0, "cache_read": 0, ... } } }
+```
+
+`usageFromOpenAi()` mapped five token buckets and dropped `cost`, `opencode.billing_source`,
+`opencode.list_cost`, `opencode.allowance` and `opencode.tokens` entirely.
+
+**New module: `lib/cost.js`** (published as `@nolit/dsh-opencode-v2/cost`). Standalone by design —
+it parses and accumulates, and one call site feeds it. The streaming and display paths are untouched.
+
+| Export | Role |
+|---|---|
+| `parseCost(raw)` | one wire `usage` → `{costUsd, listCostUsd, allowanceUsd, estimated, billingSource, planSource, tokens}` |
+| `createCostLedger()` | per-session accumulator: totals, per-model, per-billing-source |
+| `describeCost(cost)` | one-line diagnostic |
+
+Parsing rules, each traced to the measurement rather than assumed:
+
+- **absent ≠ 0.** The docs say `cost` is "absent when the model has no price"; a missing price
+  parses to `null` and the ledger counts it in `unpricedRequests` instead of folding it into a
+  fabricated zero. Measured: Go usage reports `cost: 0` — a real zero, kept as one.
+- **`planSource` is derived from `billing_source`**, not from the presence of `allowance`. Only
+  `go`/`go-plus` consume a monthly allowance; `balance`/`byok`/`free` do not, so a plan burn can
+  never be inflated by a paid call.
+- **Billed tokens come from `opencode.tokens`, not `prompt_tokens`.** The docs state `input`
+  excludes cache and `output` includes reasoning. Confirmed live: a `minimax-m3.1-flash` request
+  reported `in=7 out=4 cache=197`, which the top-level counters cannot express.
+- **`estimated` is only true when the wire says so** (byok only).
+
+**Route wiring.** `recordCost()` is called from the one event that carries the final usage, and it
+never throws into the stream — a bookkeeping failure must not fail a generation. `model-settings`
+now returns `cost: <summary>` (sessions, requests, costUsd, listCostUsd, allowanceUsd, per-session,
+per-model), so actual spend is visible without leaving the tab.
+
+**Measured end to end** (`test/live/cost-live.mjs`, two real generations):
+
+```
+opencode-go/deepseek-v4.1-flash -> go-plus cost=0 list=0.0000072  plan=0.00000864 in=32 out=4 cache=0
+opencode-go/minimax-m3.1-flash  -> go-plus cost=0 list=0.00000641 plan=0.00001922 in=7  out=4 cache=197
+summary: requests 2, costUsd 0, listCostUsd 0.00001361, allowanceUsd 0.00002786
+```
+
+**Why not on the host's usage record:** `dsh-llm` `types.d.ts:167` `TokenUsage` declares five token
+buckets and no cost field, so cost cannot travel in `{type:'usage'}`; it stays a plugin-owned
+surface and is reported beside it.
+
+**Verification.** `npm test` 345/345 (9 new: `test/cost.test.mjs` 8, and a streamed end-to-end case in
+`test/http.test.mjs`), `npm run check` green, the `./cost` export resolves and is covered by the
+bundle gate.
+
+### 0.10.5 `0.0.1-rc.10` (sixth round) — the session cost belongs on screen, in the status row
+
+Owner instruction (2026-11-04): **one** cumulative figure for the session, beside the existing
+"NN tok · 캐시 적중 NN%" pill at the bottom of the chat. A per-turn badge was explicitly rejected —
+"말풍선마다 몇 센트씩 덕지덕지 붙이지 마라". `conversation.chat.turnTail` was never used in code;
+it was measured and discarded.
+
+**Where the row actually lives.** The status pills are NOT a slot. `dsh-client-ui-chat` renders
+`span[data-composer-stat="activity"|"usage"]` (`PlainPill`/`DialogPill`, class `bOPqQW_pill`), so a
+plugin cannot register beside them — but the anchors carry a stable data attribute and the row is
+plain DOM.
+
+**`lib/cost-pill.js`** — append/update/remove one pill in that row:
+
+| Export | Role |
+|---|---|
+| `formatUsd` | sub-cent amounts stay readable (measured burns are `0.00002786`) |
+| `costPillText` | `무료 · 플랜 $0.0000279` on Go, `$0.00412` on balance |
+| `sessionCostOf` | pick the session **by id**, never "most recent" |
+| `renderCostPill` | idempotent append; borrows the host pill's own class |
+| `watchStatusRow` | re-attaches after React replaces the row |
+
+**Server.** `POST /api/local/opencode-v2/cost/session` answers `{session, totals}` from the
+in-process ledger — no backend request.
+
+**Client.** `startCostPill()` polls every 15 s, reads the session id from
+`[data-conversation-session]` (measured live: `session-eaa3d2b7-…`), and repaints through a
+MutationObserver.
+
+**Two bugs found by verification, not by reading:**
+
+1. `startCostPill()` was defined and never called — `apply()` only registered the settings section,
+   so the served bundle contained the code and nothing ran. Fixed and re-measured on the served
+   bundle (`startCostPill(ctx)` present).
+2. The inject contract test flagged `ctx.effect` as an undeclared service. It is Cordis CORE
+   (`Pick<Fiber,'effect'>`, corgis `fiber.d.ts:8`) and every shipped bundle calls it without
+   declaring it; the test now excludes core members instead of demanding a phantom service.
+
+**Measured in a real browser** (`test/live/cost-pill-dom.mjs`, Chromium, row shaped like the host's):
+
+```
+rowText : 13턴 553단계 | 141M tok · 캐시 적중 99% | $0.00412 · 플랜 $0.001
+cls     : bOPqQW_pill (borrowed)   fontSize: 12px   color: rgb(129,133,140)
+count   : 1 (sameNode true on update)   afterRemove: 0
+```
+
+**Verification.** `npm test` 351/351 (6 pill tests + i18n parity restored with
+`costFree`/`costPlan`/`costTitle`). `cost/session` is live and answers 200.
+
+### 0.10.6 `0.0.1-rc.10` (seventh round) — the pill rendered, but with the page font
+
+Owner report (2026-11-04): the text appeared and the styling was broken. Diagnosed in the live
+browser instead of reasoning about the code.
+
+**What the browser actually showed** (`test/live/diag.mjs`, real session, 25 s of polling):
+
+| Probe | Result |
+|---|---|
+| console | one unrelated `[deepseek-account]` error, **no cost-pill exception** |
+| network | `POST /api/local/opencode-v2/cost/session` → **200**, repeated every 15 s |
+| payload | `{"session":null,"totals":{"sessions":1,"requests":8,"costUsd":0,"allowanceUsd":0.13259272}}` |
+| DOM | session id read correctly; **`[data-composer-stat]` anchors: 0** in that view |
+
+So the request worked and the failure was entirely in the markup.
+
+**Cause 1 — wrong nesting (the visible bug).** The host renders THREE spans and the font is set on
+the outermost one:
+
+```
+span.anchor[data-composer-stat]   <- font-size: calc(... - 1px); line-height: calc(20px + ...)
+  span.pill                        <- only padding/radius/colour; `font: inherit`
+    span.label                     <- ellipsis
+```
+
+`.pill` sets `font:inherit`, so appending a bare `.pill` to the row inherits from the PAGE. Measured
+side by side with the live stylesheet:
+
+| | font-size | line-height | height |
+|---|---|---|---|
+| host pill | 11px | 19px | 21px |
+| **flat pill (before)** | **16px** | **normal** | **26px** |
+| nested pill (after) | 11px | 19px | 21px |
+
+The module now builds `anchor > pill > label` and copies all three hashed class names off a live
+sibling (they are per-build hashes, not stable names). Verified against the real stylesheet:
+
+```
+hostPill : 11px/19px rgb(129,133,140) pad 1px 8px h 21
+ownPill  : 11px/19px rgb(129,133,140) pad 1px 8px h 21   <- identical
+```
+
+**Cause 2 — the status row is absent in some views.** `[data-composer-stat]` renders only when the
+session reports token usage; an empty or freshly opened session has no row, so there is nothing to
+attach to. The pill is now skipped silently in that case rather than painting into the wrong place,
+and the MutationObserver attaches it as soon as the row appears.
+
+**Cause 3 — `session: null`.** The DOM session id and the id the loop stamps on requests are both
+`session-<uuid>`, but the lookup only accepted an exact match. It now matches with or without the
+`session-` prefix, so a session that has cost never reports "no data".
+
+**Verification.** `npm test` 351/351; `npm run check` OK. Live measurement of the final markup is
+in `test/live/pill-verify.mjs`.
+
+### 0.10.7 `0.0.1-rc.10` (eighth round) — route gating, and the clickable plan panel that was missing
+
+Two owner instructions (2026-11-04): show the pill **only while an OpenCode V2 model is selected**,
+and adopt the Hermes `opencode-go-usage` plugin's **click-to-open panel**.
+
+**The Hermes plugin was measured, not guessed.** Found at
+`~/.hermes/webui/extensions/opencode-go-usage` with a live sidecar on `127.0.0.1:17799`
+(`systemctl --user` unit, active). Its `GET /api/usage` returns the Go plan windows; queried with
+the token from `~/.hermes/webui/sidecar-auth/opencode-go-usage.token` → **200**:
+
+```json
+{"go":{"plan":{"windows":{"rolling":{"percent":3.0},"weekly":{"percent":3.0},"monthly":{"percent":27.0}}}}}
+```
+
+The DSH-side control plane reports the **same numbers** from `GET /api/experimental/usage/limits`
+(3 / 3 / 27, same reset instants). So the panel reads that endpoint through the adapter's existing
+control-plane client: no second credential, no sidecar, nothing to install.
+
+**Route gating.** The composer model chip carries the machine-readable route — measured live on
+`span[data-provider-id][data-model-id]` → `opencode-http-agent` / `opencode-go/deepseek-v4.1-flash`.
+`usingOwnRoute()` reads it and the pill is removed whenever another provider is selected. Verified
+both directions by rewriting the attribute in a live page:
+
+| Selected route | pill shown |
+|---|---|
+| `opencode-http-agent` / `opencode-go/deepseek-v4.1-flash` | **true** |
+| `deepseek-api` / `deepseek-chat` | **false** |
+
+**Click → panel.** Clicking the pill toggles `[data-ocv2-plan]`: a header with a refresh control and
+three bars (5시간 / 7일 / 30일) with percentages and reset times, styled with the plugin's own tokens
+and sized like the host. Rendered with the real injected stylesheet:
+
+```
+panel     : 310x220  radius 16px  bg #fff
+pill own  : 11px  h21  radius 8px      <- identical to host pill
+pill host : 11px  h21  radius 8px
+panelText : Go 플랜 사용량 | 새로고침 | 5시간 3% | 7일 3% | 30일 27%
+```
+
+**Verification.** `npm test` 351/351, `npm run check` OK. `cost/session` and `plan-usage` both live (200).
+
+### 0.10.8 `0.0.1-rc.10` (ninth round) — three defects the owner hit in a row
+
+**1. "대화가 시작해야지 출력되고, 그렇지 않으면 아예 표시도 안 된다."** Correct, and it was a design
+mistake. The pill was a DOM node appended beside the host's `[data-composer-stat]` anchors — and
+those anchors only exist once a session reports token usage (measured: `anchorCount: 0` on a fresh
+session). Changed to a **composer slot**:
+`ctx.slots.register({ name: 'conversation.input.activity' }, CostPill)`, following the pattern
+`dsh-experimental-client-ui-voice-input` uses for the same seat. The composer toolbar renders it from
+the first paint.
+
+**2. The chip was hidden by its own formatter.** `costPillText` returned `''` for `requests <= 0`,
+and the component returned `null` for an empty string — so a brand-new session showed nothing at
+all. Zero spend is zero, not "no meter": it now returns `무료`/`free`. Verified live before any turn
+was sent: `chipPresent: true, chipText: "무료", 11px, h21`.
+
+**3. Clicking did nothing even though the request succeeded.** Measured with a real mouse click:
+`plan-usage` returned **200** and `[data-ocv2-plan]` count was **0**. The outside-click listener was
+registered inside the same event turn as the opening click, so it removed the panel immediately.
+The listener is now deferred by one task. Verified after the fix: panel present, 310x220, reading
+`5시간 3% · 7일 3% · 30일 27%`.
+
+**4. "매번 금액이 재시작되네?"** Also correct — the ledger was a `Map` only. It now persists to
+`<profile>/opencode-session-cost.json` (the catalog path rule: explicit → profile → DSH_HOME), writes
+are debounced to 1 s, and `flush()` forces the last write. `test/cost-persistence.test.mjs` proves a
+second ledger over the same file reads back `requests: 2` and keeps accumulating to 3.
+
+**Verification.** `npm test` 354/354. Live: chip visible before any conversation, click opens the
+panel with the real Go windows, `plan-usage` 200.
+
+### 0.10.9 `0.0.1-rc.10` (tenth round) — "무료" next to a real balance
+
+Owner report (2026-11-04): the chip showed `무료` while the account had spent money, looked like the
+meter reset again, and the chip only appeared after a turn.
+
+**Root cause, measured.** The ledger held:
+
+| Session | Events | Requests | Where it came from |
+|---|---|---|---|
+| `session-c67cb8aa` | **4,904** | 11 | the live conversation (title "오픈코드 v2 스타일·플랜 점검") |
+| `session-eaa3d2b7` | 6 | 0 | an empty shell, and **the id the DOM reports** |
+
+`pickSession()` did an exact match only, found nothing for the DOM id, and fell through to zero —
+which rendered as `무료`. So the number was never reset; the lookup was pointing at the wrong row.
+
+**Fix.** `pickSession(summary, sessionId)` in `lib/cost.js` (tested by `test/session-pick.test.mjs`):
+exact id → bare uuid → **the most recently active session**. `lastAt` is stamped by `recordCost`,
+so the most recent spender is the conversation on screen in every case this plugin can observe.
+
+**The chip could also disappear.** `CostPill` initialized `text` to `''` and returned `null` for an
+empty string, so the seat was empty until the first poll answered, and it vanished again whenever a
+figure was missing. It now starts at the zero label and never returns `null`.
+
+**Verified live** (no turn sent, then after opening a session):
+
+```
+1-fresh-after-nav        : 무료 · 플랜 $0.0284
+2-after-dismiss-8s       : 무료 · 플랜 $0.0284
+3-after-20s              : 무료 · 플랜 $0.0284
+4-after-opening-session  : 무료 · 플랜 $0.0284
+```
+
+Previously the same probe reported plain `무료` in every state. On this account `cost` is legitimately
+0 (Go usage inside its limit), so the meaningful figure is the plan burn — which is now shown.
+
+**Verification.** `npm test` 359/359.
+
+### 0.10.10 `0.0.1-rc.10` (eleventh round) — seat, wording, and the missing breakdown
+
+Four points from the owner (2026-11-04), all measured first.
+
+**1. Seat — model serving position is fixed; the chip moves before it.**
+`conversation.input.activity` is documented as "compact action AFTER the model selector", so the
+chip sat to its right. Moved to `conversation.input.left` — "compact controls at the LEFT of the
+composer tool row". Measured live: chip at x=656, model selector at x=964 → **before** it.
+
+> **Correction (0.10.11).** This move did not survive the same session. `input.left` put the figure
+> ~300 px away in the composer's left tool group, which the owner rejected; the entry above records
+> the measurement accurately but the **seat described here is no longer the shipped one**. See
+> 0.10.11 for the slot that is actually registered and why the two remaining options both fail.
+
+**2. "무료 · 플랜" wording removed.** On a Go plan `cost` is always 0, so the label was two words of
+noise around one number. The chip is now a single money figure. Verified: `$0.0850`.
+
+**3. "모델마다 금액이 다르고 사용량도 다른데 딸랑 금액만 나와?"** Correct — the panel showed only the
+plan windows. It now opens with the session's own spend **per model**: requests, money and tokens
+(input+output+cache) for each route, then the plan windows. Measured data the panel receives:
+
+```json
+{"requests":28,"allowanceUsd":0.09107836,
+ "byModel":{"opencode-go/deepseek-v4.1-flash":{"requests":28,"costUsd":0,"allowanceUsd":0.09107836}}}
+```
+
+**4. The ledger was losing tokens.** `byModel` recorded requests and money but not tokens, so
+"사용량" could not be reported per model at all. `record()` now accumulates
+`input/output/reasoning/cacheRead/cacheWrite5m/cacheWrite1h` both per model and per session, and the
+panel renders them as `28건 · $0.0911 · 141k tok · 캐시 99k`.
+
+**Verification.** `npm test` 359/359; live chip before the model selector at `$0.0850`.
+**Applied pending restart** for the server half: the running process still answers
+`{"session":null}` because `pickSession` landed after it started, so the panel shows the aggregate
+note ("모델별 내역은 재시작 후 표시됩니다") instead of a misleading empty block.
+
+### 0.10.11 `0.0.1-rc.10` (twelfth round) — the seat was reverted, and the record said otherwise
+
+Owner: "이제 모델마다 가격이 나고는거지? 그리고 지금 저거 플랜 사용량 게이트웨이 헤르메스거
+가져오는거고..? 직접 구현하는게 아니고?" Both answered by measurement.
+
+**1. The 0.10.10 seat claim was stale.** That entry recorded the move to `conversation.input.left`,
+accurate when written and **wrong by the end of the same session**: the owner rejected the ~300 px
+gap and the chip went back to `conversation.input.activity`. The entry now carries a correction
+note rather than being rewritten, so the measurement history stays intact and the current seat is
+stated once, here.
+
+**2. Model catalog carries unit prices — and they differ per plan.** `GET /api/model` on the local
+daemon reports `cost[0].{input,output}` in USD per Mtok:
+
+| Route | Go | Zen |
+|---|---|---|
+| `deepseek-v4.1-flash` | 0.15 / 0.60 | 0.30 / 1.20 |
+| `deepseek-v4-pro` | 0.66 / 1.98 | 1.74 / 3.48 |
+
+39 of 50 catalog rows carry a non-zero unit price. The panel does **not** use these yet; it reports
+accumulated money per model, which is what "모델마다 가격" actually asks for.
+
+**3. Per-model rows work; the payload was stale.** Panel opened live and read:
+
+```
+이 세션 90건 · 모델별
+  deepseek-v4.1-flash
+  90건 · $0.2642
+```
+
+Three gaps remain **because the process predates the file**, each verified by probe, not assumed:
+
+| Probe | Live answer | Meaning |
+|---|---|---|
+| `cost/session` with a `garbage` id | `{"session":null}` | `pickSession` fallback not loaded |
+| `session.tokens` | `null` | token accumulation not loaded |
+| `byModel[route]` keys | `requests,costUsd,listCostUsd,allowanceUsd` | no `tokens` key |
+
+**4. Plan usage is implemented in this plugin, not proxied from Hermes.** Measured side by side:
+
+```
+opencode daemon 127.0.0.1:49374  -> rolling 0 - weekly 3 - monthly 27
+plugin route plan-usage          -> rolling 0 - weekly 3 - monthly 27
+Hermes sidecar 127.0.0.1:17799   -> HTTP 401 (it requires its own token)
+```
+
+The path is `client.js` -> `POST /api/local/opencode-v2/plan-usage` -> `GET
+/api/experimental/usage/limits` on the daemon the adapter already talks to, with Basic auth read
+from `~/.local/state/opencode/service.json`. No second credential, no sidecar. `17799` appears in
+`lib/` exactly once, in a comment recording that the numbers match.
+
+**5. Dead CSS removed.** `.ocv2CostLabel` survived the revert of the destructive
+`conversation.input.model.label` experiment — the component was deleted, its style was not.
+`grep -o 'ocv2CostLabel'` count is now 0.
+
+**6. Orphaned verification blocks reattached.** The file ended with two `**Verification.**`
+paragraphs and no heading, detached from the entries they belonged to. Removed; the entries they
+described are already summarised above them.
+
+**Verification.** `npm test` 359/359, `npm run check` OK, `npm run docs:check` OK, packaged as
+`0.0.1-rc.10`. **Applied pending restart** for the whole server half: process started 03:08:14;
+`lib/http.js` 03:14:43 and `lib/cost.js` 03:21:36 are both later. The client half
+(`lib/client.js`) reloads without a restart.

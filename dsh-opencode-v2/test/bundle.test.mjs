@@ -267,7 +267,21 @@ test('client half exports an inject array covering every ctx service it uses', (
   assert.equal(typeof exportsObj.apply, 'function', 'client half must export apply()')
   assert.ok(Array.isArray(exportsObj.inject), 'exports.inject must be an array (Cordis service injection)')
 
-  const used = new Set([...source.matchAll(/\bctx\.([A-Za-z_$][\w$]*)/g)].map((match) => match[1]))
+  // Cordis CORE capabilities are mixed onto `ctx` and must NOT be declared as
+  // injected services: `effect` is `Pick<Fiber, 'effect'>` (cordis fiber.d.ts:8),
+  // and every shipped bundle (ui-chat, ui-settings-subagent, experimental-ui-stats)
+  // calls `ctx.effect` with an inject list that never names it. Declaring a core
+  // member would make the fiber wait for a service that does not exist.
+  const CORE_MEMBERS = new Set([
+    'effect', 'on', 'once', 'off', 'emit', 'parallel', 'serial', 'bail',
+    'plugin', 'dispose', 'get', 'set', 'provide', 'accessor', 'mixin', 'extend',
+    'isolate', 'intercept', 'logger', 'root', 'baseUrl', 'events', 'reflect', 'registry',
+  ])
+  const used = new Set(
+    [...source.matchAll(/\bctx\.([A-Za-z_$][\w$]*)/g)]
+      .map((match) => match[1])
+      .filter((name) => !CORE_MEMBERS.has(name)),
+  )
   assert.ok(used.size > 0, 'the client half should touch at least one service')
   for (const service of used) {
     assert.ok(

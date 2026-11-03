@@ -1240,6 +1240,12 @@ suite: 311/311
 
 **`applied on disk, pending restart`.** Artifact
 `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.10.tgz` sha256
-`33f193b33de486f161c497db63356698944cb2b2c485d91daf7604f3283315d6`. The serving process keeps the old README
+`f2146d62d2930c7cfc5727387397bcc9d1a3abb7a3b0bf145be4f965c80f0f0d`. The serving process keeps the old README
 rendering, the duplicate form and the unstyled panel until `dsh-web.service` restarts.
+
+> **Repacked 2026-11-04 03:59.** The previous artifact under this same version string
+> (`33f193b3…`, built 2026-11-03 21:13) predated `lib/cost.js` (03:21:36) and `lib/cost-pill.js`
+> (02:43:45), so it shipped a `package.json` whose `./cost` export pointed at a file that was not in
+> the tarball. Per the `b349ea0` precedent the version is unchanged and the hash line is replaced;
+> the tarball now carries 29 files including both cost modules.
 

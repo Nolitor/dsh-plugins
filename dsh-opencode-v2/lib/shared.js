@@ -703,11 +703,6 @@ export async function fetchUsage(options) {
   }
 }
 
-/** True when `id` is a `provider/model` route, which is what `-m` expects. */
-export function isModelRoute(id) {
-  return typeof id === 'string' && id.length > 0 && !id.includes(' ')
-}
-
 /** A short, safe tail of stderr for error surfaces. */
 export function stderrTail(text, max = 400) {
   const clean = String(text ?? '').trim()

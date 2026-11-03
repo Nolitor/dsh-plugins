@@ -26,13 +26,10 @@
  *   G3 a candidate is decided once (settle clears the queue).
  */
 
-/** Canonical JSON with sorted keys, for argument equality. */
-export function stableStringify(value) {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
-  if (Array.isArray(value)) return '[' + value.map((item) => stableStringify(item)).join(',') + ']'
-  const keys = Object.keys(value).sort()
-  return '{' + keys.map((key) => JSON.stringify(key) + ':' + stableStringify(value[key])).join(',') + '}'
-}
+import { stableStringify } from './display-clean.js'
+
+/** Canonical JSON with sorted keys, for argument equality (one implementation). */
+export { stableStringify }
 
 /** Parse one argument string; returns undefined when it is not a JSON object. */
 function parseArgs(value) {

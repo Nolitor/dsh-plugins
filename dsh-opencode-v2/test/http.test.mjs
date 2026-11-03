@@ -48,6 +48,9 @@ const json = (res, status, body) => {
 async function startServer(script = {}) {
   const state = {
     chatRequests: [],
+    providerIds: [],
+    zenRequests: 0,
+    chatPaths: [],
     chatHeaders: [],
     providerRequests: 0,
     credentialRequests: 0,
@@ -82,16 +85,34 @@ async function startServer(script = {}) {
         state.sessionCalls += 1
         return json(res, 500, { error: 'session API must not be called by a pure adapter' })
       }
-      if (url.pathname === '/api/provider/opencode-go') {
-        state.providerRequests += 1
-        return json(res, 200, {
-          data: {
-            id: 'opencode-go',
-            integrationID: 'opencode-go',
-            settings: { baseURL: state.backendURL },
-            headers: { 'x-opencode-org-id': 'org_test' },
-          },
-        })
+      if (url.pathname.startsWith('/api/provider/')) {
+        const id = decodeURIComponent(url.pathname.slice('/api/provider/'.length))
+        state.providerIds.push(id)
+        if (id === 'opencode-go') {
+          state.providerRequests += 1
+          return json(res, 200, {
+            data: {
+              id: 'opencode-go',
+              integrationID: 'opencode-go',
+              settings: { baseURL: state.backendURL },
+              headers: { 'x-opencode-org-id': 'org_test' },
+            },
+          })
+        }
+        if (id === 'opencode') {
+          // The Zen root is a DIFFERENT endpoint; the fixture keeps it distinct so
+          // a request that ignores the plan cannot pass by accident.
+          state.zenRequests += 1
+          return json(res, 200, {
+            data: {
+              id: 'opencode',
+              integrationID: 'opencode',
+              settings: { baseURL: state.backendURL.replace('/backend/v1', '/zen/v1') },
+              headers: { 'x-opencode-org-id': 'org_test' },
+            },
+          })
+        }
+        return json(res, 404, { error: 'unknown provider' })
       }
       if (url.pathname === '/api/credential') {
         state.credentialRequests += 1
@@ -101,9 +122,10 @@ async function startServer(script = {}) {
           ],
         })
       }
-      if (url.pathname === '/backend/v1/chat/completions') {
+      if (url.pathname === '/backend/v1/chat/completions' || url.pathname === '/zen/v1/chat/completions') {
         state.chatRequests.push(body)
         state.chatHeaders.push(req.headers)
+        state.chatPaths.push(url.pathname)
         if (script.status) return json(res, script.status, { error: 'backend refused' })
         const events = script.events ?? [
           { choices: [{ delta: { reasoning_content: 'Think.' } }] },
@@ -694,6 +716,93 @@ test('model-settings routes expose the catalog and persist the allow-list', asyn
   }
 })
 
+/**
+ * The cost fields on the wire are parsed and accumulated per session.
+ *
+ * The host's TokenUsage has no cost field (measured: dsh-llm types.d.ts:167
+ * declares five token buckets and nothing else), so this is a plugin-owned
+ * surface fed by the same chunk that reports usage.
+ */
+test('a streamed generation records its cost against the DSH session', async () => {
+  // The measured Go payload, injected as the final usage chunk.
+  const usage = {
+    prompt_tokens: 32,
+    completion_tokens: 8,
+    cost: 0,
+    opencode: {
+      billing_source: 'go-plus',
+      list_cost: 0.0000096,
+      allowance: 0.00001152,
+      tokens: { input: 32, output: 8, reasoning: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0 },
+    },
+  }
+  const events = [
+    { choices: [{ delta: { content: 'Hi' } }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }], usage },
+  ]
+  const { state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    for await (const _chunk of adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      sessionId: 'session-cost-1',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }],
+    })) { /* consume */ }
+
+    const summary = adapter.costSummary()
+    assert.equal(summary.requests, 1)
+    assert.equal(summary.costUsd, 0, 'Go usage inside its limit costs no dollars')
+    assert.equal(summary.allowanceUsd, 0.00001152, 'the plan burn is still reported')
+    const session = summary.bySession[0]
+    assert.equal(session.sessionId, 'session-cost-1')
+    assert.equal(session.byModel['opencode-go/deepseek-v4.1-flash'].listCostUsd, 0.0000096)
+    assert.equal(session.lastBillingSource, 'go-plus')
+  } finally {
+    await close()
+  }
+})
+
+/**
+ * The settings list is scoped to the plan being configured.
+ *
+ * Measured 2026-11-04 on the live route with `activePlan: 'go'`: 50 rows served,
+ * 28 selectable, 20 of the 50 rendering the disabled "다른 플랜" badge. The plan is
+ * already an explicit choice in this panel, so listing the other plan's routes
+ * gives the operator nothing to act on.
+ */
+test('model-settings lists only the active plan and counts the rest', async () => {
+  const { state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const registered = new Map()
+    const ctx = {
+      effect: (fn) => fn(),
+      connection: { fetch: { register: (route) => { registered.set(route.path, route); return () => {} } } },
+    }
+    assert.equal(registerModelSettingsRoutes(ctx, adapter, adapter.config), true)
+    const route = registered.get('/api/local/opencode-v2/model-settings')
+
+    const asGo = await (await route.fetch(new Request('http://x/', { method: 'POST' }))).json()
+    assert.equal(asGo.activePlan, 'go')
+    assert.ok(asGo.models.length > 0)
+    assert.deepEqual([...new Set(asGo.models.map((model) => model.plan))], ['go'], 'every served row belongs to the active plan')
+    assert.equal(asGo.otherPlanCount, 1, 'the fixture catalog has one zen route')
+    // The zen route is the one counted out, not a silently dropped unknown.
+    assert.ok(!asGo.models.some((model) => model.route === 'opencode/beam-free'))
+
+    // Switching the plan swaps the list, and the counts follow.
+    adapter.config.activePlan = { get: () => 'zen' }
+    const asZen = await (await route.fetch(new Request('http://x/', { method: 'POST' }))).json()
+    assert.equal(asZen.activePlan, 'zen')
+    assert.deepEqual([...new Set(asZen.models.map((model) => model.plan))], ['zen'])
+    assert.equal(asZen.otherPlanCount, 1, 'the fixture catalog has one go route')
+    assert.ok(asZen.models.some((model) => model.route === 'opencode/beam-free'))
+  } finally {
+    await close()
+  }
+})
+
 test('model-settings routes report a host without a settings service instead of writing', async () => {
   const { state, close } = await startServer()
   try {
@@ -1256,6 +1365,36 @@ test('reasoning prose without a marker stays reasoning', async () => {
     const reasoning = chunks.filter((chunk) => chunk.type === 'reasoning-delta').map((chunk) => chunk.text).join('')
     assert.equal(reasoning, 'weighing the options')
     assert.equal(chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call').length, 0)
+  } finally {
+    await close()
+  }
+})
+
+/**
+ * The plan picks the endpoint, measured end to end.
+ *
+ * test/live/endpoint-plan-probe.mjs proved the two roots are not interchangeable
+ * (go root + zen model -> 400 "Model is unavailable."; zen root + go model -> 402
+ * "Insufficient account funds"). This test proves the adapter follows the route
+ * instead of pinning one provider for the whole process.
+ */
+test('a zen route reaches the zen root and a go route the go root', async () => {
+  const { state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const drain = async (model) => {
+      for await (const _chunk of adapter.stream({
+        provider: 'opencode-http-agent',
+        model,
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }],
+      })) { /* consume */ }
+    }
+    await drain('opencode-go/minimax-m3.1-flash')
+    await drain('opencode/beam-free')
+    assert.deepEqual(state.chatPaths, ['/backend/v1/chat/completions', '/zen/v1/chat/completions'])
+    assert.deepEqual(state.providerIds, ['opencode-go', 'opencode'])
+    // The provider prefix never travels on the wire; the endpoint carries it.
+    assert.deepEqual(state.chatRequests.map((body) => body.model), ['minimax-m3.1-flash', 'beam-free'])
   } finally {
     await close()
   }

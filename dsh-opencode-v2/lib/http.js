@@ -57,6 +57,7 @@ import { inferToolFromArguments, normalizeArguments } from './arguments.js'
 import { createTrace, summarizePart, summarizeRequest } from './trace.js'
 import { stripThinkingTags } from './display-clean.js'
 import { mapChatDelta } from './upstream-map.js'
+import { createCostLedger, createCostStore, describeCost, parseCost, pickSession } from './cost.js'
 
 /** Plugin name; the cordis row uses the `@nolit/dsh-opencode-v2/http` specifier. */
 export const name = 'dsh-opencode-v2-http'
@@ -714,6 +715,18 @@ export class OpencodeHttpAdapter {
     this.providerId = options.providerId ?? 'opencode-http-agent'
     this.standDown = false
     this.server = new ServerManager(ctx, config)
+    // Per-session spend, from the wire's own cost fields (lib/cost.js). Kept on
+    // the adapter so every stream of one process feeds the same ledger.
+    // Persisted so a restart does not reset the session's running total.
+    this.costLedger = createCostLedger({
+      store: createCostStore({
+        explicit: config.costPath?.get?.() ?? '',
+        profileDir: ctx?.get?.('profileContext')?.dir,
+        dshHome: process.env.DSH_HOME,
+      }),
+    })
+    /** Short cache for the Go plan window panel (60 s, as the operator sees it). */
+    this.planCache = null
     this.backendCache = null
     this.lastWorkspace = ''
     this.catalogStore = new CatalogStore(
@@ -899,12 +912,46 @@ export class OpencodeHttpAdapter {
    *
    * The result is cached for `credentialCacheMs`; a 401 forces one refresh.
    */
-  async resolveBackend(signal, { force = false } = {}) {
+  /**
+   * Record one request's cost against its session, and log it at debug.
+   *
+   * Never throws into the stream: a cost bookkeeping failure must not fail a
+   * generation.
+   *
+   * @param {string|undefined} sessionId - DSH session id.
+   * @param {string|undefined} model - the route on the wire.
+   * @param {object} cost - a record from `parseCost`.
+   * @returns {void}
+   */
+  recordCost(sessionId, model, cost) {
+    try {
+      this.costLedger.record(sessionId, model, cost)
+      this.ctx?.logger?.debug?.('opencode-http-agent cost: ' + describeCost(cost))
+    } catch (error) {
+      this.ctx?.logger?.warn?.('opencode-http-agent: cost bookkeeping failed: ' + (error instanceof Error ? error.message : String(error)))
+    }
+  }
+
+  /** Per-session spend summary; see lib/cost.js. */
+  costSummary() {
+    return this.costLedger.summary()
+  }
+
+  async resolveBackend(signal, { force = false, model = '' } = {}) {
     const now = Date.now()
-    if (!force && this.backendCache && now - this.backendCache.at < this.config.credentialCacheMs.get()) {
+    // The endpoint belongs to the ROUTE, not to a configured default: Go and Zen
+    // are different roots with different entitlements (measured 2026-11-04). The
+    // cache is therefore keyed by provider, or a Zen route would reuse the Go
+    // baseURL resolved moments earlier for a Go route.
+    const providerId = backendProviderForRoute(model, this.config)
+    if (
+      !force &&
+      this.backendCache &&
+      this.backendCache.providerId === providerId &&
+      now - this.backendCache.at < this.config.credentialCacheMs.get()
+    ) {
       return this.backendCache.value
     }
-    const providerId = this.config.backendProviderId.get()
     let provider = null
     let baseURL = this.config.backendBaseUrl.get()
     if (!baseURL) {
@@ -927,7 +974,7 @@ export class OpencodeHttpAdapter {
         authorization: `Bearer ${credential}`,
       },
     }
-    this.backendCache = { at: now, value }
+    this.backendCache = { at: now, providerId, value }
     return value
   }
 
@@ -1535,7 +1582,7 @@ export class OpencodeHttpAdapter {
     const preserveCut = config.streamCutPreserve.get()
 
     try {
-      backend = await this.resolveBackend(signal)
+      backend = await this.resolveBackend(signal, { model: options.model })
       const body = buildChatRequest(options, ref, config)
       // Real-traffic evidence (no bodies, no credentials): a short probe cannot
       // reproduce the leak because it produces almost no output. Opt out with
@@ -1602,7 +1649,13 @@ export class OpencodeHttpAdapter {
 
         try {
           for await (const chunk of chatSseEvents(response.body, signal, sseState)) {
-            if (chunk?.usage) usage = usageFromOpenAi(chunk.usage)
+            if (chunk?.usage) {
+              usage = usageFromOpenAi(chunk.usage)
+              // The same chunk carries what the request cost: cost/opencode.*.
+              // Parsed here, on the one event that reports it, and handed to the
+              // cost ledger — the streaming and display paths stay untouched.
+              this.recordCost(options.sessionId, options.model, parseCost(chunk.usage))
+            }
             const choice = chunk?.choices?.[0]
             if (!choice) continue
             const delta = choice.delta ?? {}
@@ -1943,6 +1996,31 @@ export function sessionHeaders(headers, options, config) {
   return { ...headers, [name]: session }
 }
 
+/**
+ * Which provider owns the backend endpoint for one route.
+ *
+ * The provider id `opencode-go` is the Go subscription root
+ * (`/inference/go/openai/v1`) and `opencode` is the Zen pay-as-you-go root
+ * (`/inference/openai/v1`). They are different endpoints with different
+ * entitlements, measured 2026-11-04: a zen-only route on the Go root answers 400
+ * "Model is unavailable.", and a Go route on the Zen root answers 402
+ * "Insufficient account funds".
+ *
+ * So the route decides the endpoint, not the configured default. A bare model id
+ * (`default`, worker callers) keeps the configured provider, and an unknown
+ * prefix is passed through rather than silently sent to the Go root.
+ *
+ * @param {string} model - the route as the host passes it (`provider/id` or bare id).
+ * @param {{ backendProviderId: { get: () => string } }} config - row config.
+ * @returns {string} provider id whose `/api/provider/{id}` supplies baseURL + headers.
+ */
+export function backendProviderForRoute(model, config) {
+  const route = typeof model === 'string' ? model : ''
+  const slash = route.indexOf('/')
+  if (slash <= 0) return config.backendProviderId.get()
+  return route.slice(0, slash)
+}
+
 /** Legacy OpenCode `tokens` mapper, kept for batch-worker consumers/tests. */
 export function usageFromTokens(tokens) {
   const usage = {
@@ -2129,21 +2207,41 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
     }
   }
 
-  /** Annotate and order the served catalog for the settings checklist. */
+  /**
+   * Annotate and order the served catalog for the settings checklist.
+   *
+   * Scoped to the active plan. Measured 2026-11-04 before this: the tab served
+   * all 50 routes while only 28 could be clicked — 44% of the list was rows that
+   * say "다른 플랜" and refuse input. The plan is already a first-class choice in
+   * this panel, so the other plan's rows carry no decision the operator can act
+   * on; `otherPlanCount` reports them instead of rendering them.
+   *
+   * @returns {Promise<{ models: object[], otherPlanCount: number, verdicts: object, observedAt: string|null, ranking: object }>}
+   */
   const describeModels = async () => {
     const discovered = await adapter.discover().catch(() => null)
     const rows = (discovered?.models ?? []).map((model) => ({ route: String(model.id), name: model.name ?? String(model.id) }))
     const ranking = adapter.readRanking()
     const snapshot = adapter.verdicts()
     adapter.markKnown(rows.map((row) => row.route))
-    const models = orderModels(rows, {
-      activePlan: config.activePlan?.get?.() ?? 'go',
+    const activePlan = config.activePlan?.get?.() ?? 'go'
+    const ordered = orderModels(rows, {
+      activePlan,
       verdicts: snapshot.verdicts,
       ranking: rankingForRoutes(rows.map((row) => row.route), ranking.byModel),
       firstSeen: adapter.readFirstSeen().firstSeen,
       newWithinDays: config.newModelDays?.get?.() ?? NEW_MODEL_DAYS,
     })
-    return { models, verdicts: snapshot.verdicts, observedAt: snapshot.measuredAt, ranking }
+    // Ordering already puts the active plan first; the split keeps the payload
+    // scoped without a second pass over the catalog.
+    const models = ordered.filter((model) => model.plan === activePlan)
+    return {
+      models,
+      otherPlanCount: ordered.length - models.length,
+      verdicts: snapshot.verdicts,
+      observedAt: snapshot.measuredAt,
+      ranking,
+    }
   }
 
   const visibleRoutes = async () =>
@@ -2160,6 +2258,12 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
         plans: PLANS,
         enabled: config.enabledModels?.get?.() ?? [],
         models: state.models,
+        // Routes of the plan NOT being shown: reported as a number, never as rows
+        // (measured 2026-11-04: 20 of 50 rows were unclickable "다른 플랜" entries).
+        otherPlanCount: state.otherPlanCount,
+        // What the requests of this process actually cost, per session, parsed
+        // from the wire's own usage.cost / usage.opencode (lib/cost.js).
+        cost: adapter.costSummary(),
         visible: await visibleRoutes(),
         verdicts: state.verdicts,
         observedAt: state.observedAt,
@@ -2176,6 +2280,78 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
         updatedAt: snapshot.updatedAt,
         fetchedAt: snapshot.fetchedAt,
         covered: Object.keys(snapshot.byModel ?? {}).length,
+      })
+    },
+    /**
+     * Go plan windows (rolling / weekly / monthly).
+     *
+     * The local control plane already reports this and the adapter already talks
+     * to it, so the panel needs no extra credential. Measured 2026-11-04 against
+     * the Hermes `opencode-go-usage` sidecar on 127.0.0.1:17799: identical numbers
+     * (3% / 3% / 27%), so this is the same source, reached without the sidecar.
+     *
+     * `?refresh=1` bypasses the short cache, mirroring that sidecar's flag.
+     */
+    'plan-usage': async (request) => {
+      const url = new URL(request.url)
+      const force = url.searchParams.get('refresh') === '1'
+      const now = Date.now()
+      if (!force && adapter.planCache !== null && now - adapter.planCache.at < 60000) {
+        return respond(adapter.planCache.value)
+      }
+      try {
+        const payload = await adapter.server.request('GET', '/api/experimental/usage/limits')
+        const data = payload?.data ?? {}
+        const go = data.go ?? {}
+        const window = (entry, label) => ({
+          label,
+          percent: Number(entry?.percent ?? 0),
+          limited: entry?.limited === true,
+          resetsAt: Number(entry?.resetsAt ?? 0),
+        })
+        const value = {
+          ok: true,
+          workspace: data.workspace?.name ?? null,
+          usageUrl: data.workspace?.usageURL ?? null,
+          windows: {
+            rolling: window(go.rolling, '5시간'),
+            weekly: window(go.weekly, '7일'),
+            monthly: window(go.monthly, '30일'),
+          },
+          fetchedAt: now,
+        }
+        adapter.planCache = { at: now, value }
+        return respond(value)
+      } catch (error) {
+        return respond({ ok: false, error: error instanceof Error ? error.message : String(error) }, 502)
+      }
+    },
+    /**
+     * Session cost for the composer status pill.
+     *
+     * The chat status row reads this while a session is open; it answers from the
+     * in-process ledger, so it costs no backend request. Keyed by the DSH session
+     * id the client already has.
+     */
+    'cost/session': async (request) => {
+      const payload = await readJson(request)
+      if (payload === null) return respond({ error: 'expected JSON' }, 400)
+      const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : ''
+      const summary = adapter.costSummary()
+      // The client knows the session by its DSH id; the adapter records whatever
+      // identity the loop stamped on the request. Measured 2026-11-04 they are the
+      // same `session-<uuid>` shape, but a client may hold the bare uuid (the DOM
+      // attribute is not guaranteed to keep the prefix). Match on either form
+      // rather than reporting "no data" for a session that has cost.
+      const entry = pickSession(summary, sessionId)
+      return respond({
+        session: entry,
+        totals: {
+          sessions: summary.sessions,
+          requests: summary.requests,
+          costUsd: summary.costUsd,
+          allowanceUsd: summary.allowanceUsd,
+        },
       })
     },
     'model-settings/apply': async (request) => {
@@ -2208,6 +2384,7 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
         activePlan: config.activePlan?.get?.() ?? 'go',
         enabled: config.enabledModels?.get?.() ?? [],
         models: state.models,
+        otherPlanCount: state.otherPlanCount,
         visible: await visibleRoutes(),
       })
     },

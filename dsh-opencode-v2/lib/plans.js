@@ -24,12 +24,6 @@ export const PLANS = ['go', 'zen']
 /** Provider id that owns each plan's routes. */
 export const PLAN_PROVIDERS = { go: 'opencode-go', zen: 'opencode' }
 
-/** Human labels, kept here so the client and the tests agree. */
-export const PLAN_LABELS = {
-  go: { ko: 'Go 구독', en: 'Go subscription' },
-  zen: { ko: 'Zen 종량제', en: 'Zen pay-as-you-go' },
-}
-
 /**
  * @param {string} providerId Provider of a catalog row (`opencode-go`, `opencode`, ...).
  * @returns {'go' | 'zen' | 'other'}
@@ -89,16 +83,23 @@ export function availabilityOf(model, { activePlan = 'go', verdicts = {} } = {})
   const route = String(model?.route ?? model?.id ?? '')
   const plan = planOfRoute(route)
   const verdict = verdicts?.[route]
+  const refusal = verdict && REFUSALS.has(verdict) ? verdict : null
 
-  if (verdict && REFUSALS.has(verdict)) {
-    return { plan, available: false, state: verdict }
-  }
+  // The plan is the FIRST question, not a tie-breaker. A route is only ever
+  // described relative to the plan being shown: a refusal measured on the other
+  // plan's endpoint does not turn that route into "unavailable", because the
+  // operator is not being offered it at all. Measured 2026-11-04 before this
+  // ordering: 13 zen routes under `activePlan: 'go'` read as "unavailable"
+  // instead of "another plan", and the checklist interleaved two plans.
   if (plan === 'other') {
     // A provider this build does not know: show it, but do not offer it.
     return { plan, available: false, state: 'unknown' }
   }
   if (plan !== activePlan) {
     return { plan, available: false, state: 'other-plan' }
+  }
+  if (refusal) {
+    return { plan, available: false, state: refusal }
   }
   return { plan, available: true, state: 'usable' }
 }
@@ -122,10 +123,18 @@ export function orderModels(
     const isNew = isNewModel(route, { firstSeen, ranking, now, newWithinDays })
     return { ...model, route, ...availability, rank, isNew }
   })
+  // Sort order is plan first, then usability, then the "just appeared" bonus,
+  // then usage rank, then name. Grouping by plan first is what keeps the
+  // checklist readable: measured 2026-11-04, sorting by availability first
+  // interleaved the two plans 11 times in one list, because blocked rows of both
+  // plans shared one group and fell back to name/rank comparison.
+  const onActive = (model) => (model.plan === activePlan ? 0 : 1)
   return annotated.sort((left, right) => {
+    const planDelta = onActive(left) - onActive(right)
+    if (planDelta !== 0) return planDelta
     if (left.available !== right.available) return left.available ? -1 : 1
     // A route that just appeared is served first so it is impossible to miss,
-    // but only inside the availability group it already qualified for.
+    // but only inside the plan and availability group it already qualified for.
     if (left.isNew !== right.isNew) return left.isNew ? -1 : 1
     const leftRank = left.rank ?? Number.POSITIVE_INFINITY
     const rightRank = right.rank ?? Number.POSITIVE_INFINITY

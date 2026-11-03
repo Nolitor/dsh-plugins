@@ -27,6 +27,9 @@
     "./http": {
       "default": "./lib/http.js"
     },
+    "./cost": {
+      "default": "./lib/cost.js"
+    },
     "./locale/en.json": "./locale/en.json",
     "./locale/ko.json": "./locale/ko.json",
     "./client": {
@@ -60,7 +63,7 @@
   },
   "scripts": {
     "test": "node --import ./test/setup-isolate.mjs --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/provider.js && node --check lib/http.js && node --check lib/conflicts.js && node --check lib/stream-parser.js && node --check lib/display-gate.js && node --check lib/arguments.js && node --check lib/trace.js && node --check lib/upstream-map.js && node --check lib/display-clean.js && node --check lib/shared.js && node --check lib/catalog-cache.js && node --check lib/workers/index.js && node --check lib/workers/run.js && node --check lib/workers/backends.js && node --check lib/workers/artifacts.js && node --check lib/plans.js && node --check lib/verdict-store.js && node --check lib/client.js"
+    "check": "node --check lib/index.js && node --check lib/provider.js && node --check lib/http.js && node --check lib/conflicts.js && node --check lib/stream-parser.js && node --check lib/display-gate.js && node --check lib/arguments.js && node --check lib/trace.js && node --check lib/upstream-map.js && node --check lib/display-clean.js && node --check lib/shared.js && node --check lib/catalog-cache.js && node --check lib/workers/index.js && node --check lib/workers/run.js && node --check lib/workers/backends.js && node --check lib/workers/artifacts.js && node --check lib/plans.js && node --check lib/verdict-store.js && node --check lib/cost.js && node --check lib/cost-pill.js && node --check lib/client.js"
   },
   "dependencies": {
     "@quonaro/dsh-plugin-opencode": "^0.1.2"
