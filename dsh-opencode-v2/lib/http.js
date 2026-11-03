@@ -37,8 +37,10 @@ import {
 import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_MAX_OUTPUT_TOKENS,
+  DEFAULT_TURN_MAX_TOKENS,
   modelsFromApiPayload,
   reasoningEffortsFromVariants,
+  turnCompletionReservation,
   unsupportedEffortMessage,
 } from './shared.js'
 import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
@@ -92,7 +94,7 @@ const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
 /** Version string of this module, for the load beacon. Must match package.json. */
-const VERSION = '0.0.1-rc.8'
+const VERSION = '0.0.1-rc.9'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
@@ -150,6 +152,15 @@ export const Config = Schema.object({
   reasoningField: Schema.string().default('reasoning_content').volatile(),
   /** OpenAI-compatible field carrying the reasoning effort. */
   effortField: Schema.string().default('reasoning_effort').volatile(),
+  /**
+   * Completion tokens ONE TURN reserves (the host's `defaultMaxTokens`).
+   *
+   * Separate from the route's capability (`limit.output`, kept in the catalog):
+   * the reservation is subtracted from the context window before compaction
+   * decides how much room messages get, so publishing a capability-sized number
+   * here wastes context on every turn. See DEFAULT_TURN_MAX_TOKENS.
+   */
+  turnMaxTokens: Schema.number().default(DEFAULT_TURN_MAX_TOKENS).volatile(),
   timeoutMs: Schema.number().default(1800000).volatile(),
   requestTimeoutMs: Schema.number().default(30000).volatile(),
   /**
@@ -255,8 +266,14 @@ export function parseSseBlock(block) {
  * Async iterator over an OpenAI-compatible SSE body.
  * @param {ReadableStream<Uint8Array>} body
  * @param {AbortSignal} signal
+ * @param {{ done?: boolean }} [state] - set `done` when the stream carried the
+ *   protocol's own terminator. Without it a clean EOF and a cut are
+ *   indistinguishable, which is the ambiguity measured on 2026-11-03.
  */
-export async function* chatSseEvents(body, signal) {
+export async function* chatSseEvents(body, signal, state = undefined) {
+  // Start from "no terminator seen" so a caller never reads a stale `true` from
+  // a previous attempt.
+  if (state) state.done = false
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -271,7 +288,10 @@ export async function* chatSseEvents(body, signal) {
         if (!match) break
         const block = buffer.slice(0, match.index)
         buffer = buffer.slice(match.index + match[0].length)
-        if (String(block).includes('data: [DONE]')) return
+        if (String(block).includes('data: [DONE]')) {
+          if (state) state.done = true
+          return
+        }
         const event = parseSseBlock(block)
         if (event) yield event
       }
@@ -786,7 +806,10 @@ export class OpencodeHttpAdapter {
           id: model.id,
           name: model.name,
           description,
-          inputModalities: ['text'],
+          // The route's own declared modalities travel with the discovery row.
+          // Advertised as text-only, an image-capable route was refused by the
+          // host before the request was ever built.
+          ...(Array.isArray(model.inputModalities) ? { inputModalities: model.inputModalities } : {}),
         }))
       // Priority 0 for a route that just appeared, so it shows up at the top of
       // the prompt picker instead of behind 40 ranked models.
@@ -813,7 +836,7 @@ export class OpencodeHttpAdapter {
         id: entry.id,
         name: entry.name || `OpenCode ${entry.id}`,
         description,
-        inputModalities: ['text'],
+        ...(Array.isArray(entry.inputModalities) ? { inputModalities: entry.inputModalities } : {}),
       }))
   }
 
@@ -828,9 +851,13 @@ export class OpencodeHttpAdapter {
       id: model,
       name: found?.name ?? `OpenCode ${model}`,
       description: this.describe(),
-      inputModalities: ['text'],
+      // Absent means "unknown" to the host, which then sends no image cap; a
+      // route that declared image input keeps that declaration here.
+      ...(Array.isArray(found?.inputModalities) ? { inputModalities: found.inputModalities } : {}),
       context: { contextWindow: found?.contextWindow ?? DEFAULT_CONTEXT_WINDOW },
-      defaultMaxTokens: found?.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+      // The RESERVATION for one turn, not the route's capability. The capability
+      // still travels in the catalog (`maxTokens`) and in the settings UI.
+      defaultMaxTokens: turnCompletionReservation(found?.maxTokens, this.config.turnMaxTokens.get()),
       ...(efforts.length ? { reasoning: { efforts } } : {}),
     }
   }
@@ -1151,6 +1178,17 @@ export class OpencodeHttpAdapter {
       }
     }
 
+    // The route's own reasoning field name, when discovery declared one.
+    let routeReasoningField = null
+    try {
+      const found = await this.lookupModel(options.model)
+      if (typeof found?.reasoningField === 'string' && found.reasoningField.length > 0) {
+        routeReasoningField = found.reasoningField
+      }
+    } catch {
+      /* discovery unavailable: the configured field still applies */
+    }
+
     const blocks = new Map()
     const toolCalls = new Map()
     const displayLogger = this.ctx?.logger
@@ -1264,6 +1302,11 @@ export class OpencodeHttpAdapter {
       resetGates()
     }
 
+    // Whether the backend sent the protocol terminator for the current attempt.
+    // An EOF without it is a cut, not a completion: measured 2026-11-03, four
+    // long requests ended this way carrying reasoning only, and the default
+    // branch of finishFromOpenAi() reported them as a clean `stop`.
+    const sseState = { done: false }
     let response = null
     let backend = null
     let usage = null
@@ -1548,7 +1591,7 @@ export class OpencodeHttpAdapter {
         bootBeacon('stream', { tools: (options.tools ?? []).length })
 
         try {
-          for await (const chunk of chatSseEvents(response.body, signal)) {
+          for await (const chunk of chatSseEvents(response.body, signal, sseState)) {
             if (chunk?.usage) usage = usageFromOpenAi(chunk.usage)
             const choice = chunk?.choices?.[0]
             if (!choice) continue
@@ -1558,7 +1601,12 @@ export class OpencodeHttpAdapter {
             // reasoning, tool_calls -> tool-call, content -> text. A text payload is
             // then classified by the restored state machine (lib/stream-parser.js),
             // and every classified part is routed by the bottom gate.
-            for (const part of mapChatDelta(delta, { reasoningField: config.reasoningField.get() })) {
+            // Measured 2026-11-03: the catalog names the field per route
+            // (`compatibility.reasoningField`), and a route that omits it emits
+            // no reasoning delta at all. The configured field is the fallback.
+            for (const part of mapChatDelta(delta, {
+              reasoningField: routeReasoningField ?? config.reasoningField.get(),
+            })) {
               const summary = summarizePart(part)
               traceCounts[summary.field] = (traceCounts[summary.field] ?? 0) + 1
               if (summary.field === 'content' || summary.field === 'reasoning') traceChars[summary.field] += summary.len
@@ -1571,6 +1619,30 @@ export class OpencodeHttpAdapter {
             }
 
             if (choice.finish_reason) finishReason = choice.finish_reason
+          }
+
+          // A stream that stops without a finish_reason is a CUT, not a completion.
+          // Measured 2026-11-03: four requests (111-171 messages, 256k-311k chars)
+          // ended exactly this way, carrying reasoning deltas and nothing else; the
+          // default branch of finishFromOpenAi() reported them as a clean `stop`,
+          // so the host committed a half response and no retry ran. Reporting a
+          // retryable TRANSPORT failure here hands the step back to llm-retry,
+          // which re-runs the request from a clean attempt.
+          const visibleOutput = textStarted || [...toolCalls.values()].some((entry) => entry.started)
+          if (finishReason === null && visibleOutput === false) {
+            const reason = sseState.done ? 'without finish_reason' : 'before [DONE]'
+            const detail = `stream ended ${reason} after ${emitted} delta(s) and no visible output`
+            trace.error({ detail, transient: true, emitted, retried: 0 })
+            displayLogger?.warn?.(`opencode-http-agent: ${detail}; reporting a transport cut so the host retries`)
+            for (const chunk of closeAll()) yield chunk
+            yield {
+              type: 'finish',
+              reason: {
+                kind: 'error',
+                failure: { code: 'TRANSPORT', message: `OpenCode backend ${detail}` },
+              },
+            }
+            return
           }
 
           yield* flushGates()

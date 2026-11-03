@@ -56,7 +56,12 @@ export function resolveCatalogPath({ explicit, profileDir, dshHome, fileName = C
  * Refresh writes are skipped and clients are not notified when this string is
  * unchanged, so a no-op poll costs one probe and nothing else.
  *
- * @param {readonly { id: string, name?: string, contextWindow?: number, maxTokens?: number, variants?: readonly string[] }[]} models
+ * Modalities and the route's reasoning field are part of the identity: a route
+ * that starts accepting images, or that renames its reasoning field, changes what
+ * the picker offers and what the stream reader looks for, so a snapshot that
+ * differs only there must not be treated as "unchanged".
+ *
+ * @param {readonly { id: string, name?: string, contextWindow?: number, maxTokens?: number, variants?: readonly string[], inputModalities?: readonly string[], reasoningField?: string }[]} models
  * @returns {string} Deterministic signature.
  */
 export function catalogSignature(models) {
@@ -68,6 +73,8 @@ export function catalogSignature(models) {
         model.contextWindow ?? '',
         model.maxTokens ?? '',
         (model.variants ?? []).join('|'),
+        (model.inputModalities ?? []).join('|'),
+        model.reasoningField ?? '',
       ].join('\u0000'),
     )
     .join('\u0001')

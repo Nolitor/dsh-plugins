@@ -38,6 +38,7 @@ import {
   usageFromTokens,
 } from '../lib/http.js'
 import { assistantHistoryText, buildChatRequest } from '../lib/http.js'
+import { DEFAULT_TURN_MAX_TOKENS } from '../lib/shared.js'
 
 const json = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json' })
@@ -337,7 +338,9 @@ test('resolveModel publishes contextWindow and reasoning variants from /api/mode
     const adapter = adapterFor(state, { baseUrl: controlURL(state) })
     const resolved = await adapter.resolveModel('opencode-http-agent', 'opencode-go/minimax-m3.1-flash')
     assert.equal(resolved.context.contextWindow, 1000000)
-    assert.equal(resolved.defaultMaxTokens, 512000)
+    // Reservation, not the route capability (limit.output 512000): compaction
+    // subtracts this from the window, so the capability must not be published.
+    assert.equal(resolved.defaultMaxTokens, DEFAULT_TURN_MAX_TOKENS)
     assert.deepEqual(resolved.reasoning.efforts.map((effort) => effort.id), ['low', 'medium', 'high', 'xhigh', 'max'])
   } finally {
     await close()
@@ -356,6 +359,65 @@ test('stream rejects a level the route does not advertise before calling the bac
     }))
     assert.equal(state.chatRequests.length, 0)
     assert.equal(chunks.at(-1).reason.failure.code, 'UNSUPPORTED_REASONING_EFFORT')
+  } finally {
+    await close()
+  }
+})
+
+test('a stream that ends without finish_reason is a retryable transport cut', async () => {
+  // Measured 2026-11-03: four live requests ended with reasoning deltas, no
+  // content, no tool call and no finish_reason. finishFromOpenAi(undefined)
+  // reported that as `stop`, so the host committed a half response and the
+  // llm-retry listener never saw a failure.
+  const events = [
+    { choices: [{ delta: { reasoning_content: 'Thinking hard about it.' } }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    const finish = chunks.at(-1)
+    assert.equal(finish.type, 'finish')
+    assert.equal(finish.reason.kind, 'error')
+    assert.equal(finish.reason.failure.code, 'TRANSPORT')
+  } finally {
+    await close()
+  }
+})
+
+test('chatSseEvents reports the protocol terminator it saw', async () => {
+  const make = (text) => new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(text))
+      controller.close()
+    },
+  })
+  const terminated = {}
+  for await (const _event of chatSseEvents(make('data: {"a":1}\n\ndata: [DONE]\n\n'), new AbortController().signal, terminated)) { /* drain */ }
+  assert.equal(terminated.done, true)
+
+  const cut = {}
+  for await (const _event of chatSseEvents(make('data: {"a":1}\n\n'), new AbortController().signal, cut)) { /* drain */ }
+  assert.equal(cut.done, false, 'a clean EOF without [DONE] is not a terminator')
+})
+
+test('a stream cut after real content still finishes as stop', async () => {
+  const events = [
+    { choices: [{ delta: { content: 'Partial answer' } }] },
+  ]
+  const { server, state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
   } finally {
     await close()
   }

@@ -23,6 +23,7 @@ import Schema from '@deepseek-ai/schemastery'
 import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_MAX_OUTPUT_TOKENS,
+  DEFAULT_TURN_MAX_TOKENS,
   JsonRunParser,
   buildRunArgv,
   fetchUsage,
@@ -32,6 +33,7 @@ import {
   reasoningEffortsFromVariants,
   sendPrompt,
   stripUnsupportedFlags,
+  turnCompletionReservation,
   unsupportedEffortMessage,
   withVariant,
 } from './shared.js'
@@ -62,6 +64,12 @@ export const Config = Schema.object({
   pure: Schema.boolean().default(false).volatile(),
   thinking: Schema.boolean().default(true).volatile(),
   cwd: Schema.string().default('').volatile(),
+  /**
+   * Completion tokens ONE TURN reserves (the host's `defaultMaxTokens`), kept
+   * separate from the route capability in the catalog (`limit.output`).
+   * See DEFAULT_TURN_MAX_TOKENS for the measurement behind the default.
+   */
+  turnMaxTokens: Schema.number().default(DEFAULT_TURN_MAX_TOKENS).volatile(),
   timeoutMs: Schema.number().default(1800000).volatile(),
   stderrMaxBytes: Schema.number().default(65536).volatile(),
   forwardEnv: Schema.array(Schema.string()).default(FORWARD_ENV_DEFAULT).volatile(),
@@ -590,7 +598,8 @@ export class OpencodeLlmAdapter {
       description: 'OpenCode agent, spawned headless per generation',
       inputModalities: ['text'],
       context: { contextWindow: found?.contextWindow ?? DEFAULT_CONTEXT_WINDOW },
-      defaultMaxTokens: found?.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+      // The RESERVATION for one turn, not the route capability.
+      defaultMaxTokens: turnCompletionReservation(found?.maxTokens, this.config.turnMaxTokens.get()),
       ...(efforts.length ? { reasoning: { efforts } } : {}),
     }
   }

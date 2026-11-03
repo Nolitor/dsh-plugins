@@ -26,6 +26,7 @@ import {
   apply,
   usageFromTokens,
 } from '../lib/http.js'
+import { DEFAULT_TURN_MAX_TOKENS } from '../lib/shared.js'
 
 function fakeCtx(initialProviders = []) {
   const state = {
@@ -239,7 +240,8 @@ test('native resolveModel exports OpenCode variants as host reasoning efforts', 
     const resolved = await adapter.resolveModel('opencode-http-agent', 'opencode-go/deepseek-v4.1-flash')
     assert.deepEqual(resolved.reasoning.efforts.map((effort) => effort.id), ['low', 'high', 'max'])
     assert.equal(resolved.context.contextWindow, 1000000)
-    assert.equal(resolved.defaultMaxTokens, 384000)
+    // Reservation, not capability: see DEFAULT_TURN_MAX_TOKENS.
+    assert.equal(resolved.defaultMaxTokens, DEFAULT_TURN_MAX_TOKENS)
 
     const bare = await adapter.resolveModel('opencode-http-agent', 'opencode-go/mimo-v2.6-flash')
     assert.equal(bare.reasoning, undefined, 'a route without variants advertises no levels')

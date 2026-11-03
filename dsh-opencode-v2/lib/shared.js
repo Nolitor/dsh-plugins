@@ -341,6 +341,49 @@ export const DEFAULT_CONTEXT_WINDOW = 32768
 export const DEFAULT_MAX_OUTPUT_TOKENS = 8192
 
 /**
+ * Per-turn completion reservation advertised as `defaultMaxTokens`.
+ *
+ * TWO DIFFERENT NUMBERS, deliberately not the same one:
+ *
+ *   `limit.output`  the ROUTE'S CAPABILITY (e.g. 384000 on deepseek-v4.1-flash).
+ *                   A catalog fact; it belongs in the catalog and the settings UI.
+ *   `defaultMaxTokens` what ONE TURN actually reserves. The host uses this for two
+ *                   things: the per-request `max_tokens` it fills in when the
+ *                   caller omits one, and — through compaction —
+ *                   `contextWindow - reservedCompletionTokens - headroom` as the
+ *                   budget messages may occupy.
+ *
+ * Publishing the capability as the reservation therefore costs context for nothing.
+ * Measured 2026-11-03 on this profile: 384000 reserved left
+ * 1000000 - 384000 - 65536 = 550464 tokens (55.0%) of a 1M window usable, while the
+ * real per-step output distribution over 2223 routed steps was p50 661, p99 13077,
+ * and only 17 steps (0.76%) ever exceeded 16384.
+ *
+ * At 16384 the reserved share is 1.6% and messages get 918080 tokens (91.8%) of the
+ * window. A step whose reasoning genuinely needs more is truncated by the route, not
+ * silently mis-billed: that is the same behaviour every other adapter has.
+ */
+export const DEFAULT_TURN_MAX_TOKENS = 16384
+
+/**
+ * The completion reservation for one turn on a route.
+ *
+ * Never more than the route can actually emit (a route capping at 8192 cannot
+ * reserve 16384) and never more than the configured turn reservation.
+ *
+ * @param {number|undefined} catalogMaxTokens - the route's own `limit.output`.
+ * @param {number|undefined} turnCap - configured per-turn reservation.
+ * @returns {number} positive integer tokens to reserve for one completion.
+ */
+export function turnCompletionReservation(catalogMaxTokens, turnCap) {
+  const capability = Number.isFinite(catalogMaxTokens) && catalogMaxTokens > 0
+    ? Math.trunc(catalogMaxTokens)
+    : DEFAULT_MAX_OUTPUT_TOKENS
+  const ceiling = Number.isFinite(turnCap) && turnCap > 0 ? Math.trunc(turnCap) : DEFAULT_TURN_MAX_TOKENS
+  return Math.min(capability, ceiling)
+}
+
+/**
  * Variant display names and ascending reasoning order.
  *
  * OpenCode names the levels itself; ids are an external spec and stay fixed, so
@@ -428,9 +471,27 @@ export function modelFromApiEntry(entry) {
   const variants = Array.isArray(entry.variants)
     ? [...new Set(entry.variants.map((variant) => variant?.id).filter((id) => typeof id === 'string' && id.length > 0))]
     : []
+  // NOTE on `variants[].settings`: measured 2026-11-03, they are OpenCode's
+  // INTERNAL provider options, not OpenAI wire fields. Sending a route's own
+  // shape (thinkingConfig.thinkingLevel, thinking+effort, include+reasoningSummary)
+  // to /chat/completions produced 400 "cannot be represented by ..." on
+  // gpt-6-luna and claude-haiku-5-5, and a 503 on gemini-4-argon. They are
+  // deliberately NOT forwarded: the levels reach the wire through
+  // `reasoning_effort`, which the same measurement showed is honoured.
+  // `capabilities.input` is the route's own statement of what it accepts. The
+  // host's modality vocabulary is only text|image, so audio/video/pdf are not
+  // advertised - but an image-capable route must not be advertised as
+  // text-only, which would make the host refuse an image before the request is
+  // even built (dsh-subagent: MODEL_DOES_NOT_SUPPORT_IMAGES).
+  const declaredInput = Array.isArray(entry.capabilities?.input) ? entry.capabilities.input : []
+  const inputModalities = declaredInput.includes('image') ? ['text', 'image'] : ['text']
   return {
     id: `${providerID}/${modelID}`,
     name: typeof entry.name === 'string' && entry.name ? entry.name : `${providerID}/${modelID}`,
+    inputModalities,
+    ...(typeof entry.compatibility?.reasoningField === 'string' && entry.compatibility.reasoningField.length > 0
+      ? { reasoningField: entry.compatibility.reasoningField }
+      : {}),
     contextWindow: positive(limit.context) ?? DEFAULT_CONTEXT_WINDOW,
     maxTokens: positive(limit.output) ?? DEFAULT_MAX_OUTPUT_TOKENS,
     ...(variants.length ? { variants } : {}),

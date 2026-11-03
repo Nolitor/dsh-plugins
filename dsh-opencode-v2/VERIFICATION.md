@@ -2,8 +2,8 @@
 version: 2.2
 kind: ver
 status: active
-updated: 2026-11-02
-summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2, 0.0.1-rc.3, 0.0.1-rc.4 (protocol tokens scrubbed by delimiter shape, not by the DSML text; worst-case one-character feeding 42 -> 3 -> 1, the remaining 1 a measurement-regex false positive), 0.0.1-rc.5 (synthetic probes rejected as evidence; lib/trace.js records real-traffic shape), 0.0.1-rc.6 (the rc.5 trace measured hasSystem=false on 29/29 real requests and a 58.6% leak rate; system-role messages now keep the system slot and empty tool results keep their call id) and 0.0.1-rc.7 (rc.6 traffic: 155 requests, hasSystem=true 155/155, 56 (36.1%) still leaking mostly in reasoning because only the content channel was classified; reasoning now goes through the same classifier, replay recovers 21 calls and 3 of 6 stalled steps; 295/295) and 0.0.1-rc.8 (assistant history is prose only: the wire no longer carries `<thinking>` wrappers or rendered `[tool call ...]` echoes, -38.7% / -50.3% body size on two recorded sessions, and bare element closers are scrubbed; 298/298). Older rounds live in VERIFICATION-ARCHIVE.md.
+updated: 2026-11-03
+summary: Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2, 0.0.1-rc.3, 0.0.1-rc.4 (protocol tokens scrubbed by delimiter shape, not by the DSML text; worst-case one-character feeding 42 -> 3 -> 1, the remaining 1 a measurement-regex false positive), 0.0.1-rc.5 (synthetic probes rejected as evidence; lib/trace.js records real-traffic shape), 0.0.1-rc.6 (the rc.5 trace measured hasSystem=false on 29/29 real requests and a 58.6% leak rate; system-role messages now keep the system slot and empty tool results keep their call id) and 0.0.1-rc.7 (rc.6 traffic: 155 requests, hasSystem=true 155/155, 56 (36.1%) still leaking mostly in reasoning because only the content channel was classified; reasoning now goes through the same classifier, replay recovers 21 calls and 3 of 6 stalled steps; 295/295) and 0.0.1-rc.8 (assistant history is prose only: the wire no longer carries `<thinking>` wrappers or rendered `[tool call ...]` echoes, -38.7% / -50.3% body size on two recorded sessions, and bare element closers are scrubbed; 298/298) and 0.0.1-rc.9 (the per-turn reservation is separated from the route capability: `defaultMaxTokens` is 16384 instead of the route's `limit.output`, restoring usable context from 55.0% to 80.0% of a 1M window / 91.8% message capacity; the reported "41M cacheRead" was measured to be a 2026-10-29 session, not current code, and was not changed; 305/305). Older rounds live in VERIFICATION-ARCHIVE.md.
 -->
 # @nolit/dsh-opencode-v2 - Verification (current)
 
@@ -1123,3 +1123,78 @@ The number advanced one instructed RC step (`0.0.1-rc.7` -> `0.0.1-rc.8`).
 
 **`applied on disk, pending restart`.** The body figures are a rebuild of recorded transcripts, not
 live requests; the serving process must be restarted before the wire changes. Ledger entry: F-35.
+
+## 48. v0.0.1-rc.9 — the per-turn reservation was the route's capability (measured 2026-11-03 20:1x-20:3x KST)
+
+### 48.1 What was wrong
+
+`resolveModel().defaultMaxTokens` published the route's own `limit.output`. The host reads that
+field as a **reservation**, not a capability: `compaction-basic` computes
+
+```
+thresholdTokens = min(contextWindow * thresholdRatio,
+                     contextWindow - reservedCompletionTokens - headroomTokens)
+reservedCompletionTokens = header.config.maxTokens ?? info.defaultMaxTokens
+```
+
+so a 384000 capability was subtracted from a 1000000 window on every turn.
+
+### 48.2 Measured before -> after (live catalog, 2026-11-03)
+
+| route | contextWindow | reserved before | usable before | reserved after | usable after |
+|---|---|---|---|---|---|
+| `opencode-go/deepseek-v4.1-flash` | 1000000 | 384000 | 550464 (55.0%) | 16384 | 800000 (80.0%, ratio-bound) |
+| `opencode-go/minimax-m3.1-flash` | 1000000 | 512000 | 550464 | 16384 | 800000 |
+| `opencode-go/gpt-6-luna` | 1050000 | 128000 | — | 16384 | 840000 |
+
+Message capacity after the reservation is 918080 tokens = **91.8%** of a 1M window.
+
+### 48.3 Why 16384 is the reservation and not a smaller guess
+
+Per-step output over 2223 routed `opencode-http-agent` steps (all sessions in this workspace):
+
+| percentile | output tokens |
+|---|---|
+| p50 | 661 |
+| p90 | 2564 |
+| p95 | 4243 |
+| p99 | 13077 |
+| p99.5 | 18992 |
+| max | 131072 |
+
+Steps above 16384: **17 (0.76%)**; above 8192: 39 (1.75%). The single 131072 step is real — a
+541425-character reasoning block (135356 tokens), not a counter artefact. The reservation is a
+per-turn default, so a caller that needs more passes `maxTokens` explicitly and gets exactly that
+(`buildChatRequest` line 649 is unchanged).
+
+### 48.4 What changed
+
+- `lib/shared.js`: `DEFAULT_TURN_MAX_TOKENS = 16384` and `turnCompletionReservation(capability, cap)`
+  = `min(capability ?? 8192, cap ?? 16384)`.
+- `lib/http.js`, `lib/provider.js`: `resolveModel().defaultMaxTokens` uses the helper; the catalog
+  keeps `limit.output` untouched, so the picker still reports the true capability.
+- `Config.turnMaxTokens` (default 16384, `.volatile()`) in both adapters, documented in
+  `cordis.patch.yml`.
+- Tests: the three sites that pinned the capability now pin the reservation, plus a route-below-cap
+  case and a per-profile override case.
+
+### 48.5 Not changed — a claim that did not survive measurement
+
+A "usage accumulation" defect was reported (cacheRead 41M on a 1M route). Measured:
+
+- The series is monotonic (265306 -> 41143179), and the last value is what the adapter publishes.
+- All 59 multi-usage messages live in sessions created **2026-10-29 / 10-30**; the newest session
+  has **0** of 280.
+- The current adapter, fed a stub backend that sends a cumulative `usage` on every delta, emits
+  **exactly one** `usage` chunk carrying the last value (verified 2026-11-03).
+- A 37.7s generation against the live backend emitted **1** usage chunk.
+
+No code change was made. The old records stay as historical evidence.
+
+### 48.6 Status
+
+**`applied pending restart`.** 305/305 tests pass, `npm run check` clean, artifact
+`artifacts/nolit-dsh-opencode-v2-0.0.1-rc.9.tgz` sha256
+`46b95607e34a6916cc34c3f23c4eb1c3f66cc391f84904c1ed5a3873b1b270f9`. The serving process must be
+restarted before the new reservation takes effect.
+

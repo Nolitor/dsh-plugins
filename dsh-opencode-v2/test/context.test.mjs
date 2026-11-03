@@ -13,6 +13,7 @@ import assert from 'node:assert/strict'
 import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_MAX_OUTPUT_TOKENS,
+  DEFAULT_TURN_MAX_TOKENS,
   modelsFromApiPayload,
   modelsFromCliOutput,
   modelFromApiEntry,
@@ -43,9 +44,45 @@ test('modelFromApiEntry maps the measured /api/model shape', () => {
   assert.deepEqual(modelFromApiEntry(entry), {
     id: 'opencode-go/deepseek-v4.1-flash',
     name: 'DeepSeek V4.1 Flash',
+    // A route that declares no capabilities is advertised as text-only: the
+    // host must never be told it can send an image the backend never promised.
+    inputModalities: ['text'],
     contextWindow: 1000000,
     maxTokens: 384000,
   })
+})
+
+test('modelFromApiEntry carries capabilities a Route declares', () => {
+  // Measured 2026-11-03: 34 of 50 live routes declare image input, and a
+  // text-only advertisement made the host refuse the image up front
+  // (dsh-subagent: MODEL_DOES_NOT_SUPPORT_IMAGES).
+  const model = modelFromApiEntry({
+    id: 'kimi-k3.1-pro',
+    providerID: 'opencode-go',
+    limit: { context: 1048576, output: 131072 },
+    capabilities: { tools: true, input: ['text', 'image', 'video'] },
+    compatibility: { reasoningField: 'reasoning_content' },
+  })
+  assert.deepEqual(model.inputModalities, ['text', 'image'])
+  assert.equal(model.reasoningField, 'reasoning_content')
+})
+
+test('modelFromApiEntry keeps the variant ids and drops the internal settings', () => {
+  // Measured 2026-11-03: a variant's `settings` are OpenCode's internal
+  // provider options. Sending them to /chat/completions returns
+  // 400 "cannot be represented by ..." on gpt-6-luna and claude-haiku-5-5.
+  // Only the ids are published; the level reaches the wire as reasoning_effort.
+  const model = modelFromApiEntry({
+    id: 'gemini-4-argon',
+    providerID: 'opencode-go',
+    variants: [
+      { id: 'low', settings: { thinkingConfig: { includeThoughts: true, thinkingLevel: 'low' } } },
+      { id: 'high', settings: { thinkingConfig: { includeThoughts: true, thinkingLevel: 'high' } } },
+      { id: 'bare' },
+    ],
+  })
+  assert.deepEqual(model.variants, ['low', 'high', 'bare'])
+  assert.equal('variantSettings' in model, false, 'internal settings must not travel')
 })
 
 test('modelFromApiEntry falls back to safe defaults when limit is absent', () => {
@@ -87,7 +124,25 @@ test('resolveModel publishes a positive contextWindow for a discovered route', a
   assert.equal(info.provider, 'opencode-agent')
   assert.equal(info.id, 'opencode-go/deepseek-v4.1-flash')
   assert.equal(info.context.contextWindow, 1000000)
-  assert.equal(info.defaultMaxTokens, 384000)
+  // The route CAPABILITY is 384000, but the per-turn RESERVATION is the small
+  // default: compaction subtracts the reservation from the window, so publishing
+  // the capability here would leave only 55% of a 1M route usable (measured).
+  assert.equal(info.defaultMaxTokens, DEFAULT_TURN_MAX_TOKENS)
+})
+
+test('a route whose output cap is below the reservation reserves what it can', async () => {
+  const adapter = adapterWith([{ id: 'opencode-go/tiny', name: 'Tiny', contextWindow: 32768, maxTokens: 4096 }])
+  const info = await adapter.resolveModel('opencode-agent', 'opencode-go/tiny')
+  assert.equal(info.defaultMaxTokens, 4096, 'never reserve more than the route can emit')
+})
+
+test('the turn reservation is configurable per profile', async () => {
+  const adapter = adapterWith(
+    [{ id: 'opencode-go/deepseek-v4.1-flash', name: 'F', contextWindow: 1000000, maxTokens: 384000 }],
+    { turnMaxTokens: 64000 },
+  )
+  const info = await adapter.resolveModel('opencode-agent', 'opencode-go/deepseek-v4.1-flash')
+  assert.equal(info.defaultMaxTokens, 64000)
 })
 
 test('resolveModel still publishes a contextWindow for an UNKNOWN route', async () => {

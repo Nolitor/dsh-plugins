@@ -113,6 +113,7 @@ test('discovery maps variants and limits from the live /api/model payload', asyn
   assert.deepEqual(result.models[0], {
     id: 'opencode-go/deepseek-v4.1-flash',
     name: 'DeepSeek V4.1 Flash',
+    inputModalities: ['text'],
     contextWindow: 1000000,
     maxTokens: 384000,
     variants: ['low', 'high', 'max'],

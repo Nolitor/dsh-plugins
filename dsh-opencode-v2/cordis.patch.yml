@@ -88,3 +88,10 @@
       autoDiscoverModels: true
       # Durable catalog is written to <profile>/opencode-models.json.
       catalogSyncMs: 300000
+      # Completion tokens ONE TURN reserves (the host's defaultMaxTokens). This is
+      # NOT the route capability: limit.output stays in the catalog and is what the
+      # picker reports. The reservation is subtracted from the context window before
+      # compaction decides how much room messages get, so a capability-sized value
+      # (384000) left only 55% of a 1M route usable. Measured per-step output on this
+      # profile: p50 661, p99 13077, and 0.76% of steps above 16384.
+      turnMaxTokens: 16384

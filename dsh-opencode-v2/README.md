@@ -3,7 +3,7 @@
 version: 3.2
 kind: readme
 status: active
-updated: 2026-11-01
+updated: 2026-11-03
 summary: Golden-reference pure LLM adapter for OpenCode Go. The local OpenCode server is a control plane only (catalog/provider/credential); generation goes directly to the OpenAI-compatible /chat/completions backend and is normalized into DSH text/reasoning/tool/usage chunks. No agent loop, persona, session prompt, or static cwd. 0.0.1 (reset from 0.9.0) restores the top explicit state machine in lib/stream-parser.js and adds the bottom parser/screen gate in lib/display-gate.js; the 0.8.0/0.9.0 display-only filter is replaced, not extended. 0.0.1-rc.1 (fix round) adds defensive tool-argument accumulation in lib/arguments.js (duplicate/restated/wrapped snapshots, schema-selected) and holds a body payload that is only a tool-shaped JSON object until it can be promoted to the parser channel instead of displayed as prose. 0.0.1-rc.2 makes the top classifier recognize the tool-call marker by shape (any bracket style, name/id from the head or the declared parameter schema, any pipe glyph) instead of a literal list, scrubs model-written tags and DSML tokens from the screen, and de-duplicates promoted calls by id; measured screen leaks 301 -> 4 on whole-string feeding. 0.0.1-rc.3 makes recognition stream-safe: a bounded hold for trailing marker/DSML/parameter fragments, a PARAM_BODY state and orphan-DSML scrub stop chunk-boundary leaks (strict screen leaks 42 -> 3 fed one character at a time; turn 16 4/6 -> 0/6). 0.0.1-rc.4 scrubs any pipe-wrapped protocol token by delimiter shape instead of only DSML, treats `thought` as a thinking wrapper, and lets the chunk-boundary hold keep any character inside a pending `<…` fragment, so a split token cannot leak; worst-case chunking leaks 42 -> 3 -> 1, and the remaining 1 is a measurement-regex false positive (a pair of markdown pipes). 0.0.1-rc.5 is an evidence round, not a new classifier: the owner rejected the synthetic A/B as proof (a short prompt produces almost no reasoning or text, so there is nothing to leak), so lib/trace.js records real traffic shape (request: model/messages/context chars/tools/system/stream/maxTokens/toolChoice/effort/session; delta: field/length/marker and an excerpt of at most 400 chars only when notation is detected; finish: counts; error: transport detail and retry counters), capped at 8 MB at /tmp/opencode-v2-trace.jsonl and disabled with OPENCODE_V2_TRACE=0, never storing prompts, message bodies or credentials; scripts/analyze-opencode-trace.mjs groups it by process and request and reports the leak rate by tool count, context chars, system prompt and model. 0.0.1-rc.6 is driven by what that trace then measured: process 2397320 served 29 real requests on deepseek-v4.1-flash, 17 (58.6%) carried protocol notation (34 content deltas, 1 reasoning), 559-580 messages and ~1.07-1.10M context chars each, tools=1, max_tokens 384000, effort high — and hasSystem=false on 29 of 29, which exposed a real role-mapping defect: DSH's loop-built history carries the system prompt as a leading system-role message and every unknown role was mapped to `user`, so the model never saw its system instructions. rc.6 maps `system` to the OpenAI system slot (developer still maps to system) and sends an empty tool result with its tool_call_id instead of dropping it. 0.0.1-rc.7 answers the next trace (serving pid 2422772, 155 requests): 155/155 now carry the system prompt (the rc.6 fix verified) and 138 ended with structured tool_calls, but 56 requests (36.1%) still carried protocol notation, now mostly in `reasoning_content` — the adapter classified only the content channel for body calls, so a call the model wrote into reasoning was stripped of its wrapper tokens and lost, the step produced no tool call and the turn stalled; rc.7 sends reasoning through the same classifier, so prose stays reasoning while a recovered call is queued for the parser channel.
 -->
 
@@ -18,12 +18,12 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 
 > Measurement of record: [`../OPENCODE-V2-SURFACE-MEASUREMENT.md`](../OPENCODE-V2-SURFACE-MEASUREMENT.md)
 
-## 0. Version — 0.0.1 baseline, 0.0.1-rc.8 on instruction
+## 0. Version — 0.0.1 baseline, 0.0.1-rc.9 on instruction
 
 | Field | Value |
 |---|---|
-| `package.json` | `0.0.1-rc.8` (was `0.0.1-rc.7`, which was `0.0.1-rc.6`, which was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
-| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.8` (was `0.0.1-rc.7`, which was `0.0.1-rc.6`, which was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `package.json` | `0.0.1-rc.9` (was `0.0.1-rc.8`, which was `0.0.1-rc.7`, which was `0.0.1-rc.6`, which was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
+| `lib/http.js` load-beacon `VERSION` | `0.0.1-rc.9` (was `0.0.1-rc.8`, which was `0.0.1-rc.7`, which was `0.0.1-rc.6`, which was `0.0.1-rc.5`, which was `0.0.1-rc.4`, which was `0.0.1-rc.3`, which was `0.0.1-rc.2`, which was `0.0.1-rc.1`, which was `0.0.1`) |
 | Versions self-bumped in this history | 26 (`0.1.1` … `0.9.0`) |
 | `0.0.1-rc.1` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.1.tgz` — sha256 `64be56cd99543754caadcc5459b983c597ac53f226cdd145ded4ab7d99a3fc16` |
 | `0.0.1-rc.2` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.2.tgz` — sha256 `29260240b776708a524e90c5e6b4071557beeb9f6b18908c4ad09befda85e8e3` |
@@ -33,6 +33,7 @@ surface needs is re-implemented here on top of `ctx.subprocess`.
 | `0.0.1-rc.6` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.6.tgz` — sha256 `b95379ad0f13b78699fa8a4b526ca586fc0ad2d945628d487bea0e24d311b1b9` |
 | `0.0.1-rc.7` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.7.tgz` — sha256 `79e6ddf7d0fa7e640654783b7fd243d8a36295c68ebd07747530790322a2d442` |
 | `0.0.1-rc.8` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.8.tgz` — sha256 `a417272025669427fd7bdcb4f114a4092ba188c55212782cf1451b66c5d63ac1` |
+| `0.0.1-rc.9` artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.9.tgz` — sha256 `46b95607e34a6916cc34c3f23c4eb1c3f66cc391f84904c1ed5a3873b1b270f9` |
 
 The owner reset the number and forbade further self-bumps: **the version changes again only on an
 explicit owner instruction, and then only as `0.0.1.rc<N>`** (packaged as `0.0.1-rc.<N>`). A release,
@@ -46,8 +47,9 @@ accumulation, §0.1), `0.0.1-rc.1` → `0.0.1-rc.2` (shape-based marker classifi
 `0.0.1-rc.3` → `0.0.1-rc.4` (protocol tokens are a delimiter family, not a DSML family, §0.4),
 `0.0.1-rc.4` → `0.0.1-rc.5` (real-traffic trace instead of synthetic probes, §0.5),
 `0.0.1-rc.5` → `0.0.1-rc.6` (the system prompt actually reaches the model, §0.6) and
-`0.0.1-rc.6` → `0.0.1-rc.7` (a call in the reasoning channel is promoted, not dropped, §0.7) and
-`0.0.1-rc.7` → `0.0.1-rc.8` (assistant history is prose only, §0.8).
+`0.0.1-rc.6` → `0.0.1-rc.7` (a call in the reasoning channel is promoted, not dropped, §0.7),
+`0.0.1-rc.7` → `0.0.1-rc.8` (assistant history is prose only, §0.8) and
+`0.0.1-rc.8` → `0.0.1-rc.9` (the per-turn reservation is separated from the route capability, §0.9).
 None of those numbers came from a green suite or a defect found on our own; each was the one RC
 step the owner's instruction allowed.
 
@@ -1224,3 +1226,50 @@ dsh-opencode-v2/
 # scripts/analyze-opencode-trace.mjs (workspace root) summarises the trace:
 # leak rate by tool count, context chars, system prompt and model
 ```
+### 0.9 `0.0.1-rc.9` — the per-turn reservation is separated from the route capability
+
+`resolveModel().defaultMaxTokens` used to publish the route's own `limit.output`
+(384000 on `deepseek-v4.1-flash`, 512000 on `minimax-m3.1-flash`). That is a **capability**, but
+the host reads the same field as a **reservation**: it fills in `max_tokens` when a caller omits
+one, and `compaction-basic` computes
+
+```
+thresholdTokens = min(contextWindow * thresholdRatio,
+                     contextWindow - reservedCompletionTokens - headroomTokens)
+```
+
+with `reservedCompletionTokens = header.config.maxTokens ?? info.defaultMaxTokens`. So publishing a
+capability-sized number subtracted it from the context **on every turn**:
+
+| reserved | usable before compaction (1M route) | share |
+|---|---|---|
+| 384000 (before) | 550464 | 55.0% |
+| 16384 (after) | 800000 (ratio-bound) | 80.0% |
+
+Measured 2026-11-03 over 2223 routed steps on this profile: output tokens p50 **661**, p90 2564,
+p99 13077, max 131072 (one real 541425-character reasoning block). Only 17 steps (0.76%) ever
+exceeded 16384.
+
+**The fix is a separation, not a smaller fudge factor.**
+
+- `limit.output` stays the **catalog capability** — it is what `listModels` reports and what the
+  settings UI shows.
+- `defaultMaxTokens` becomes the **per-turn reservation**: `DEFAULT_TURN_MAX_TOKENS = 16384`,
+  capped by the route's own capability (`turnCompletionReservation()`). A route that can only emit
+  8192 reserves 8192; nothing ever reserves more than the route can deliver.
+- `turnMaxTokens` (`Config`, default 16384, `.volatile()`) lets a profile raise it without a code
+  change. A caller that passes an explicit `maxTokens` still gets exactly that — the reservation is
+  only the default.
+
+Message capacity after the reservation is 918080 tokens (**91.8%** of a 1M window); compaction is
+now bound by its normal `thresholdRatio` rather than by the reservation.
+
+Tests: `resolveModel` publishes the reservation (`context.test.mjs`), a route under the cap
+reserves only what it can emit, and `turnMaxTokens` is honoured per profile.
+
+**Not changed, and why:** a report of a "usage accumulation bug" (cacheRead 41M on a 1M route) was
+traced to session `7850b074` created **2026-10-29**, before the present adapter emitted a single
+`usage` chunk per attempt. Every one of the 59 multi-usage messages lives in a session created
+2026-10-29 or 10-30; the current code was verified against a stub backend that sends a cumulative
+`usage` on every delta and it still emits exactly one. No code change was made for it.
+
