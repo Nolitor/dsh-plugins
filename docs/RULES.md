@@ -91,6 +91,15 @@ Two concrete hazards, both measured:
 Copy real directories, or link the scope dir itself and write only into a fresh local directory.
 Never let a glob stand in for an empty listing.
 
+## 5.1 Typography and visual style (mandatory)
+
+Every plugin surface states its own `font-size: 14px; line-height: 22px` root. DSH defines no
+font-size token and sets none on `body`, so an omitted size inherits the browser's 16px and the
+surface renders larger than the rest of the UI (measured: the sidebar panel and the notify
+settings section both computed 16px before this rule). Full standard, including the token
+pitfalls (`--dsw-alias-bg-layer-4` is unset at runtime; `--dsw-alias-brand-primary` is near-white
+in dark mode): [PLUGIN-STYLE-STANDARD.md](PLUGIN-STYLE-STANDARD.md).
+
 ## 6. Documentation contract (skeleton indexing)
 
 Every tracked document (root `*.md` and `docs/**/*.md`) must start with a title, then a

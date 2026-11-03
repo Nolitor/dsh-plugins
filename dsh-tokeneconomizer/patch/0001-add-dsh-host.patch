@@ -443,7 +443,7 @@ diff --git a/tokeneconomizer/plugin/sidecall.py b/tokeneconomizer/plugin/sidecal
 index 3594a3e..8a19e61 100644
 --- a/tokeneconomizer/plugin/sidecall.py
 +++ b/tokeneconomizer/plugin/sidecall.py
-@@ -331,6 +331,55 @@ def copilot_call(prompt, model="", cli="copilot", timeout=TIMEOUT_S):
+@@ -331,6 +331,70 @@ def copilot_call(prompt, model="", cli="copilot", timeout=TIMEOUT_S):
      return text, eff
  
  
@@ -459,11 +459,26 @@ index 3594a3e..8a19e61 100644
 +    A model override is not passed: DSH chooses the agent preset's route, which is the person's
 +    own default. The call is billed where the person's DSH is billed; the ledger charges the
 +    tokens DSH reports.
++
++    The throwaway directory is also the call's session store: a `--patch` overlay re-roots
++    `session-persistence-jsonl` at `<cwd>/sessions`, so the Session log dies with the directory.
++    Without it DSH writes one permanent workspace-shaped session directory per call under
++    `~/.dsh/sessions/--tmp-te-side-*`, at a cwd that no longer exists -- measured 119 of 130
++    session directories on 2026-11-03, essentially all of them the loop guard's judge.
 +    """
 +    cmd = [cli, "--profile", profile, "--json", prompt]
 +    out_usage = None
 +    text = ""
 +    with tempfile.TemporaryDirectory(prefix="te-side-") as cwd:
++        # Keep the Session DSH is about to persist inside the directory this block deletes.
++        overlay = os.path.join(cwd, ".te-session-store.yml")
++        with open(overlay, "w", encoding="utf-8") as fh:
++            for entry, sub in (("session-persistence-jsonl", "sessions"),
++                               ("storage-json", "storages")):
++                fh.write("- id: " + entry + "\n"
++                         "  config:\n"
++                         "    root: " + json.dumps(os.path.join(cwd, sub)) + "\n")
++        cmd[3:3] = ["--patch", overlay]
 +        out = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace",
 +                             timeout=timeout, env=dict(_env(), TE_DISABLE="1"), cwd=cwd,
 +                             stdin=subprocess.DEVNULL)

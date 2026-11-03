@@ -53,6 +53,25 @@ test('the display title the DSH plugin inventory reads is the Korean title', () 
   assert.ok(pkg.files.includes('locale/'))
 })
 
+test('the side call keeps its Session inside the throwaway directory', () => {
+  // Regression guard, measured 2026-11-03: a side call that let DSH persist at its default
+  // root left one permanent session directory per call under ~/.dsh/sessions/--tmp-te-side-*,
+  // at a cwd TemporaryDirectory had already deleted -- 119 of 130 session directories, nearly
+  // all of them the loop guard's judge. The fix re-roots session-persistence-jsonl per call.
+  assert.ok(patch.includes('--patch'), 'the side call does not pass its overlay')
+
+  const hunk = patch.slice(patch.indexOf('def dsh_call('))
+  // Both stores leak independently: the Session log (sessions/) and the per-session
+  // projection-cache row (storages/) are written at the persistence roots.
+  // Match the executable tuple, not the prose: the docstring also names both ids, so a
+  // loose match would pass even with the writes removed (measured: it did).
+  assert.match(hunk, /\("session-persistence-jsonl", "sessions"\)/,
+    'dsh_call does not re-root persistence')
+  assert.match(hunk, /\("storage-json", "storages"\)/,
+    'dsh_call does not re-root the projection cache')
+  assert.match(hunk, /TemporaryDirectory/, 'dsh_call lost its throwaway directory')
+})
+
 test('the operator entry points exist', () => {
   for (const file of ['bin/te-dsh.mjs', 'scripts/bootstrap.mjs', 'lib/index.js', 'lib/bridge.js']) {
     assert.ok(existsSync(`${root}${file}`), `${file} is missing`)

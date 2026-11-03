@@ -15,6 +15,8 @@
 
 ## rule
 
+- **1.0** · active · 2026-11-03 · [docs/PLUGIN-STYLE-STANDARD.md](PLUGIN-STYLE-STANDARD.md)
+  Mandatory typography rules for DSH plugin surfaces, measured from DSH 0.2.2-alpha.3 — DSH ships no font-size token and sets none on body, so every plugin surface must state 14px/22px itself.
 - **2.7** · active · 2026-11-02 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
   Every defect and wrong turn this workspace actually made, including a literal marker whitelist that missed a new notation family, a stream recogniser tested only on whole payloads and a scrub keyed to one vendor token that missed the model's other pipe-wrapped tokens, and a synthetic A/B probe offered as evidence for a streaming defect that only appears in long output-heavy turns, a role map that sent DSH's leading system-role message to the model as `user` so every system instruction was lost, a body-call classifier that ran only on the content channel while calls written into `reasoning_content` were stripped and dropped, and an assistant-history serializer that re-sent the model its own protocol notation (rendered calls and `<thinking>` wrappers) while the scrub knew each notation's openers but not its bare closers, with the standing rule that keeps it from happening again, and a headless side-call profile that pointed at an account provider while the bundle had disabled the three services that provider needs, so the identical sign-in error came from two different missing dependencies. Read before changing a plugin, a doc, or a live service.
 - **1.4** · active · 2026-11-02 · [docs/RULES.md](RULES.md)
@@ -35,6 +37,8 @@
 
 ## report
 
+- **1.0** · measured · 2026-11-03 · [DSH-0.2.2-ALPHA.3-PLUGIN-VERIFICATION.md](../DSH-0.2.2-ALPHA.3-PLUGIN-VERIFICATION.md)
+  Per-plugin verification against DSH 0.2.2-alpha.3 (excluding opencode-v2) — measured mount state, test results, Korean locale delta, notify settings restyle, sidebar/UTM harness and TE KV-cache interaction.
 - **3.2** · active · 2026-11-01 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
   Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, the 0.6.0 client-half activation defect that killed the web shell, the 0.7.3 stream-cut/inline-tag defects with their measured fix, the 0.7.6 split-marker hold gap that still printed the notation on screen, and the 0.8.0 boundary pipeline that deletes the tag scanner and types every delta from its wire field.
 - **1.0** · completed · 2026-10-29 · [DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](../DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
@@ -97,8 +101,10 @@
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
   The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
 
-## boot (newest 5 of 40)
+## boot (newest 5 of 41)
 
+- **active** · 2026-11-03T2159+0900.md · [card](../bootcards/2026-11-03T2159+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-03T2159+0900. Older cards are historical.
 - **active** · 2026-11-02T0906+0900.md · [card](../bootcards/2026-11-02T0906+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-02T0906+0900. Older cards are historical.
 - **active** · 2026-11-02T0831+0900.md · [card](../bootcards/2026-11-02T0831+0900.md)
@@ -107,9 +113,7 @@
   Dated session card (tier 5). State, active task, and handoff for 2026-11-02T0747+0900. Older cards are historical.
 - **active** · 2026-11-02T0739+0900.md · [card](../bootcards/2026-11-02T0739+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-02T0739+0900. Older cards are historical.
-- **active** · 2026-11-02T0715+0900.md · [card](../bootcards/2026-11-02T0715+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-11-02T0715+0900. Older cards are historical.
 
 ---
 
-71 indexed (40 boot cards), 0 missing header, 71 total.
+74 indexed (41 boot cards), 0 missing header, 74 total.
