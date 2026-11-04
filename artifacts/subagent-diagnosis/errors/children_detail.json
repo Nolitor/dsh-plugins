@@ -1,0 +1,876 @@
+[
+ {
+  "sid": "59429101-d728-41eb-9131-dc60f2b82e03",
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "label": "Primary 3-day token saving measurement",
+  "events": 1059,
+  "toolCalls": 106,
+  "toolCallNames": {
+   "run_code": 106
+  },
+  "rootErrorCount": 3,
+  "rootErrorCats": {
+   "ptc_compile": 3
+  },
+  "rootErrors": [
+   {
+    "seq": 461,
+    "time": 1793831921810,
+    "step": 47,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 789,
+    "time": 1793832378897,
+    "step": 77,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): ToolCallError: old_string was not found in \"/home/minami/Workspace/projects/dsh-workspace/dsh-plugins/artifacts/token-saving-3d/d-audit/audit.mjs\"\n    at bindingFailure (file:///home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js:1068:22)\n    at Object.value [as edit] (file:///home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/proce"
+   },
+   {
+    "seq": 812,
+    "time": 1793832397410,
+    "step": 80,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): ToolCallError: old_string was not found in \"/home/minami/Workspace/projects/dsh-workspace/dsh-plugins/artifacts/token-saving-3d/d-audit/audit.mjs\"\n    at bindingFailure (file:///home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js:1068:22)\n    at Object.value [as edit] (file:///home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/proce"
+   }
+  ],
+  "subDispatchErrors": 2,
+  "subDispatchErrorTools": {
+   "edit": 2
+  },
+  "subErrors": [
+   {
+    "seq": 788,
+    "time": 1793832378834,
+    "name": "edit",
+    "text": "Error: old_string was not found in \"/home/minami/Workspace/projects/dsh-workspace/dsh-plugins/artifacts/token-saving-3d/d-audit/audit.mjs\""
+   },
+   {
+    "seq": 811,
+    "time": 1793832397323,
+    "name": "edit",
+    "text": "Error: old_string was not found in \"/home/minami/Workspace/projects/dsh-workspace/dsh-plugins/artifacts/token-saving-3d/d-audit/audit.mjs\""
+   }
+  ],
+  "turnEnd": [],
+  "createdAt": 1793831210268
+ },
+ {
+  "sid": "1217d636-1b3f-4db0-b96e-e95778ea4960",
+  "model": "opencode-go/minimax-m3.1-flash",
+  "label": "Engine-side independent cross-check",
+  "events": 920,
+  "toolCalls": 105,
+  "toolCallNames": {
+   "run_code": 105
+  },
+  "rootErrorCount": 4,
+  "rootErrorCats": {
+   "ptc_compile": 4
+  },
+  "rootErrors": [
+   {
+    "seq": 54,
+    "time": 1793831247622,
+    "step": 5,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ',', got 'ident'\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 77,
+    "time": 1793831257443,
+    "step": 8,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ',', got 'ident'\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 391,
+    "time": 1793831458563,
+    "step": 44,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ',', got 'ident'\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 610,
+    "time": 1793831656206,
+    "step": 71,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ',', got 'ident'\nFile sandbox: danger-full-access."
+   }
+  ],
+  "subDispatchErrors": 0,
+  "subDispatchErrorTools": {},
+  "subErrors": [],
+  "turnEnd": [
+   {
+    "kind": "completed"
+   }
+  ],
+  "createdAt": 1793831231367
+ },
+ {
+  "sid": "5b72bfc9-ad5f-420e-a32b-82db0625adb4",
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "label": "Cost attribution and counterfactual",
+  "events": 557,
+  "toolCalls": 50,
+  "toolCallNames": {
+   "run_code": 50
+  },
+  "rootErrorCount": 2,
+  "rootErrorCats": {
+   "ptc_compile": 2
+  },
+  "rootErrors": [
+   {
+    "seq": 156,
+    "time": 1793831432255,
+    "step": 15,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ',', got '{'\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 391,
+    "time": 1793831844068,
+    "step": 36,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): TypeError: 3.7 is not a function\n    at eval (eval at evaluate (file:///home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js:1136:4), <anonymous>:20:23)\n    at Object.evaluate (file:///home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js:1136:72)\n    at file:///home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node"
+   }
+  ],
+  "subDispatchErrors": 0,
+  "subDispatchErrorTools": {},
+  "subErrors": [],
+  "turnEnd": [
+   {
+    "kind": "completed"
+   }
+  ],
+  "createdAt": 1793831231368
+ },
+ {
+  "sid": "5d17dd9f-5665-456f-80db-d5ff9e4fb785",
+  "model": "opencode-go/beam-free",
+  "label": "Adversarial audit of savings claims",
+  "events": 880,
+  "toolCalls": 103,
+  "toolCallNames": {
+   "bash": 1,
+   "run_code": 101,
+   "write": 1
+  },
+  "rootErrorCount": 17,
+  "rootErrorCats": {
+   "unknown_tool": 2,
+   "ptc_compile": 15
+  },
+  "rootErrors": [
+   {
+    "seq": 20,
+    "time": 1793831233911,
+    "step": 1,
+    "name": "ToolNotFoundError",
+    "code": "UNKNOWN_TOOL",
+    "cat": [
+     "unknown_tool"
+    ],
+    "text": "Error: unknown tool \"bash\": only `run_code` is callable directly — call `bash` from inside a `run_code` program instead"
+   },
+   {
+    "seq": 34,
+    "time": 1793831238158,
+    "step": 3,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): The left-hand side of an assignment expression must be a variable or a property access.\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 48,
+    "time": 1793831242838,
+    "step": 5,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): The left-hand side of an assignment expression must be a variable or a property access.\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 107,
+    "time": 1793831259363,
+    "step": 12,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ',', got 'const'\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 130,
+    "time": 1793831272892,
+    "step": 15,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): 'import', and 'export' cannot be used outside of module code\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 135,
+    "time": 1793831276160,
+    "step": 16,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): 'import', and 'export' cannot be used outside of module code\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 140,
+    "time": 1793831277765,
+    "step": 17,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 145,
+    "time": 1793831280217,
+    "step": 18,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 150,
+    "time": 1793831283942,
+    "step": 19,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 155,
+    "time": 1793831285720,
+    "step": 20,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 187,
+    "time": 1793831300687,
+    "step": 24,
+    "name": "ToolNotFoundError",
+    "code": "UNKNOWN_TOOL",
+    "cat": [
+     "unknown_tool"
+    ],
+    "text": "Error: unknown tool \"write\": only `run_code` is callable directly — call `write` from inside a `run_code` program instead"
+   },
+   {
+    "seq": 210,
+    "time": 1793831316787,
+    "step": 27,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Unknown regular expression flags.\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 233,
+    "time": 1793831327297,
+    "step": 30,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ',', got '<eof>'\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 265,
+    "time": 1793831344710,
+    "step": 34,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 365,
+    "time": 1793831665402,
+    "step": 46,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Unknown regular expression flags.\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 508,
+    "time": 1793831843001,
+    "step": 62,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Unknown regular expression flags.\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 531,
+    "time": 1793831856488,
+    "step": 65,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Unknown regular expression flags.\nFile sandbox: danger-full-access."
+   }
+  ],
+  "subDispatchErrors": 0,
+  "subDispatchErrorTools": {},
+  "subErrors": [],
+  "turnEnd": [
+   {
+    "kind": "completed"
+   }
+  ],
+  "createdAt": 1793831231369
+ },
+ {
+  "sid": "b70d93d8-a3dd-4b34-b280-3f5fead6d21b",
+  "model": "opencode-go/step-5-preview",
+  "label": "Per-day trend and regime timeline",
+  "events": 263,
+  "toolCalls": 34,
+  "toolCallNames": {
+   "run_code": 33,
+   "write": 1
+  },
+  "rootErrorCount": 9,
+  "rootErrorCats": {
+   "invalid_tool_args": 4,
+   "ptc_compile": 4,
+   "unknown_tool": 1
+  },
+  "rootErrors": [
+   {
+    "seq": 20,
+    "time": 1793831234500,
+    "step": 1,
+    "name": "ToolArgsError",
+    "code": "INVALID_ARGS",
+    "cat": [
+     "invalid_tool_args"
+    ],
+    "text": "Error: invalid arguments: missing required property \"description\""
+   },
+   {
+    "seq": 22,
+    "time": 1793831234505,
+    "step": 1,
+    "name": "ToolArgsError",
+    "code": "INVALID_ARGS",
+    "cat": [
+     "invalid_tool_args"
+    ],
+    "text": "Error: invalid arguments: missing required property \"description\""
+   },
+   {
+    "seq": 48,
+    "time": 1793831241224,
+    "step": 3,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ',', got 'numeric literal'\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 107,
+    "time": 1793831271615,
+    "step": 8,
+    "name": "ToolArgsError",
+    "code": "INVALID_ARGS",
+    "cat": [
+     "invalid_tool_args"
+    ],
+    "text": "Error: invalid arguments: missing required property \"code\""
+   },
+   {
+    "seq": 130,
+    "time": 1793831279997,
+    "step": 11,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ',', got ';'\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 135,
+    "time": 1793831281725,
+    "step": 12,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ',', got ';'\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 158,
+    "time": 1793831288351,
+    "step": 15,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ',', got ';'\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 172,
+    "time": 1793831323749,
+    "step": 17,
+    "name": "ToolNotFoundError",
+    "code": "UNKNOWN_TOOL",
+    "cat": [
+     "unknown_tool"
+    ],
+    "text": "Error: unknown tool \"write\": only `run_code` is callable directly — call `write` from inside a `run_code` program instead"
+   },
+   {
+    "seq": 224,
+    "time": 1793831423064,
+    "step": 23,
+    "name": "ToolArgsError",
+    "code": "INVALID_ARGS",
+    "cat": [
+     "invalid_tool_args"
+    ],
+    "text": "Error: invalid arguments: missing required property \"description\""
+   }
+  ],
+  "subDispatchErrors": 0,
+  "subDispatchErrorTools": {},
+  "subErrors": [],
+  "turnEnd": [
+   {
+    "kind": "error",
+    "error": {
+     "message": "OpenCode backend HTTP 451: {\"error\":{\"type\":\"server_error\",\"message\":\"Upstream request failed: Endpoint is unavailable.\"}}",
+     "code": "OPENCODE_BACKEND_HTTP"
+    }
+   }
+  ],
+  "createdAt": 1793831231370
+ },
+ {
+  "sid": "022a9249-ff60-4b4f-8523-32a04a21fa72",
+  "model": "opencode-go/iceman-contributor-free",
+  "label": "Re-run per-day trend on free preview model",
+  "events": 316,
+  "toolCalls": 56,
+  "toolCallNames": {
+   "run_code": 56
+  },
+  "rootErrorCount": 12,
+  "rootErrorCats": {
+   "ptc_compile": 12
+  },
+  "rootErrors": [
+   {
+    "seq": 60,
+    "time": 1793831538491,
+    "step": 9,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@mongodb-js/zstd' imported from /home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js\n    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9)\n    at packageResolve (node:internal/modules/esm/resolve:784:25)\n    at moduleResolve (node:internal/modules/esm/resolve:873:18)\n    at defaultResolve (node:internal/modules/es"
+   },
+   {
+    "seq": 65,
+    "time": 1793831545167,
+    "step": 10,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): ReferenceError: path is not defined\n    at eval (eval at evaluate (file:///home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js:1136:4), <anonymous>:12:20)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 90,
+    "time": 1793831608413,
+    "step": 15,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 130,
+    "time": 1793831703585,
+    "step": 23,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 135,
+    "time": 1793831705710,
+    "step": 24,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 145,
+    "time": 1793831713941,
+    "step": 26,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 150,
+    "time": 1793831718508,
+    "step": 27,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Error: Command failed: node -e \"const fs=require('fs');const c=fs.readFileSync('artifacts/token-saving-3d/e-trend/trend.mjs','utf8');const i=c.indexOf('textOf');console.log(c.slice(i-5,i+60));\"\n/bin/sh: 1: node: not found\n\n    at genericNodeError (node:internal/errors:986:15)\n    at wrappedFn (node:internal/errors:540:14)\n    at checkExecSyncError (node:child_process:943:11)\n    at execSync (node:child_process:1015:15)\n    at eval (eval at evaluate (file:///ho"
+   },
+   {
+    "seq": 170,
+    "time": 1793831740988,
+    "step": 31,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 180,
+    "time": 1793831747413,
+    "step": 33,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 185,
+    "time": 1793831749315,
+    "step": 34,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Unterminated block comment\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 215,
+    "time": 1793831807835,
+    "step": 40,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 240,
+    "time": 1793831833402,
+    "step": 45,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Unterminated block comment\nFile sandbox: danger-full-access."
+   }
+  ],
+  "subDispatchErrors": 0,
+  "subDispatchErrorTools": {},
+  "subErrors": [],
+  "turnEnd": [
+   {
+    "kind": "completed"
+   }
+  ],
+  "createdAt": 1793831458227
+ },
+ {
+  "sid": "72fa9915-62c5-494a-a3cc-bd7718810013",
+  "model": "opencode-go/iceman-contributor-free",
+  "label": "Re-run adversarial audit",
+  "events": 225,
+  "toolCalls": 38,
+  "toolCallNames": {
+   "run_code": 38
+  },
+  "rootErrorCount": 15,
+  "rootErrorCats": {
+   "ptc_compile": 15
+  },
+  "rootErrors": [
+   {
+    "seq": 33,
+    "time": 1793832050440,
+    "step": 3,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'zstd' imported from /home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js\n    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9)\n    at packageResolve (node:internal/modules/esm/resolve:784:25)\n    at moduleResolve (node:internal/modules/esm/resolve:873:18)\n    at defaultResolve (node:internal/modules/esm/resolve:10"
+   },
+   {
+    "seq": 63,
+    "time": 1793832171727,
+    "step": 9,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 73,
+    "time": 1793832239165,
+    "step": 11,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expression expected\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 78,
+    "time": 1793832241594,
+    "step": 12,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expression expected\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 83,
+    "time": 1793832244197,
+    "step": 13,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 88,
+    "time": 1793832322132,
+    "step": 14,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expression expected\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 93,
+    "time": 1793832324887,
+    "step": 15,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 110,
+    "time": 1793832399645,
+    "step": 16,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 120,
+    "time": 1793832475121,
+    "step": 18,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expression expected\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 125,
+    "time": 1793832477532,
+    "step": 19,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expression expected\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 135,
+    "time": 1793832545791,
+    "step": 21,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected a semicolon\nFile sandbox: danger-full-access."
+   },
+   {
+    "seq": 140,
+    "time": 1793832551802,
+    "step": 22,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Error: Command failed: node /home/minami/Workspace/projects/dsh-workspace/dsh-plugins/artifacts/token-saving-3d/d-audit/audit.mjs\n/bin/sh: 1: node: not found\n\n    at genericNodeError (node:internal/errors:986:15)\n    at wrappedFn (node:internal/errors:540:14)\n    at checkExecSyncError (node:child_process:943:11)\n    at execSync (node:child_process:1015:15)\n    at eval (eval at evaluate (file:///home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_m"
+   },
+   {
+    "seq": 155,
+    "time": 1793832566836,
+    "step": 25,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Error: Command failed: /home/minami/.local/nodejs/bin/node /home/minami/Workspace/projects/dsh-workspace/dsh-plugins/artifacts/token-saving-3d/d-audit/audit.mjs\nfile:///home/minami/Workspace/projects/dsh-workspace/dsh-plugins/artifacts/token-saving-3d/d-audit/audit.mjs:113\nfor (const project of readdirSync(SESSIONS)) {\n                      ^\n\nReferenceError: readdirSync is not defined\n    at file:///home/minami/Workspace/projects/dsh-workspace/dsh-plugins/art"
+   },
+   {
+    "seq": 196,
+    "time": 1793832731279,
+    "step": 33,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Error: spawnSync /bin/sh ENOBUFS\n    at Object.spawnSync (node:internal/child_process:1191:20)\n    at spawnSync (node:child_process:929:24)\n    at execSync (node:child_process:1010:15)\n    at eval (eval at evaluate (file:///home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js:1136:4), <anonymous>:17:19)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\nCapture"
+   },
+   {
+    "seq": 211,
+    "time": 1793832748565,
+    "step": 36,
+    "name": "CodeRunFailedError",
+    "code": "CODE_RUN_FAILED",
+    "cat": [
+     "ptc_compile"
+    ],
+    "text": "Error: code run failed (exception): Expected ',', got '#'\nFile sandbox: danger-full-access."
+   }
+  ],
+  "subDispatchErrors": 0,
+  "subDispatchErrorTools": {},
+  "subErrors": [],
+  "turnEnd": [],
+  "createdAt": 1793832020962
+ }
+]

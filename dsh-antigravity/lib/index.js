@@ -122,6 +122,19 @@ export const Config = Schema.object({
   /** Extra headers merged into generation requests. */
   extraHeaders: Schema.dict(Schema.string()).default({}).volatile(),
 
+  // ---- generation resilience --------------------------------------------
+  /**
+   * Adapter-level retries of a generation request refused with a retryable
+   * status (429/451/500/502/503/504). Exponential backoff: 1s → 2s → 4s.
+   * Measured 2026-11-05: the sibling OpenCode HTTP route lost a 27-step turn to
+   * one unretried 451; this route gets the same contract.
+   */
+  httpRetries: Schema.number().default(3).volatile(),
+  /** Statuses that trigger `httpRetries`; 401/403/404 are deliberately absent. */
+  httpRetryStatuses: Schema.array(Schema.number()).default([429, 451, 500, 502, 503, 504]).volatile(),
+  /** First backoff step; doubles per attempt. */
+  httpRetryBaseMs: Schema.number().default(1000).volatile(),
+
   // ---- subagent surface --------------------------------------------------
   /** Registry name the delegation tool binds to. */
   subagentProviderName: Schema.string().default('antigravity').volatile(),

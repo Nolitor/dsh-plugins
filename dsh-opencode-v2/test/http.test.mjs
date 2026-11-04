@@ -10,6 +10,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -89,7 +90,11 @@ async function startServer(script = {}) {
         const id = decodeURIComponent(url.pathname.slice('/api/provider/'.length))
         state.providerIds.push(id)
         if (id === 'opencode-go') {
+          const providerStatus = (script.providerStatuses ?? [])[state.providerRequests]
           state.providerRequests += 1
+          if (providerStatus && providerStatus !== 200) {
+            return json(res, providerStatus, { error: 'provider not found' })
+          }
           return json(res, 200, {
             data: {
               id: 'opencode-go',
@@ -126,7 +131,9 @@ async function startServer(script = {}) {
         state.chatRequests.push(body)
         state.chatHeaders.push(req.headers)
         state.chatPaths.push(url.pathname)
-        if (script.status) return json(res, script.status, { error: 'backend refused' })
+        const statuses = script.statuses ?? []
+        const status = statuses[state.chatRequests.length - 1] ?? script.status
+        if (status) return json(res, status, { error: 'backend refused' })
         const events = script.events ?? [
           { choices: [{ delta: { reasoning_content: 'Think.' } }] },
           { choices: [{ delta: { content: 'Hello' } }] },
@@ -168,6 +175,10 @@ function adapterFor(serverState, overrides = {}) {
       catalogSyncMs: 0,
       requestTimeoutMs: 2000,
       timeoutMs: 5000,
+      // Each adapter gets its own spend ledger. The durable ledger is debounced
+      // by 1s, so a shared test path made later assertions read earlier tests'
+      // records (measured 2026-11-05: summary.requests was 3 instead of 1).
+      costPath: join(mkdtempSync(join(tmpdir(), 'dsh-cost-')), 'opencode-session-cost.json'),
       ...overrides,
     }),
   )
@@ -448,13 +459,81 @@ test('a stream cut after real content still finishes as stop', async () => {
 test('backend HTTP failure becomes a stable error finish', async () => {
   const { server, state, close } = await startServer({ status: 502 })
   try {
-    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    // The single-attempt contract: retries are exercised by the dedicated test
+    // below, so this one pins the error shape without the 1s+2s+4s backoff.
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), httpRetries: 0 })
     const chunks = await collect(adapter.stream({
       provider: 'opencode-http-agent',
       model: 'opencode-go/minimax-m3.1-flash',
       messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
     }))
     assert.equal(chunks.at(-1).reason.failure.code, 'OPENCODE_BACKEND_HTTP')
+  } finally {
+    await close()
+  }
+})
+
+test('a retryable 451 is retried with backoff and the retried request completes', async () => {
+  const { server, state, close } = await startServer({ statuses: [451] })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), httpRetryBaseMs: 1 })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    assert.equal(state.chatRequests.length, 2, 'the refused request is re-sent once')
+    assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
+    assert.equal(chunks.some((chunk) => chunk.type === 'finish' && chunk.reason.kind === 'error'), false)
+  } finally {
+    await close()
+  }
+})
+
+test('retryable statuses are bounded and the final refusal keeps the stable error code', async () => {
+  const { server, state, close } = await startServer({ statuses: [503, 503, 503, 503, 503] })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), httpRetryBaseMs: 1, httpRetries: 2 })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    assert.equal(state.chatRequests.length, 3, 'initial attempt plus two retries')
+    assert.equal(chunks.at(-1).reason.failure.code, 'OPENCODE_BACKEND_HTTP')
+    assert.match(chunks.at(-1).reason.failure.message, /503/)
+  } finally {
+    await close()
+  }
+})
+
+test('a control-plane provider 404 is re-resolved and retried once', async () => {
+  const { server, state, close } = await startServer({ providerStatuses: [404] })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), daemonRetryBaseMs: 1 })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    assert.ok(state.providerRequests >= 2, 'the provider lookup is repeated after the 404')
+    assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
+  } finally {
+    await close()
+  }
+})
+
+test('a 403 is not retried: it needs a different credential, not another attempt', async () => {
+  const { server, state, close } = await startServer({ status: 403 })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), httpRetryBaseMs: 1 })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    assert.equal(state.chatRequests.length, 1)
+    assert.equal(chunks.at(-1).reason.failure.code, 'OPENCODE_BACKEND_AUTH')
   } finally {
     await close()
   }

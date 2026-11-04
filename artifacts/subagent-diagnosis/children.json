@@ -1,0 +1,113 @@
+[
+ {
+  "sid": "022a9249-ff60-4b4f-8523-32a04a21fa72",
+  "label": "Re-run per-day trend on free preview model",
+  "provider": "opencode-http-agent",
+  "model": "opencode-go/iceman-contributor-free",
+  "tools": 56,
+  "errors": 12,
+  "tool_counts": {
+   "run_code": 56
+  },
+  "end": [
+   {
+    "kind": "completed"
+   }
+  ]
+ },
+ {
+  "sid": "1217d636-1b3f-4db0-b96e-e95778ea4960",
+  "label": "Engine-side independent cross-check",
+  "provider": "opencode-http-agent",
+  "model": "opencode-go/minimax-m3.1-flash",
+  "tools": 105,
+  "errors": 4,
+  "tool_counts": {
+   "run_code": 105
+  },
+  "end": [
+   {
+    "kind": "completed"
+   }
+  ]
+ },
+ {
+  "sid": "59429101-d728-41eb-9131-dc60f2b82e03",
+  "label": "Primary 3-day token saving measurement",
+  "provider": "opencode-http-agent",
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "tools": 87,
+  "errors": 3,
+  "tool_counts": {
+   "run_code": 87
+  },
+  "end": []
+ },
+ {
+  "sid": "5b72bfc9-ad5f-420e-a32b-82db0625adb4",
+  "label": "Cost attribution and counterfactual",
+  "provider": "opencode-http-agent",
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "tools": 50,
+  "errors": 2,
+  "tool_counts": {
+   "run_code": 50
+  },
+  "end": [
+   {
+    "kind": "completed"
+   }
+  ]
+ },
+ {
+  "sid": "5d17dd9f-5665-456f-80db-d5ff9e4fb785",
+  "label": "Adversarial audit of savings claims",
+  "provider": "opencode-http-agent",
+  "model": "opencode-go/beam-free",
+  "tools": 103,
+  "errors": 17,
+  "tool_counts": {
+   "bash": 1,
+   "run_code": 101,
+   "write": 1
+  },
+  "end": [
+   {
+    "kind": "completed"
+   }
+  ]
+ },
+ {
+  "sid": "72fa9915-62c5-494a-a3cc-bd7718810013",
+  "label": "Re-run adversarial audit",
+  "provider": "opencode-http-agent",
+  "model": "opencode-go/iceman-contributor-free",
+  "tools": 18,
+  "errors": 9,
+  "tool_counts": {
+   "run_code": 18
+  },
+  "end": []
+ },
+ {
+  "sid": "b70d93d8-a3dd-4b34-b280-3f5fead6d21b",
+  "label": "Per-day trend and regime timeline",
+  "provider": "opencode-http-agent",
+  "model": "opencode-go/step-5-preview",
+  "tools": 34,
+  "errors": 9,
+  "tool_counts": {
+   "run_code": 33,
+   "write": 1
+  },
+  "end": [
+   {
+    "kind": "error",
+    "error": {
+     "message": "OpenCode backend HTTP 451: {\"error\":{\"type\":\"server_error\",\"message\":\"Upstream request failed: Endpoint is unavailable.\"}}",
+     "code": "OPENCODE_BACKEND_HTTP"
+    }
+   }
+  ]
+ }
+]

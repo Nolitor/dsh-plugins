@@ -24,10 +24,48 @@ import { readEvents } from './sse.js'
 import { candidateOf, classify, finishReasonFor, partsOf } from './map.js'
 import { groupByBase, toModelInfo, toResolvedModelInfo } from './catalog.js'
 import { toTokenUsage } from './usage.js'
-import { resolveEndpoint } from './settings.js'
+import { configValue, resolveEndpoint } from './settings.js'
 
 /** Tool-call ids are synthesised when the provider omits one. */
 let callCounter = 0
+
+/**
+ * Statuses an Antigravity generation request is retried on.
+ *
+ * The measured 2026-11-05 failure was an OpenCode-side 451, but the resilience
+ * contract is per-route: a rate limit (429), an upstream gateway fault
+ * (500/502/503/504), or a legal/unavailable refusal (451) says nothing about the
+ * request body. 401/403/404 are excluded: they need a new credential or a
+ * different model, not another attempt.
+ */
+export const DEFAULT_ANTIGRAVITY_RETRY_STATUSES = Object.freeze([429, 451, 500, 502, 503, 504])
+
+/** Abortable sleep used by the retry loop. */
+async function sleepFor(ms, signal) {
+  if (!(ms > 0)) return !signal?.aborted
+  if (signal?.aborted) return false
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (elapsed) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      signal?.removeEventListener?.('abort', onAbort)
+      resolve(elapsed)
+    }
+    const timer = setTimeout(() => finish(true), ms)
+    const onAbort = () => finish(false)
+    signal?.addEventListener?.('abort', onAbort, { once: true })
+  })
+}
+
+/** Exponential backoff step: `base`, `base*2`, `base*4`, ... */
+export function backoffDelay(baseMs, attempt) {
+  const base = Number(baseMs)
+  if (!Number.isFinite(base) || base <= 0) return 0
+  return Math.round(base * 2 ** Math.max(0, Math.trunc(attempt)))
+}
+
 
 /**
  * Antigravity subscription provider adapter.
@@ -182,30 +220,58 @@ export class AntigravityAdapter extends LlmAdapter {
       throw new LlmError(error?.message ?? 'Antigravity request rejected', error?.code ?? 'UNSUPPORTED_OPTION', { cause: error })
     }
 
-    const token = await this.dependencies.tokens.get(options.signal)
     const url = `${endpoint.baseUrl}${GENERATION_PATH}`
-    const headers = {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-      'user-agent': endpoint.userAgent,
-      accept: 'text/event-stream',
-    }
-
+    const maxRetries = Math.max(0, Math.trunc(configValue(config, 'httpRetries') ?? 3) || 0)
+    const baseMs = Math.max(0, Number(configValue(config, 'httpRetryBaseMs') ?? 1000) || 0)
+    const retryStatuses = new Set(
+      (configValue(config, 'httpRetryStatuses') ?? DEFAULT_ANTIGRAVITY_RETRY_STATUSES).map((value) => Number(value)),
+    )
+    let statusRetries = 0
+    let authRetried = false
     let response
-    try {
-      response = await this.dependencies.fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: options.signal,
-      })
-    } catch (error) {
-      if (error?.name === 'AbortError') throw error
-      throw new LlmError(`Antigravity request failed: ${error?.message ?? error}`, 'TRANSPORT', { cause: error })
-    }
+    for (;;) {
+      // The token is re-read on every attempt: a 401 invalidates it, and a
+      // retry after backoff may sit long enough for the access token to rotate.
+      const token = await this.dependencies.tokens.get(options.signal)
+      const headers = {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'user-agent': endpoint.userAgent,
+        accept: 'text/event-stream',
+      }
+      try {
+        response = await this.dependencies.fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: options.signal,
+        })
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error
+        throw new LlmError(`Antigravity request failed: ${error?.message ?? error}`, 'TRANSPORT', { cause: error })
+      }
+      if (response.ok) break
 
-    if (!response.ok) {
       const text = await response.text().catch(() => '')
+      if (response.status === 401 && !authRetried) {
+        authRetried = true
+        this.dependencies.tokens.invalidate()
+        this.dependencies.log?.warn?.('antigravity: 401 from the generation endpoint; refreshing the token and retrying once')
+        continue
+      }
+      if (retryStatuses.has(response.status) && statusRetries < maxRetries) {
+        const delay = backoffDelay(baseMs, statusRetries)
+        statusRetries += 1
+        this.dependencies.log?.warn?.(
+          `antigravity: generation HTTP ${response.status}; retry ${statusRetries}/${maxRetries} in ${delay}ms`,
+        )
+        if (!(await sleepFor(delay, options.signal))) {
+          const aborted = new Error('Antigravity request aborted during retry backoff')
+          aborted.name = 'AbortError'
+          throw aborted
+        }
+        continue
+      }
       if (response.status === 401) this.dependencies.tokens.invalidate()
       throw classifyHttpError(response.status, text)
     }

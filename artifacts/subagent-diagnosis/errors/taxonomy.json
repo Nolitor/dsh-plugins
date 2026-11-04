@@ -1,0 +1,531 @@
+{
+ "per_child": {
+  "59429101": {
+   "model": "opencode-go/deepseek-v4.1-flash",
+   "calls": 110,
+   "errors": 3,
+   "cats": {
+    "ptc_parse_error": 1,
+    "old_string_not_found": 2
+   },
+   "details": [
+    {
+     "seq": 461,
+     "step": 47,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 789,
+     "step": 77,
+     "name": "CodeRunFailedError",
+     "cat": "old_string_not_found",
+     "text": "Error: code run failed (exception): ToolCallError: old_string was not found in \"/home/minami/Workspace/projects/dsh-workspace/dsh-plugins/artifacts/token-saving-3d/d-audit/audit.mjs\"\n    at bindingFailure (file:///home/minami/.local/nodejs/lib/node_modules/@de"
+    },
+    {
+     "seq": 812,
+     "step": 80,
+     "name": "CodeRunFailedError",
+     "cat": "old_string_not_found",
+     "text": "Error: code run failed (exception): ToolCallError: old_string was not found in \"/home/minami/Workspace/projects/dsh-workspace/dsh-plugins/artifacts/token-saving-3d/d-audit/audit.mjs\"\n    at bindingFailure (file:///home/minami/.local/nodejs/lib/node_modules/@de"
+    }
+   ]
+  },
+  "1217d636": {
+   "model": "opencode-go/minimax-m3.1-flash",
+   "calls": 105,
+   "errors": 4,
+   "cats": {
+    "ptc_parse_error": 4
+   },
+   "details": [
+    {
+     "seq": 54,
+     "step": 5,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ',', got 'ident'\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 77,
+     "step": 8,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ',', got 'ident'\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 391,
+     "step": 44,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ',', got 'ident'\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 610,
+     "step": 71,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ',', got 'ident'\nFile sandbox: danger-full-access."
+    }
+   ]
+  },
+  "5b72bfc9": {
+   "model": "opencode-go/deepseek-v4.1-flash",
+   "calls": 50,
+   "errors": 2,
+   "cats": {
+    "ptc_parse_error": 1,
+    "runtime_js": 1
+   },
+   "details": [
+    {
+     "seq": 156,
+     "step": 15,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ',', got '{'\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 391,
+     "step": 36,
+     "name": "CodeRunFailedError",
+     "cat": "runtime_js",
+     "text": "Error: code run failed (exception): TypeError: 3.7 is not a function\n    at eval (eval at evaluate (file:///home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js:1136:4), <anonymous>:20:23)\n  "
+    }
+   ]
+  },
+  "5d17dd9f": {
+   "model": "opencode-go/beam-free",
+   "calls": 103,
+   "errors": 17,
+   "cats": {
+    "unknown_tool": 2,
+    "ptc_parse_error": 15
+   },
+   "details": [
+    {
+     "seq": 20,
+     "step": 1,
+     "name": "ToolNotFoundError",
+     "cat": "unknown_tool",
+     "text": "Error: unknown tool \"bash\": only `run_code` is callable directly — call `bash` from inside a `run_code` program instead"
+    },
+    {
+     "seq": 34,
+     "step": 3,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): The left-hand side of an assignment expression must be a variable or a property access.\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 48,
+     "step": 5,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): The left-hand side of an assignment expression must be a variable or a property access.\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 107,
+     "step": 12,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ',', got 'const'\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 130,
+     "step": 15,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): 'import', and 'export' cannot be used outside of module code\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 135,
+     "step": 16,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): 'import', and 'export' cannot be used outside of module code\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 140,
+     "step": 17,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 145,
+     "step": 18,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 150,
+     "step": 19,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 155,
+     "step": 20,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 187,
+     "step": 24,
+     "name": "ToolNotFoundError",
+     "cat": "unknown_tool",
+     "text": "Error: unknown tool \"write\": only `run_code` is callable directly — call `write` from inside a `run_code` program instead"
+    },
+    {
+     "seq": 210,
+     "step": 27,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Unknown regular expression flags.\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 233,
+     "step": 30,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ',', got '<eof>'\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 265,
+     "step": 34,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 365,
+     "step": 46,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Unknown regular expression flags.\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 508,
+     "step": 62,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Unknown regular expression flags.\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 531,
+     "step": 65,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Unknown regular expression flags.\nFile sandbox: danger-full-access."
+    }
+   ]
+  },
+  "b70d93d8": {
+   "model": "opencode-go/step-5-preview",
+   "calls": 34,
+   "errors": 9,
+   "cats": {
+    "invalid_tool_args": 4,
+    "ptc_parse_error": 4,
+    "unknown_tool": 1
+   },
+   "details": [
+    {
+     "seq": 20,
+     "step": 1,
+     "name": "ToolArgsError",
+     "cat": "invalid_tool_args",
+     "text": "Error: invalid arguments: missing required property \"description\""
+    },
+    {
+     "seq": 22,
+     "step": 1,
+     "name": "ToolArgsError",
+     "cat": "invalid_tool_args",
+     "text": "Error: invalid arguments: missing required property \"description\""
+    },
+    {
+     "seq": 48,
+     "step": 3,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ',', got 'numeric literal'\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 107,
+     "step": 8,
+     "name": "ToolArgsError",
+     "cat": "invalid_tool_args",
+     "text": "Error: invalid arguments: missing required property \"code\""
+    },
+    {
+     "seq": 130,
+     "step": 11,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ',', got ';'\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 135,
+     "step": 12,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ',', got ';'\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 158,
+     "step": 15,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ',', got ';'\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 172,
+     "step": 17,
+     "name": "ToolNotFoundError",
+     "cat": "unknown_tool",
+     "text": "Error: unknown tool \"write\": only `run_code` is callable directly — call `write` from inside a `run_code` program instead"
+    },
+    {
+     "seq": 224,
+     "step": 23,
+     "name": "ToolArgsError",
+     "cat": "invalid_tool_args",
+     "text": "Error: invalid arguments: missing required property \"description\""
+    }
+   ]
+  },
+  "022a9249": {
+   "model": "opencode-go/iceman-contributor-free",
+   "calls": 56,
+   "errors": 12,
+   "cats": {
+    "runtime_js": 3,
+    "ptc_parse_error": 9
+   },
+   "details": [
+    {
+     "seq": 60,
+     "step": 9,
+     "name": "CodeRunFailedError",
+     "cat": "runtime_js",
+     "text": "Error: code run failed (exception): Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@mongodb-js/zstd' imported from /home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js\n    at Object.getP"
+    },
+    {
+     "seq": 65,
+     "step": 10,
+     "name": "CodeRunFailedError",
+     "cat": "runtime_js",
+     "text": "Error: code run failed (exception): ReferenceError: path is not defined\n    at eval (eval at evaluate (file:///home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js:1136:4), <anonymous>:12:20)"
+    },
+    {
+     "seq": 90,
+     "step": 15,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 130,
+     "step": 23,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 135,
+     "step": 24,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 145,
+     "step": 26,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 150,
+     "step": 27,
+     "name": "CodeRunFailedError",
+     "cat": "runtime_js",
+     "text": "Error: code run failed (exception): Error: Command failed: node -e \"const fs=require('fs');const c=fs.readFileSync('artifacts/token-saving-3d/e-trend/trend.mjs','utf8');const i=c.indexOf('textOf');console.log(c.slice(i-5,i+60));\"\n/bin/sh: 1: node: not found\n\n "
+    },
+    {
+     "seq": 170,
+     "step": 31,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 180,
+     "step": 33,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 185,
+     "step": 34,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Unterminated block comment\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 215,
+     "step": 40,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 240,
+     "step": 45,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Unterminated block comment\nFile sandbox: danger-full-access."
+    }
+   ]
+  },
+  "72fa9915": {
+   "model": "opencode-go/iceman-contributor-free",
+   "calls": 45,
+   "errors": 16,
+   "cats": {
+    "runtime_js": 4,
+    "ptc_parse_error": 11,
+    "ptc_other_exception": 1
+   },
+   "details": [
+    {
+     "seq": 33,
+     "step": 3,
+     "name": "CodeRunFailedError",
+     "cat": "runtime_js",
+     "text": "Error: code run failed (exception): Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'zstd' imported from /home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js\n    at Object.getPackageJSONUR"
+    },
+    {
+     "seq": 63,
+     "step": 9,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 73,
+     "step": 11,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expression expected\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 78,
+     "step": 12,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expression expected\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 83,
+     "step": 13,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 88,
+     "step": 14,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expression expected\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 93,
+     "step": 15,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 110,
+     "step": 16,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ';', '}' or <eof>\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 120,
+     "step": 18,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expression expected\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 125,
+     "step": 19,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expression expected\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 135,
+     "step": 21,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected a semicolon\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 140,
+     "step": 22,
+     "name": "CodeRunFailedError",
+     "cat": "runtime_js",
+     "text": "Error: code run failed (exception): Error: Command failed: node /home/minami/Workspace/projects/dsh-workspace/dsh-plugins/artifacts/token-saving-3d/d-audit/audit.mjs\n/bin/sh: 1: node: not found\n\n    at genericNodeError (node:internal/errors:986:15)\n    at wrap"
+    },
+    {
+     "seq": 155,
+     "step": 25,
+     "name": "CodeRunFailedError",
+     "cat": "runtime_js",
+     "text": "Error: code run failed (exception): Error: Command failed: /home/minami/.local/nodejs/bin/node /home/minami/Workspace/projects/dsh-workspace/dsh-plugins/artifacts/token-saving-3d/d-audit/audit.mjs\nfile:///home/minami/Workspace/projects/dsh-workspace/dsh-plugin"
+    },
+    {
+     "seq": 196,
+     "step": 33,
+     "name": "CodeRunFailedError",
+     "cat": "runtime_js",
+     "text": "Error: code run failed (exception): Error: spawnSync /bin/sh ENOBUFS\n    at Object.spawnSync (node:internal/child_process:1191:20)\n    at spawnSync (node:child_process:929:24)\n    at execSync (node:child_process:1010:15)\n    at eval (eval at evaluate (file:///"
+    },
+    {
+     "seq": 211,
+     "step": 36,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_parse_error",
+     "text": "Error: code run failed (exception): Expected ',', got '#'\nFile sandbox: danger-full-access."
+    },
+    {
+     "seq": 226,
+     "step": 39,
+     "name": "CodeRunFailedError",
+     "cat": "ptc_other_exception",
+     "text": "Error: code run failed (timeout): execution deadline reached (120000ms)\nFile sandbox: danger-full-access."
+    }
+   ]
+  }
+ },
+ "aggregate": {
+  "ptc_parse_error": 45,
+  "old_string_not_found": 2,
+  "runtime_js": 8,
+  "unknown_tool": 3,
+  "invalid_tool_args": 4,
+  "ptc_other_exception": 1
+ }
+}

@@ -8,7 +8,25 @@ updated: 2026-11-05
 summary: Engineering history for @nolit/dsh-opencode-v2, including the completed subagent merge, the 0.0.2-rc.2 cleanup, and the measured host contracts behind every change.
 -->
 
-Current version: `0.0.2-rc.2`
+Current version: `0.0.2-rc.3`
+
+## 0.0.2-rc.3 — resilience patch — 2026-11-05
+
+The 2026-11-05 subagent post-mortem measured four failures this patch addresses. The rc number moved
+`0.0.2-rc.2` → `0.0.2-rc.3`: the rc# is the agent-owned part and increments once per session that
+modifies the plugin; the numeric track stays owner-owned.
+
+| Failure (measured) | Change |
+| :--- | :--- |
+| one `HTTP 451` killed a 27-step child; `OPENCODE_BACKEND_HTTP` was not retryable, so 28 steps / 34 calls were discarded and the parent re-ran the track (56 duplicate calls / 7.8 min) | `httpRetries` (default 3) + `httpRetryStatuses` (`429,451,502,503,504`) + `httpRetryBaseMs` (1s → 2s → 4s) in `lib/http.js`; only the final refusal becomes the route verdict |
+| local daemon answered `GET /api/provider/opencode-go → 404 ProviderNotFoundError` 8 times in 3 days and killed the turn | `daemonRetries` (default 3) + `daemonRetryBaseMs`; the control-plane request re-resolves the backend before each retry instead of failing on a stale root |
+| a dead child's surviving files were invisible, so the parent re-ran the whole track | `lib/resilience.js` `writeSalvageManifest`: on a child `turn/end` error, a bounded manifest (JSON + Markdown) under `$DSH_HOME/opencode-v2/salvage` names every file changed since the child started, plus the failure reason (`salvage`, `salvageDir`, `salvageMaxFiles`) |
+| a parent turn could fail while its background children kept running (orphans) | `lib/resilience.js`: a failed parent `turn/end` cancels its running descendants; a 60s sweep cancels children whose parent is no longer live (`orphanCleanup`, `orphanSweepMs`) |
+| `costPath` was read by the adapter but missing from the `Config` schema, so a profile setting it had no effect | added `costPath` to `Config` |
+
+Tests: `test/http.test.mjs` +4 retry/control-plane cases; `test/resilience.test.mjs` (8 cases). Full suite
+425/425 green on 2026-11-05. Live daemon still runs the build it loaded at boot: this patch is
+**applied pending restart**.
 
 ## Subagent merge completed — 2026-11-05
 

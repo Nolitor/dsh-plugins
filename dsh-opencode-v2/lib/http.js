@@ -58,6 +58,7 @@ import { createTrace, summarizePart, summarizeRequest } from './trace.js'
 import { stripThinkingTags } from './display-clean.js'
 import { mapChatDelta } from './upstream-map.js'
 import { createCostLedger, createCostStore, describeCost, parseCost, pickSession } from './cost.js'
+import { installResilience } from './resilience.js'
 import {
   INVALID_REQUEST,
   RequestShapeError,
@@ -105,7 +106,19 @@ const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
 /** Version string of this module, for the load beacon. Must match package.json. */
-const VERSION = '0.0.2-rc.2'
+const VERSION = '0.0.2-rc.3'
+
+/**
+ * HTTP statuses one generation request may be retried on.
+ *
+ * Measured 2026-11-05: a single `451 Endpoint is unavailable` from the OpenCode
+ * backend killed a 27-step subagent turn, and the Lead re-ran the whole track
+ * (56 duplicate tool calls / 7.8 min). 429/451/502/503/504 are backend refusals
+ * that say nothing about the request body, so re-sending it is safe before any
+ * delta reached the transcript. 401/403/400 are NOT here: they need a different
+ * credential or request, not a retry.
+ */
+export const DEFAULT_HTTP_RETRY_STATUSES = Object.freeze([429, 451, 502, 503, 504])
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
@@ -196,6 +209,48 @@ export const Config = Schema.object({
    * whole turn (the measured 2026-10-31 `terminated` failure).
    */
   streamCutPreserve: Schema.boolean().default(true).volatile(),
+  /**
+   * Adapter-level retries when the backend answers a generation request with a
+   * retryable status (see `httpRetryStatuses`). Exponential backoff:
+   * `httpRetryBaseMs`, x2, x4. `0` keeps the pre-2026-11-05 single-attempt
+   * behavior for callers that want it.
+   */
+  httpRetries: Schema.number().default(3).volatile(),
+  /** Statuses that trigger `httpRetries`; 400/401/403 are deliberately absent. */
+  httpRetryStatuses: Schema.array(Schema.number()).default([...DEFAULT_HTTP_RETRY_STATUSES]).volatile(),
+  /** First backoff step for `httpRetries`; doubles per attempt (1s → 2s → 4s). */
+  httpRetryBaseMs: Schema.number().default(1000).volatile(),
+  /**
+   * Retries of a local control-plane `GET /api/provider/{id}` that answers 404:
+   * the attached daemon lost its provider catalog (measured 9 times between
+   * 2026-10-31 and 11-04) or was replaced. The backend is re-resolved before
+   * every retry, so a stale `opencode-go` root cannot keep failing the turn.
+   */
+  daemonRetries: Schema.number().default(3).volatile(),
+  /** First backoff step for `daemonRetries`; doubles per attempt. */
+  daemonRetryBaseMs: Schema.number().default(1000).volatile(),
+  /**
+   * Where the durable per-session spend ledger lives (`opencode-session-cost.json`).
+   * Empty follows the catalog rule (profile dir, then `$DSH_HOME/cache`). This key
+   * was read by the adapter but absent from the schema until 2026-11-05, so a
+   * profile setting it had no effect.
+   */
+  costPath: Schema.string().default('').volatile(),
+  /**
+   * Cancel a parent's running subagent descendants when that parent's turn ends
+   * in error/abort, and sweep children whose parent is no longer live. This is
+   * the measured 2026-11-05 orphan case: nothing collects the child, yet it
+   * keeps spending quota.
+   */
+  orphanCleanup: Schema.boolean().default(true).volatile(),
+  /** Interval of the orphan sweep (ms); minimum 5s. */
+  orphanSweepMs: Schema.number().default(60000).volatile(),
+  /** Write a salvage manifest when a subagent's turn fails (files survive as-is). */
+  salvage: Schema.boolean().default(true).volatile(),
+  /** Manifest directory; empty follows `$DSH_HOME/opencode-v2/salvage`. */
+  salvageDir: Schema.string().default('').volatile(),
+  /** Upper bound of files one salvage manifest names. */
+  salvageMaxFiles: Schema.number().default(200).volatile(),
   discoveryCacheMs: Schema.number().default(300000).volatile(),
   autoDiscoverModels: Schema.boolean().default(true).volatile(),
   catalogPath: Schema.string().default('').volatile(),
@@ -329,6 +384,44 @@ export async function* chatSseEvents(body, signal, state = undefined) {
 }
 
 /**
+ * Abortable sleep used by the retry loops.
+ *
+ * @param ms - delay in milliseconds.
+ * @param signal - caller cancellation; resolves `false` when it fires first.
+ * @returns whether the full delay elapsed.
+ */
+async function sleepFor(ms, signal) {
+  if (!(ms > 0)) return !signal?.aborted
+  if (signal?.aborted) return false
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (elapsed) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      signal?.removeEventListener?.('abort', onAbort)
+      resolve(elapsed)
+    }
+    const timer = setTimeout(() => finish(true), ms)
+    const onAbort = () => finish(false)
+    signal?.addEventListener?.('abort', onAbort, { once: true })
+  })
+}
+
+/**
+ * Exponential backoff step: `base`, `base*2`, `base*4`, ...
+ *
+ * @param baseMs - first delay.
+ * @param attempt - zero-based retry index.
+ * @returns delay in milliseconds.
+ */
+export function backoffDelay(baseMs, attempt) {
+  const base = Number(baseMs)
+  if (!Number.isFinite(base) || base <= 0) return 0
+  return Math.round(base * 2 ** Math.max(0, Math.trunc(attempt)))
+}
+
+/**
  * The local OpenCode control-plane endpoint. It supplies catalog, provider
  * metadata, and credentials only; generation never goes through it.
  */
@@ -350,14 +443,31 @@ export class ServerManager {
   }
 
   async request(method, path, body, { signal, timeoutMs } = {}) {
-    const endpoint = await this.ensure()
-    try {
-      return await this.requestOnce(endpoint, method, path, body, { signal, timeoutMs })
-    } catch (error) {
-      if (endpoint.owned || error.status || signal?.aborted) throw error
-      this.resolved = null
-      const refreshed = await this.ensure()
-      return this.requestOnce(refreshed, method, path, body, { signal, timeoutMs })
+    const maxRetries = Math.max(0, Math.trunc(this.config.daemonRetries?.get?.() ?? 3) || 0)
+    const baseMs = Math.max(0, Number(this.config.daemonRetryBaseMs?.get?.() ?? 1000) || 0)
+    // A provider 404 means the attached daemon's catalog does not contain the
+    // route (or the daemon was replaced). Re-resolving before each retry turns
+    // that from a dead turn into a recoverable control-plane miss.
+    const retryable404 = path.startsWith('/api/provider/')
+    for (let attempt = 0; ; attempt += 1) {
+      const endpoint = await this.ensure()
+      try {
+        return await this.requestOnce(endpoint, method, path, body, { signal, timeoutMs })
+      } catch (error) {
+        const aborted = signal?.aborted
+        const status = error?.status
+        const retryable = !aborted && status === 404 && retryable404
+        const refreshable = !aborted && !endpoint.owned && status === undefined
+        if (!retryable && !refreshable) throw error
+        if (attempt >= maxRetries) throw error
+        const delay = backoffDelay(baseMs, attempt)
+        this.ctx?.logger?.warn?.(
+          `opencode-http-agent: control-plane ${method} ${path} failed (${errorText(error)}); ` +
+            `retry ${attempt + 1}/${maxRetries} in ${delay}ms`,
+        )
+        this.resolved = null
+        if (!(await sleepFor(delay, signal))) throw error
+      }
     }
   }
 
@@ -1765,6 +1875,10 @@ export class OpencodeHttpAdapter {
       }
 
       let retried = 0
+      let statusRetries = 0
+      const maxStatusRetries = Math.max(0, Math.trunc(config.httpRetries.get()) || 0)
+      const retryStatuses = new Set((config.httpRetryStatuses.get() ?? []).map((value) => Number(value)))
+      const statusBaseMs = Math.max(0, Number(config.httpRetryBaseMs.get()) || 0)
       for (let attempt = 0; ; attempt += 1) {
         if (attempt > 0) {
           response = await send()
@@ -1775,6 +1889,24 @@ export class OpencodeHttpAdapter {
         }
         if (!response.ok) {
           const text = await response.text().catch(() => '')
+          // A retryable refusal (429/451/502/503/504) is a backend condition, not
+          // a request defect: nothing reached the transcript, so the same body is
+          // sent again after backoff (1s → 2s → 4s). Only the final refusal is
+          // recorded as the route's verdict.
+          if (retryStatuses.has(response.status) && statusRetries < maxStatusRetries) {
+            const delay = backoffDelay(statusBaseMs, statusRetries)
+            statusRetries += 1
+            trace.error({ detail: `HTTP ${response.status}; adapter retry ${statusRetries}/${maxStatusRetries}`, transient: true, emitted, retried: statusRetries })
+            this.ctx?.logger?.warn?.(
+              `opencode-http-agent: backend HTTP ${response.status} (${text.slice(0, 120)}); ` +
+                `retry ${statusRetries}/${maxStatusRetries} in ${delay}ms`,
+            )
+            if (!(await sleepFor(delay, signal))) {
+              yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } } }
+              return
+            }
+            continue
+          }
           // Free entitlement evidence: the backend just answered for this route, so
           // a refusal is recorded without spending another request on a probe.
           const observed = classifyProbe(response.status, text)
@@ -2246,6 +2378,21 @@ export function apply(ctx, config) {
     } catch {
       /* logging is advisory */
     }
+  }
+
+  // Orphan cleanup + partial-artifact salvage. Both are opt-out through config
+  // and both are best-effort: a failed teardown must never fail the route.
+  try {
+    if (typeof ctx?.effect === 'function') {
+      ctx.effect(() => {
+        const resilience = installResilience(ctx, config, log)
+        return () => resilience.dispose()
+      }, 'dsh-opencode-v2-http: subagent resilience')
+    } else {
+      installResilience(ctx, config, log)
+    }
+  } catch (error) {
+    log(`dsh-opencode-v2-http: resilience install failed: ${error instanceof Error ? error.message : String(error)}`)
   }
 
   let registration = null

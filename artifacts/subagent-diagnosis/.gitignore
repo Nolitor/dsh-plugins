@@ -1,0 +1,11 @@
+# Raw copies of the live DSH session logs. They contain whole conversations and
+# are reproducible from ~/.dsh/sessions; the reports cite ids and seq numbers.
+parent.v4.jsonl
+child.v4.jsonl
+child.zstd
+
+# Bulky intermediate scan output (the findings and small evidence tables are kept).
+errors/matches.jsonl
+errors/sessions.json
+errors/perfail.json
+errors/perfail.jsonl

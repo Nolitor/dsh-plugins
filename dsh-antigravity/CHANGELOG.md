@@ -8,7 +8,23 @@ updated: 2026-11-05
 summary: Engineering history for @nolit/dsh-antigravity. Created 2026-11-05 by merging the CLI worker surface of @nolit/dsh-antigravity-cli with the HTTP model route proven in @nolit/dsh-antigravity-directsdk, plus a settings section, a usage chip and per-surface switches.
 -->
 
-Current version: `0.0.1-rc.4`
+Current version: `0.0.1-rc.5`
+
+## 0.0.1-rc.5 — generation retry parity — 2026-11-05
+
+The 2026-11-05 post-mortem showed the OpenCode HTTP route losing a 27-step subagent turn to one
+unretried `451`. Antigravity is the sibling model route used by the same subagents, so it gets the
+same resilience contract instead of remaining the weaker link.
+
+| Failure class | Change |
+| :--- | :--- |
+| a retryable refusal (429/451/500/502/503/504) failed the turn on first answer | `httpRetries` (default 3), `httpRetryStatuses`, `httpRetryBaseMs` (1s → 2s → 4s) in `lib/adapter.js`; the body is re-sent before any chunk reached the transcript |
+| an expired token (401) failed the turn | token is invalidated and the request retried **once** with a freshly read token; a second 401 still throws `AUTH` |
+| 403/404 were indistinguishable from transient faults | still thrown immediately: they need a different credential/model, never a retry |
+
+Version moved `0.0.1-rc.4` → `0.0.1-rc.5` (rc is agent-owned; numeric track owner-owned).
+Tests: 4 new adapter cases (429→success, bounded 503, 401 refresh, 403 no-retry); full suite 94/94.
+**applied pending restart** — the running daemon still serves the module loaded at boot.
 
 ## 0.0.1-rc.4 — 2026-11-05 (live-defect correction)
 
