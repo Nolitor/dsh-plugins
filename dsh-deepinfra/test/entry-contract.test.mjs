@@ -96,6 +96,23 @@ test('every config field is VOLATILE, so the settings UI can write it', async ()
   assert.equal(form.dict.apiKey.meta.role, 'secret')
 })
 
+test('the version follows the owner ladder 0.0.1-rc.N, never a self-bump', () => {
+  // FAILURE-LEDGER F-27: version bumps happen only on instruction, and then only
+  // as 0.0.1.rc<N>. This plugin shipped 0.1.0 -> 0.2.5 by bumping on every green
+  // suite, which is exactly the habit that rule forbids.
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  assert.match(pkg.version, /^0\.0\.1-rc\.\d+$/, 'got ' + pkg.version)
+})
+
+test('the CHANGELOG ladder uses the same numbering with no duplicate rounds', () => {
+  // F-25: a duplicated round heading hides stale claims and doubles the document.
+  const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8')
+  const rounds = [...changelog.matchAll(/^## (0\.0\.1-rc\.\d+)/gm)].map((m) => m[1])
+  assert.ok(rounds.length > 0, 'no round headings found')
+  assert.equal(new Set(rounds).size, rounds.length, 'duplicate round heading')
+  for (const round of rounds) assert.match(round, /^0\.0\.1-rc\.\d+$/)
+})
+
 test('the plugin declares a web client half in its manifest', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   assert.equal(pkg.dsh.manifestVersion, 1)

@@ -6,6 +6,8 @@ import {
   chatRoutes,
   isSupportedEffort,
   indexRoutes,
+  fetchLiveMetrics,
+  fetchRequestCost,
   pricesOf,
   promotionOf,
   toModelInfo,
@@ -121,6 +123,43 @@ test('a route with no pricing publishes null, not zero', () => {
   assert.equal(prices.input, null)
   assert.equal(prices.output, null)
   assert.equal(prices.promotion, null)
+})
+
+test('live metrics are fetched from /v1/metrics/live, never used as cost', async () => {
+  // Measured 2026-11-05: the endpoint returns platform-wide fleet throughput
+  // (tokens/s, requests/s, ttft). It says nothing about this account or this
+  // request, so it must never feed a cost figure.
+  const calls = []
+  const metrics = await fetchLiveMetrics('https://api.deepinfra.com', {
+    fetchImpl: async (url) => {
+      calls.push(url)
+      return { ok: true, json: async () => ({ tokens_per_second: 85070217.47, requests_per_second: 4594.63, time_to_first_token: 0.565, total_tflops: 24780714 }) }
+    },
+  })
+  assert.equal(calls[0], 'https://api.deepinfra.com/v1/metrics/live')
+  assert.equal(metrics.tokens_per_second, 85070217.47)
+  // No cost field exists in that payload, by design.
+  assert.equal('estimated_cost' in metrics, false)
+})
+
+test('live metrics degrade to null instead of failing', async () => {
+  // Metrics are decoration: an unavailable platform surface must not fail a turn.
+  assert.equal(await fetchLiveMetrics('https://x', { fetchImpl: async () => ({ ok: false }) }), null)
+  assert.equal(await fetchLiveMetrics('https://x', { fetchImpl: async () => { throw new Error('net') } }), null)
+})
+
+test('request-costs converts nanoUSD and reports null when undeployed', async () => {
+  // Documented schema: { requests:[{ requestId, costNanoUsd }] } — integer nano-USD.
+  const billed = await fetchRequestCost('https://api.deepinfra.com', 'req-1', {
+    fetchImpl: async () => ({ ok: true, json: async () => ({ requests: [{ requestId: 'req-1', costNanoUsd: 22960 }] }) }),
+  })
+  assert.equal(billed, 22960 / 1e9)
+  // Measured 2026-11-05: this credential gets 404, and that must read as "unknown".
+  assert.equal(
+    await fetchRequestCost('https://api.deepinfra.com', 'req-1', { fetchImpl: async () => ({ ok: false }) }),
+    null,
+  )
+  assert.equal(await fetchRequestCost('https://api.deepinfra.com', '', { fetchImpl: async () => ({ ok: true }) }), null)
 })
 
 test('indexRoutes keys by model id', () => {

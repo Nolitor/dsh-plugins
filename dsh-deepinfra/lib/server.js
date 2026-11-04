@@ -21,7 +21,7 @@ import { join } from 'node:path'
 
 import { COST_FILE_NAME, createCostLedger, createCostStore, formatCost, parseCost, pickSession } from './cost.js'
 import { API_KEY_ENV, configValue, maskKey, resolveCredentials } from './settings.js'
-import { pricesOf, promotionOf } from './catalog.js'
+import { fetchLiveMetrics, pricesOf, promotionOf } from './catalog.js'
 
 /**
  * Resolve where the spend ledger lives.
@@ -101,13 +101,16 @@ export function createServer({ ctx, config, catalog, profileDir, log = { warn() 
    * @param {object} rawUsage - the provider's raw usage object.
    * @param {number} [turn] - the DSH turn this request belongs to, when known.
    */
-  const recordCost = (options, rawUsage, turn, pricing) => {
+  const recordCost = (options, rawUsage, turn, pricing, requestId) => {
     try {
       if (rawUsage === null || typeof rawUsage !== 'object') return
       // `pricing` is the catalog row's price list, which lets the ledger store the
       // LIST figure beside the BILLED one.
       const cost = parseCost(rawUsage, pricing)
       const attributed = Number.isInteger(turn) ? turn : options?.turn
+      // The provider's request id travels with the record: it is the only key that
+      // can later map a local row to an authoritative invoice line.
+      if (typeof requestId === 'string' && requestId.length > 0) cost.requestId = requestId
       ledger.record(options?.sessionId === undefined ? undefined : String(options.sessionId), options?.model, cost, attributed)
     } catch (error) {
       log.warn('dsh-deepinfra: cost bookkeeping failed: ' + (error instanceof Error ? error.message : String(error)))
@@ -160,6 +163,9 @@ export function createServer({ ctx, config, catalog, profileDir, log = { warn() 
       catalogCount: Array.isArray(models) ? models.length : 0,
       promotionalCount: Array.isArray(models) ? models.filter((entry) => promotionOf(entry) !== null).length : 0,
       catalogError,
+      // Platform-wide throughput. Reported separately from account usage so the two
+      // are never confused: these numbers describe the whole fleet.
+      platform: await fetchLiveMetrics(String(configValue(config, 'baseURL') ?? 'https://api.deepinfra.com').replace(/\/v1\/openai$/, '')),
       usage: {
         sessions: summary.sessions,
         requests: summary.requests,

@@ -56,5 +56,11 @@
   "enabledLabel": "Shown",
   "usageList": "List price",
   "usageSavings": "Promotion saved {amount}",
-  "chipBilledTitle": "{n} requests · billed by DeepInfra"
+  "chipBilledTitle": "{n} requests · billed by DeepInfra",
+  "platformTitle": "Platform status",
+  "platformHint": "Live values from GET /v1/metrics/live. These describe DeepInfra's whole fleet, not this account or this turn.",
+  "platformTps": "Tokens/s",
+  "platformRps": "Requests/s",
+  "platformTtft": "First token",
+  "platformUnavailable": "Live metrics unavailable right now."
 }

@@ -20,6 +20,89 @@
 /** Catalog endpoint. Public; no credential needed. */
 export const MODELS_PATH = '/models'
 
+/**
+ * Live platform metrics.
+ *
+ * Measured 2026-11-05: `GET /v1/metrics/live` returns platform-wide throughput, not
+ * anything about this account or this request:
+ *
+ *   {"tokens_per_second":85070217.47,"time_to_first_token":0.565,
+ *    "requests_per_second":4594.63,"total_tflops":24780714.0}
+ *
+ * It is therefore a STATUS surface (shown in the settings card), never an input to
+ * cost. Treating platform-wide throughput as a per-request quantity would be a
+ * fabricated number.
+ */
+export const METRICS_LIVE_PATH = '/v1/metrics/live'
+
+/**
+ * Per-request authoritative billing, as documented by DeepInfra.
+ *
+ * `POST /v1/request-costs { requestIds: string[] }` ->
+ * `{ requests: [{ requestId, costNanoUsd }] }`.
+ *
+ * Measured 2026-11-05: documented in the OpenAPI spec (`/v1/request-costs` is
+ * present at `api.deepinfra.com/openapi.json`) and it VALIDATES the payload
+ * (a wrong shape returns 422 naming `body.requestIds`), but every correctly shaped
+ * call from this account answers **404 Not Found**. The route is documented and
+ * undeployed for this credential, so the adapter treats it as optional and falls
+ * back to the wire's own `usage.estimated_cost`.
+ */
+export const REQUEST_COSTS_PATH = '/v1/request-costs'
+
+/**
+ * Query live platform metrics.
+ * @param {string} origin - API origin, e.g. `https://api.deepinfra.com`.
+ * @param {{ fetchImpl?: Function, signal?: AbortSignal }} [options] - seams.
+ * @returns {Promise<object|null>} the metrics object, or null when unavailable.
+ */
+export async function fetchLiveMetrics(origin, options = {}) {
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch
+  try {
+    const response = await fetchImpl(String(origin).replace(/\/$/, '') + METRICS_LIVE_PATH, {
+      method: 'GET',
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+    if (!response.ok) return null
+    const body = await response.json()
+    return body !== null && typeof body === 'object' ? body : null
+  } catch {
+    // Metrics are decoration; an unavailable platform surface must not fail a turn.
+    return null
+  }
+}
+
+/**
+ * Ask DeepInfra what a request actually cost, by its id.
+ *
+ * @param {string} origin - API origin.
+ * @param {string} requestId - the `x-request-id` header value from the completion.
+ * @param {{ fetchImpl?: Function, signal?: AbortSignal }} [options] - seams.
+ * @returns {Promise<number|null>} billed USD, or null when the endpoint is not
+ *   deployed for this credential.
+ */
+export async function fetchRequestCost(origin, requestId, options = {}) {
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch
+  if (typeof requestId !== 'string' || requestId.length === 0) return null
+  try {
+    const response = await fetchImpl(String(origin).replace(/\/$/, '') + REQUEST_COSTS_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ requestIds: [requestId] }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+    if (!response.ok) return null
+    const body = await response.json()
+    const item = Array.isArray(body?.requests) ? body.requests[0] : undefined
+    const nano = item?.costNanoUsd
+    if (typeof nano !== 'number' || !Number.isFinite(nano) || nano < 0) return null
+    // costNanoUsd is integer nano-USD: 1e9 nano = 1 USD.
+    return nano / 1e9
+  } catch {
+    return null
+  }
+}
+
 /** Cache file name under `$DSH_HOME/cache`. */
 export const CACHE_FILE = 'deepinfra-models.json'
 

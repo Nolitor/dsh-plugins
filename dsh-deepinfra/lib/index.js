@@ -230,7 +230,7 @@ export function apply(ctx, config) {
     fetchImpl: (...args) => globalThis.fetch(...args),
     // The adapter asks for the turn at record time, so one DSH turn that makes
     // several model calls is still one turn's cost.
-    recordCost: (options, rawUsage, pricing) => server.recordCost(options, rawUsage, currentTurn(), pricing),
+    recordCost: (options, rawUsage, pricing, requestId) => server.recordCost(options, rawUsage, currentTurn(), pricing, requestId),
     log,
   })
 

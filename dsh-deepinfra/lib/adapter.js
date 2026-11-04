@@ -138,7 +138,13 @@ export class DeepInfraAdapter extends LlmAdapter {
 
     if (!response.ok) throw await this.httpFailure(response, options)
 
-    yield* this.translate(response.body, options, catalogEntry?.metadata?.pricing)
+    // `x-request-id` is the id DeepInfra's own billing surface keys on. It is
+    // recorded with the request so an authoritative figure can be attached later;
+    // /v1/request-costs is documented but answers 404 for this credential
+    // (measured 2026-11-05), so the wire's estimated_cost remains the fallback.
+    const requestId = typeof response.headers?.get === 'function' ? response.headers.get('x-request-id') : null
+
+    yield* this.translate(response.body, options, catalogEntry?.metadata?.pricing, requestId)
   }
 
   /**
@@ -199,7 +205,7 @@ export class DeepInfraAdapter extends LlmAdapter {
    * @param body - response body stream.
    * @param options - the originating request.
    */
-  async * translate(body, options, pricing) {
+  async * translate(body, options, pricing, requestId) {
     let nextIndex = 0
     let textIndex = -1
     let reasoningIndex = -1
@@ -330,7 +336,7 @@ export class DeepInfraAdapter extends LlmAdapter {
     // Cost bookkeeping happens on the way out, after the wire's own usage object
     // has been read and before the terminal chunk. It never throws into the
     // stream: a ledger failure must not fail a generation.
-    this.dependencies.recordCost?.(options, lastUsage, pricing)
+    this.dependencies.recordCost?.(options, lastUsage, pricing, requestId)
     yield { type: 'finish', reason }
   }
 }

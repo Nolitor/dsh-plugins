@@ -110,6 +110,12 @@ window.__ModuleLoader__.load({
       usageList: "List price",
       usageSavings: "Promotion saved {amount}",
       chipBilledTitle: "{n} requests · billed by DeepInfra",
+      platformTitle: "Platform status",
+      platformHint: "Live values from GET /v1/metrics/live. These describe DeepInfra's whole fleet, not this account or this turn.",
+      platformTps: "Tokens/s",
+      platformRps: "Requests/s",
+      platformTtft: "First token",
+      platformUnavailable: "Live metrics unavailable right now.",
     },
       ko: {
       meta: {
@@ -170,6 +176,12 @@ window.__ModuleLoader__.load({
       usageList: "정가 합계",
       usageSavings: "프로모션 절감 {amount}",
       chipBilledTitle: "{n}개 요청 · 실제 청구 금액",
+      platformTitle: "플랫폼 상태",
+      platformHint: "GET /v1/metrics/live 실시간 값입니다. 이 값은 딥인프라 전체 플릿 기준이며, 이 계정이나 이번 턴의 수치가 아닙니다.",
+      platformTps: "토큰/초",
+      platformRps: "요청/초",
+      platformTtft: "첫 토큰",
+      platformUnavailable: "지금은 실시간 지표를 가져올 수 없습니다.",
     },
     }
 
@@ -604,6 +616,23 @@ window.__ModuleLoader__.load({
                 }
               },
             }, t('modelsSave')))),
+        h('div', { className: 'difCard' },
+          h('div', { className: 'difCardHead' },
+            h('h4', { className: 'difCardTitle' }, t('platformTitle')),
+            h('span', { className: 'difMeta' }, 'GET /v1/metrics/live')),
+          h('p', { className: 'difHint' }, t('platformHint')),
+          info.platform
+            ? h('div', { className: 'difStats' },
+                h('div', { className: 'difStat' },
+                  h('span', { className: 'difStatLabel' }, t('platformTps')),
+                  h('span', { className: 'difStatValue' }, Number(info.platform.tokens_per_second ?? 0).toFixed(0))),
+                h('div', { className: 'difStat' },
+                  h('span', { className: 'difStatLabel' }, t('platformRps')),
+                  h('span', { className: 'difStatValue' }, Number(info.platform.requests_per_second ?? 0).toFixed(0))),
+                h('div', { className: 'difStat' },
+                  h('span', { className: 'difStatLabel' }, t('platformTtft')),
+                  h('span', { className: 'difStatValue' }, Number(info.platform.time_to_first_token ?? 0).toFixed(3) + 's')))
+            : h('p', { className: 'difHint' }, t('platformUnavailable'))),
         h('div', { className: 'difCard' },
           h('div', { className: 'difCardHead' },
             h('h4', { className: 'difCardTitle' }, t('usageTitle')),
