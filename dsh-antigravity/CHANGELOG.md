@@ -46,13 +46,17 @@ history and corrected here.
 | 10 | "Default" reasoning sent the **high** variant | catalog order is high, medium, low; `modelForEffort` took the first variant when no effort was requested | advertise `reasoning.defaultEffort: 'low'` and prefer `<base>-low` when the host omits an effort |
 | 11 | The usage chip claimed the **single** `conversation.input.activity` seat already owned by `tk` | live pageerror `single slot "conversation.input.activity" already has a registration at priority 0 (registered by tk)`; the chip never rendered | register in the additive list slot `conversation.input.right`, the same visual position, so no single seat is contested |
 | 12 | The Antigravity tab duplicated the plugin's own options | owner: the master/CLI/usage switches and the account/usage cards belong to the plugin row, not the model surface | the tab now contains **model selection only** (live list, checkboxes, Save); plugin enable/disable stays on the Plugins page |
+| 13 | The model list showed reasoning levels as separate models | owner screenshot: `Gemini 3.8 Flash (Low)/(Medium)/(High)` rows; the account's usage page groups by family instead | group by **usage family** (Gemini / Claude-and-GPT / Gemini 4 Argon) and then by **base model**; effort suffixes are hidden and one checkbox owns all variants |
 
 ### Verification
 
-- **82 tests pass, 0 fail** (`test/server.test.mjs` and `test/ledger.test.mjs` are new; `switch.test.mjs` now asserts the panel-stays rule).
+- **85 tests pass, 0 fail** (`test/server.test.mjs`, `test/ledger.test.mjs` and `test/models-group.test.mjs` are new; `switch.test.mjs` now asserts the panel-stays rule).
 - Isolated profile `/tmp/agtest` with a real Chromium boot:
-  - settings tab **Antigravity** renders **only the model list, checkboxes and Save selection**
-    (no duplicate plugin switches, account card or usage counters);
+  - settings tab **Antigravity** renders **only the grouped model list, checkboxes and Save
+    selection** — families `Gemini Models`, `Claude and GPT models`, `Gemini 4 Argon`, base
+    names only (no Low/Medium/High rows), group quota on each header;
+  - toggling one base model and saving updates every effort variant of that model (verified
+    isolated: disabling Claude Sonnet 5.5 removed low/medium/high together);
   - `/agy` appears in the slash menu;
   - the model picker shows the `Antigravity (subscription)` route, with the duplicated
     "Gemini 3.5 Flash Lite" names disambiguated by id;

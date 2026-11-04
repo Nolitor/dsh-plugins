@@ -7,7 +7,7 @@ One plugin, every Antigravity surface, one account.
 | **CLI worker** | `/agy <task>` command and `agy_worker` tool, spawning the `agy` binary | `cliWorker` (+ `workerEnabled`) |
 | **Model serving** | the `antigravity` provider route, pure HTTP to `cloudcode-pa` | `modelServing` |
 | **Subagent** | `subagent_antigravity` delegation provider | `subagent` |
-| **UI** | an "Antigravity" settings tab for **model selection** and a composer usage chip | `usagePill` |
+| **UI** | an "Antigravity" settings tab for **grouped model selection** and a composer usage chip | `usagePill` |
 
 `enabled` is the master switch. The plugin itself can also be disabled from the **DSH Plugins page**, which unmounts every surface at once.
 
@@ -174,9 +174,11 @@ Every value resolves **config → environment → built-in default**.
 | `subagent` | the subagent provider |
 | `usagePill` | the composer usage chip |
 
-The **settings tab contains model selection only**: the live account catalog, the checkboxes and
-Save selection. The plugin's own switches are profile config (the table above), not duplicated in
-the tab; the whole plugin is enabled/disabled from the **DSH Plugins page**. The tab stays mounted
+The **settings tab contains grouped model selection only**: the live account catalog is grouped by
+usage family (Gemini Models / Claude and GPT models / Gemini 4 Argon), then by base model, so the
+reasoning suffixes are hidden and one checkbox owns every effort variant. Save selection persists
+the full variant set. The plugin's own switches are profile config (the table above), not duplicated
+in the tab; the whole plugin is enabled/disabled from the **DSH Plugins page**. The tab stays mounted
 while the plugin is mounted so the model list remains reachable. The usage chip renders nothing
 when off, leaving no empty node in the composer.
 

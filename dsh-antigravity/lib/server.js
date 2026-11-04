@@ -17,6 +17,7 @@
  *
  * @module @nolit/dsh-antigravity/server
  */
+import { groupByBase } from './catalog.js'
 import { configValue } from './settings.js'
 
 /** Settings namespace the host derives for this row (the Cordis entry id). */
@@ -52,6 +53,84 @@ async function persist(settings, patch) {
   if (typeof settings?.update !== 'function') return false
   await settings.update(SETTINGS_ID, patch)
   return true
+}
+
+/** Family labels used when the client has no locale entry for the kind. */
+const FAMILY_LABELS = {
+  gemini: 'Gemini Models',
+  'claude-gpt': 'Claude and GPT models',
+  argon: 'Gemini 4 Argon',
+  other: 'Other models',
+}
+
+/** Family order in the settings list, mirroring the account's usage groups. */
+const FAMILY_ORDER = ['gemini', 'claude-gpt', 'argon', 'other']
+
+/**
+ * Which usage family a model id belongs to.
+ *
+ * The Antigravity usage page groups limits as Gemini / Claude-and-GPT / Gemini 4
+ * Argon (measured 2026-11-05). Those families also share one quota reset window,
+ * which is the signal we can read from `fetchAvailableModels`.
+ * @param id - raw model id.
+ * @returns the family kind.
+ */
+function familyOf(id) {
+  if (String(id).startsWith('gemini-4-argon')) return 'argon'
+  if (String(id).startsWith('claude-') || String(id).startsWith('gpt-')) return 'claude-gpt'
+  if (String(id).startsWith('gemini-')) return 'gemini'
+  return 'other'
+}
+
+/**
+ * Group the flat catalog into the same families the usage page shows, then into
+ * BASE models: reasoning levels are model-id suffixes and must not become
+ * separate rows here. A base model's checkbox owns every variant id, so the
+ * saved `enabledModels` set stays valid for the picker.
+ *
+ * @param entries - flat catalog entries from `parseCatalog`.
+ * @param enabledModels - the saved id allow-list; empty means all.
+ * @returns one group per family/reset window, each with base-model rows.
+ */
+export function groupModels(entries, enabledModels = []) {
+  const buckets = new Map()
+  for (const entry of entries ?? []) {
+    const kind = familyOf(entry.id)
+    const reset = entry.quota?.resetTime ?? 'none'
+    const key = kind + '|' + reset
+    let bucket = buckets.get(key)
+    if (bucket === undefined) {
+      bucket = { kind, reset, entries: [] }
+      buckets.set(key, bucket)
+    }
+    bucket.entries.push(entry)
+  }
+  const groups = []
+  for (const bucket of buckets.values()) {
+    const bases = groupByBase(bucket.entries)
+    const models = bases.map((base) => {
+      const variants = base.members.map((member) => member.id)
+      return {
+        id: base.id,
+        name: base.name,
+        variants,
+        enabled: enabledModels.length === 0 || variants.every((id) => enabledModels.includes(id)),
+      }
+    })
+    const quota = bucket.entries.map((entry) => entry.quota).filter(Boolean)
+    const remaining = quota.length > 0
+      ? Math.min(...quota.map((entry) => entry.remaining))
+      : null
+    groups.push({
+      kind: bucket.kind,
+      label: FAMILY_LABELS[bucket.kind] ?? FAMILY_LABELS.other,
+      quotaRemaining: remaining,
+      quotaReset: quota[0]?.resetTime ?? null,
+      models,
+    })
+  }
+  groups.sort((left, right) => FAMILY_ORDER.indexOf(left.kind) - FAMILY_ORDER.indexOf(right.kind))
+  return groups
 }
 
 /** Route suffix -> handler. Prefixed with `/api/local/<plugin>/`. */
@@ -91,11 +170,20 @@ function createRoutes({ config, catalog, endpointOf, ledger, settings, installed
       return json({ ok: true, applied: patch })
     },
 
-    /** Live catalog with quota and the current enable state. */
+    /**
+     * Live catalog grouped like the account's usage page: family -> base model.
+     * Effort suffixes are hidden; a base row owns all of its variants.
+     */
     models: async () => {
       const all = await catalog.all().catch(() => [])
       const enabled = configValue(config, 'enabledModels') ?? []
-      const rows = all.map((entry) => ({
+      const groups = groupModels(all, enabled)
+      const total = groups.reduce((count, group) => count + group.models.length, 0)
+      const enabledCount = groups.reduce(
+        (count, group) => count + group.models.filter((model) => model.enabled).length,
+        0,
+      )
+      const flat = all.map((entry) => ({
         id: entry.id,
         name: entry.name,
         contextWindow: entry.maxInputTokens ?? null,
@@ -105,7 +193,7 @@ function createRoutes({ config, catalog, endpointOf, ledger, settings, installed
         quotaReset: entry.quota?.resetTime ?? null,
         enabled: enabled.length === 0 ? true : enabled.includes(entry.id),
       }))
-      return { models: rows, total: rows.length }
+      return { groups, total, enabled: enabledCount, models: flat }
     },
 
     /** Persist which model ids the picker advertises. */

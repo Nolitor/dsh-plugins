@@ -168,8 +168,13 @@ window.__ModuleLoader__.load({
           h('p', { className: 'agError' }, t('loadError') + ': ' + state.error))
       }
 
-      const models = state.models
-      const enabledCount = models.models.filter((row) => row.enabled).length
+      const { groups, total, enabled: enabledCount } = state.models
+      const GROUP_LABEL = {
+        gemini: 'groupGemini',
+        'claude-gpt': 'groupClaudeGpt',
+        argon: 'groupArgon',
+        other: 'groupOther',
+      }
 
       return h('section', { className: 'agSection' },
         h('h3', { className: 'agHeading' }, t('sectionTitle')),
@@ -178,35 +183,55 @@ window.__ModuleLoader__.load({
         h('div', { className: 'agCard' },
           h('div', { className: 'agCardHead' },
             h('h4', { className: 'agCardTitle' }, t('modelsTitle')),
-            h('span', { className: 'agMeta' }, t('modelsCount', { enabled: enabledCount, total: models.total }))),
-          h('p', { className: 'agHint' }, t('modelsHint')),
-          models.total === 0
-            ? h('p', { className: 'agHint' }, t('noModels'))
-            : h('div', { className: 'agModels' },
-                models.models.map((row) => h('label', { key: row.id, className: 'agModel' },
+            h('span', { className: 'agMeta' }, t('modelsCount', { enabled: enabledCount, total }))),
+          h('p', { className: 'agHint' }, t('modelsHint'))),
+
+        groups.length === 0
+          ? h('div', { className: 'agCard' }, h('p', { className: 'agHint' }, t('noModels')))
+          : groups.map((group) => h('div', { className: 'agCard', key: group.kind + '|' + (group.quotaReset ?? '') },
+              h('div', { className: 'agCardHead' },
+                h('h4', { className: 'agCardTitle' }, t(GROUP_LABEL[group.kind] ?? 'groupOther')),
+                h('span', { className: 'agMeta' },
+                  group.quotaRemaining === null || group.quotaRemaining === undefined
+                    ? ''
+                    : Math.round(group.quotaRemaining * 100) + '% ' + t('quota'))),
+              h('div', { className: 'agModels' },
+                group.models.map((model) => h('label', { key: model.id, className: 'agModel' },
                   h('input', {
                     type: 'checkbox',
-                    checked: row.enabled,
+                    checked: model.enabled,
                     onChange: () => {
-                      const next = models.models.map((item) => (item.id === row.id ? { ...item, enabled: !row.enabled } : item))
-                      setState((prev) => ({ ...prev, models: { ...prev.models, models: next } }))
+                      const nextGroups = groups.map((candidate) => candidate !== group ? candidate : {
+                        ...candidate,
+                        models: candidate.models.map((item) => item.id === model.id
+                          ? { ...item, enabled: !model.enabled }
+                          : item),
+                      })
+                      setState((prev) => prev.status === 'ready'
+                        ? { ...prev, models: { ...prev.models, groups: nextGroups } }
+                        : prev)
                     },
                   }),
                   h('span', { className: 'agRoute' },
-                    h('div', { className: 'agModelName' }, row.name ?? row.id),
-                    row.id),
-                  h('span', { className: 'agQuota' },
-                    row.quotaRemaining === null || row.quotaRemaining === undefined
-                      ? ''
-                      : Math.round(row.quotaRemaining * 100) + '% ' + t('quota'))))),
+                    h('div', { className: 'agModelName' }, model.name ?? model.id),
+                    model.id)))))),
+
+        h('div', { className: 'agCard' },
           h('div', { className: 'agActions' },
             h('button', {
               type: 'button',
               className: 'agButton',
               disabled: busy,
               onClick: () => {
+                const allEnabled = groups.every((group) => group.models.every((model) => model.enabled))
+                const picked = allEnabled
+                  ? []
+                  : groups.flatMap((group) => group.models.filter((model) => model.enabled).flatMap((model) => model.variants))
+                if (!allEnabled && picked.length === 0) {
+                  setNotice(t('noModelsSelected'))
+                  return
+                }
                 setBusy(true)
-                const picked = state.models.models.filter((row) => row.enabled).map((row) => row.id)
                 post('models/apply', { enabled: picked })
                   .then(() => { setNotice(t('modelsSaved')); return load() })
                   .catch((error) => setNotice(t('saveError') + ': ' + error.message))
