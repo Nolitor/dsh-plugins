@@ -1,12 +1,55 @@
 # Changelog — @nolit/dsh-opencode-v2
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: report
 status: active
-updated: 2026-11-03
+updated: 2026-11-04
 summary: Engineering history for @nolit/dsh-opencode-v2, moved out of README.md so the README can serve as an operator manual. Every entry records what was measured, what changed, and what stayed unchanged; per-round proof lives in VERIFICATION.md and VERIFICATION-ARCHIVE.md.
 -->
+
+## Documentation alignment (2026-11-04)
+
+**No code changed in this package.** This entry records a documentation-only alignment made while
+building `dsh-deepinfra`, so the two tracks state the same host contracts in the same terms.
+
+### Added
+
+- **`ARCHITECTURE.md`** — the document this track was missing. It records, for both halves:
+  - the **control plane vs serving plane** split (local `opencode serve` for catalog/provider/
+    credential only; `POST {baseURL}/chat/completions` for generation), and the forbidden
+    `POST /api/session/{id}/prompt` path;
+  - credential resolution order (explicit → `/api/provider/{id}` + `/api/credential`), with the
+    `credentialCacheMs` window and the single forced refresh on 401;
+  - module ownership (`request-guards`, `stream-parser`, `upstream-map`, `display-gate`,
+    `cost`, `usage-ledger`, `catalog-cache`, `plans`, `conflicts`);
+  - the shared boundary rule: **a delta's type comes from the wire field, never its characters**;
+  - the slot contract (`InputActivityOwnerProps`, release expansion on unmount, provider-id-only
+    gating, and why `conversation.input.model.label` must not be used);
+  - the ledger path and the "unpriced ≠ free" rule;
+  - an explicit statement of why DeepInfra is a separate package.
+
+### Clarified — the service-declaration difference between the two tracks
+
+This package declares five services (`llm, subprocess, sessions, connection, settings`) because the
+control plane genuinely needs all of them. `dsh-deepinfra` declares only `['llm']` and mounts the
+web surfaces through `ctx.inject([...])`.
+
+Both are correct, and the rule that reconciles them is now written down in both ARCHITECTURE docs:
+
+> Declare a service when the plugin cannot serve **any** surface without it; otherwise read it
+> optionally so a profile that lacks it still boots.
+
+Measured evidence for the rule, from building `dsh-deepinfra`: declaring a web-only service made a
+**headless** profile log `pending (waiting for service: connection)` and then
+`NO_ADAPTER: no adapter registered`, i.e. the model route was gated by a UI dependency.
+
+### Cross-reference
+
+The config-layer credential pattern (a `.volatile()` + `role('secret')` field written through
+`settings.update()`, with the patch default left empty so the saved value wins) is documented in
+`dsh-deepinfra/ARCHITECTURE.md` §3. This package already uses `.volatile()` on all of its fields,
+which is why its settings writes were never affected by the defect recorded there.
 
 > Per-round proof, measurements and failure ledger entries live in
 > [VERIFICATION.md](VERIFICATION.md) and [VERIFICATION-ARCHIVE.md](VERIFICATION-ARCHIVE.md).
