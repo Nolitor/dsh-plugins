@@ -86,6 +86,14 @@ Stream output is normalized into DSH chunks in this order:
 then **`usage` before `finish`**. Usage buckets are disjoint — cached tokens are
 subtracted from `prompt_tokens`, and `reasoning_tokens` are never double counted.
 
+## Localisation
+
+English is the default; Korean follows the host locale. The plugin card title/description live in
+`locale/en.json` and `locale/ko.json` (`오픈코드 v2 에이전트`), and the browser half carries the
+full `I18N.ko` / `I18N.en` tables for the model-settings tab and the session cost pill. The client
+exports `inject = ['slots', 'locale']`; `test/locale.test.mjs` pins the card metadata and both
+language tables.
+
 ## Configuration
 
 All configuration lives in **one** place: the **OpenCode V2** settings panel

@@ -137,12 +137,29 @@ level selector:
 | Picker id | Efforts |
 | :--- | :--- |
 | `gemini-3.8-flash` | low, medium, high |
+| `gemini-3.5-flash-lite` | low, medium, high (three aliased ids; see below) |
 | `claude-sonnet-5-5` | low, medium, high |
 | `gpt-oss-120b` | medium (no image support) |
 
+**Every model with a low level defaults to low.** `gpt-oss-120b` is the exception because the
+account serves only `-medium`; requesting a level it does not serve would return 404.
+
 Effort is encoded in the model id suffix, because `thinkingConfig.thinkingLevel` is ignored by the
-server (measured). Sending an image to a model without image support is refused with
-`UNSUPPORTED_OPTION` rather than silently dropping the image.
+server (measured). The Gemini 3.5 Flash Lite family is the one exception: Google serves it as three
+unrelated ids whose display names are identical, so the plugin aliases them back to one base:
+
+| Picker effort | Raw id sent |
+| :--- | :--- |
+| low | `gemini-2.5-flash-lite` |
+| medium | `gemini-2.5-flash` |
+| high | `gemini-2.5-flash-thinking` |
+
+Sending an image to a model without image support is refused with `UNSUPPORTED_OPTION` rather than
+silently dropping the image.
+
+The settings tab groups models by usage family and shows the account's **weekly + 5-hour** limits
+from `retrieveUserQuotaSummary`; it hides effort entirely. See
+[ANTIGRAVITY-STAGE-PLAN.md](../docs/ANTIGRAVITY-STAGE-PLAN.md) for the stage-1 gate.
 
 ### `subagent_antigravity` — delegation
 
@@ -207,7 +224,7 @@ inherits) and never targets a bare element selector. See
 ```bash
 npm run build    # regenerate the locale table and the browser bundle
 npm run check    # syntax check every module
-npm test         # 82 tests, no network
+npm test         # 90 tests, no network
 ```
 
 ## Measured protocol notes

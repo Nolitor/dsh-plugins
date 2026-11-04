@@ -28,6 +28,8 @@
   "groupArgon": "Gemini 4 Argon",
   "groupOther": "기타 모델",
   "noModelsSelected": "모델을 하나 이상 선택하세요.",
+  "weeklyLimit": "주간",
+  "fiveHourLimit": "5시간",
   "modelsCount": "{total}개 중 {enabled}개 활성",
   "modelsSave": "선택 저장",
   "modelsSaved": "선택을 저장했습니다.",

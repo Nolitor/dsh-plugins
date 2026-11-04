@@ -44,6 +44,13 @@ Stage 2 may not start until **all** of these hold. Each is a command, not an opi
 S6 is the criterion that failed last time: `0.0.2` was shipped, restarted, and broke on the
 first boot. **A green suite is not S6.** S6 requires time and the owner's own usage.
 
+### Sibling track — `@nolit/dsh-antigravity`
+
+Antigravity uses the same S1–S7 gate; its status and stage-1 reinforcement are recorded in
+[ANTIGRAVITY-STAGE-PLAN.md](ANTIGRAVITY-STAGE-PLAN.md). Stage 2/3 work opens for **both** tracks
+together, and only after each track's S6 soak is owner-confirmed. Do not open stage 2 for one
+track alone.
+
 ## 3. Stage 1 — current state and remaining work
 
 Applied in `0.0.2-rc.1` (measurements in CHANGELOG `0.0.2-rc.1`):

@@ -175,6 +175,18 @@ window.__ModuleLoader__.load({
         argon: 'groupArgon',
         other: 'groupOther',
       }
+      const limitLabel = (window) => window === 'weekly' ? t('weeklyLimit') : t('fiveHourLimit')
+      const groupLimits = (group) => {
+        if (Array.isArray(group.limits) && group.limits.length > 0) {
+          return group.limits
+            .map((limit) => limitLabel(limit.window) + ' ' + Math.round(limit.remainingFraction * 100) + '%')
+            .join(' · ')
+        }
+        return group.quotaRemaining === null || group.quotaRemaining === undefined
+          ? ''
+          : Math.round(group.quotaRemaining * 100) + '% ' + t('quota')
+      }
+      const groupLimitTitle = (group) => (group.limits ?? []).map((limit) => limit.description).filter(Boolean).join(' / ')
 
       return h('section', { className: 'agSection' },
         h('h3', { className: 'agHeading' }, t('sectionTitle')),
@@ -191,10 +203,7 @@ window.__ModuleLoader__.load({
           : groups.map((group) => h('div', { className: 'agCard', key: group.kind + '|' + (group.quotaReset ?? '') },
               h('div', { className: 'agCardHead' },
                 h('h4', { className: 'agCardTitle' }, t(GROUP_LABEL[group.kind] ?? 'groupOther')),
-                h('span', { className: 'agMeta' },
-                  group.quotaRemaining === null || group.quotaRemaining === undefined
-                    ? ''
-                    : Math.round(group.quotaRemaining * 100) + '% ' + t('quota'))),
+                h('span', { className: 'agMeta', title: groupLimitTitle(group) }, groupLimits(group))),
               h('div', { className: 'agModels' },
                 group.models.map((model) => h('label', { key: model.id, className: 'agModel' },
                   h('input', {

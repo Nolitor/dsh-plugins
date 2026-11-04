@@ -21,6 +21,47 @@
 /** Effort suffixes the catalog uses, least to greatest. */
 export const EFFORT_ORDER = ['low', 'medium', 'high']
 
+/**
+ * Google serves the three Gemini 3.5 Flash Lite reasoning levels as THREE ids
+ * whose displayName is IDENTICAL and carries no level suffix (measured
+ * 2026-11-05):
+ *
+ *   gemini-2.5-flash-lite → low
+ *   gemini-2.5-flash      → medium
+ *   gemini-2.5-flash-thinking → high
+ *
+ * Pasting those ids through gives three indistinguishable picker rows, which is
+ * the owner-reported confusion. They are aliases of one base model; the effort
+ * is carried by the id itself.
+ */
+export const EFFORT_ALIASES = Object.freeze({
+  'gemini-2.5-flash-lite': Object.freeze({ base: 'gemini-3.5-flash-lite', effort: 'low' }),
+  'gemini-2.5-flash': Object.freeze({ base: 'gemini-3.5-flash-lite', effort: 'medium' }),
+  'gemini-2.5-flash-thinking': Object.freeze({ base: 'gemini-3.5-flash-lite', effort: 'high' }),
+})
+
+/**
+ * The alias row for one base model and effort level.
+ * @param base - base model id.
+ * @param effort - low | medium | high.
+ * @returns the raw id, or undefined when the family has no alias.
+ */
+export function aliasFor(base, effort) {
+  for (const [id, alias] of Object.entries(EFFORT_ALIASES)) {
+    if (alias.base === base && alias.effort === effort) return id
+  }
+  return undefined
+}
+
+/**
+ * The alias metadata for a raw model id.
+ * @param id - raw catalog id.
+ * @returns `{ base, effort }`, or undefined.
+ */
+export function effortAlias(id) {
+  return EFFORT_ALIASES[String(id ?? '')]
+}
+
 /** Display names for the effort ids DSH shows in its selector. */
 const EFFORT_NAMES = { low: 'Low', medium: 'Medium', high: 'High' }
 
@@ -30,6 +71,8 @@ const EFFORT_NAMES = { low: 'Low', medium: 'Medium', high: 'High' }
  * @returns base id and the suffix, if any.
  */
 export function splitEffort(id) {
+  const alias = effortAlias(id)
+  if (alias) return { base: alias.base, effort: alias.effort }
   const match = /^(.*)-(low|medium|high)$/.exec(String(id ?? ''))
   if (!match) return { base: String(id ?? ''), effort: undefined }
   return { base: match[1], effort: match[2] }

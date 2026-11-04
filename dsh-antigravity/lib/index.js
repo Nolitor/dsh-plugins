@@ -35,10 +35,14 @@ import { configValue, resolveEndpoint } from './settings.js'
 import { readSelection, writeSelection } from './selection.js'
 import { listAgyModels, runAgyWorker } from './worker.js'
 import { AntigravitySubagentProvider } from './subagent.js'
+import { bootBeacon } from './beacon.js'
 import { createLedger, registerRoutes } from './server.js'
 
 /** Provider route owned by the model surface. */
 export const PROVIDER_ID = 'antigravity'
+
+// Which code this process actually loaded (stage-1 S2).
+bootBeacon('load')
 
 /** Host plugin name; must match package.json `name` and the bundle row id. */
 export const name = '@nolit/dsh-antigravity'
@@ -168,6 +172,11 @@ function optional(ctx, service) {
 export function createCatalog({ config, tokens, fetchImpl, log, now, onChanged }) {
   let cache = null
   let inflight = null
+  // Weekly / 5-hour limits live on a separate RPC (retrieveUserQuotaSummary),
+  // measured 2026-11-05. They move faster than the model catalog, so cache them
+  // for a minute only.
+  let quotaCache = null
+  let quotaInflight = null
 
   /** POST one cloudcode RPC to the control host. */
   async function rpc(method, body, signal) {
@@ -240,8 +249,34 @@ export function createCatalog({ config, tokens, fetchImpl, log, now, onChanged }
     return inflight
   }
 
+  /**
+   * Fetch the account's quota summary (weekly + 5-hour buckets per family).
+   * @param signal - cancellation.
+   * @returns the summary, or a stale/empty fallback on failure.
+   */
+  async function quotaSummary(signal) {
+    const ttl = 60_000
+    if (quotaCache && now() - quotaCache.fetchedAt < ttl) return quotaCache.value
+    if (quotaInflight) return quotaInflight
+    const project = resolveEndpoint(config).project
+    quotaInflight = rpc('retrieveUserQuotaSummary', { project }, signal)
+      .then((value) => {
+        quotaCache = { value, fetchedAt: now() }
+        return value
+      })
+      .catch((error) => {
+        log?.warn?.('antigravity: quota summary unavailable: ' + (error?.message ?? error))
+        return quotaCache?.value ?? { groups: [] }
+      })
+      .finally(() => {
+        quotaInflight = null
+      })
+    return quotaInflight
+  }
+
   return {
     snapshot,
+    quotaSummary,
     /** Drop the cached catalog so the next list read re-applies enabledModels. */
     invalidate() {
       cache = null
@@ -517,6 +552,7 @@ export function apply(ctx, config) {
         endpointOf,
         ledger,
         invalidate: () => catalog.invalidate(),
+        quota: () => catalog.quotaSummary(),
         pluginName: name,
         installed: () => ({
           model: parts.has('model'),

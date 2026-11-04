@@ -126,6 +126,7 @@ export function groupModels(entries, enabledModels = []) {
       label: FAMILY_LABELS[bucket.kind] ?? FAMILY_LABELS.other,
       quotaRemaining: remaining,
       quotaReset: quota[0]?.resetTime ?? null,
+      limits: [],
       models,
     })
   }
@@ -133,8 +134,48 @@ export function groupModels(entries, enabledModels = []) {
   return groups
 }
 
+/**
+ * Map an API quota group label to the family kind used by the model list.
+ * @param label - `Gemini Models`, `Claude and GPT models`, `Gemini 4 Argon`.
+ * @returns the kind, or `other`.
+ */
+function familyKindOfLabel(label) {
+  const text = String(label ?? '')
+  if (/argon/i.test(text)) return 'argon'
+  if (/claude|gpt/i.test(text)) return 'claude-gpt'
+  if (/gemini/i.test(text)) return 'gemini'
+  return 'other'
+}
+
+/**
+ * Attach the account's weekly / 5-hour buckets to the model groups.
+ *
+ * The summary RPC was measured 2026-11-05: it returns exactly the three groups
+ * the Antigravity usage page shows, with a `window` of `weekly` or `5h`.
+ *
+ * @param groups - result of `groupModels`.
+ * @param summary - `retrieveUserQuotaSummary` body, or undefined.
+ * @returns the same groups with `limits` filled.
+ */
+export function attachQuota(groups, summary) {
+  const byKind = new Map()
+  for (const source of summary?.groups ?? []) {
+    byKind.set(familyKindOfLabel(source.displayName), source)
+  }
+  for (const group of groups) {
+    const source = byKind.get(group.kind)
+    group.limits = (source?.buckets ?? []).map((bucket) => ({
+      window: bucket.window,
+      remainingFraction: bucket.remainingFraction,
+      resetTime: bucket.resetTime,
+      description: bucket.description,
+    }))
+  }
+  return groups
+}
+
 /** Route suffix -> handler. Prefixed with `/api/local/<plugin>/`. */
-function createRoutes({ config, catalog, endpointOf, ledger, settings, installed, invalidate }) {
+function createRoutes({ config, catalog, endpointOf, ledger, settings, installed, invalidate, quota }) {
   return {
     /** Panel bootstrap: switches, account, catalog and quota in one call. */
     info: async () => {
@@ -177,7 +218,8 @@ function createRoutes({ config, catalog, endpointOf, ledger, settings, installed
     models: async () => {
       const all = await catalog.all().catch(() => [])
       const enabled = configValue(config, 'enabledModels') ?? []
-      const groups = groupModels(all, enabled)
+      const summary = await quota?.().catch(() => undefined)
+      const groups = attachQuota(groupModels(all, enabled), summary)
       const total = groups.reduce((count, group) => count + group.models.length, 0)
       const enabledCount = groups.reduce(
         (count, group) => count + group.models.filter((model) => model.enabled).length,

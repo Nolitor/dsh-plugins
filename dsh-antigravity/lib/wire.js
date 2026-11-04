@@ -15,6 +15,7 @@
  *
  * @module @nolit/dsh-antigravity/wire
  */
+import { EFFORT_ALIASES, aliasFor, effortAlias } from './catalog.js'
 
 /** Streaming generation path. `alt=sse` is what makes the response line-delimited. */
 export const GENERATION_PATH = '/v1internal:streamGenerateContent?alt=sse'
@@ -243,12 +244,18 @@ export function effortMatchesModel(model, effort) {
  * @returns the suffixed id to use, or the original when no variant exists.
  */
 export function modelForEffort(model, effort, available) {
-  const base = String(model ?? '').replace(/-(low|medium|high)$/, '')
   const ids = Array.isArray(available) ? available : []
+  const alias = effortAlias(model)
+  const base = alias ? alias.base : String(model ?? '').replace(/-(low|medium|high)$/, '')
   const variants = ids.filter((id) => id === base || id.startsWith(base + '-'))
 
-  const wanted = effort === 'xhigh' || effort === 'max' ? 'high' : effort
+  let wanted = effort === 'xhigh' || effort === 'max' ? 'high' : effort
+  // A bare alias id already encodes its level; a bare alias base defaults to low.
+  if (!wanted) wanted = alias?.effort ?? (base === 'gemini-3.5-flash-lite' ? 'low' : undefined)
   if (wanted && ['low', 'medium', 'high'].includes(wanted)) {
+    // The 3.5 Flash Lite family maps effort onto three unrelated ids.
+    const aliasId = aliasFor(base, wanted)
+    if (aliasId) return aliasId
     const candidate = `${base}-${wanted}`
     if (ids.length === 0) return candidate
     if (ids.includes(candidate)) return candidate
@@ -262,11 +269,17 @@ export function modelForEffort(model, effort, available) {
   // resolved to high while the picker looked neutral.
   if (ids.length > 0) {
     if (ids.includes(model)) return model
+    if (aliasesOf(base).includes(model)) return model
     if (ids.includes(base + '-low')) return base + '-low'
     if (variants.length > 0) return variants[0]
   }
   // Unknown catalog: keep a suffixed id when the caller already gave one.
   return /-(low|medium|high)$/.test(String(model ?? '')) ? model : model
+}
+
+/** All raw alias ids that belong to a base model. */
+function aliasesOf(base) {
+  return Object.keys(EFFORT_ALIASES).filter((id) => EFFORT_ALIASES[id].base === base)
 }
 
 /**

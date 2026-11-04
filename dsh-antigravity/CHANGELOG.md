@@ -47,16 +47,24 @@ history and corrected here.
 | 11 | The usage chip claimed the **single** `conversation.input.activity` seat already owned by `tk` | live pageerror `single slot "conversation.input.activity" already has a registration at priority 0 (registered by tk)`; the chip never rendered | register in the additive list slot `conversation.input.right`, the same visual position, so no single seat is contested |
 | 12 | The Antigravity tab duplicated the plugin's own options | owner: the master/CLI/usage switches and the account/usage cards belong to the plugin row, not the model surface | the tab now contains **model selection only** (live list, checkboxes, Save); plugin enable/disable stays on the Plugins page |
 | 13 | The model list showed reasoning levels as separate models | owner screenshot: `Gemini 3.8 Flash (Low)/(Medium)/(High)` rows; the account's usage page groups by family instead | group by **usage family** (Gemini / Claude-and-GPT / Gemini 4 Argon) and then by **base model**; effort suffixes are hidden and one checkbox owns all variants |
+| 14 | The group header showed one quota percentage; the usage page shows weekly and 5-hour limits | owner screenshot: Weekly Limit 97%, Five Hour Limit 98% | call `retrieveUserQuotaSummary` (measured 2026-11-05) and render both buckets per family; the per-model fraction remains the fallback |
+| 15 | Three `Gemini 3.5 Flash Lite` ids had identical names and no visible effort | `gemini-2.5-flash-lite`, `gemini-2.5-flash`, `gemini-2.5-flash-thinking` all displayed "Gemini 3.5 Flash Lite" | alias them to one base model with **low / medium / high** respectively; the settings list hides effort, the prompt picker offers the three levels, and the default is **low** |
+| 16 | Antigravity was created after the OpenCode v2 stage-1 gate and never had it applied | no load beacon, no restart verifier, no S1–S7 status | added `lib/beacon.js`, `scripts/verify-antigravity-restart.sh`, `scripts/antigravity-browser-boot.mjs`, `scripts/antigravity-stabilisation-status.sh`, and `docs/ANTIGRAVITY-STAGE-PLAN.md` |
 
 ### Verification
 
-- **85 tests pass, 0 fail** (`test/server.test.mjs`, `test/ledger.test.mjs` and `test/models-group.test.mjs` are new; `switch.test.mjs` now asserts the panel-stays rule).
+- **90 tests pass, 0 fail** (`test/server.test.mjs`, `test/ledger.test.mjs`, `test/models-group.test.mjs` and the alias cases in `catalog.test`/`wire.test`; `switch.test.mjs` asserts the panel-stays rule).
 - Isolated profile `/tmp/agtest` with a real Chromium boot:
   - settings tab **Antigravity** renders **only the grouped model list, checkboxes and Save
     selection** — families `Gemini Models`, `Claude and GPT models`, `Gemini 4 Argon`, base
-    names only (no Low/Medium/High rows), group quota on each header;
+    names only (no Low/Medium/High rows), **weekly + 5-hour** quota on each header;
   - toggling one base model and saving updates every effort variant of that model (verified
     isolated: disabling Claude Sonnet 5.5 removed low/medium/high together);
+  - live group headers read `주간 97% · 5시간 100%` (Gemini), `주간 100% · 5시간 100%`
+    (Claude/GPT), `주간 100%` (Argon);
+  - `Gemini 3.5 Flash Lite` is one picker entry; low/medium/high map to
+    `gemini-2.5-flash-lite` / `gemini-2.5-flash` / `gemini-2.5-flash-thinking`, default low;
+  - stage-1 S1–S5 and S7 PASS, S6 soak UNKNOWN (`docs/ANTIGRAVITY-STAGE-PLAN.md`);
   - `/agy` appears in the slash menu;
   - the model picker shows the `Antigravity (subscription)` route, with the duplicated
     "Gemini 3.5 Flash Lite" names disambiguated by id;

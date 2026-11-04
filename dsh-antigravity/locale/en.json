@@ -28,6 +28,8 @@
   "groupArgon": "Gemini 4 Argon",
   "groupOther": "Other models",
   "noModelsSelected": "Select at least one model.",
+  "weeklyLimit": "Weekly",
+  "fiveHourLimit": "5-hour",
   "modelsCount": "{enabled} of {total} enabled",
   "modelsSave": "Save selection",
   "modelsSaved": "Selection saved.",

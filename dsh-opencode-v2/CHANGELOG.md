@@ -49,9 +49,23 @@ Measured after the cleanup:
 pipeline and stage-1 open items (O1/O2/O3) are untouched. The stage plan's gate still applies; no
 stage-2 work was opened.
 
+## Localisation — 2026-11-05
+
+The plugin card title/description now come from `locale/{en,ko}.json` like the DeepInfra and
+Antigravity tracks, instead of falling back to the English `package.json` description in Korean:
+
+| Locale | Title | Description |
+| :--- | :--- | :--- |
+| en | `Opencode v2 Agent` | English adapter summary |
+| ko | `오픈코드 v2 에이전트` | Korean adapter summary |
+
+The browser half already carried both language tables inline (`I18N.ko` / `I18N.en`) and exports
+`inject = ['slots', 'locale']`; `test/locale.test.mjs` now pins both the card metadata and the
+browser tables so a future bundle rebuild cannot silently drop Korean.
+
 ### Verification
 
-- `npm test`: **411 pass, 0 fail**.
+- `npm test`: **413 pass, 0 fail** (2 new localisation tests).
 - `npm run check`: every module parses.
 - `opencode --version`: **v2.2.0**; `opencode models`: route catalog returns.
 - Real CLI smoke: `opencode run -m opencode-go/beam-free --format json "Reply with exactly: CLI-OK"`

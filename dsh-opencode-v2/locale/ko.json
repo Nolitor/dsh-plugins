@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Opencode v2 Agent"
+    "title": "오픈코드 v2 에이전트",
+    "description": "OpenCode Go 순수 LLM 어댑터입니다. opencode 위임 도구, /opencode 명령, cli_worker, opencode-http-agent 라우트, 통합 서브에이전트를 제공합니다."
   }
 }

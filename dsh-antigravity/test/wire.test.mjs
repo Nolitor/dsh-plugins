@@ -91,6 +91,16 @@ test('modelForEffort selects the suffixed id when the catalog serves it', () => 
   assert.equal(modelForEffort('gemini-2.5-pro', 'high', ['gemini-2.5-pro']), 'gemini-2.5-pro')
 })
 
+test('modelForEffort maps Gemini 3.5 Lite efforts onto the three alias ids', () => {
+  const available = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-thinking']
+  assert.equal(modelForEffort('gemini-3.5-flash-lite', 'low', available), 'gemini-2.5-flash-lite')
+  assert.equal(modelForEffort('gemini-3.5-flash-lite', 'medium', available), 'gemini-2.5-flash')
+  assert.equal(modelForEffort('gemini-3.5-flash-lite', 'high', available), 'gemini-2.5-flash-thinking')
+  assert.equal(modelForEffort('gemini-3.5-flash-lite', undefined, available), 'gemini-2.5-flash-lite')
+  assert.equal(modelForEffort('gemini-2.5-flash', undefined, available), 'gemini-2.5-flash')
+  assert.equal(modelForEffort('gemini-2.5-flash', 'high', available), 'gemini-2.5-flash-thinking')
+})
+
 test('requestBody does not send a misleading thinkingLevel', () => {
   const body = requestBody(
     { model: 'gemini-3.8-flash-low', reasoningEffort: 'high', messages: [{ role: 'user', content: 'hi' }] },

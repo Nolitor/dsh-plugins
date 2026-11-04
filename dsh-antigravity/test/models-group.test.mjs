@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { groupModels } from '../lib/server.js'
+import { attachQuota, groupModels } from '../lib/server.js'
 
 /** Minimal flat catalog rows with the quota reset windows measured on the account. */
 const entries = [
@@ -30,6 +30,22 @@ test('a base model is enabled only when all of its variants are allowed', () => 
   assert.equal(gemini.models[0].enabled, false, 'a partial variant set is not a full model')
   const full = groupModels(entries, ['gemini-3.8-flash-low', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-high'])
   assert.equal(full.find((group) => group.kind === 'gemini').models[0].enabled, true)
+})
+
+test('weekly and 5-hour buckets attach to the matching family group', () => {
+  const groups = groupModels(entries, [])
+  const summary = {
+    groups: [
+      { displayName: 'Gemini Models', buckets: [{ window: 'weekly', remainingFraction: 0.97, resetTime: 'w', description: 'weekly' }, { window: '5h', remainingFraction: 0.98, resetTime: 'h', description: 'five hour' }] },
+      { displayName: 'Claude and GPT models', buckets: [{ window: 'weekly', remainingFraction: 1 }] },
+      { displayName: 'Gemini 4 Argon', buckets: [{ window: 'weekly', remainingFraction: 1 }] },
+    ],
+  }
+  attachQuota(groups, summary)
+  const gemini = groups.find((group) => group.kind === 'gemini')
+  assert.deepEqual(gemini.limits.map((limit) => [limit.window, limit.remainingFraction]), [['weekly', 0.97], ['5h', 0.98]])
+  assert.equal(groups.find((group) => group.kind === 'claude-gpt').limits.length, 1)
+  assert.equal(groups.find((group) => group.kind === 'argon').limits.length, 1)
 })
 
 test('the group quota is the minimum remaining across its models', () => {
