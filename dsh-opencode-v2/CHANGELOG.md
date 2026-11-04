@@ -37,6 +37,88 @@ Removing it also removed the whole claim-file subsystem (`lib/exclusion.js`, `ex
 the beta dependency in three test files). The `conflictPolicy` guard stays: it handles a legacy
 `opencode-go`/`opencode` provider, which is a real third-party collision.
 
+### 0.0.2-rc.1.2 The cost pill is event-driven
+
+Owner instruction: "1초 폴링 대신 MutationObserver나 모델 변경 이벤트 리스너로".
+
+- `watchRoute()` observes the composer chip's `data-provider-id` / `data-model-id` attributes
+  with a `MutationObserver` (childList + attributes, filtered to those two names) and fires only
+  when the pair actually changes. A 1 s interval queried the DOM forever on every page.
+- The mount-time read is explicit: the chip does not exist yet when the slot mounts, so the
+  effect reads the route once and then relies on the observer. Measured without it: the pill
+  stayed hidden until the operator switched models.
+- Cost refresh follows activity: opening the route reads once, a composer/session mutation
+  schedules one debounced read (400 ms), and a 15 s tick remains as a floor for an idle page.
+
+**Verified live** (playwright, route attribute rewritten and restored):
+
+| step | route | pills |
+|---|---|---|
+| 1 | `opencode-http-agent/opencode-go/deepseek-v4.1-flash` | `$0.58…` |
+| 2 | `deepseek-account/deepseek-flash` (after 1.2 s) | **none** |
+| 3 | back on our route (after 1.2 s) | `$0.58…` |
+
+`ROUTE_POLL_MS` is gone from the served bundle (verified by fetching it from the running
+service: 0 occurrences, `watchRoute` present).
+
+### 0.0.2-rc.1.3 The pill matched a MODEL PREFIX, so other routers still showed it (2026-11-04)
+
+Owner report after the previous fix: "오픈코드 v2 서빙된 모델이 아닌 다른 라우터에서 부른 모델인데 왜
+이렇게 모델 서빙 옆에 붙냐 ... 이거 버그라고".
+
+**Cause.** `usingOwnRoute()` accepted `provider === 'opencode-http-agent'` **or** any model id
+matching `/^opencode(-go)?\//`. The model id comes from OpenCode's CATALOG, not from this
+adapter, so every router that resells `opencode-go/*` ids matched it. Reproduced against the
+predicate directly:
+
+| provider | model | before | after |
+|---|---|---|---|
+| `opencode-http-agent` | `opencode-go/deepseek-v4.1-flash` | SHOWED | SHOWED |
+| `subrouter` | `opencode-go/deepseek-v4.1-flash` | **SHOWED** | hidden |
+| `deepseek-account` | `opencode-go/deepseek-v4.1-flash` | **SHOWED** | hidden |
+| `opencode-zen`, `opencodeai`, `my-opencode-agent` | any | SHOWED/hidden by accident | hidden |
+
+**Fix.** Only the PROVIDER id decides, and the accepted set is the ids this package actually
+registers: `lib/http.js` registers `opencode-http-agent`, `lib/provider.js` registers
+`opencode-agent`. The model id is read only to prove the node is a route chip; it is never
+matched.
+
+**Verified live** on the running service (fresh token; the earlier attempt silently measured an
+expired-token page that had no composer at all — recorded so the evidence is not over-read):
+
+| step | route | pill |
+|---|---|---|
+| 1 | `opencode-http-agent/opencode-go/deepseek-v4.1-flash` | `$0.67…` |
+| 2 | `subrouter/opencode-go/deepseek-v4.1-flash` | **none** (was the leak) |
+| 3 | `deepseek-account/opencode-go/deepseek-v4.1-flash` | **none** |
+| 4 | back to ours | `$0.67…` |
+
+**Regression gate.** `test/cost-pill-gate.test.mjs` now derives the accepted ids from the
+bundle's own `OWN_PROVIDER_IDS` declaration, asserts a foreign router serving an
+`opencode-go/` id is hidden, and fails if the gate consults the model id at all.
+
+### 0.0.2-rc.1.4 Stage plan written; the staging code is preserved as source (2026-11-04)
+
+Owner instruction: plan the beta work properly and make stages 2 and 3 reachable **after
+stabilisation**, not instead of it.
+
+- [docs/OPENCODE-V2-STAGE-PLAN.md](../docs/OPENCODE-V2-STAGE-PLAN.md) defines stage 1 exit
+  criteria S1–S7, the stage-2 acceptance gates S2-1…S2-5, the stage-3 gates S3-1…S3-4, the
+  three adversarial inputs that must round-trip, and the rule that only an owner instruction
+  opens a stage.
+- `scripts/opencode-v2-stabilisation-status.sh` turns S1–S5 and S7 into a command. It prints
+  PASS/FAIL/UNKNOWN per criterion and exits non-zero unless every machine-decidable one
+  passes. S6 (soak) always prints UNKNOWN: it is owner-reported, and it is the criterion the
+  `0.0.2` release skipped.
+- `scripts/opencode-v2-browser-boot.mjs` is the S5 probe (real shell boot, not a route probe).
+- The deleted beta package's parser work was recovered from git into `staging/`, which is
+  **source, not a plugin**: no package.json, no mount, no `npm pack` entry. `scripts/doc-index.mjs`
+  skips it so it cannot pollute the documentation index.
+
+Measured when this was written (`--boot --browser`): S1 PASS, S2 PASS (`0.0.2-rc.1`),
+S3 PASS (401 tests), S4 PASS (isolated boot, 0 activation warnings), S5 PASS (shell renders,
+own client entry present, no page errors), S7 PASS. S6 UNKNOWN — the soak has not happened.
+
 ### 0.0.2-rc.1.5 The composer slot has a contract the pill was ignoring (2026-11-04)
 
 Owner pointed at `docs/upgrade-guide/v0.2.2-alpha.3/chat-process-activity-context` and asked whether
@@ -83,87 +165,21 @@ Tests: 406 pass. Live re-check after repacking: pill shows on our route, is abse
 `subrouter` and `deepseek-account` even when they serve an `opencode-go/` model id, and
 returns on our route.
 
-### 0.0.2-rc.1.4 Stage plan written; the staging code is preserved as source (2026-11-04)
+### 0.0.2-rc.1.6 Documentation policy: history lives in this directory (2026-11-04)
 
-Owner instruction: plan the beta work properly and make stages 2 and 3 reachable **after
-stabilisation**, not instead of it.
+Owner instruction: "각 플러그인에 작업 히스토리 안쌓아? 매번 부트카드와 에이전트에만 쌓아두는거야? …
+에이전트 규정과 부트카드는 내 작업 미이행 내역이나 내가 기억을 놓칠만한것만 기록하게 하고".
 
-- [docs/OPENCODE-V2-STAGE-PLAN.md](../docs/OPENCODE-V2-STAGE-PLAN.md) defines stage 1 exit
-  criteria S1–S7, the stage-2 acceptance gates S2-1…S2-5, the stage-3 gates S3-1…S3-4, the
-  three adversarial inputs that must round-trip, and the rule that only an owner instruction
-  opens a stage.
-- `scripts/opencode-v2-stabilisation-status.sh` turns S1–S5 and S7 into a command. It prints
-  PASS/FAIL/UNKNOWN per criterion and exits non-zero unless every machine-decidable one
-  passes. S6 (soak) always prints UNKNOWN: it is owner-reported, and it is the criterion the
-  `0.0.2` release skipped.
-- `scripts/opencode-v2-browser-boot.mjs` is the S5 probe (real shell boot, not a route probe).
-- The deleted beta package's parser work was recovered from git into `staging/`, which is
-  **source, not a plugin**: no package.json, no mount, no `npm pack` entry. `scripts/doc-index.mjs`
-  skips it so it cannot pollute the documentation index.
+| Change | Where |
+|---|---|
+| Plugin history is authoritative in `dsh-<track>/CHANGELOG.md` + `VERIFICATION.md` | `docs/RULES.md` §6.1 |
+| Boot cards and `AGENTS.md` are narrowed to **owner memory only** (unfinished asks, open decisions, state to remember) | `docs/RULES.md` §6.1, `docs/BOOTCARD-POLICY.md` |
+| New upstream version → acquire the exact tag, diff it, write a per-surface verdict | `docs/RULES.md` §6.2, this file |
+| The comparison record for this plugin | [UPSTREAM-COMPAT.md](UPSTREAM-COMPAT.md) |
 
-Measured when this was written (`--boot --browser`): S1 PASS, S2 PASS (`0.0.2-rc.1`),
-S3 PASS (401 tests), S4 PASS (isolated boot, 0 activation warnings), S5 PASS (shell renders,
-own client entry present, no page errors), S7 PASS. S6 UNKNOWN — the soak has not happened.
-
-### 0.0.2-rc.1.3 The pill matched a MODEL PREFIX, so other routers still showed it (2026-11-04)
-
-Owner report after the previous fix: "오픈코드 v2 서빙된 모델이 아닌 다른 라우터에서 부른 모델인데 왜
-이렇게 모델 서빙 옆에 붙냐 ... 이거 버그라고".
-
-**Cause.** `usingOwnRoute()` accepted `provider === 'opencode-http-agent'` **or** any model id
-matching `/^opencode(-go)?\//`. The model id comes from OpenCode's CATALOG, not from this
-adapter, so every router that resells `opencode-go/*` ids matched it. Reproduced against the
-predicate directly:
-
-| provider | model | before | after |
-|---|---|---|---|
-| `opencode-http-agent` | `opencode-go/deepseek-v4.1-flash` | SHOWED | SHOWED |
-| `subrouter` | `opencode-go/deepseek-v4.1-flash` | **SHOWED** | hidden |
-| `deepseek-account` | `opencode-go/deepseek-v4.1-flash` | **SHOWED** | hidden |
-| `opencode-zen`, `opencodeai`, `my-opencode-agent` | any | SHOWED/hidden by accident | hidden |
-
-**Fix.** Only the PROVIDER id decides, and the accepted set is the ids this package actually
-registers: `lib/http.js` registers `opencode-http-agent`, `lib/provider.js` registers
-`opencode-agent`. The model id is read only to prove the node is a route chip; it is never
-matched.
-
-**Verified live** on the running service (fresh token; the earlier attempt silently measured an
-expired-token page that had no composer at all — recorded so the evidence is not over-read):
-
-| step | route | pill |
-|---|---|---|
-| 1 | `opencode-http-agent/opencode-go/deepseek-v4.1-flash` | `$0.67…` |
-| 2 | `subrouter/opencode-go/deepseek-v4.1-flash` | **none** (was the leak) |
-| 3 | `deepseek-account/opencode-go/deepseek-v4.1-flash` | **none** |
-| 4 | back to ours | `$0.67…` |
-
-**Regression gate.** `test/cost-pill-gate.test.mjs` now derives the accepted ids from the
-bundle's own `OWN_PROVIDER_IDS` declaration, asserts a foreign router serving an
-`opencode-go/` id is hidden, and fails if the gate consults the model id at all.
-
-### 0.0.2-rc.1.2 The cost pill is event-driven
-
-Owner instruction: "1초 폴링 대신 MutationObserver나 모델 변경 이벤트 리스너로".
-
-- `watchRoute()` observes the composer chip's `data-provider-id` / `data-model-id` attributes
-  with a `MutationObserver` (childList + attributes, filtered to those two names) and fires only
-  when the pair actually changes. A 1 s interval queried the DOM forever on every page.
-- The mount-time read is explicit: the chip does not exist yet when the slot mounts, so the
-  effect reads the route once and then relies on the observer. Measured without it: the pill
-  stayed hidden until the operator switched models.
-- Cost refresh follows activity: opening the route reads once, a composer/session mutation
-  schedules one debounced read (400 ms), and a 15 s tick remains as a floor for an idle page.
-
-**Verified live** (playwright, route attribute rewritten and restored):
-
-| step | route | pills |
-|---|---|---|
-| 1 | `opencode-http-agent/opencode-go/deepseek-v4.1-flash` | `$0.58…` |
-| 2 | `deepseek-account/deepseek-flash` (after 1.2 s) | **none** |
-| 3 | back on our route (after 1.2 s) | `$0.58…` |
-
-`ROUTE_POLL_MS` is gone from the served bundle (verified by fetching it from the running
-service: 0 occurrences, `watchRoute` present).
+Why: the same compatibility question was answered twice in this session, the second time by
+citing a master-only upgrade guide that does not exist at the installed tag. Without a written
+per-surface record, "no problem found" is indistinguishable from "nothing was checked".
 
 ## 0.0.2 — Tier A guards, beta track split, verified prerequisites (2026-11-04)
 

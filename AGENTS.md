@@ -43,7 +43,7 @@ Read only this latest card by default; older cards are historical evidence.
 4. **Plugin replacement is 4 steps** — disable → remove → add → verify by **real mount**
    (`--dump-config` passing does NOT prove a plugin mounts).
 5. **Sidebar Manager drift gate** — run `node scripts/audit-installed-vs-packaged.mjs` before any version-up.
-6. **Docs** — English, every doc needs a `<!-- skeleton: -->` header; run `npm run docs:index`.
+6. **Docs** — English + skeleton header + `npm run docs:index`. **Plugin history → `dsh-<track>/CHANGELOG.md`**, never boot cards; done needs measured before/after (§6.1). New upstream → diff the exact tag, never master (§6.2).
 7. **Cross-project contract** — `total_skill` is a separate repository joined at runtime. Duplicate command/skill names are a **hard mount failure**; read the contract first.
 
 ## Commands
@@ -51,5 +51,6 @@ Read only this latest card by default; older cards are historical evidence.
 ```bash
 npm run docs:index    # regenerate INDEX.md + docs/SKELETON.md
 npm run docs:check    # fail on missing skeleton headers or stale indexes
+node scripts/check-plugin-history.mjs    # every plugin track owns its CHANGELOG
 npm run bootcard -- "session note"   # new dated boot card
 ```

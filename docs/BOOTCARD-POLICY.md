@@ -19,6 +19,21 @@ Rules belong in [RULES.md](RULES.md) / [DSH-HARNESS-POLICY.md](DSH-HARNESS-POLIC
 `AGENTS.md` — `AGENTS.md` is auto-loaded into every session's context, so growing it costs
 context on every turn.
 
+## Scope: owner memory only (owner instruction, 2026-11-04)
+
+A boot card records **what the owner asked for and has not received yet**, plus anything the owner
+would otherwise have to remember themselves. It is not engineering history.
+
+| Belongs on a boot card | Does NOT belong on a boot card |
+|---|---|
+| An instruction the owner gave that is not finished | A changelog entry for work that is done |
+| A defect the owner reported that is still open | A measurement (that lives in `dsh-<track>/CHANGELOG.md`) |
+| A decision the owner has to make | A design note (that lives in the plugin's `README.md`) |
+| State the owner must remember across sessions (a pending restart, a claim file) | A version history or a list of what changed |
+
+If a fact is needed to **rebuild** understanding of a plugin, it goes in that plugin's directory.
+If it is needed so the owner is not **surprised** next session, it goes here.
+
 ## Generate
 
 ```bash

@@ -19,6 +19,7 @@ registry.
 | History | [CHANGELOG.md](CHANGELOG.md) |
 | Release line | `0.0.2-rc.N` fixes first; the next stable line starts only after that is quiet |
 | Proof of record | [VERIFICATION.md](VERIFICATION.md) |
+| Upstream compatibility | [UPSTREAM-COMPAT.md](UPSTREAM-COMPAT.md) — per-release surface diff, tag-verified |
 
 ---
 

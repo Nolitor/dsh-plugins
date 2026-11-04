@@ -121,9 +121,58 @@ summary: one line, <= 140 chars, what the doc answers
 - After adding/renaming a doc run `npm run docs:index`; `npm run docs:check` must pass.
 - **Plugin-track docs are not indexed.** `scripts/doc-index.mjs` skips every `dsh-*` directory, so
   `dsh-<track>/README.md` and `VERIFICATION.md` never appear in `INDEX.md` or `docs/SKELETON.md`.
-  Measurements, defects, and decisions a later session must find belong in the root-level doc that
-  owns that fact (update its skeleton `version`/`updated`/`summary`), with the track doc as the
-  implementation detail. Reporting a measurement only inside a track is a documentation miss.
+  That is fine: **a plugin's own history belongs in its own directory.**
+
+### 6.1 Per-plugin history is the home (owner instruction, 2026-11-04)
+
+The owner's words: *"각 플러그인에 작업 히스토리 안쌓아? 매번 부트카드와 에이전트에만 쌓아두는거야?
+에이전트 규정에 괜히 각 플러그인 히스토리 파편화하지 말고 각 플러그인 디렉토리에 히스토리와 문서
+남기라 그래."*
+
+Rules that follow:
+
+| What | Where it goes | Never goes |
+|---|---|---|
+| Every change to a plugin (what, why, measured before/after) | `dsh-<track>/CHANGELOG.md` | bootcards |
+| Per-version verification evidence | `dsh-<track>/VERIFICATION.md` (archive when large) | root `docs/` |
+| Operator manual, prerequisites, config | `dsh-<track>/README.md` | root `docs/` |
+| Measurements that outlive one plugin (cross-plugin contract, harness policy) | root `docs/` | a plugin track |
+| **Owner's unfinished asks and things they would otherwise forget** | bootcard + `AGENTS.md` only | plugin tracks |
+
+- **Bootcards and `AGENTS.md` are for the owner's memory, not for engineering history.** A bootcard
+  records what is *pending* or *half-done*. It is not a changelog and must not be the only place a
+  defect, a measurement, or a decision is written down.
+- A change is **not complete** until `dsh-<track>/CHANGELOG.md` has an entry with the measured
+  before/after. Reporting a change only in a chat message or only in a bootcard is a
+  documentation miss, and can be reversed by the next session that does not read the transcript.
+- Root `docs/` keeps only what spans plugins: the stage plans that govern several tracks, the
+  harness policy, the failure ledger. A per-plugin detail copied into root `docs/` is
+  **fragmentation** and is the mistake this rule exists to prevent.
+
+### 6.2 Comparing against a new upstream version (owner instruction, 2026-11-04)
+
+The owner's words: *"제발 새로운 버전 나왔다고 하면 문서 좀 확보해서 비교 검증하도록 해라, 지난번엔
+아무 문제가 없다고 하더니 마치 처음 보고받은 것 처럼 얘기하면 어쩌냐."*
+
+When a new DSH / provider / library version appears, this is the **minimum** sequence. It is not
+optional and it is not satisfied by reading a rendered HTML page:
+
+1. **Acquire the actual artifact for the exact version.**
+   `curl -sL https://codeload.github.com/<org>/<repo>/tar.gz/refs/tags/<tag>` for a tag, or the
+   installed package directory for the running build. Reading `master` is not reading the
+   version you run.
+2. **Diff the tagged source against the installed/target version** for every surface the plugin
+   touches (types, exports, upgrade-guide entries). Record which files were compared.
+3. **Diff the docs of that tag**, not the docs of master. A guide under
+   `docs/upgrade-guide/<version>/` may exist only on master — measured 2026-11-04: the
+   `dsh-v0.2.2-alpha.3` tag does not contain the `chat-process-activity-context` guide, and the
+   tag's `ProcessActivity` union has no `context` member.
+4. **Write the comparison into `dsh-<track>/CHANGELOG.md`** as a table of
+   *surface → before/after → affected? → evidence file*. "No problem found" without that table is
+   not a verification.
+5. **Never re-report a previously known fact as new.** §7 requirement 5 already says corrections
+   must be explicit; this adds: if a previous session already reported something, the new report
+   must reference it (*"still unchanged since <date>"*), not introduce it as a discovery.
 
 ## 7. Reporting format
 
@@ -137,6 +186,7 @@ summary: one line, <= 140 chars, what the doc answers
 
 ```bash
 npm run docs:check                       # skeleton headers + generated indexes
+node scripts/check-plugin-history.mjs    # every plugin track owns CHANGELOG (+ compat for adapters)
 (cd dsh-korean-locale && npm run verify)
 (cd dsh-sidebar-manager && npm test)
 (cd dsh-notify && npm test)
