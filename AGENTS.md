@@ -19,7 +19,6 @@ summary: Tier-1 auto-loaded entry. Points to detailed rules, the doc skeleton in
 | 3 | doc index | [docs/SKELETON.md](docs/SKELETON.md) | to find which doc answers your question |
 | 4 | session card | latest boot card below | current state, active task |
 | 5 | cross-project | [docs/CROSS-PROJECT-COLLABORATION.md](dsh-command-skill/docs/CROSS-PROJECT-COLLABORATION.md) | changes touching the interrupt boundary or `projects/total_skill` |
-| 6 | **plugin map** | [docs/PLUGIN-CONSOLIDATION.md](docs/PLUGIN-CONSOLIDATION.md) | **before installing, removing, or reinstalling ANY plugin** — some packages in this repo are superseded |
 
 Older boot cards are historical evidence; open them only for a version/policy delta.
 
@@ -46,7 +45,6 @@ Read only this latest card by default; older cards are historical evidence.
 5. **Sidebar Manager drift gate** — run `node scripts/audit-installed-vs-packaged.mjs` before any version-up.
 6. **Docs** — English + skeleton header + `npm run docs:index`. **Plugin history → `dsh-<track>/CHANGELOG.md`**, never boot cards; done needs measured before/after (§6.1). New upstream → diff the exact tag, never master (§6.2).
 7. **Cross-project contract** — `total_skill` is a separate repository joined at runtime. Duplicate command/skill names are a **hard mount failure**; read the contract first.
-8. **Superseded packages** — `dsh-antigravity-cli`, `dsh-subagent-antigravity` and `dsh-subagent-opencode` are **absorbed**; their READMEs say so. A duplicate subagent provider name is silently shadowed, not rejected — check [docs/PLUGIN-CONSOLIDATION.md](docs/PLUGIN-CONSOLIDATION.md) before reinstalling.
 
 ## Commands
 

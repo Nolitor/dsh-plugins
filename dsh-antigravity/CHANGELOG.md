@@ -8,7 +8,7 @@ updated: 2026-11-05
 summary: Engineering history for @nolit/dsh-antigravity. Created 2026-11-05 by merging the CLI worker surface of @nolit/dsh-antigravity-cli with the HTTP model route proven in @nolit/dsh-antigravity-directsdk, plus a settings section, a usage chip and per-surface switches.
 -->
 
-Current version: `0.0.1-rc.1`
+Current version: `0.0.1-rc.3`
 
 ## [0.1.0] — 2026-11-05
 

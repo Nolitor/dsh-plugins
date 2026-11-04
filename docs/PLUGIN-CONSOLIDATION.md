@@ -18,7 +18,7 @@ that vendor's account:
 
 | Vendor | Package | Version | Surfaces |
 | :--- | :--- | :--- | :--- |
-| Antigravity | `@nolit/dsh-antigravity` | `0.0.1-rc.1` | `/agy`, `agy_worker`, `antigravity` model route, `subagent_antigravity`, settings section, usage chip |
+| Antigravity | `@nolit/dsh-antigravity` | `0.0.1-rc.3` | `/agy`, `agy_worker`, `antigravity` model route, `subagent_antigravity`, settings section, usage chip |
 | OpenCode | `@nolit/dsh-opencode-v2` | `0.0.2-rc.1` | `opencode` tool, `/ocode`, `cli_worker`, `opencode-http-agent` route, `subagent_opencode` |
 
 ### The forcing reason
@@ -98,3 +98,29 @@ and the tool list do not show a surface that cannot serve.
 | What went wrong and what rule came from it? | `docs/FAILURE-LEDGER.md` |
 | Typography contract | `docs/PLUGIN-STYLE-STANDARD.md` (v2.0) |
 | Runtime/manifest contract | `docs/dsh-plugin-runtime-spec.md` |
+## 6. Version policy
+
+**Version numbers are the Master's, not the agent's.** The global rule (`~/.dsh/AGENTS.md` §6)
+is authoritative; this is the practical form for these packages:
+
+| Rule | Detail |
+| :--- | :--- |
+| Scheme | `0.0.<n>-rc.<k>` — only `rc.<k>` moves once a package exists |
+| `rc.<k>` increments | **once per session** in which the package was modified, never per edit and never for a release |
+| A new package | starts at `0.0.1-rc.1` unless the Master names a number |
+| Never | bump for a refactor, a doc pass, or "it feels finished" |
+
+### Why the separator is `-rc.` and not `.rc`
+
+The owner's scheme is written `0.0.1.rc3`. **pnpm rejects it:**
+
+```
+[ERR_PNPM_BAD_PACKAGE_JSON] .../package.json: Invalid version: "0.0.1.rc3"
+```
+
+A dot-separated `rc` is not valid semver (`semver.valid('0.0.1.rc3') === null`), so the package
+cannot be installed at all. Both `0.0.1-rc3` and `0.0.1-rc.3` install cleanly; this repo uses
+`0.0.1-rc.3` so the number is still explicit.
+
+**If the owner wants the literal `.rc` form, the install step must change too** — it cannot be
+satisfied by the package version alone.
