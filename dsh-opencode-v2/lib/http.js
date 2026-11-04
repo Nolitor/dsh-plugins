@@ -64,8 +64,10 @@ import {
   resolveRequestMaxTokens,
   validateRequest,
 } from './request-guards.js'
-import { claimActivation, detectSibling, releaseClaim, resolveClaimPath } from './exclusion.js'
-import { optionalService } from './optional-service.js'
+// The mutual-exclusion guard against the beta package was removed with that package
+// (owner instruction 2026-11-04). The pre-existing `conflictPolicy` guard below is
+// the one that stays: it handles a LEGACY opencode-go/opencode provider, which is a
+// real third-party collision, not a second copy of this adapter.
 
 /** Plugin name; the cordis row uses the `@nolit/dsh-opencode-v2/http` specifier. */
 export const name = 'dsh-opencode-v2-http'
@@ -103,7 +105,7 @@ const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
 /** Version string of this module, for the load beacon. Must match package.json. */
-const VERSION = '0.0.2'
+const VERSION = '0.0.2-rc.1'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
@@ -180,13 +182,6 @@ export const Config = Schema.object({
    * here wastes context on every turn. See DEFAULT_TURN_MAX_TOKENS.
    */
   turnMaxTokens: Schema.number().default(DEFAULT_TURN_MAX_TOKENS).volatile(),
-  /**
-   * Where the mutual-exclusion claim lives. Empty follows the catalog rule
-   * (profile dir, then `$DSH_HOME/cache`). The stable and beta packages share
-   * this file: only one of them may be active in a profile, because both
-   * register `opencode-http-agent`, the `opencode` tool and the same commands.
-   */
-  exclusionStatePath: Schema.string().default('').volatile(),
   timeoutMs: Schema.number().default(1800000).volatile(),
   requestTimeoutMs: Schema.number().default(30000).volatile(),
   /**
@@ -2236,44 +2231,9 @@ export function addUsage(previous, next) {
  * Plugin body: register the native `opencode-http-agent` route, own its
  * catalog/server lifecycle, and reconcile runtime conflicts.
  */
-/** This package's identity, for the mutual-exclusion guard. */
-const PACKAGE_NAME = '@nolit/dsh-opencode-v2'
-
 export function apply(ctx, config) {
   const providerId = 'opencode-http-agent'
   const adapter = new OpencodeHttpAdapter(ctx, config, { providerId })
-
-  // MUTUAL EXCLUSION (stable side). The beta package under the same repository
-  // claims the same route and tool, and a double registration both shadows this
-  // adapter and bills the same route twice. Claim first, then check for a live
-  // sibling: a stale claim from a crashed process is taken over, a live
-  // registration is a stand-down.
-  const claimPath = resolveClaimPath({
-    explicit: typeof config?.exclusionStatePath?.get === 'function'
-      ? config.exclusionStatePath.get()
-      : config?.exclusionStatePath,
-    dshHome: process.env.DSH_HOME,
-  })
-  const claim = claimActivation({ owner: PACKAGE_NAME, path: claimPath })
-  if (!claim.ok) {
-    adapter.standDown = true
-    ctx?.logger?.warn?.(claim.message)
-    return () => releaseClaim(claimPath, PACKAGE_NAME)
-  }
-  // `tools` is NOT in this entry's `inject` list, and cordis throws on reading an
-  // undeclared service (measured 2026-11-04: this exact line killed the row and
-  // the profile booted with "1 entry did not activate"). Read it optionally.
-  const sibling = detectSibling({
-    owner: PACKAGE_NAME,
-    llm: ctx?.llm,
-    tools: optionalService(ctx, 'tools'),
-    providerId,
-  })
-  if (sibling.conflict) {
-    ctx?.logger?.warn?.(sibling.evidence.join('; ') + ' — standing down; only one OpenCode package may be active')
-    return () => releaseClaim(claimPath, PACKAGE_NAME)
-  }
-  ctx?.on?.('dispose', () => releaseClaim(claimPath, PACKAGE_NAME))
 
   const policy = () => normalizeConflictPolicy(
     typeof config?.conflictPolicy?.get === 'function'

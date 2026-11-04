@@ -39,8 +39,20 @@ test('the pill component applies the route gate before it renders anything', () 
   const pill = bodyOf('CostPill')
   assert.match(pill, /usingOwnRoute\(\)/, 'the component must consult the gate')
   assert.match(pill, /if \(!onRoute\) return null/, 'a foreign route must render NOTHING')
-  // And it must re-check: switching models does not remount the slot.
-  assert.match(pill, /setInterval\(\s*sync/, 'the gate must be polled, not read once')
+  // It must re-check on change: a model switch does not remount the slot.
+  assert.match(pill, /watchRoute\b/, 'the gate must follow the route, not be read once')
+})
+
+test('the route gate is event-driven, not a timer', () => {
+  // Owner instruction 2026-11-04: "1초 폴링 대신 MutationObserver나 모델 변경
+  // 이벤트 리스너로". A 1 s interval queried the DOM forever on every page.
+  assert.doesNotMatch(SRC, /ROUTE_POLL_MS/, 'no polling constant for the route gate')
+  const watcher = bodyOf('watchRoute')
+  assert.match(watcher, /new MutationObserver/, 'the route gate observes the composer')
+  assert.match(watcher, /attributeFilter: \[\s*'data-provider-id',\s*'data-model-id'\s*\]/, 'only the two route attributes are watched')
+  assert.match(watcher, /disconnect\(\)/, 'the observer is released with the effect')
+  // It must only fire on an actual change, not on every mutation.
+  assert.match(watcher, /if \(next === last\) return/, 'an unchanged route must not re-render')
 })
 
 test('the pill does not poll cost while another provider is selected', () => {
@@ -53,6 +65,12 @@ test('the pill does not poll cost while another provider is selected', () => {
 test('the legacy DOM painter keeps the same gate', () => {
   const paint = bodyOf('paintCostPill')
   assert.match(paint, /if \(!usingOwnRoute\(\)\)/, 'both paths must agree')
+})
+
+test('cost refreshes on activity, not only on the clock', () => {
+  const pill = bodyOf('CostPill')
+  assert.match(pill, /watchSession\(schedule\)/, 'a turn ending must trigger a read')
+  assert.match(pill, /COST_REFRESH_DEBOUNCE_MS/, 'a burst of mutations collapses into one read')
 })
 
 test('only one place decides ownership, so the two paths cannot drift', () => {

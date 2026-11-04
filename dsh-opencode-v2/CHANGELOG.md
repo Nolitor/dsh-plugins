@@ -12,6 +12,55 @@ summary: Engineering history for @nolit/dsh-opencode-v2, moved out of README.md 
 > [VERIFICATION.md](VERIFICATION.md) and [VERIFICATION-ARCHIVE.md](VERIFICATION-ARCHIVE.md).
 > This file records **what changed and why**, in the order the owner instructed it.
 
+## 0.0.2-rc.1 — the beta package is gone; the pill is event-driven (2026-11-04)
+
+Owner instruction, verbatim intent: two plugin cards with the same name cannot be told apart;
+stages 2 and 3 are unreachable while stage 1 keeps emitting bugs; delete the beta package,
+fix on `0.0.2.rc3` and up, and build the later stages on a stabilised version.
+
+| Field | Value |
+|---|---|
+| `package.json` / load beacon | `0.0.2-rc.1` (was `0.0.2`) |
+| Beta package | **removed** — `dsh-opencode-v2-beta/` deleted, artifact deleted, ledger row dropped |
+| Tests | 403 (was 417; the 14 exclusion/beta tests went with the package) |
+| Artifact | `artifacts/nolit-dsh-opencode-v2-0.0.2-rc.1.tgz` |
+
+### 0.0.2-rc.1.1 Why the beta package was a mistake, measured
+
+| Observation | Measurement |
+|---|---|
+| The two cards were indistinguishable | The beta package shipped **no** `locale/*.json`; the plugin manager falls back to `pkg.meta?.title === undefined ? pkg.name`, so its card rendered as the bare specifier `@nolit/dsh-opencode-v2-beta` next to `Opencode v2 Agent`. |
+| It could never run beside the stable package | Both register `opencode` tool, `/opencode`, `/ocode`, `cli_worker` and the `opencode-http-agent` route. The mutual-exclusion claim existed precisely because coexistence is broken. |
+| It shipped nothing that served a model | It mounted, self-checked, and stood down. It was a test fixture packaged as a plugin. |
+
+Removing it also removed the whole claim-file subsystem (`lib/exclusion.js`, `exclusionStatePath`,
+the beta dependency in three test files). The `conflictPolicy` guard stays: it handles a legacy
+`opencode-go`/`opencode` provider, which is a real third-party collision.
+
+### 0.0.2-rc.1.2 The cost pill is event-driven
+
+Owner instruction: "1초 폴링 대신 MutationObserver나 모델 변경 이벤트 리스너로".
+
+- `watchRoute()` observes the composer chip's `data-provider-id` / `data-model-id` attributes
+  with a `MutationObserver` (childList + attributes, filtered to those two names) and fires only
+  when the pair actually changes. A 1 s interval queried the DOM forever on every page.
+- The mount-time read is explicit: the chip does not exist yet when the slot mounts, so the
+  effect reads the route once and then relies on the observer. Measured without it: the pill
+  stayed hidden until the operator switched models.
+- Cost refresh follows activity: opening the route reads once, a composer/session mutation
+  schedules one debounced read (400 ms), and a 15 s tick remains as a floor for an idle page.
+
+**Verified live** (playwright, route attribute rewritten and restored):
+
+| step | route | pills |
+|---|---|---|
+| 1 | `opencode-http-agent/opencode-go/deepseek-v4.1-flash` | `$0.58…` |
+| 2 | `deepseek-account/deepseek-flash` (after 1.2 s) | **none** |
+| 3 | back on our route (after 1.2 s) | `$0.58…` |
+
+`ROUTE_POLL_MS` is gone from the served bundle (verified by fetching it from the running
+service: 0 occurrences, `watchRoute` present).
+
 ## 0.0.2 — Tier A guards, beta track split, verified prerequisites (2026-11-04)
 
 Owner instruction: version to `0.0.2`, beta to `0.0.2-beta.1`, beta stabilises through
@@ -21,7 +70,7 @@ Owner instruction: version to `0.0.2`, beta to `0.0.2-beta.1`, beta stabilises t
 |---|---|
 | `package.json` | `0.0.2` (was `0.0.1-rc.10`) |
 | `lib/http.js` load-beacon `VERSION` | `0.0.2` |
-| beta package | `@nolit/dsh-opencode-v2-beta` `0.0.2-beta.1`, peer `~0.0.2` |
+| beta package | `@nolit/dsh-opencode-v2-beta` `0.0.2-beta.1` — **removed in `0.0.2-rc.1`**, see above |
 | Tests | 402 stable (was 359), 12 beta |
 | Artifacts | `artifacts/nolit-dsh-opencode-v2-0.0.2.tgz` (sha256 `395267f1…`), `artifacts/nolit-dsh-opencode-v2-0.0.2-beta.1.tgz` (sha256 `60165f6f…`) |
 | Packing | `scripts/pack-opencode-v2.sh` — see the artifact naming rule below |

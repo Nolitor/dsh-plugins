@@ -7,10 +7,10 @@
  *   Error: cannot get property "tools" without inject
  *
  * Measured 2026-11-04, on the live web profile: `dsh-opencode-v2-http` declares
- * `['llm','subprocess','sessions','connection','settings']`, and the exclusion
- * guard read `ctx?.tools`. Optional chaining does NOT help - the throw happens on
- * the property read itself - so the whole entry failed to activate and the profile
- * booted with one dead row ("dsh: warning: 1 entry did not activate").
+ * `['llm','subprocess','sessions','connection','settings']`, and a guard read
+ * `ctx?.tools`. Optional chaining does NOT help - the throw happens on the property
+ * read itself - so the whole entry failed to activate and the profile booted with one
+ * dead row ("dsh: warning: 1 entry did not activate").
  *
  * The guard only WANTS the tool table when it happens to be visible. This module
  * reads it that way: a rejected read is "not observable", never a crash.

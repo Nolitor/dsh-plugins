@@ -5,7 +5,7 @@ version: 4.1
 kind: readme
 status: active
 updated: 2026-11-04
-summary: Operator manual for @nolit/dsh-opencode-v2 — a native DSH LLM adapter that streams from OpenAI-compatible backends (OpenCode Go) while the DSH agent loop keeps ownership of tools, history and workspace. Covers the three provided surfaces (opencode-http-agent route, opencode tool + /opencode command, cli_worker), Tier A request guards derived from deepseek-recipe, mutual exclusion against the beta package, verified prerequisites (CLI version, web auth and token store, PATH resolution), and installation. Engineering history lives in CHANGELOG.md.
+summary: Operator manual for @nolit/dsh-opencode-v2 — a native DSH LLM adapter that streams from OpenAI-compatible backends (OpenCode Go) while the DSH agent loop keeps ownership of tools, history and workspace. Covers the three provided surfaces (opencode-http-agent route, opencode tool + /opencode command, cli_worker), Tier A request guards derived from deepseek-recipe, the legacy-provider collision guard, verified prerequisites (CLI version, web auth and token store, PATH resolution), the release ladder, and installation. Engineering history lives in CHANGELOG.md.
 -->
 
 OpenCode models inside DeepSeek Harness, served **natively** through the DSH model
@@ -14,10 +14,10 @@ registry.
 | | |
 |---|---|
 | Package | `@nolit/dsh-opencode-v2` |
-| Version | `0.0.2` |
+| Version | `0.0.2-rc.1` |
 | Host | DSH `>=0.2.2-alpha.2 <0.3.0` |
 | History | [CHANGELOG.md](CHANGELOG.md) |
-| Beta track | `@nolit/dsh-opencode-v2-beta` `0.0.2-beta.1` (mutually exclusive with this package) |
+| Release line | `0.0.2-rc.N` fixes first; the next stable line starts only after that is quiet |
 | Proof of record | [VERIFICATION.md](VERIFICATION.md) |
 
 ---
@@ -107,19 +107,23 @@ stored by `opencode auth login`; the adapter reads it from the local control pla
 
 ## Release ladder (owner instruction, 2026-11-04)
 
-| Step | Package | Version | Meaning |
-|---|---|---|---|
-| 1 | `@nolit/dsh-opencode-v2` | `0.0.2` | Tier A is applied. This is the served package. |
-| 2 | `@nolit/dsh-opencode-v2-beta` | `0.0.2-beta.1`, `-beta.2`, … | Beta cycles step the rc number only. Each step must keep the conformance and invariance suites green before the next one starts. |
-| 3 | `@nolit/dsh-opencode-v2` | `0.0.3` | Once the beta parser is accepted, its work is promoted and `0.0.3` becomes the current release. `0.0.2` then becomes the **lower version** — kept for rollback, not developed further. |
+| Step | Version | What ships |
+|---|---|---|
+| 1 | `0.0.2-rc.1`, `-rc.2`, … | Bug fixes on the released 0.0.2 line. Each `rc` is one instructed fix round. |
+| 2 | next minor patch of the stable package | Only after the `rc` line is quiet. The canonical parser (former "beta") is added to THIS package, not to a second one. |
+| 3 | following stable line | The conformance oracle becomes part of the shipped test suite. |
 
-Rules taken from the instruction and from the standing policy:
+Rules:
 
-- The stable version changes only on an explicit owner instruction; a green test run is not one.
-- The beta version advances one `-beta.N` step per instructed cycle, never a new minor.
-- `0.0.3` is produced by **promotion**, not by editing the beta in place: the beta package
-  keeps its own identity so a rollback is a profile change, not a rebuild.
-- Only one of the two packages may be active at a time (see Mutual exclusion below).
+- The version changes only on an explicit owner instruction; a green test run is not one.
+- **There is no second package.** The `@nolit/dsh-opencode-v2-beta` staging package was
+  removed on 2026-11-04: it registered the same tool, commands, worker and model route as
+  this one (mutual exclusion was mandatory) and its plugin card had no title, so the operator
+  saw two identical-looking entries and could not tell which was which. Stage 2 and 3 work
+  now happens on top of a stabilised stable release.
+- A promoted change keeps the same package identity, so a rollback is a version change, not a
+  profile rebuild.
+
 
 ## Request guards (Tier A, 2026-11-04)
 
@@ -145,44 +149,16 @@ per stream. Measured: reasoning is 86.1% of output characters on this profile, y
 field arrives in 2 of 35 recorded steps.
 
 
-## Mutual exclusion with the beta package
+## Collision guard (legacy providers only)
 
-`@nolit/dsh-opencode-v2-beta` carries the canonical protocol parser (Tier B). Both
-packages register `opencode-http-agent`, the `opencode` tool and the same commands, so
-only one may be active per profile. One implementation (`lib/exclusion.js`) serves both
-sides:
+`conflictPolicy` handles ONE case: a legacy `opencode-go` / `opencode` provider (for example
+`llm-pi-ai`) already owns the same namespace. `warn` serves alongside it, `stand-down` yields
+the namespace and keeps the tools and commands usable.
 
-1. **Mount-time** -- an exclusive claim at `$DSH_HOME/cache/opencode-claim.json` (or
-   `exclusionStatePath`). A second package activating in the same profile is refused, and
-   the message names the owning package, pid and timestamp. A claim left by a dead
-   process is taken over.
-2. **Runtime** -- before serving, the live `ctx.tools` is read for the shared tool name. The
-   provider registry is consulted only for a *foreign* id: because both packages register the
-   same `opencode-http-agent`, its presence cannot name an owner, so ownership belongs to the
-   claim file alone (measured: treating the shared id as evidence made the guard stand down on
-   itself and silenced the pre-existing conflict warning).
+There is no guard between two copies of this adapter any more, because there is only one
+package. A second copy of the same package in one profile is a mount error the host reports
+itself (duplicate tool registration), which is the honest place for it.
 
-Recovery from a crash: delete the claim file, or let the stale-pid takeover handle it.
-
-### What the message does and does not mean
-
-`@nolit/dsh-opencode-v2 cannot activate: @nolit/dsh-opencode-v2-beta already owns this
-profile` is **not** about two different plugins coexisting. It only ever names the
-STABLE and the BETA build of this same adapter, because they are the only two packages
-that register the same `opencode-http-agent` route, the same `opencode` tool and the
-same commands — a duplicate registration is a hard mount failure, and a silent
-shadowing would bill the same route twice.
-
-Other plugins coexist normally:
-
-| Package | What it registers | Coexists with this one? |
-|---|---|---|
-| `@nolit/dsh-opencode-v2` | `opencode` tool, `/opencode` + `/ocode`, `cli_worker`, `opencode-http-agent` | — |
-| `@nolit/dsh-opencode-v2-beta` | the same four names | **No** (mutually exclusive, by design) |
-| `@nolit/dsh-subagent-opencode` | `subagent_opencode` tool, `subagents` service | Yes — measured installed side by side |
-
-The claim file is stale-safe: a claim written by a process that no longer exists is
-taken over on the next activation, so a crash cannot lock a profile.
 
 ## Reference — measured OpenCode v2.2.0 facts
 
@@ -658,7 +634,7 @@ dsh-opencode-v2/
 │   ├── stream-parser.js  # TOP: explicit state machine, content -> typed parts
 │   ├── display-gate.js   # BOTTOM: parser channel vs screen channel
 │   ├── request-guards.js # Tier A: max_tokens clamp, tool/stop validation (recipe-derived)
-│   ├── exclusion.js      # mutual exclusion vs the beta package (claim file + live check)
+│   ├── optional-service.js # read a service cordis did not inject, without throwing
 │   ├── display-clean.js  # retained: stripThinkingTags only; off the stream path
 │   ├── trace.js          # opt-in real-traffic shape trace (OPENCODE_V2_TRACE=0 disables, 8 MB cap)
 │   └── shared.js         # argv, ndjson parser, usage mapping/fetch

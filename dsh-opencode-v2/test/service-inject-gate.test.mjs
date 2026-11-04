@@ -23,7 +23,6 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const LIB = new URL('../lib', import.meta.url).pathname
-const BETA_ENTRY = new URL('../../dsh-opencode-v2-beta/lib/index.js', import.meta.url).pathname
 
 /** cordis core members — always readable, never services. */
 const CORE_MEMBERS = new Set([
@@ -87,17 +86,10 @@ test('at least the two known entries are actually covered by this gate', () => {
   assert.deepEqual(entries, ['lib/http.js', 'lib/index.js'])
 })
 
-test('the http entry declares exactly what it needs, and reads tools optionally', () => {
+test('the http entry declares exactly what it needs and reads nothing else', () => {
   const source = readFileSync(join(LIB, 'http.js'), 'utf8')
   assert.deepEqual(declaredInjects(source).sort(), ['connection', 'llm', 'sessions', 'settings', 'subprocess'])
-  assert.match(source, /optionalService\(ctx, 'tools'\)/, 'tools must be read through the optional helper')
+  // The historical failure was `ctx?.tools` here; the guard that needed it is gone,
+  // so the rule is simply "do not read it at all".
   assert.doesNotMatch(source, /ctx\??\.tools\b/, 'a direct ctx.tools read kills the whole row')
-})
-
-test('the beta entry injects nothing and reads no service directly', () => {
-  const source = readFileSync(BETA_ENTRY, 'utf8')
-  assert.deepEqual(declaredInjects(source), [])
-  assert.doesNotMatch(source, /ctx\??\.(llm|tools|sessions|settings|connection|subprocess)\b/)
-  assert.match(source, /optionalService\(ctx, 'llm'\)/)
-  assert.match(source, /optionalService\(ctx, 'tools'\)/)
 })

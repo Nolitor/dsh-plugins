@@ -500,6 +500,8 @@ window.__ModuleLoader__.load({
      * figure per session — deliberately NOT a per-turn badge.
      */
     const COST_POLL_MS = 15000
+    /** Collapse a burst of DOM mutations into one cost read. */
+    const COST_REFRESH_DEBOUNCE_MS = 400
 
     function formatUsd(usd) {
       if (typeof usd !== 'number' || !Number.isFinite(usd)) return ''
@@ -802,8 +804,72 @@ window.__ModuleLoader__.load({
      */
 
 
-    /** How often the route gate re-reads the composer's model chip. */
-    const ROUTE_POLL_MS = 1000
+    /**
+     * Watch the composer's model chip and report every change.
+     *
+     * Event-driven on purpose (owner instruction 2026-11-04: "1초 폴링 대신
+     * MutationObserver나 모델 변경 이벤트 리스너로"). A 1 s interval above all ran a
+     * DOM query every second for the whole lifetime of the page, whether or not
+     * the model ever changed.
+     *
+     * Why an observer and not a host event: the selected route is a DOM fact
+     * (`data-provider-id` / `data-model-id` on the composer chip). The client
+     * context exposes no model-selection event to a plugin — measured against the
+     * running shell: `uiConversation.events` registers turns and messages, not the
+     * picker. The chip is re-rendered by React when the model changes, so a
+     * childList+attributes observer on the composer is the exact signal, and it
+     * costs nothing while the selection is stable.
+     *
+     * @param {() => void} onChange - called with no arguments on every change.
+     * @returns {() => void} disconnect callback.
+     */
+    function watchRoute(onChange) {
+      if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return () => {}
+      let last = ''
+      const current = () => {
+        const node = document.querySelector('[data-provider-id][data-model-id]')
+        return node === null
+          ? ''
+          : (node.getAttribute('data-provider-id') ?? '') + '|' + (node.getAttribute('data-model-id') ?? '')
+      }
+      last = current()
+      const check = () => {
+        const next = current()
+        if (next === last) return
+        last = next
+        onChange()
+      }
+      const observer = new MutationObserver(check)
+      // Observe the whole body: the composer is re-created on session switches, so
+      // a narrower root would go stale after the first navigation.
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-provider-id', 'data-model-id'],
+      })
+      // The first render may already differ from the value captured above.
+      check()
+      return () => observer.disconnect()
+    }
+
+    /**
+     * Watch the conversation for activity, and report it once per burst.
+     *
+     * A turn's cost lands in the adapter's ledger when the stream ends, and the
+     * composer re-renders at that moment (usage pill, token counts). Observing the
+     * conversation root turns that into the refresh trigger; the safety tick in
+     * the caller covers a page that never re-renders.
+     *
+     * @param {() => void} onActivity - called after a burst of mutations.
+     * @returns {() => void} disconnect callback.
+     */
+    function watchSession(onActivity) {
+      if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return () => {}
+      const observer = new MutationObserver(onActivity)
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+      return () => observer.disconnect()
+    }
 
     function CostPill() {
       /**
@@ -815,9 +881,10 @@ window.__ModuleLoader__.load({
        * 아예 감춰져야 하는거 아닌가?"). `paintCostPill` (the old DOM path) already
        * had the rule; the slot component that replaced it did not.
        *
-       * The chip is a DOM fact (no client service), so the value is polled: the
-       * provider/model pair changes when the operator switches models, and a
-       * slot has no subscription to that.
+       * The chip is a DOM fact (no client service), so the value is read from the
+       * composer and RE-READ when it changes: `watchRoute` observes the chip's
+       * provider/model attributes, so a model switch re-evaluates the gate
+       * immediately and nothing runs while the selection is stable.
        */
       const [onRoute, setOnRoute] = React.useState(() => usingOwnRoute())
       // Start at the zero label, not an empty string: an empty first render used
@@ -825,10 +892,13 @@ window.__ModuleLoader__.load({
       const [text, setText] = React.useState(() => t('costFree'))
       const [title, setTitle] = React.useState('')
       React.useEffect(() => {
-        const sync = () => setOnRoute(usingOwnRoute())
-        sync()
-        const gate = setInterval(sync, ROUTE_POLL_MS)
-        return () => clearInterval(gate)
+        const disconnect = watchRoute(() => setOnRoute(usingOwnRoute()))
+        // The chip may not exist yet at mount (the composer renders after the
+        // slot), so the first read happens here rather than only in useState.
+        // Measured 2026-11-04: without this the pill stayed hidden until the
+        // operator switched models, because no mutation followed the mount.
+        setOnRoute(usingOwnRoute())
+        return disconnect
       }, [])
       React.useEffect(() => {
         // Nothing to poll while this plugin's route is not the selected one: the
@@ -853,8 +923,23 @@ window.__ModuleLoader__.load({
           }
         }
         void refresh()
+        // Spend only moves when a turn produces usage, so the refresh is driven by
+        // activity rather than by the clock alone: the route entry (above), any
+        // composer/session mutation (a turn ending re-renders the composer), and a
+        // slow safety tick for a page left idle on our route.
+        let pending = null
+        const schedule = () => {
+          if (pending !== null) return
+          pending = setTimeout(() => { pending = null; void refresh() }, COST_REFRESH_DEBOUNCE_MS)
+        }
+        const disconnect = watchSession(schedule)
         const timer = setInterval(() => void refresh(), COST_POLL_MS)
-        return () => { live = false; clearInterval(timer) }
+        return () => {
+          live = false
+          disconnect()
+          if (pending !== null) clearTimeout(pending)
+          clearInterval(timer)
+        }
       }, [onRoute])
       // A different provider is selected: occupy no seat at all. Returning null
       // (not an empty chip) is what makes the figure disappear, and the slot
