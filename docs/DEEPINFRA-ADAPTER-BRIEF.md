@@ -1,12 +1,17 @@
 <!-- skeleton:
-version: 1.0
+version: 2.0
 kind: spec
-status: active
+status: reference
 updated: 2026-11-04
-summary: Build brief for the next session — a DeepInfra API-key LLM adapter plugin for DSH (@nolit/dsh-deepinfra). Records the measured DeepInfra surface (OpenAI-compatible /v1/openai, 91 chat routes, reasoning_effort enum, prompt-cache pricing, 16,384 output cap), the DSH adapter contract it must satisfy, why API-key auth removes the hardest parts of the OpenCode V2 build (no control plane, no spawn, no OAuth, no credential store to seek), the five parts that do NOT become easy, the acceptance gates, and the exact open questions to answer with a key.
+summary: Build brief (SUPERSEDED IN PART — 5 assumptions corrected by live measurement, 2026-11-04) for the DeepInfra adapter @nolit/dsh-deepinfra, now built. Read section 12 first.
 -->
 
-> Status: **not started** · Target package: `@nolit/dsh-deepinfra` · Next session ·
+> Status: **built** — `@nolit/dsh-deepinfra@0.1.0-rc.1` · **Read §12 before trusting anything below.**
+> Five assumptions in this brief were contradicted by the live API. §12 records each one with
+> the measurement that replaced it; the sections below are kept as the original hypothesis so the
+> delta stays visible. Per-plugin history and the full evidence live in
+> [dsh-deepinfra/CHANGELOG.md](../dsh-deepinfra/CHANGELOG.md).
+> Target package: `@nolit/dsh-deepinfra` ·
 > Inputs: [DeepInfra docs](https://docs.deepinfra.com/llms.txt),
 > [DSH adapter cookbook](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cookbook/adding-an-llm-adapter.md),
 > [DSH LLM streaming](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/llm-streaming.md),
@@ -58,8 +63,8 @@ Everything here was read from the live API or the docs, not from memory.
 | Reasoning control | `reasoning_effort`: `none|minimal|low|medium|high|xhigh|max`, or `reasoning{effort,enabled}` |
 | Reasoning output | `message.reasoning_content` (confirmed present in the OpenAPI schema) |
 | Streaming | `stream: true` SSE; `stream_options.include_usage` **defaults to true** |
-| Output cap | model-dependent, **hard 16,384 for most models** (bigger only where `max_tokens` says so) |
-| Stop | **up to 4 sequences** |
+| Output cap | model-dependent, **hard 16,384 for most models** (bigger only where `max_tokens` says so) — ⚠️ **WRONG, see §12.1/C2: there is no wire cap** |
+| Stop | **up to 4 sequences** — ⚠️ **WRONG, see §12.1/C3: the limit is 16** |
 | Extras worth knowing | `service_tier: priority\|flex`, `fail_fast` (429 instead of queueing), `prompt_cache_key`, `prompt_cache_options.ttl` (`1h`), `cache_salt` |
 
 Errors the docs name explicitly: `engine_overloaded` (HTTP 429, "Model busy, retry later") and
@@ -222,4 +227,48 @@ Reading only `docs/subsystems` and the cookbook is not sufficient — that is ex
 | `usage` before `finish`, two error paths | `docs/subsystems/llm-streaming.md` + cookbook | matches |
 | `purpose` is a live `GenerateOptions` field | installed `types.d.ts:579` | **was missing from this brief — added above** |
 | Client halves must handle `ProcessActivity.context` | alpha.3 guide | not applicable today (no reference in our client) |
+
+
+
+## 12. Corrections — what the live API actually does (2026-11-04)
+
+> This section was written **after** building `@nolit/dsh-deepinfra@0.1.0-rc.1` with the owner's
+> key. Where it disagrees with §2–§5 above, **this section wins**. Full evidence and the
+> per-gate verification table: [dsh-deepinfra/CHANGELOG.md](../dsh-deepinfra/CHANGELOG.md).
+
+### 12.1 Five assumptions this brief got wrong
+
+| # | Brief said (§) | Measured | Effect |
+|---|---|---|---|
+| C1 | Cost is derived, not reported; "there is no cost field on the wire" (§4) | `usage.estimated_cost` is present on **every** completion as exact USD | Provider value is used; derivation is a labelled fallback |
+| C2 | "Hard 16,384 output cap for most models" (§2, §5.3) | No wire cap: 16385 / 50000 / 100000 all 200. On **all 91** chat routes `max_tokens === context_length` | No clamp; `defaultMaxTokens` comes from the turn reservation |
+| C3 | "Stop: up to 4 sequences" (§2) | 4/5/8/16 → 200; **32** → 422 "maximum of 16 stop sequences allowed" | Limit is 16 |
+| C4 | "57 of 148 rows have no `context_length`" (§4) | **0 of 91** chat routes lack it (that 57 counted embed/tts/image entries) | Context is always populated |
+| C5 | Setting `reasoning_effort` on a non-reasoning model "has no effect — do not advertise it" (§4) | Tags do not predict behaviour: 7 routes carry `reasoning_effort` without `reasoning`; `DeepSeek-V3.2` (neither tag) emitted **50** reasoning deltas with an effort and **0** without | Tags drive advertisement only; the adapter accepts an effort on any route |
+
+### 12.2 Two facts that settled the design
+
+- **`metadata.discount` is a fraction to SUBTRACT.** Fitting provider-reported cost against
+  catalog pricing gave exactly 0.70 (discount 0.3), 0.75 (0.25), 0.75 (0.25), 1.00 (none).
+  `1 - discount` reproduces `estimated_cost` to the last digit.
+- **The prompt bucket is folded, like DeepSeek's.** `prompt_tokens` is the TOTAL and
+  `cached_tokens` a subset (measured 9612 / 9600 on a warm prefix), so `inputTokens` must be the
+  uncached remainder or the host double-counts.
+
+### 12.3 Open questions from §8 — answered
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Does `completion_tokens_details.reasoning_tokens` appear? | **Sometimes.** Present on DeepSeek-V4.1-Flash, Kimi-K2.6, GLM-5.3; entirely **absent** on gpt-oss-120b and claude-sonnet-5 while both stream reasoning. Absence is "not reported", never 0 |
+| 2 | Does `prompt_tokens_details.cached_tokens` appear? | Yes, always (with `cache_write_tokens` null). Non-zero on a repeated prefix |
+| 3 | Is `reasoning_content` a delta field? | **Yes**, it streams as deltas — on routes the tags do not predict (C5) |
+| 4 | Streamed tool-call shape | `delta.tool_calls[]` with `index`; the first fragment carries `id`+`name` with EMPTY arguments, later fragments carry only `index`+`arguments` slice and `id:null` |
+| 5 | Does usage arrive after `finish_reason`? | **Yes** — measured order `FINISH:tool_calls -> USAGE -> [DONE]`. This is exactly why finish/usage must be buffered |
+
+### 12.4 The defect the suite could not catch
+
+`block-end` first emitted `{type:'text', text:''}` instead of the assembled block, so a turn that
+streamed 5 output tokens completed with an **empty message**. Only a real boot exposed it
+(`"text":""` → `"text":"MOUNT-OK"` after the fix). A fake SSE server asserting chunk *kinds* was
+green throughout: it asserted ordering, never that the block carried content.
 

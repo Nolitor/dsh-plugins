@@ -1,0 +1,90 @@
+{
+  "name": "@nolit/dsh-deepinfra",
+  "version": "0.2.5-rc.1",
+  "private": false,
+  "description": "DeepInfra pure LLM adapter for DeepSeek Harness: a `deepinfra` provider route that calls the OpenAI-compatible /v1/openai/chat/completions endpoint directly (streaming text/reasoning/tool deltas, disjoint usage, cache-aware usage buckets, catalog-derived context and reasoning metadata). No daemon, no spawn, no credential store — one bearer key.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "cordis",
+    "deepinfra",
+    "llm-adapter",
+    "openai-compatible"
+  ],
+  "license": "MIT",
+  "author": "nolit",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./wire": {
+      "default": "./lib/wire.js"
+    },
+    "./catalog": {
+      "default": "./lib/catalog.js"
+    },
+    "./map": {
+      "default": "./lib/map.js"
+    },
+    "./usage": {
+      "default": "./lib/usage.js"
+    },
+    "./cost": {
+      "default": "./lib/cost.js"
+    },
+    "./settings": {
+      "default": "./lib/settings.js"
+    },
+    "./server": {
+      "default": "./lib/server.js"
+    },
+    "./adapter": {
+      "default": "./lib/adapter.js"
+    }
+  },
+  "files": [
+    "lib/",
+    "locale/",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "ARCHITECTURE.md",
+    "UPSTREAM-COMPAT.md"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.2-alpha.3 <0.3.0"
+  },
+  "scripts": {
+    "test": "node --import ./test/setup-isolate.mjs --test test/*.test.mjs",
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/wire.js && node --check lib/catalog.js && node --check lib/map.js && node --check lib/usage.js && node --check lib/cost.js && node --check lib/settings.js && node --check lib/server.js && node --check lib/adapter.js && node --check lib/sse.js"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-llm": "^0.2.2-alpha.3",
+    "@deepseek-ai/schemastery": "~3.18.4"
+  }
+}

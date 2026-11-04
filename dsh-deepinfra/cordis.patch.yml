@@ -1,0 +1,39 @@
+# Bundle config layer for @nolit/dsh-deepinfra.
+#
+# The row id is the settings namespace the loader derives for volatile Config
+# fields, so it MUST equal the plugin name exported by lib/index.js
+# (dsh-deepinfra). It is also the namespace `settings.update('dsh-deepinfra', …)`
+# writes, which is how a key typed in the Web UI reaches the running plugin.
+#
+# CREDENTIAL MODEL — no systemd edit required.
+#   `apiKey` is a `role('secret')` + `.volatile()` field. The Settings panel saves
+#   the key through the host's settings service, which persists it into this
+#   profile patch as a plain string and updates the live loader entry, so the
+#   adapter reads it on the NEXT TURN with no restart and no unit change.
+#   The value below is only the initial default: an empty string means "read from
+#   the environment until the operator saves one". Deliberately NOT
+#   `!!js process.env.DEEPINFRA_API_KEY`, because an expression pinned in the
+#   patch would be re-evaluated on every boot and would shadow a saved key.
+- insert:
+  - id: dsh-deepinfra
+    name: '@nolit/dsh-deepinfra'
+    config:
+      # OpenAI-compatible base URL. Override only for a compatible gateway.
+      baseURL: 'https://api.deepinfra.com/v1/openai'
+      # Empty = fall back to DEEPINFRA_API_KEY. A key saved in the UI is written
+      # here by the settings service and takes precedence.
+      apiKey: ''
+      # Completion tokens ONE TURN reserves (the host's defaultMaxTokens).
+      # Deliberately NOT the catalog max_tokens: on all 91 chat routes the catalog
+      # reports max_tokens === context_length, so using it here would reserve a
+      # whole 1M window for a single answer.
+      turnMaxTokens: 16384
+      # Context window used only when a route reports none (none of the 91 do).
+      contextWindow: 32768
+      # How long a fetched catalog stays authoritative (ms).
+      catalogTtlMs: 1800000
+      # Default reasoning effort when a caller omits one; '' keeps the provider
+      # default. Must be one of none|minimal|low|medium|high|xhigh|max.
+      defaultEffort: ''
+      # Advertise only these model ids; empty means every chat route.
+      enabledModels: []
