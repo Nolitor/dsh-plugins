@@ -104,6 +104,8 @@
 
 - **1.0** · active · 2026-11-05 · [docs/ANTIGRAVITY-STAGE-PLAN.md](ANTIGRAVITY-STAGE-PLAN.md)
   Stage-1 stabilisation gate for @nolit/dsh-antigravity, the measured S1–S7 status after today's reinforcement, and the rule that its stage 2/3 upgrades ride with the OpenCode v2 stage plan.
+- **1.0** · active · 2026-11-05 · [docs/UI-SLOT-ARCHITECTURE.md](UI-SLOT-ARCHITECTURE.md)
+  Owner-approved placement rule for token/usage surfaces — global header for the tk system ledger, conversation.input.right for per-provider composer chips, sidebar/settings for management — with the measured slot seats and the migration that removes the tk/deepinfra single-slot collision.
 - **1.0** · active · 2026-11-04 · [docs/OPENCODE-V2-STAGE-PLAN.md](OPENCODE-V2-STAGE-PLAN.md)
   Stage plan for @nolit/dsh-opencode-v2 — what "stabilised" means as a measurable gate, then stage 2 (move the canonical recipe-derived protocol parser into this single package) and stage 3 (ship the conformance oracle in the test suite). Replaces the deleted beta package. Records the exact defects that block promotion, the acceptance thresholds taken from recorded traffic, the rollback route, and who is allowed to open a stage.
 - **1.0** · active · 2026-11-02 · [docs/LIGHTPANDA-CDP.md](LIGHTPANDA-CDP.md)
@@ -126,4 +128,4 @@
 
 ---
 
-81 indexed (43 boot cards), 0 missing header, 81 total.
+82 indexed (43 boot cards), 0 missing header, 82 total.

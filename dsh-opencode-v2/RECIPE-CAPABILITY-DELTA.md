@@ -11,6 +11,12 @@ summary: Capability delta between deepseek-ai/deepseek-recipe (Rust/Python model
 Measured 2026-11-04 (KST). Every number below was read from the named source at the
 time of writing; estimates are labelled **estimate**.
 
+> **Current status (2026-11-05):** this document measures recipe and the plugin at
+> `0.0.1-rc.10` / 359 tests. The plugin is now `0.0.2-rc.2` / 413 tests after the subagent merge
+> and cleanup. Tier A guards remain applied; Tier B/C are not on the stable stream path; stage 2
+> has not been opened (S6 soak is owner-confirmed). The numbers below are the measurement date,
+> not today's HEAD.
+
 ## 0. What was measured, and what was not
 
 | # | Source | Reading |
