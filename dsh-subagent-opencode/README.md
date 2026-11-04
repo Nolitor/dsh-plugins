@@ -1,5 +1,20 @@
 # @nolit/dsh-subagent-opencode
 
+> ## ⚠️ SUPERSEDED — do not install this package
+>
+> This package was **absorbed into `@nolit/dsh-opencode-v2`** on 2026-11-05.
+> It is kept only as the historical record of what shipped before the merge.
+>
+> | | |
+> | :--- | :--- |
+> | **Replacement** | `@nolit/dsh-opencode-v2` |
+> | **Surfaces now in the replacement** | `subagent_opencode` provider |
+> | **Why** | The owner asked for one package per vendor so a single install carries every surface. Two packages registering the same names cannot coexist: a duplicate `ctx.subagents.registerProvider` name **silently shadows** the other, and a duplicate tool or command name **aborts the whole plugin row**. |
+> | **What to do** | Install `@nolit/dsh-opencode-v2` instead. If this package is still mounted, remove its bundle row: the replacement detects the duplicate provider with `getProvider()` and yields with a warning rather than shadowing. |
+>
+> The code here still works and still passes its own tests; it is not broken, only superseded.
+> See the replacement CHANGELOG for the merge record.
+
 OpenCode subagent provider for DeepSeek Harness.
 
 ## What it is

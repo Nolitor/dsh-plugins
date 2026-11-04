@@ -1,5 +1,20 @@
 # @nolit/dsh-antigravity-cli
 
+> ## ⚠️ SUPERSEDED — do not install this package
+>
+> This package was **absorbed into `@nolit/dsh-antigravity`** on 2026-11-05.
+> It is kept only as the historical record of what shipped before the merge.
+>
+> | | |
+> | :--- | :--- |
+> | **Replacement** | `@nolit/dsh-antigravity` |
+> | **Surfaces now in the replacement** | `/agy` command, `agy_worker` tool |
+> | **Why** | The owner asked for one package per vendor so a single install carries every surface. Two packages registering the same names cannot coexist: a duplicate `ctx.subagents.registerProvider` name **silently shadows** the other, and a duplicate tool or command name **aborts the whole plugin row**. |
+> | **What to do** | Install `@nolit/dsh-antigravity` instead. If this package is still mounted, remove its bundle row: the replacement detects the duplicate provider with `getProvider()` and yields with a warning rather than shadowing. |
+>
+> The code here still works and still passes its own tests; it is not broken, only superseded.
+> See the replacement CHANGELOG for the merge record.
+
 Antigravity (`agy`) CLI worker tool for DeepSeek Harness — the "Antigravity subagent" plugin.
 
 ## What it is

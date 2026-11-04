@@ -39,6 +39,8 @@
 
 ## report
 
+- **1.0** · active · 2026-11-05 · [docs/PLUGIN-CONSOLIDATION.md](PLUGIN-CONSOLIDATION.md)
+  Why the per-surface plugins were folded into one package per vendor, which packages are superseded, and what a future agent must check before reinstalling any of them.
 - **1.0** · measured · 2026-11-03 · [DSH-0.2.2-ALPHA.3-PLUGIN-VERIFICATION.md](../DSH-0.2.2-ALPHA.3-PLUGIN-VERIFICATION.md)
   Per-plugin verification against DSH 0.2.2-alpha.3 (excluding opencode-v2) — measured mount state, test results, Korean locale delta, notify settings restyle, sidebar/UTM harness and TE KV-cache interaction.
 - **3.2** · active · 2026-11-01 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
@@ -122,4 +124,4 @@
 
 ---
 
-79 indexed (43 boot cards), 0 missing header, 79 total.
+80 indexed (43 boot cards), 0 missing header, 80 total.

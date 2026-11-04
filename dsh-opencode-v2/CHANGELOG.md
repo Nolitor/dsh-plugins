@@ -1,3 +1,5 @@
+# Changelog — @nolit/dsh-opencode-v2
+
 <!-- skeleton:
 version: 1.0
 kind: report
