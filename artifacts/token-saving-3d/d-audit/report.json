@@ -1,0 +1,301 @@
+{
+  "window": {
+    "START_MS": 1793571849158,
+    "END_MS": 1793831049158
+  },
+  "res": {
+    "te_warm": 229,
+    "te_cold": 0,
+    "net": 982680,
+    "inflating": 0,
+    "dedup": 0,
+    "append": 0,
+    "replace": 0,
+    "pruner": 0,
+    "claim5": 1
+  },
+  "full": {
+    "scannedSessions": 0,
+    "realSessions": 0,
+    "replacementsInWindow": 229,
+    "replacementsByClass": {
+      "te_warm": 229,
+      "te_cold": 0,
+      "te_dedup_pointer": 0,
+      "harness_pruner": 0,
+      "other": 0
+    },
+    "charsBefore": {
+      "te_warm": 1668821,
+      "te_cold": 0,
+      "te_dedup_pointer": 0,
+      "harness_pruner": 0,
+      "other": 0
+    },
+    "charsAfter": {
+      "te_warm": 686141,
+      "te_cold": 0,
+      "te_dedup_pointer": 0,
+      "harness_pruner": 0,
+      "other": 0
+    },
+    "netByClass": {
+      "te_warm": 982680,
+      "te_cold": 0,
+      "te_dedup_pointer": 0,
+      "harness_pruner": 0,
+      "other": 0
+    },
+    "inflating": {
+      "count": 0,
+      "cases": []
+    },
+    "dayTable": {
+      "2026-11-03": {
+        "r": 78,
+        "cb": 472634,
+        "ca": 233009,
+        "n": 239625,
+        "i": 0
+      },
+      "2026-11-05": {
+        "r": 54,
+        "cb": 412220,
+        "ca": 160954,
+        "n": 251266,
+        "i": 0
+      },
+      "2026-11-04": {
+        "r": 67,
+        "cb": 506190,
+        "ca": 201788,
+        "n": 304402,
+        "i": 0
+      },
+      "2026-11-02": {
+        "r": 30,
+        "cb": 277777,
+        "ca": 90390,
+        "n": 187387,
+        "i": 0
+      }
+    },
+    "dedupPointerEvents": [],
+    "dedup": {
+      "append": 0,
+      "replace": 0
+    },
+    "samples": [
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1499,
+        "os": 52,
+        "cb": 7976,
+        "ca": 3264,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1501,
+        "os": 97,
+        "cb": 8000,
+        "ca": 2797,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1503,
+        "os": 133,
+        "cb": 20380,
+        "ca": 2891,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1505,
+        "os": 146,
+        "cb": 11252,
+        "ca": 2948,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1507,
+        "os": 155,
+        "cb": 6612,
+        "ca": 2889,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1509,
+        "os": 166,
+        "cb": 10472,
+        "ca": 3061,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1511,
+        "os": 184,
+        "cb": 6000,
+        "ca": 2828,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1513,
+        "os": 195,
+        "cb": 8455,
+        "ca": 3045,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1515,
+        "os": 222,
+        "cb": 8541,
+        "ca": 2814,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1517,
+        "os": 240,
+        "cb": 4226,
+        "ca": 2933,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1519,
+        "os": 276,
+        "cb": 5872,
+        "ca": 2907,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1521,
+        "os": 294,
+        "cb": 9152,
+        "ca": 3295,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1523,
+        "os": 337,
+        "cb": 14507,
+        "ca": 3102,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1525,
+        "os": 344,
+        "cb": 14843,
+        "ca": 3136,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1527,
+        "os": 376,
+        "cb": 4465,
+        "ca": 2918,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1529,
+        "os": 412,
+        "cb": 4528,
+        "ca": 3494,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1531,
+        "os": 430,
+        "cb": 4087,
+        "ca": 2940,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1533,
+        "os": 493,
+        "cb": 4629,
+        "ca": 3102,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 1535,
+        "os": 564,
+        "cb": 5062,
+        "ca": 2937,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      },
+      {
+        "c": "te_warm",
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+        "rs": 2183,
+        "os": 626,
+        "cb": 6000,
+        "ca": 2764,
+        "f": "[tokeneconomizer] warm tier: the tool output was replaced by its structure. --- "
+      }
+    ],
+    "claim5": [
+      {
+        "pd": "--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--",
+        "sd": "session-edeabe91-3607-45c6-af7b-8c6efe0944b8",
+        "rs": 2625,
+        "os": 220,
+        "c": "te_warm"
+      }
+    ],
+    "fixtures": []
+  }
+}

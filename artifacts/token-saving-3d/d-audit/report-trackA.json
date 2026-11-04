@@ -1,0 +1,512 @@
+{
+ "window": {
+  "startMs": 1793571849158,
+  "endMs": 1793831049158,
+  "startKst": "2026-11-02 07:24:09",
+  "endKst": "2026-11-05 07:24:09"
+ },
+ "note": "authored by the Track-A owner; a sibling agent replaced d-audit/audit.mjs concurrently, so this file is namespaced audit-trackA.mjs",
+ "headline": {
+  "rewrites": 229,
+  "charsBefore": 1668821,
+  "charsAfter": 686141,
+  "netCharsSaved": 982680,
+  "warm": 229,
+  "cold": 0,
+  "inflating": 0,
+  "inflatingCharsAdded": 0,
+  "minCharsBefore": 3719
+ },
+ "findings": [
+  {
+   "id": "A1",
+   "claim": "Headline 229 rewrites / 1668821 before / 686141 after / 982680 net",
+   "verdict": "CONFIRMED",
+   "basis": "independent traversal reproduced {\"rewrites\":229,\"charsBefore\":1668821,\"charsAfter\":686141,\"netCharsSaved\":982680,\"warm\":229,\"cold\":0,\"inflating\":0,\"inflatingCharsAdded\":0,\"minCharsBefore\":3719}"
+  },
+  {
+   "id": "A2",
+   "claim": "Zero inflating rewrites in the window",
+   "verdict": "CONFIRMED",
+   "basis": "inflating=0, charsAdded=0, max(after-before)=-583"
+  },
+  {
+   "id": "A3",
+   "claim": "Zero cold-tier rewrites",
+   "verdict": "CONFIRMED",
+   "basis": "cold=0 warm=229"
+  },
+  {
+   "id": "A4",
+   "claim": "Fixture sessions contribute nothing",
+   "verdict": "CONFIRMED",
+   "basis": "no in-window rewrite has a /tmp cwd or a te-side-*/benchtest-*/ab-current-* project"
+  },
+  {
+   "id": "D1",
+   "claim": ">=20-rewrite sample across the window confirms every replacement is a real structural summary",
+   "verdict": "CONFIRMED",
+   "basis": "n=24 stride=9; every sampled replacement starts with the warm banner, is shorter than its original, and its original is untiered"
+  },
+  {
+   "id": "D2",
+   "claim": "Harness pruner excluded from plugin totals",
+   "verdict": "CONFIRMED",
+   "basis": "replacement texts carrying the pruner marker inside the window: 0; the 4 non-TE replacements are system/message re-renders and a compaction checkpoint, classified \"other\""
+  },
+  {
+   "id": "D2b",
+   "claim": "Quantified: cost of dropping the pruner rule",
+   "verdict": "CONFIRMED",
+   "basis": "in-window: 0 rewrites / 0 chars would be wrongly counted (no pruner-text replacement exists here). Whole-corpus it matters: 180 of 1135 all-time surface replaces carry the pruner marker."
+  },
+  {
+   "id": "D3",
+   "claim": "No rewrite after the d1547b9 floor era has charsBefore < 3700",
+   "verdict": "CONFIRMED",
+   "basis": "below3700=0 min=3719. The first in-window rewrite is 08:17:59, i.e. 29.9 min after the 07:48:05 commit and 53.8 min after START; no rewrite exists between START and 08:17:59, so the window cannot contain pre-commit TE activity"
+  },
+  {
+   "id": "D3b",
+   "claim": "No inflation survives the 3700 floor",
+   "verdict": "CONFIRMED",
+   "basis": "the floor bounds the INPUT, not the output: inflation stays structurally possible and did occur in 2 post-floor ops that are NOT TE (system/message 42231->55650 and 54095->48116, +26491 chars total), plus one harness blanking 55633->0"
+  },
+  {
+   "id": "D4a",
+   "claim": "Window boundary handling correct (event.time epoch ms; KST only buckets)",
+   "verdict": "CONFIRMED",
+   "basis": "first 2026-11-02 08:17:59 (+53.8 min), last 2026-11-05 04:39:07 (-165.0 min); none on an edge; 11-05 is a partial day ending 07:24 KST"
+  },
+  {
+   "id": "D4b",
+   "claim": "No duplicate snapshots, no session double counting",
+   "verdict": "CONFIRMED",
+   "basis": "114 session dirs, 114 non-bak snapshots, 0 dirs with >1. Keyed by (project, sessionId, replacement seq) so a multi-snapshot dir could not double count anyway"
+  },
+  {
+   "id": "D4c",
+   "claim": "Backup files never read",
+   "verdict": "CONFIRMED",
+   "basis": "1 dir carries *.bak* (session-ec259449-1f09-); selector requires the name to start with session.v4.jsonl.zstd AND excludes \"bak\""
+  },
+  {
+   "id": "D6",
+   "claim": "No chained rewrite double counting",
+   "verdict": "CONFIRMED",
+   "basis": "originals that are themselves replacements: 0; originals rewritten twice: 0. Sum(charsBefore) equals the sum over distinct (session,src) pairs"
+  },
+  {
+   "id": "D7",
+   "claim": "Same-millisecond batches are distinct surfaces",
+   "verdict": "CONFIRMED",
+   "basis": "191 (session,ms) groups, largest 2; each has a different replacement seq and a different original"
+  },
+  {
+   "id": "D5",
+   "claim": "Every dedup pointer is genuinely TE dedup",
+   "verdict": "CONFIRMED",
+   "basis": "4 exact pointer events, 4 verified by recomputing SHA-256 of the referenced step tool/result. Whole-text equality rejects 2 extra pattern hits that merely QUOTE the pointer inside a JSON report. SHAPE CORRECTION: the pointers DO carry a surfaceOp, but it is the string \"append\" with sourceEventSeqs pointing at the first occurrence - not an object with op:\"replace\". A replace-only scanner therefore sees 0 pointers; the BRIEF categorization is right but the field shape differs from a tiering rewrite"
+  },
+  {
+   "id": "D5b",
+   "claim": "The 1 TE rewrite whose ORIGINAL contains the pruner wording is not a pruner rewrite",
+   "verdict": "CONFIRMED",
+   "basis": "session-edeabe91 seq 2625 / src 220: the phrase appears inside a quoted measurement report the tool printed (\"179 rewrites in 7 sessions\"), not in a pruner-produced surface. Classified by the replacement text, so it stays te-warm and is correct"
+  }
+ ],
+ "verdictCounts": {
+  "CONFIRMED": 16
+ },
+ "sample": [
+  {
+   "at": "2026-11-02 08:17:59",
+   "session": "session-edeabe91",
+   "seq": 1866,
+   "src": 60,
+   "charsBefore": 22963,
+   "charsAfter": 3566,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "=== RULES.md ===\n# DSH Plugins — Detailed Rules\n\n<!-- skeleton:\nversion: 1.3\nkin",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-02 08:30:31",
+   "session": "session-edeabe91",
+   "seq": 2635,
+   "src": 321,
+   "charsBefore": 4064,
+   "charsAfter": 2816,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "=== any dsh process ===\n3261903 node /home/minami/.local/bin/dsh --profile web -",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-02 08:46:39",
+   "session": "session-c889802e",
+   "seq": 498,
+   "src": 70,
+   "charsBefore": 17087,
+   "charsAfter": 3200,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "\n===== src/index.js (41 lines) =====\n/**\n * 커맨드(시스템) 스킬 — 시스템 접근 통합 스킬 플러그인 진입점.",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-02 08:56:44",
+   "session": "session-edeabe91",
+   "seq": 3180,
+   "src": 1586,
+   "charsBefore": 7901,
+   "charsAfter": 3060,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "=== interrupt-bridge.js ===\n1\t/**\n2\t * Bridge to the shared interrupt registry (",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-03 19:50:51",
+   "session": "session-13a47456",
+   "seq": 1511,
+   "src": 184,
+   "charsBefore": 6000,
+   "charsAfter": 2828,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "count 50\nproviders { opencode: 20, 'opencode-go': 30 }\n--- opencode-go models --",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-03 19:50:51",
+   "session": "session-13a47456",
+   "seq": 1529,
+   "src": 412,
+   "charsBefore": 4528,
+   "charsAfter": 3494,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "\t\t\t\t\t\t\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\t\t\t\t\t\t\tchildren: [(0, react_jsx_runtime.jsx)(\"span\", {\n\t\t\t",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-03 21:06:32",
+   "session": "session-13a47456",
+   "seq": 4802,
+   "src": 911,
+   "charsBefore": 4503,
+   "charsAfter": 2969,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "40\t * @param {{ explicit?: string, profileDir?: string, dshHome?: string, fileNa",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-03 21:06:32",
+   "session": "session-13a47456",
+   "seq": 4820,
+   "src": 1227,
+   "charsBefore": 3988,
+   "charsAfter": 2789,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "/home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deeps",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-03 22:58:49",
+   "session": "session-70ee2d8d",
+   "seq": 4492,
+   "src": 88,
+   "charsBefore": 9030,
+   "charsAfter": 3585,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "docs:\ntotal 144\ndrwxrwxr-x  3 minami minami  4096 11월  2 08:24 .\ndrwxrwxr-x 19 m",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-03 22:58:49",
+   "session": "session-70ee2d8d",
+   "seq": 4510,
+   "src": 346,
+   "charsBefore": 4576,
+   "charsAfter": 2855,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": " 1659 lib/client.js\n   13 lib/index.js\n 1672 total\n=== settings section in clien",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-03 22:58:49",
+   "session": "session-70ee2d8d",
+   "seq": 4528,
+   "src": 849,
+   "charsBefore": 5566,
+   "charsAfter": 3116,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "### common\n   language.title = \"Language\"\n### documentHtml\n   language = \"en\"\n  ",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-03 22:58:49",
+   "session": "session-70ee2d8d",
+   "seq": 4546,
+   "src": 2287,
+   "charsBefore": 5000,
+   "charsAfter": 3264,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "# DSH Plugins — Boot Card 2026-11-03T2159+0900\n\n<!-- skeleton:\nversion: 1.0\nkind",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-04 02:33:06",
+   "session": "session-c67cb8aa",
+   "seq": 3687,
+   "src": 61,
+   "charsBefore": 14437,
+   "charsAfter": 3662,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "# DSH Plugins — Detailed Rules\n\n<!-- skeleton:\nversion: 1.4\nkind: rule\nstatus: a",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-04 02:33:06",
+   "session": "session-c67cb8aa",
+   "seq": 3705,
+   "src": 169,
+   "charsBefore": 8164,
+   "charsAfter": 3300,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "# OpenCode v2 HTTP API — measurement for DSH-side control\n\n<!-- skeleton:\nversio",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-04 02:33:06",
+   "session": "session-c67cb8aa",
+   "seq": 3723,
+   "src": 284,
+   "charsBefore": 4584,
+   "charsAfter": 2910,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "=== primitives ===\n--- index\n--- exports in client\ncat: /home/minami/.local/node",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-04 02:48:56",
+   "session": "session-c67cb8aa",
+   "seq": 4090,
+   "src": 610,
+   "charsBefore": 6468,
+   "charsAfter": 2788,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "===== dsh-client-ui-settings chunks 0\n===== dsh-client-ui-settings-subagent chun",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-04 02:48:56",
+   "session": "session-c67cb8aa",
+   "seq": 4108,
+   "src": 1078,
+   "charsBefore": 4000,
+   "charsAfter": 2763,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "--- primary nav selected rule\n--- settings nav bg from live measure (already: rg",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-04 21:30:22",
+   "session": "session-eaa3d2b7",
+   "seq": 3869,
+   "src": 80,
+   "charsBefore": 5803,
+   "charsAfter": 3311,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "total entries: 182 truncated: false\nF\t.gitignore\nF\tCHANGELOG.md\nF\tCargo.lock\nF\tC",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-04 21:30:22",
+   "session": "session-eaa3d2b7",
+   "seq": 3887,
+   "src": 340,
+   "charsBefore": 6087,
+   "charsAfter": 3098,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "=== root Cargo.toml ===\n[workspace]\nmembers = [\n    \"deepseek-recipe\",\n    \"deep",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-04 21:46:32",
+   "session": "session-eaa3d2b7",
+   "seq": 4507,
+   "src": 912,
+   "charsBefore": 5309,
+   "charsAfter": 2842,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "/**\n * Regression tests for the compaction failure:\n *   \"compaction-basic: no c",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-05 00:29:50",
+   "session": "session-4974cafa",
+   "seq": 4250,
+   "src": 212,
+   "charsBefore": 9087,
+   "charsAfter": 3143,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "---\nkind: upgrade-guide\ndescription: \"Subagent control and Team task tools addre",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-05 00:29:50",
+   "session": "session-4974cafa",
+   "seq": 4268,
+   "src": 318,
+   "charsBefore": 3987,
+   "charsAfter": 2775,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "2916 /home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-05 01:01:34",
+   "session": "session-4974cafa",
+   "seq": 4537,
+   "src": 1525,
+   "charsBefore": 15835,
+   "charsAfter": 3100,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "1: /**\n2:  * Per-request cost and per-session spend, from the wire's own account",
+   "plausible": true
+  },
+  {
+   "at": "2026-11-05 03:06:59",
+   "session": "session-ca389eef",
+   "seq": 2246,
+   "src": 108,
+   "charsBefore": 4057,
+   "charsAfter": 3239,
+   "replacementHead80": "[tokeneconomizer] warm tier: the tool output was replaced by its structure.\n--- ",
+   "originalHead80": "=== agy presence (exit 0) ===\n/home/minami/.local/bin/agy\n-rwxr-xr-x 1 minami mi",
+   "plausible": true
+  }
+ ],
+ "boundary": {
+  "first": "2026-11-02 08:17:59",
+  "last": "2026-11-05 04:39:07",
+  "marginStartMin": "53.8",
+  "marginEndMin": "165.0",
+  "onStart": 0,
+  "onEnd": 0,
+  "firstKstDay": "2026-11-02",
+  "lastKstDay": "2026-11-05",
+  "rewritesNearStart": 3
+ },
+ "snapshots": {
+  "dirs": 114,
+  "snapshots": 114,
+  "multiSnap": 0,
+  "backupDirs": 1
+ },
+ "pruner": {
+  "replacementsWithPrunerText": 0,
+  "nonTeReplacements": [
+   {
+    "at": "2026-11-03 20:05:22",
+    "type": "system/message",
+    "charsBefore": 42231,
+    "charsAfter": 55650
+   },
+   {
+    "at": "2026-11-04 03:36:10",
+    "type": "user/message",
+    "charsBefore": 0,
+    "charsAfter": 13072
+   },
+   {
+    "at": "2026-11-04 21:14:18",
+    "type": "system/message",
+    "charsBefore": 55633,
+    "charsAfter": 0
+   },
+   {
+    "at": "2026-11-03 17:43:45",
+    "type": "system/message",
+    "charsBefore": 54095,
+    "charsAfter": 48116
+   }
+  ]
+ },
+ "floor": {
+  "below3700": 0,
+  "minCharsBefore": 3719,
+  "commitD1547b9": "2026-11-02 07:48:05 KST"
+ },
+ "dedup": [
+  {
+   "session": "session-70ee2d8d-b",
+   "seq": 619,
+   "at": "2026-11-03 21:35:20",
+   "step": 63,
+   "hashPrefix": "45bda12db480",
+   "verifiedBySha256": true,
+   "duplicateChars": 3102,
+   "matchedSeq": 601,
+   "pointerChars": 83,
+   "surfaceOp": "append",
+   "sourceEventSeqs": [
+    614
+   ],
+   "eventType": "tool/result",
+   "shape": "dedup replaces at append time: surfaceOp is the string \"append\" (not an object op:\"replace\"), so a replace-only scanner sees 0 pointers"
+  },
+  {
+   "session": "session-70ee2d8d-b",
+   "seq": 1771,
+   "at": "2026-11-03 21:48:39",
+   "step": 185,
+   "hashPrefix": "82f6d4022c67",
+   "verifiedBySha256": true,
+   "duplicateChars": 203,
+   "matchedSeq": 1727,
+   "pointerChars": 84,
+   "surfaceOp": "append",
+   "sourceEventSeqs": [
+    1766
+   ],
+   "eventType": "tool/result",
+   "shape": "dedup replaces at append time: surfaceOp is the string \"append\" (not an object op:\"replace\"), so a replace-only scanner sees 0 pointers"
+  },
+  {
+   "session": "session-edeabe91-3",
+   "seq": 1882,
+   "at": "2026-11-02 08:18:07",
+   "step": 25,
+   "hashPrefix": "e15e34f134ed",
+   "verifiedBySha256": true,
+   "duplicateChars": 549,
+   "matchedSeq": 1767,
+   "pointerChars": 83,
+   "surfaceOp": "append",
+   "sourceEventSeqs": [
+    1875
+   ],
+   "eventType": "tool/result",
+   "shape": "dedup replaces at append time: surfaceOp is the string \"append\" (not an object op:\"replace\"), so a replace-only scanner sees 0 pointers"
+  },
+  {
+   "session": "session-f62f7f28-6",
+   "seq": 4587,
+   "at": "2026-11-05 06:44:19",
+   "step": 19,
+   "hashPrefix": "65a99546d0b8",
+   "verifiedBySha256": true,
+   "duplicateChars": 246,
+   "matchedSeq": 4030,
+   "pointerChars": 83,
+   "surfaceOp": "append",
+   "sourceEventSeqs": [
+    4582
+   ],
+   "eventType": "tool/result",
+   "shape": "dedup replaces at append time: surfaceOp is the string \"append\" (not an object op:\"replace\"), so a replace-only scanner sees 0 pointers"
+  }
+ ],
+ "pruneEvents": 229,
+ "pruneShadowingTeOriginal": 229,
+ "siblingImplementationBug": "d-audit/audit.mjs (sibling) reads tool/result text via getText(ev.data), which falls through to JSON.stringify(ev.data) because the text lives at data.message.content. Its classifier therefore returns \"other\" for every replacement and it reports replacementsInWindow=0. Any D verdict quoting 0 rewrites is an artefact of that bug, not a measurement.",
+ "confidence": "HIGH on the counts: two independently written implementations (this one and Track A measure.mjs, different traversal and classifier ordering) agree to the unit. MEDIUM on causal attribution: the floor/mount timing is inferred from charsBefore minima and the absence of rewrites before 08:17:59, not from a mount log."
+}

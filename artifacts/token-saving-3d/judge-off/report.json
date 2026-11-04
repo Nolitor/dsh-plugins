@@ -1,0 +1,48 @@
+{
+ "generatedAt": "2026-11-04T23:13:07.866Z",
+ "window": {
+  "startMs": 1793571849158,
+  "endMs": 1793831049158
+ },
+ "change": {
+  "at": 1793833939.67,
+  "iso": "2026-11-04T23:12:19.670Z",
+  "action": "A: pin loopguard.gate_min_turns=100000 and loopguard.gate_error_outputs=100000 (global config)",
+  "configPath": "/home/minami/.tokeneconomizer/config.json",
+  "config": {
+   "loopguard_thresholds": {
+    "gate_error_outputs": 100000,
+    "gate_min_turns": 100000
+   }
+  }
+ },
+ "before": {
+  "calls": 467,
+  "judgeTokens": 2210470,
+  "writerTokens": 70280,
+  "totalTokens": 2280750,
+  "tokensPerCall": 4884,
+  "byDayKst": {
+   "2026-11-02": 159054,
+   "2026-11-03": 651164,
+   "2026-11-04": 909680,
+   "2026-11-05": 560852
+  },
+  "byRepo": {
+   "dsh-plugins-4806902e1d": 2195652,
+   "project-promotion-manager-125f968dc6": 77020,
+   "total-skill-f3e9379f90": 8078
+  }
+ },
+ "after": {
+  "calls": 0,
+  "tokens": 0,
+  "records": [],
+  "judgeFilesTouched": 0
+ },
+ "remainingRuleBased": {
+  "backstop": "is_stuck + envelope*2.5, checked before the judge (nudge then abort)",
+  "dshLoopBreaker": "identical failure x3 within 5 calls (rule-based, plugin-local)",
+  "watchdog": "no-progress step/tool budget (10 min)"
+ }
+}

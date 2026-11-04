@@ -1,0 +1,92 @@
+{
+  "window": {
+    "START_MS": 1793571849158,
+    "END_MS": 1793831049158
+  },
+  "scannedSessions": 111,
+  "fixtureSessions": 2,
+  "realSessions": 109,
+  "allToolResults": 282,
+  "replacementsInWindow": 0,
+  "replacementsByClass": {
+    "te_warm": 0,
+    "te_cold": 0,
+    "te_dedup_pointer": 0,
+    "harness_pruner": 0,
+    "other": 0
+  },
+  "charsBefore": {
+    "te_warm": 0,
+    "te_cold": 0,
+    "te_dedup_pointer": 0,
+    "harness_pruner": 0,
+    "other": 0
+  },
+  "charsAfter": {
+    "te_warm": 0,
+    "te_cold": 0,
+    "te_dedup_pointer": 0,
+    "harness_pruner": 0,
+    "other": 0
+  },
+  "netByClass": {
+    "te_warm": 0,
+    "te_cold": 0,
+    "te_dedup_pointer": 0,
+    "harness_pruner": 0,
+    "other": 0
+  },
+  "inflating": {
+    "count": 0,
+    "charsAdded": 0,
+    "cases": []
+  },
+  "inflatingByClass": {},
+  "dayTable": {},
+  "eraTable": {
+    "unknown": {
+      "rewrites": 0,
+      "charsBefore": 0,
+      "charsAfter": 0,
+      "net": 0,
+      "inflating": 0
+    }
+  },
+  "dedupPointerEvents": [],
+  "dedupPointerAppendsVsReplaces": {
+    "append": 0,
+    "replace": 0,
+    "unclear": 0
+  },
+  "boundaryEvents": [],
+  "samples": [],
+  "checks": {
+    "claim1_229_te_warm_rewrites": 0,
+    "claim1_982680_net_chars": 0,
+    "claim1_0_inflating": 0,
+    "claim2_cold_tier_0": 0,
+    "claim3_dedup_pointers_4_surfaceOp_append_not_replace": {
+      "count": 0,
+      "appends": 0,
+      "replaces": 0,
+      "details": []
+    },
+    "claim4_harness_pruner_conflations_0": 0,
+    "claim5_te_rewrite_original_already_contains_tool_result_middle_pruned_exactly_1": 0
+  },
+  "wrongWithoutFilters": {
+    "ifCountedPrunerMarkerInOriginal": 0,
+    "ifCountedBarePointerTextQuoted": 0
+  },
+  "fixtures": [
+    {
+      "project": "--tmp-te-ms--",
+      "session": "session-4cb83471-208c-4eba-8aaa-5fa3ec0daf1e"
+    },
+    {
+      "project": "--tmp-te-side-test--",
+      "session": "session-ae4c12f9-90c1-41db-bac6-051cd41e0fc2"
+    }
+  ],
+  "claim5_cases": []
+}

@@ -1,0 +1,5 @@
+day,rewrites,charsBefore,charsAfter,netCharsSaved,inflating,inflatingCharsAdded,dedupPointers,minCharsBefore,maxCharsBefore,turnAges
+2026-11-02,30,277777,90390,187387,0,0,1,3770,25889,[5,6,7]
+2026-11-03,78,472634,233009,239625,0,0,2,3719,20380,[6,7]
+2026-11-04,67,506190,201788,304402,0,0,0,3861,36767,[6]
+2026-11-05,54,412220,160954,251266,0,0,1,3719,49931,[6,7,8,10]

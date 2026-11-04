@@ -1,0 +1,335 @@
+{
+ "window": {
+  "startMs": 1793571849158,
+  "endMs": 1793831049158,
+  "startKst": "2026-11-02 07:24:09",
+  "endKst": "2026-11-05 07:24:09",
+  "charsPerToken": 3.7
+ },
+ "method": "engine-side: ~/.tokeneconomizer/dsh-sessions mirror + repos/*/dsh state; replacement detected by text signature and paired via the mirror's own surfaceOp range. Raw-session route read from ~/.dsh/sessions only for the delta and the prompt-token baseline.",
+ "engine": {
+  "rewrites": 229,
+  "warm": 229,
+  "cold": 0,
+  "charsBefore": 1668821,
+  "charsAfter": 686141,
+  "netCharsSaved": 982680,
+  "savedTokens": 265589.1891891892,
+  "inflating": 0,
+  "minCharsBefore": 3719,
+  "duplicatePointerEvents": 4,
+  "pointerCharsSaved": 3767,
+  "sessions": 8
+ },
+ "engineSessions": [
+  {
+   "sid": "session-c67cb8aa-66e5-4330-876e-119ae8e64620",
+   "n": 43,
+   "before": 365783,
+   "after": 129594,
+   "net": 236189
+  },
+  {
+   "sid": "session-4974cafa-0470-4291-b679-8b5492e5d175",
+   "n": 30,
+   "before": 273780,
+   "after": 90322,
+   "net": 183458
+  },
+  {
+   "sid": "session-13a47456-cf55-407f-b04d-5ea15d530630",
+   "n": 38,
+   "before": 252819,
+   "after": 112328,
+   "net": 140491
+  },
+  {
+   "sid": "session-edeabe91-3607-45c6-af7b-8c6efe0944b8",
+   "n": 25,
+   "before": 196456,
+   "after": 75374,
+   "net": 121082
+  },
+  {
+   "sid": "session-70ee2d8d-bb33-42ef-a495-edc1af1c3edf",
+   "n": 40,
+   "before": 219815,
+   "after": 120681,
+   "net": 99134
+  },
+  {
+   "sid": "session-eaa3d2b7-a8ef-4619-9958-4de1b851e40a",
+   "n": 24,
+   "before": 140407,
+   "after": 72194,
+   "net": 68213
+  },
+  {
+   "sid": "session-ca389eef-400b-44bc-99df-77fb57166a7e",
+   "n": 24,
+   "before": 138440,
+   "after": 70632,
+   "net": 67808
+  },
+  {
+   "sid": "session-c889802e-7362-47a8-ba6e-e9c3114ebc2c",
+   "n": 5,
+   "before": 81321,
+   "after": 15016,
+   "net": 66305
+  }
+ ],
+ "mirrorCoverage": {
+  "files": 207,
+  "parsed": 207,
+  "events": 195023,
+  "withSurfaceOp": 51171,
+  "replaceOps": 1135,
+  "sessionsInWindow": 10
+ },
+ "excludedByKind": {
+  "prunerText": 0,
+  "alreadyTiered": 0,
+  "nonTool": 4,
+  "otherEvent": 0
+ },
+ "engineState": {
+  "turnSummaries": 113,
+  "nudgesFromTurnSummaries": 0,
+  "nudgeEvents": 12,
+  "nudgesFromSessionFiles": 12,
+  "aborts": 2,
+  "toolCallsSeen": 10648,
+  "overheadRows": 467,
+  "judgeTokens": 2210469.7999999807,
+  "nudgeWriterTokens": 70280,
+  "ledgerSessions": 21,
+  "injectedChars": 0,
+  "injectedCharsNote": "ledger injected_chars is 0 for every in-window session and sessions/*.json carries no injected_chars key at all; micro-skills injected nothing in this window (measured, not assumed)",
+  "toolprune": {
+   "reposWithProposal": [
+    "dsh-plugins-4806902e1d"
+   ],
+   "proposalDetail": [
+    {
+     "repo": "core-02-hub-a15c84d306",
+     "proposal": [],
+     "streakMax": 4,
+     "mtimeInWindow": false,
+     "updated": 1793285469.1801932
+    },
+    {
+     "repo": "dsh-plugins-4806902e1d",
+     "proposal": [
+      "agy_worker",
+      "cli_worker",
+      "subagent_antigravity",
+      "subagent_opencode",
+      "working_directory"
+     ],
+     "streakMax": 50,
+     "mtimeInWindow": true,
+     "updated": 1793708470.5974255
+    },
+    {
+     "repo": "dsh-workspace-da5dd33285",
+     "proposal": [],
+     "streakMax": 6,
+     "mtimeInWindow": false,
+     "updated": 1793285498.5358877
+    },
+    {
+     "repo": "project-promotion-manager-125f968dc6",
+     "proposal": [],
+     "streakMax": 18,
+     "mtimeInWindow": false,
+     "updated": 1793564488.7767282
+    },
+    {
+     "repo": "release-harness-feafb78ed1",
+     "proposal": [],
+     "streakMax": 1,
+     "mtimeInWindow": false,
+     "updated": 1793285481.2566304
+    },
+    {
+     "repo": "todaysapp-98f7435611",
+     "proposal": [],
+     "streakMax": 21,
+     "mtimeInWindow": false,
+     "updated": 1793285494.1837134
+    },
+    {
+     "repo": "total-skill-f3e9379f90",
+     "proposal": [],
+     "streakMax": 26,
+     "mtimeInWindow": false,
+     "updated": 1793285488.4940557
+    }
+   ],
+   "maxStreak": 50
+  },
+  "reposTouchedInWindow": [
+   {
+    "repo": "default-workspace-8a1698f31a",
+    "files": {
+     "ledger.jsonl": {
+      "mtime": "2026-11-05 05:03:53",
+      "inWindow": true
+     },
+     "folded.json": {
+      "mtime": "2026-11-05 05:03:53",
+      "inWindow": true
+     }
+    },
+    "proposal": [],
+    "turnSummaries": 0,
+    "nudges": 0,
+    "aborts": 0,
+    "toolCalls": 0,
+    "sessionFilesInWindow": 10
+   },
+   {
+    "repo": "dsh-plugins-4806902e1d",
+    "files": {
+     "events.jsonl": {
+      "mtime": "2026-11-05 07:50:04",
+      "inWindow": false
+     },
+     "ledger.jsonl": {
+      "mtime": "2026-11-05 07:51:20",
+      "inWindow": false
+     },
+     "untool.json": {
+      "mtime": "2026-11-03 21:21:10",
+      "inWindow": true
+     },
+     "injection.json": {
+      "mtime": "2026-11-05 06:18:02",
+      "inWindow": true
+     },
+     "folded.json": {
+      "mtime": "2026-11-05 06:18:02",
+      "inWindow": true
+     },
+     "envelope.json": {
+      "mtime": "2026-11-05 07:50:04",
+      "inWindow": false
+     }
+    },
+    "proposal": [
+     "agy_worker",
+     "cli_worker",
+     "subagent_antigravity",
+     "subagent_opencode",
+     "working_directory"
+    ],
+    "turnSummaries": 105,
+    "nudges": 11,
+    "aborts": 2,
+    "toolCalls": 10299,
+    "sessionFilesInWindow": 15
+   },
+   {
+    "repo": "project-promotion-manager-125f968dc6",
+    "files": {
+     "events.jsonl": {
+      "mtime": "2026-11-03 18:18:53",
+      "inWindow": true
+     },
+     "ledger.jsonl": {
+      "mtime": "2026-11-03 18:13:35",
+      "inWindow": true
+     },
+     "untool.json": {
+      "mtime": "2026-11-02 05:21:28",
+      "inWindow": false
+     },
+     "folded.json": {
+      "mtime": "2026-11-02 05:21:28",
+      "inWindow": false
+     },
+     "envelope.json": {
+      "mtime": "2026-11-03 18:18:53",
+      "inWindow": true
+     }
+    },
+    "proposal": [],
+    "turnSummaries": 5,
+    "nudges": 1,
+    "aborts": 0,
+    "toolCalls": 304,
+    "sessionFilesInWindow": 1
+   },
+   {
+    "repo": "total-skill-f3e9379f90",
+    "files": {
+     "events.jsonl": {
+      "mtime": "2026-11-02 08:53:33",
+      "inWindow": true
+     },
+     "ledger.jsonl": {
+      "mtime": "2026-11-02 08:52:16",
+      "inWindow": true
+     },
+     "untool.json": {
+      "mtime": "2026-10-29 23:51:28",
+      "inWindow": false
+     },
+     "folded.json": {
+      "mtime": "2026-10-29 23:51:28",
+      "inWindow": false
+     },
+     "envelope.json": {
+      "mtime": "2026-11-02 08:53:33",
+      "inWindow": true
+     }
+    },
+    "proposal": [],
+    "turnSummaries": 3,
+    "nudges": 0,
+    "aborts": 0,
+    "toolCalls": 45,
+    "sessionFilesInWindow": 1
+   }
+  ]
+ },
+ "rawRoute": {
+  "sessions": 15,
+  "requests": 4925,
+  "promptTokens": 1178681003,
+  "cacheReadTokens": 1165512576,
+  "outputTokens": 3648461,
+  "rewrites": 229,
+  "warm": 229,
+  "cold": 0,
+  "other": 4,
+  "pointerEvents": 4,
+  "charsBefore": 1668821,
+  "charsAfter": 686141
+ },
+ "divergence": {
+  "rewrittenCountPct": 0,
+  "charsBeforePct": 0,
+  "netCharsPct": 0,
+  "threshold": 0.02,
+  "finding": "within 2% on every compared metric"
+ },
+ "coverage": {
+  "mirrorSessions": 207,
+  "dshSessions": 114,
+  "onlyInMirror": 107,
+  "onlyInDsh": 14
+ },
+ "comparison": {
+  "engineRewrites": 229,
+  "rawRewrites": 229,
+  "engineNetChars": 982680,
+  "rawNetChars": 982680,
+  "enginePointers": 4,
+  "rawPointers": 4,
+  "promptTokensBaseline": 1178681003,
+  "cacheReadShare": 0.9888278279140128,
+  "engineNetShareOfPromptTokens": 0.00022532745374974808
+ }
+}

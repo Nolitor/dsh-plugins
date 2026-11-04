@@ -1,0 +1,60 @@
+{
+  "full": {
+    "scannedSessions": 114,
+    "fixtureSessions": 2,
+    "realSessions": 112,
+    "allToolResults": 289,
+    "replacementsInWindow": 0,
+    "replacementsByClass": {
+      "te_warm": 0,
+      "te_cold": 0,
+      "te_dedup_pointer": 0,
+      "harness_pruner": 0,
+      "other": 0
+    },
+    "charsBefore": {
+      "te_warm": 0,
+      "te_cold": 0,
+      "te_dedup_pointer": 0,
+      "harness_pruner": 0,
+      "other": 0
+    },
+    "charsAfter": {
+      "te_warm": 0,
+      "te_cold": 0,
+      "te_dedup_pointer": 0,
+      "harness_pruner": 0,
+      "other": 0
+    },
+    "netByClass": {
+      "te_warm": 0,
+      "te_cold": 0,
+      "te_dedup_pointer": 0,
+      "harness_pruner": 0,
+      "other": 0
+    },
+    "inflating": {
+      "count": 0,
+      "cases": []
+    },
+    "dayTable": {},
+    "dedupPointerEvents": [],
+    "dedup": {
+      "append": 0,
+      "replace": 0
+    },
+    "samples": [],
+    "claim5": []
+  },
+  "res": {
+    "te_warm": 0,
+    "te_cold": 0,
+    "net": 0,
+    "inflating": 0,
+    "dedup": 0,
+    "append": 0,
+    "replace": 0,
+    "pruner": 0,
+    "claim5": 0
+  }
+}

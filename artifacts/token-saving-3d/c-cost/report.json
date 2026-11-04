@@ -1,0 +1,189 @@
+{
+ "window": {
+  "startMs": 1793571849158,
+  "endMs": 1793831049158,
+  "startKst": "2026-11-02 07:24:09",
+  "endKst": "2026-11-05 07:24:09",
+  "charsPerToken": 3.7
+ },
+ "method": "copied scripts/measure-token-saving.mjs, added (a) in-window time filter on assistant/message usage, (b) strict event-pairing rewrite classification (surfaceOp.replace -> sourceEventSeqs[0]), (c) prices fitted from ~/.dsh/deepinfra-session-cost.json recent[]",
+ "corpus": {
+  "sessions": 15,
+  "requests": 4925,
+  "promptTokens": 1178681003,
+  "inputTokens": 13168427,
+  "cacheReadTokens": 1165512576,
+  "cacheWriteTokens": 0,
+  "outputTokens": 3648461,
+  "toolResultsNote": "prompt/usage fields on assistant/message; a request with no usage block is counted in neither",
+  "cacheReadShare": 0.9888278279140128,
+  "meanPromptPerRequest": 239326
+ },
+ "perRoute": [
+  {
+   "route": "opencode-http-agent / opencode-go/deepseek-v4.1-flash",
+   "requests": 3828,
+   "prompt": 862905224,
+   "input": 10340744,
+   "cacheRead": 852564480,
+   "output": 2938344,
+   "shareOfPrompt": 0.7320939438268015
+  },
+  {
+   "route": "deepseek-account / deepseek-flash",
+   "requests": 586,
+   "prompt": 194049156,
+   "input": 685700,
+   "cacheRead": 193363456,
+   "output": 413929,
+   "shareOfPrompt": 0.16463246247806032
+  },
+  {
+   "route": "deepinfra / deepseek-ai/DeepSeek-V4.1-Flash-1017",
+   "requests": 511,
+   "prompt": 121726623,
+   "input": 2141983,
+   "cacheRead": 119584640,
+   "output": 296188,
+   "shareOfPrompt": 0.10327359369513822
+  }
+ ],
+ "fixtures": {
+  "sessions": 0,
+  "requests": 0,
+  "promptTokens": 0,
+  "rewrites": 0,
+  "assignedCwd": [
+   "/tmp/te-ms",
+   "/tmp/te-side-test"
+  ]
+ },
+ "savings": {
+  "rewrites": 229,
+  "warm": 229,
+  "cold": 0,
+  "tierCharsBefore": 1668821,
+  "tierCharsAfter": 686141,
+  "tierCharsSaved": 982680,
+  "dedupPointers": 4,
+  "dedupCharsSaved": 3767,
+  "contextCharsRemoved": 986447,
+  "contextTokensRemoved": 266607.2972972973,
+  "inflating": 0
+ },
+ "lenses": {
+  "a_contextTokenShare": 0.00022619122274705676,
+  "b_persistedTokens": 47050795.135135144,
+  "b_meanLaterRequests": 175.53711790393012,
+  "b_persistedShare": 0.03991817549903716
+ },
+ "prices": {
+  "available": true,
+  "source": "~/.dsh/deepinfra-session-cost.json recent[]",
+  "rowsFitted": 500,
+  "routes": [
+   "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+  ],
+  "usdPerToken": {
+   "input": 9.799999999999991e-8,
+   "cacheRead": 2.94e-9,
+   "output": 2.940000000000007e-7
+  },
+  "usdPerMillion": {
+   "input": 0.0979999999999999,
+   "cacheRead": 0.0029400000000000003,
+   "output": 0.2940000000000007
+  },
+  "listUsdPerMillion": {
+   "input": 0.2000000000000001,
+   "cacheRead": 0.006000000000000006,
+   "output": 0.5999999999999979
+  },
+  "paidToListRatio": 0.4899999999999993,
+  "maxRelativeResidual": 2.0981807529854882e-15,
+  "method": "exact 3-unknown least squares on (input, cacheRead, output) token counts; residual at machine precision => the file prices a linear model with these three rates",
+  "caveat": "rates are for the deepinfra route only. Sessions on opencode-go/opencode-http-agent in the same window are unpriced here; their share is reported so the coverage of the dollar figure is explicit."
+ },
+ "priceLens": {
+  "note": "each saved context token is modelled at the rate the corpus actually pays. 98.9% of prompt tokens are cache reads, so the honest rate for a token not re-sent is the cacheRead rate, not the input rate.",
+  "contextRemovedUsd_uniform_input_rate": 0.02612751513513511,
+  "contextRemovedUsd_uniform_cache_read_rate": 0.000783825454054054,
+  "persistedUsd_all_cache_read": 0.13832933769729733,
+  "persistedUsd_as_if_uncached_input": 4.61097792324324,
+  "persistedUsd_cache_aware_blend": 0.18829853737516383
+ },
+ "counterfactual": {
+  "actualUsd": 5.78976035344,
+  "withoutRewritesUsd": 5.978058890815165,
+  "deltaUsd": 0.18829853737516383,
+  "cacheAwareBlendRatePerMillion": 0.004002026678493942,
+  "pricedRouteShareOfPromptTokens": 0.10327359369513822,
+  "pricedRouteSessionsOnly": "the dollar figures apply the deepinfra route rates to the whole corpus as a pricing model; only 10.327% of in-window prompt tokens actually ran on that route, so treat them as an order-of-magnitude, not an invoice"
+ },
+ "perSession": [
+  {
+   "session": "session-c67cb8aa-66e",
+   "requests": 609,
+   "promptTokens": 146514855,
+   "rewrites": 43,
+   "charsSaved": 236189,
+   "laterMean": 232
+  },
+  {
+   "session": "session-4974cafa-047",
+   "requests": 525,
+   "promptTokens": 147129377,
+   "rewrites": 30,
+   "charsSaved": 183458,
+   "laterMean": 82
+  },
+  {
+   "session": "session-13a47456-cf5",
+   "requests": 545,
+   "promptTokens": 140121665,
+   "rewrites": 38,
+   "charsSaved": 140491,
+   "laterMean": 256
+  },
+  {
+   "session": "session-edeabe91-360",
+   "requests": 285,
+   "promptTokens": 58842798,
+   "rewrites": 25,
+   "charsSaved": 121082,
+   "laterMean": 79
+  },
+  {
+   "session": "session-70ee2d8d-bb3",
+   "requests": 626,
+   "promptTokens": 175464425,
+   "rewrites": 40,
+   "charsSaved": 99134,
+   "laterMean": 143
+  },
+  {
+   "session": "session-eaa3d2b7-a8e",
+   "requests": 592,
+   "promptTokens": 161667982,
+   "rewrites": 24,
+   "charsSaved": 68213,
+   "laterMean": 183
+  },
+  {
+   "session": "session-ca389eef-400",
+   "requests": 511,
+   "promptTokens": 121726623,
+   "rewrites": 24,
+   "charsSaved": 67808,
+   "laterMean": 244
+  },
+  {
+   "session": "session-c889802e-736",
+   "requests": 18,
+   "promptTokens": 1351213,
+   "rewrites": 5,
+   "charsSaved": 66305,
+   "laterMean": 18
+  }
+ ]
+}

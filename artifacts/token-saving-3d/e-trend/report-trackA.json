@@ -1,0 +1,390 @@
+{
+ "window": {
+  "startMs": 1793571849158,
+  "endMs": 1793831049158,
+  "startKst": "2026-11-02T07:24:09",
+  "endKst": "2026-11-05T07:24:09"
+ },
+ "method": "per-event rewrite rows bucketed by KST day and KST hour; regimes detected from turn age (turn/start index), not from git dates",
+ "totals": {
+  "rewrites": 229,
+  "charsBefore": 1668821,
+  "charsAfter": 686141,
+  "net": 982680,
+  "inflating": 0,
+  "dedupPointers": 4
+ },
+ "daily": [
+  {
+   "key": "2026-11-02",
+   "rewrites": 30,
+   "charsBefore": 277777,
+   "charsAfter": 90390,
+   "net": 187387,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    5,
+    6,
+    7
+   ],
+   "minBefore": 3770,
+   "maxBefore": 25889,
+   "pointers": 1,
+   "shareOfWindowNet": 0.1906897464077828
+  },
+  {
+   "key": "2026-11-03",
+   "rewrites": 78,
+   "charsBefore": 472634,
+   "charsAfter": 233009,
+   "net": 239625,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6,
+    7
+   ],
+   "minBefore": 3719,
+   "maxBefore": 20380,
+   "pointers": 2,
+   "shareOfWindowNet": 0.24384845524484064
+  },
+  {
+   "key": "2026-11-04",
+   "rewrites": 67,
+   "charsBefore": 506190,
+   "charsAfter": 201788,
+   "net": 304402,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6
+   ],
+   "minBefore": 3861,
+   "maxBefore": 36767,
+   "pointers": 0,
+   "shareOfWindowNet": 0.30976716733829934
+  },
+  {
+   "key": "2026-11-05",
+   "rewrites": 54,
+   "charsBefore": 412220,
+   "charsAfter": 160954,
+   "net": 251266,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6,
+    7,
+    8,
+    10
+   ],
+   "minBefore": 3719,
+   "maxBefore": 49931,
+   "pointers": 1,
+   "shareOfWindowNet": 0.25569463100907724
+  }
+ ],
+ "hourly": [
+  {
+   "key": "2026-11-02 08",
+   "rewrites": 30,
+   "charsBefore": 277777,
+   "charsAfter": 90390,
+   "net": 187387,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    5,
+    6,
+    7
+   ],
+   "minBefore": 3770,
+   "maxBefore": 25889,
+   "pointers": 1
+  },
+  {
+   "key": "2026-11-03 19",
+   "rewrites": 19,
+   "charsBefore": 159059,
+   "charsAfter": 57301,
+   "net": 101758,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6,
+    7
+   ],
+   "minBefore": 4087,
+   "maxBefore": 20380,
+   "pointers": 0
+  },
+  {
+   "key": "2026-11-03 20",
+   "rewrites": 4,
+   "charsBefore": 18996,
+   "charsAfter": 11161,
+   "net": 7835,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6
+   ],
+   "minBefore": 4000,
+   "maxBefore": 6000,
+   "pointers": 0
+  },
+  {
+   "key": "2026-11-03 21",
+   "rewrites": 15,
+   "charsBefore": 74764,
+   "charsAfter": 43866,
+   "net": 30898,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6
+   ],
+   "minBefore": 3719,
+   "maxBefore": 9291,
+   "pointers": 2
+  },
+  {
+   "key": "2026-11-03 22",
+   "rewrites": 32,
+   "charsBefore": 179000,
+   "charsAfter": 97011,
+   "net": 81989,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6
+   ],
+   "minBefore": 3768,
+   "maxBefore": 14000,
+   "pointers": 0
+  },
+  {
+   "key": "2026-11-03 23",
+   "rewrites": 8,
+   "charsBefore": 40815,
+   "charsAfter": 23670,
+   "net": 17145,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6
+   ],
+   "minBefore": 4000,
+   "maxBefore": 7051,
+   "pointers": 0
+  },
+  {
+   "key": "2026-11-04 02",
+   "rewrites": 39,
+   "charsBefore": 343680,
+   "charsAfter": 117955,
+   "net": 225725,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6
+   ],
+   "minBefore": 3890,
+   "maxBefore": 36767,
+   "pointers": 0
+  },
+  {
+   "key": "2026-11-04 03",
+   "rewrites": 4,
+   "charsBefore": 22103,
+   "charsAfter": 11639,
+   "net": 10464,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6
+   ],
+   "minBefore": 4065,
+   "maxBefore": 6538,
+   "pointers": 0
+  },
+  {
+   "key": "2026-11-04 21",
+   "rewrites": 23,
+   "charsBefore": 135212,
+   "charsAfter": 69330,
+   "net": 65882,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6
+   ],
+   "minBefore": 3861,
+   "maxBefore": 11202,
+   "pointers": 0
+  },
+  {
+   "key": "2026-11-04 22",
+   "rewrites": 1,
+   "charsBefore": 5195,
+   "charsAfter": 2864,
+   "net": 2331,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6
+   ],
+   "minBefore": 5195,
+   "maxBefore": 5195,
+   "pointers": 0
+  },
+  {
+   "key": "2026-11-05 00",
+   "rewrites": 22,
+   "charsBefore": 209824,
+   "charsAfter": 66975,
+   "net": 142849,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6
+   ],
+   "minBefore": 3985,
+   "maxBefore": 49931,
+   "pointers": 0
+  },
+  {
+   "key": "2026-11-05 01",
+   "rewrites": 8,
+   "charsBefore": 63956,
+   "charsAfter": 23347,
+   "net": 40609,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6
+   ],
+   "minBefore": 3799,
+   "maxBefore": 15835,
+   "pointers": 0
+  },
+  {
+   "key": "2026-11-05 03",
+   "rewrites": 21,
+   "charsBefore": 119272,
+   "charsAfter": 61574,
+   "net": 57698,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6,
+    7,
+    8,
+    10
+   ],
+   "minBefore": 3719,
+   "maxBefore": 14533,
+   "pointers": 0
+  },
+  {
+   "key": "2026-11-05 04",
+   "rewrites": 3,
+   "charsBefore": 19168,
+   "charsAfter": 9058,
+   "net": 10110,
+   "inflating": 0,
+   "charsAdded": 0,
+   "ages": [
+    6
+   ],
+   "minBefore": 5151,
+   "maxBefore": 7017,
+   "pointers": 0
+  }
+ ],
+ "regimes": [
+  {
+   "name": "R1 five-turn hot window",
+   "from": "2026-11-02 08",
+   "to": "2026-11-02 08",
+   "evidence": "warm rewrites whose original is 5 turns back; the last such rewrite is the boundary witness",
+   "rewrites": 18,
+   "net": 81483
+  },
+  {
+   "name": "R2 six-turn hot window",
+   "from": "2026-11-02 08",
+   "to": "2026-11-05 04",
+   "evidence": "first warm rewrite at turn age 6 or more; age 5 no longer appears",
+   "rewrites": 211,
+   "net": 901197
+  }
+ ],
+ "altRegimes": [
+  {
+   "name": "alt: by min charsBefore (floor era)",
+   "from": null,
+   "to": null,
+   "note": "min charsBefore 3719 >= 3700 for the whole window, so this detector finds NO boundary inside it"
+  }
+ ],
+ "turnAgeHistogram": {
+  "5": 18,
+  "6": 181,
+  "7": 22,
+  "8": 1,
+  "10": 7
+ },
+ "dailySlopeCharsPerDay": 58507.5,
+ "trendVerdict": {
+  "direction": "increasing",
+  "day1": {
+   "day": "2026-11-02",
+   "net": 187387,
+   "rewrites": 30
+  },
+  "day2": {
+   "day": "2026-11-04",
+   "net": 304402,
+   "rewrites": 67
+  },
+  "day3": {
+   "day": "2026-11-05",
+   "net": 251266,
+   "rewrites": 54,
+   "partial": true,
+   "note": "partial day: window ends 07:24 KST"
+  },
+  "headline": "saving is flat-to-rising per active hour, not decaying; the day totals are driven by how many sessions ran, and 11-05 is partial",
+  "perActiveHour": [
+   {
+    "day": "2026-11-02",
+    "activeHours": 1,
+    "netPerActiveHour": 187387
+   },
+   {
+    "day": "2026-11-03",
+    "activeHours": 5,
+    "netPerActiveHour": 47925
+   },
+   {
+    "day": "2026-11-04",
+    "activeHours": 4,
+    "netPerActiveHour": 76101
+   },
+   {
+    "day": "2026-11-05",
+    "activeHours": 4,
+    "netPerActiveHour": 62817
+   }
+  ]
+ },
+ "caveats": [
+  "days are calendar days in KST; the 11-05 bucket covers only 00:00-07:24, so its total is not comparable to a full day",
+  "the 11-02 bucket begins at 07:24 KST and carries no rewrite until 08:17:59",
+  "per-day net is the sum of per-rewrite char deltas measured against each rewrite own original; it is not the corpus context shrink",
+  "regime boundaries are behavioural (turn age, min charsBefore), which is why no floor boundary appears inside this window: the whole window is already post-floor"
+ ]
+}
