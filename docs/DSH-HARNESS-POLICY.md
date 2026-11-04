@@ -150,6 +150,11 @@ finish step 2.
 
 - Every package change bumps `version`.
 - Run `npm pack` into `artifacts/` and update the matching `SHA256SUMS.*`.
+  For the OpenCode packages use `scripts/pack-opencode-v2.sh`: `npm pack` names a tarball
+  `<name without scope>-<version>.tgz`, so a package that already carries `-beta` in its
+  name produced `...-beta-0.0.2-beta.1.tgz` — the word twice (owner instruction
+  2026-11-04). The script renames to `nolit-dsh-opencode-v2-<version>.tgz` and rewrites
+  the `SHA256SUMS` rows against the final name.
 - Never claim a release without a matching immutable artifact.
 - Keep `market/index.json` version and `engines.dsh` in sync with `package.json`.
 

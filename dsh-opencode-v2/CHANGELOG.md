@@ -22,8 +22,18 @@ Owner instruction: version to `0.0.2`, beta to `0.0.2-beta.1`, beta stabilises t
 | `package.json` | `0.0.2` (was `0.0.1-rc.10`) |
 | `lib/http.js` load-beacon `VERSION` | `0.0.2` |
 | beta package | `@nolit/dsh-opencode-v2-beta` `0.0.2-beta.1`, peer `~0.0.2` |
-| Tests | 401 stable (was 359), 12 beta |
-| Artifacts | `artifacts/nolit-dsh-opencode-v2-0.0.2.tgz`, `artifacts/nolit-dsh-opencode-v2-beta-0.0.2-beta.1.tgz` |
+| Tests | 402 stable (was 359), 12 beta |
+| Artifacts | `artifacts/nolit-dsh-opencode-v2-0.0.2.tgz` (sha256 `395267f1…`), `artifacts/nolit-dsh-opencode-v2-0.0.2-beta.1.tgz` (sha256 `60165f6f…`) |
+| Packing | `scripts/pack-opencode-v2.sh` — see the artifact naming rule below |
+
+**Artifact naming rule (owner instruction, 2026-11-04).** The PACKAGE keeps `-beta`
+in its name (that identity is what the peer dependency and the exclusion claim
+reference), but the ARTIFACT does not repeat the word: `npm pack` names a tarball
+`<name without scope>-<version>.tgz`, which produced
+`nolit-dsh-opencode-v2-beta-0.0.2-beta.1.tgz` — "beta" twice. Artifacts are
+named `nolit-dsh-opencode-v2-<version>.tgz` and built through
+`scripts/pack-opencode-v2.sh`, which renames after packing and rewrites the
+`artifacts/SHA256SUMS.opencode-v2` rows against the final name.
 
 ### 0.0.2.1 Request guards (Tier A) — deepseek-recipe rules applied
 
