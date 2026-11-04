@@ -37,6 +37,9 @@
     },
     "./lib/optional-service.js": {
       "default": "./lib/optional-service.js"
+    },
+    "./subagent": {
+      "default": "./lib/subagent.js"
     }
   },
   "files": [

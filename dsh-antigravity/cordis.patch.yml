@@ -1,0 +1,77 @@
+# Bundle config layer for @nolit/dsh-antigravity.
+#
+# The row id is the settings namespace the loader derives for volatile Config
+# fields, so it MUST equal the plugin name exported by lib/index.js
+# (@nolit/dsh-antigravity).
+#
+# ONE PLUGIN, FOUR SWITCHES
+#   enabled      master. false removes the model route, the settings section and
+#                the usage chip in one action.
+#   modelServing the `antigravity` provider route (HTTP, no CLI).
+#   cliWorker    /agy command and agy_worker tool (spawns the agy binary).
+#   usagePill    the composer usage chip.
+#
+# CREDENTIAL MODEL
+#   clientId / clientSecret default to the values extracted from the `agy`
+#   binary. They are installed-application credentials Google ships inside the
+#   public CLI, not private keys, but they are left EMPTY here: an empty value
+#   means "use the built-in default in lib/settings.js", so a rotated pair is a
+#   settings edit and the defaults stay in exactly one place.
+- insert:
+  - id: dsh-antigravity
+    name: '@nolit/dsh-antigravity'
+    config:
+      enabled: true
+      modelServing: true
+      cliWorker: true
+      usagePill: true
+
+      # "" = built-in agy-extracted default. Override when the CLI rotates it.
+      clientId: ''
+      clientSecret: ''
+      # "" = probe ~/.gemini/antigravity-cli/{jetski-standalone-,}oauth-token
+      tokenFile: ''
+      refreshToken: ''
+
+      # "" = https://daily-cloudcode-pa.googleapis.com (generation host).
+      baseUrl: ''
+      # "" = https://cloudcode-pa.googleapis.com (control-plane host).
+      controlBaseUrl: ''
+      # "" = aicode-consumers
+      project: ''
+      # "" = the measured agy User-Agent.
+      userAgent: ''
+      # 15 minutes: models and quota move.
+      catalogTtlMs: 900000
+      # [] = every model the account serves.
+      enabledModels: []
+      extraHeaders: {}
+
+      # ---- CLI surface ----
+      agyPath: 'agy'
+      model: 'gemini-3.8-flash-low'
+      effort: 'low'
+      mode: 'accept-edits'
+      timeoutMs: 600000
+      maxOutputBytes: 8388608
+      extraArgs: []
+      artifactLimit: 100
+      workerEnabled: true
+# ---------------------------------------------------------------------------
+# Subagent delegation row.
+#
+# The provider itself registers from lib/index.js on ctx.subagents; the shared
+# delegation TOOL is a separate shipped row bound to that provider name, exactly
+# as the codex/claude-code bundles split it. Keep this row while
+# config.subagent is true: disabling the provider in the plugin while leaving
+# this row would point the tool at a name with no provider.
+#
+# To remove the subagent surface entirely, disable BOTH: set
+# config.subagent=false AND remove this insert.
+- insert:
+    - id: tool-subagent-antigravity
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: antigravity
+        toolName: subagent_antigravity
+        maxDepth: provider-managed

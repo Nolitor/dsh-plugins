@@ -23,6 +23,26 @@ registry.
 
 ---
 
+## Subagent delegation
+
+`subagent_opencode` runs one isolated `opencode run` per delegation. Merged from
+`@nolit/dsh-subagent-opencode` 0.1.0 on 2026-11-05 so one package carries every OpenCode surface.
+
+```yaml
+subagent: true                  # false leaves the chat route and CLI worker intact
+subagentProviderName: opencode
+subagentTimeoutMs: 900000
+subagentDisposeGraceMs: 5000
+subagentEnv: {}
+```
+
+The delegation tool row is separate (`@deepseek-ai/dsh-tool-subagent` bound to provider
+`opencode`). Disabling the provider while leaving that row points the tool at a name with no
+provider — remove both to drop the surface.
+
+If `@nolit/dsh-subagent-opencode` is still mounted, it registers the same provider name; this
+plugin detects that with `getProvider` and **yields with a warning** instead of shadowing it.
+
 ## Overview
 
 This plugin is a **model-serving adapter**, not an agent framework. It registers the

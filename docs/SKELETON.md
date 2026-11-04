@@ -15,8 +15,8 @@
 
 ## rule
 
-- **1.0** · active · 2026-11-03 · [docs/PLUGIN-STYLE-STANDARD.md](PLUGIN-STYLE-STANDARD.md)
-  Mandatory typography rules for DSH plugin surfaces, measured from DSH 0.2.2-alpha.3 — DSH ships no font-size token and sets none on body, so every plugin surface must state 14px/22px itself.
+- **2.0** · active · 2026-11-05 · [docs/PLUGIN-STYLE-STANDARD.md](PLUGIN-STYLE-STANDARD.md)
+  Typography rules for DSH plugin surfaces, CORRECTED 2026-11-05 — DSH does define live content font-size tokens (--dsh-content-font-size and its derived secondaries) and sets them on body at runtime from the user's Settings > font-size. Plugins must consume those tokens, never hardcode 14px.
 - **2.7** · active · 2026-11-02 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
   Every defect and wrong turn this workspace actually made, including a literal marker whitelist that missed a new notation family, a stream recogniser tested only on whole payloads and a scrub keyed to one vendor token that missed the model's other pipe-wrapped tokens, and a synthetic A/B probe offered as evidence for a streaming defect that only appears in long output-heavy turns, a role map that sent DSH's leading system-role message to the model as `user` so every system instruction was lost, a body-call classifier that ran only on the content channel while calls written into `reasoning_content` were stripped and dropped, and an assistant-history serializer that re-sent the model its own protocol notation (rendered calls and `<thinking>` wrappers) while the scrub knew each notation's openers but not its bare closers, with the standing rule that keeps it from happening again, and a headless side-call profile that pointed at an account provider while the bundle had disabled the three services that provider needs, so the identical sign-in error came from two different missing dependencies. Read before changing a plugin, a doc, or a live service.
 - **1.4** · active · 2026-11-02 · [docs/RULES.md](RULES.md)
@@ -62,6 +62,8 @@
 
 ## measurement
 
+- **1** · active · 2026-11-05 · [ANTIGRAVITY-DIRECTSDK-MEASUREMENT.md](../ANTIGRAVITY-DIRECTSDK-MEASUREMENT.md)
+  Measured feasibility of reusing the Hermes antigravity-subscription-directsdk module to build DSH plugins (OpenCode v2 / DeepInfra class). Verdict: NOT a drop-in; usable only as an LLMAdapter after solving 4 blockers.
 - **1.3** · measured · 2026-11-02 · [TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md](../TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md)
   What the DSH TokenEconomizer bridge actually saved: the 2026-10-30 dark-lever measurement, the tiered-memory and routing fixes built from it, the 2026-11-02 re-measurement that found 1.03M chars of real tiering saving with 53% self-inflation, the toolprune lever that is real but capped near 1.2k tokens per request, and the adopted tierMinChars 3700 floor chosen from the measured maximum inflating input.
 - **1.1** · measured · 2026-10-30 · [OPENCODE-V2-HTTP-API-MEASUREMENT.md](../OPENCODE-V2-HTTP-API-MEASUREMENT.md)
@@ -120,4 +122,4 @@
 
 ---
 
-78 indexed (43 boot cards), 0 missing header, 78 total.
+79 indexed (43 boot cards), 0 missing header, 79 total.

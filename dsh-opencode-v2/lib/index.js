@@ -17,6 +17,8 @@ import { JsonRunParser, buildRunArgv, fetchUsage, forwardedEnv, sendPrompt, stri
 import { readSelection, writeSelection } from './selection.js'
 import { WORKER_BACKENDS } from './workers/backends.js'
 import { registerCliWorker } from './workers/index.js'
+import { optionalService } from './optional-service.js'
+import { OpenCodeSubagentProvider } from './subagent.js'
 
 /** Host plugin name; must match package.json `name` and the cordis.patch.yml row id. */
 export const name = 'dsh-opencode-v2'
@@ -70,6 +72,17 @@ export const Config = Schema.object({
   workerTimeoutMs: Schema.number().default(900000).volatile(),
   workerMaxOutputBytes: Schema.number().default(262144).volatile(),
   workerArtifactLimit: Schema.number().default(100).volatile(),
+  // ---- subagent surface (merged from @nolit/dsh-subagent-opencode) --------
+  /** Delegation provider. false leaves the chat route and CLI worker intact. */
+  subagent: Schema.boolean().default(true).volatile(),
+  /** Registry name the delegation tool binds to. */
+  subagentProviderName: Schema.string().default('opencode').volatile(),
+  /** Wall-clock limit for one delegation (ms). */
+  subagentTimeoutMs: Schema.number().default(900000).volatile(),
+  /** Grace period before a delegation child is terminated (ms). */
+  subagentDisposeGraceMs: Schema.number().default(5000).volatile(),
+  /** Extra environment variables for the delegation child. */
+  subagentEnv: Schema.dict(Schema.string()).default({}).volatile(),
 })
 
 /**
@@ -492,4 +505,32 @@ export async function apply(ctx, config) {
   // The isolated batch worker ships with the same plugin: one install enables
   // the chat route, the `opencode` delegation tool, and `cli_worker` together.
   await registerCliWorker(ctx, config)
+
+  // Subagent delegation provider, merged from @nolit/dsh-subagent-opencode
+  // (2026-11-05) so one package owns every OpenCode surface. Gated on its own
+  // switch: a profile that wants only the chat route can turn delegation off.
+  const subagents = optionalService(ctx, 'subagents')
+  if (config.subagent.get() !== false && subagents) {
+    // The older @nolit/dsh-subagent-opencode registers `opencode` too; yield
+    // rather than shadow it, and report which one won.
+    const takenName = config.subagentProviderName.get() || 'opencode'
+    const taken = typeof subagents.getProvider === 'function' ? subagents.getProvider(takenName) : undefined
+    if (taken) {
+      ctx.logger?.warn?.('opencode-v2: a subagent provider named "' + takenName + '" is already registered; skipping the merged one')
+    } else try {
+      const provider = new OpenCodeSubagentProvider(config.subagentProviderName.get() || 'opencode', ctx, {
+        opencodePath: config.opencodePath.get(),
+        model: config.model.get(),
+        agent: config.agent.get(),
+        auto: config.auto.get(),
+        timeoutMs: config.subagentTimeoutMs.get(),
+        disposeGraceMs: config.subagentDisposeGraceMs.get(),
+        env: config.subagentEnv.get(),
+      })
+      const release = subagents.registerProvider(provider)
+      if (typeof release === 'function') ctx.effect?.(() => release)
+    } catch (error) {
+      ctx.logger?.warn?.(`opencode-v2: subagent provider registration failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
 }
