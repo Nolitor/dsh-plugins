@@ -7,7 +7,8 @@ summary: Stage plan for @nolit/dsh-opencode-v2 — what "stabilised" means as a 
 -->
 
 > Status: **stage 1 (stabilisation) in progress** · Baseline: `0.0.2-rc.1` ·
-> Staged code: `staging/opencode-v2-stage2/` · Evidence: [CHANGELOG](../dsh-opencode-v2/CHANGELOG.md),
+> Staged code: `staging/opencode-v2-stage2/` · Next plugin: [DEEPINFRA-ADAPTER-BRIEF.md](DEEPINFRA-ADAPTER-BRIEF.md) ·
+> Evidence: [CHANGELOG](../dsh-opencode-v2/CHANGELOG.md),
 > [capability delta](../dsh-opencode-v2/RECIPE-CAPABILITY-DELTA.md)
 
 # OpenCode V2 — stage plan (2 and 3 gated on stabilisation)

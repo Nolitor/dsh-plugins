@@ -24,6 +24,8 @@
 
 ## spec
 
+- **1.0** · active · 2026-11-04 · [docs/DEEPINFRA-ADAPTER-BRIEF.md](DEEPINFRA-ADAPTER-BRIEF.md)
+  Build brief for the next session — a DeepInfra API-key LLM adapter plugin for DSH (@nolit/dsh-deepinfra). Records the measured DeepInfra surface (OpenAI-compatible /v1/openai, 91 chat routes, reasoning_effort enum, prompt-cache pricing, 16,384 output cap), the DSH adapter contract it must satisfy, why API-key auth removes the hardest parts of the OpenCode V2 build (no control plane, no spawn, no OAuth, no credential store to seek), the five parts that do NOT become easy, the acceptance gates, and the exact open questions to answer with a key.
 - **1.1** · active · 2026-10-31 · [docs/dsh-plugin-runtime-spec.md](dsh-plugin-runtime-spec.md)
   DSH plugin runtime specification: manifest, bundle patch, services, lifecycle, client factory, and the measured "declared but unexported inject" activation failure.
 - **1.1** · reference · 2026-10-31 · [docs/plugin-boot-card.md](plugin-boot-card.md)
@@ -89,8 +91,8 @@
 
 ## index
 
-- **3.0** · active · 2026-10-29 · [AGENTS.md](../AGENTS.md)
-  Tier-1 auto-loaded entry. Points to detailed rules, the doc skeleton index, and the latest boot card. Keep it tiny.
+- **3.1** · active · 2026-11-04 · [AGENTS.md](../AGENTS.md)
+  Tier-1 auto-loaded entry. Points to detailed rules, the doc skeleton index, active plans, and the latest boot card. Keep it tiny.
 - **1.0** · reference · 2026-10-29 · [verification/README.md](../verification/README.md)
   Index of machine-readable verification evidence files and what each one proves.
 
@@ -118,4 +120,4 @@
 
 ---
 
-77 indexed (43 boot cards), 0 missing header, 77 total.
+78 indexed (43 boot cards), 0 missing header, 78 total.
