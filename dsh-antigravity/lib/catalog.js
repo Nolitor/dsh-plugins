@@ -80,6 +80,15 @@ export function groupByBase(entries) {
   for (const group of groups.values()) {
     group.efforts.sort((a, b) => EFFORT_ORDER.indexOf(a) - EFFORT_ORDER.indexOf(b))
   }
+  // The account reports the SAME displayName for distinct ids
+  // (gemini-2.5-flash, -lite and -thinking are all "Gemini 3.5 Flash Lite" as of
+  // 2026-11-05). Three identical picker rows are not distinguishable, so only a
+  // duplicated name gets the id appended.
+  const names = new Map()
+  for (const group of groups.values()) names.set(group.name, (names.get(group.name) ?? 0) + 1)
+  for (const group of groups.values()) {
+    if ((names.get(group.name) ?? 0) > 1) group.name = `${group.name} (${group.id})`
+  }
   return [...groups.values()]
 }
 
@@ -217,6 +226,10 @@ export function toResolvedModelInfo(provider, group, options = {}) {
   if (group.supportsThinking && group.efforts.length > 0) {
     info.reasoning = {
       efforts: group.efforts.map((effort) => ({ id: effort, name: EFFORT_NAMES[effort] ?? effort })),
+      // The owner's test policy is the LOWEST level, not the first catalog row
+      // (the account returns high, medium, low in that order). Without this the
+      // picker says "Default" and the adapter resolves to high.
+      defaultEffort: group.efforts[0],
     }
   }
   return info

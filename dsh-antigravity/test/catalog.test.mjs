@@ -68,6 +68,7 @@ test('LlmResolvedModelInfo uses context.contextWindow and reasoning.efforts', ()
     { id: 'medium', name: 'Medium' },
     { id: 'high', name: 'High' },
   ])
+  assert.equal(resolved.reasoning.defaultEffort, 'low', 'the picker defaults to the lowest level')
   assert.equal('contextWindow' in resolved, false, 'context must be nested')
 })
 
@@ -97,4 +98,18 @@ test('account parses project and tier', () => {
   const account = parseAccount({ cloudaicompanionProject: 'aicode-consumers', currentTier: { id: 'free-tier', name: 'Antigravity' } })
   assert.equal(account.project, 'aicode-consumers')
   assert.equal(account.tier, 'free-tier')
+})
+
+test('duplicate display names are disambiguated with the model id', () => {
+  const groups = groupByBase(parseCatalog({
+    models: {
+      'gemini-2.5-flash': { displayName: 'Gemini 3.5 Flash Lite' },
+      'gemini-2.5-flash-lite': { displayName: 'Gemini 3.5 Flash Lite' },
+      'gemini-2.5-pro': { displayName: 'Gemini 2.5 Pro' },
+    },
+  }))
+  const names = Object.fromEntries(groups.map((group) => [group.id, group.name]))
+  assert.equal(names['gemini-2.5-flash'], 'Gemini 3.5 Flash Lite (gemini-2.5-flash)')
+  assert.equal(names['gemini-2.5-flash-lite'], 'Gemini 3.5 Flash Lite (gemini-2.5-flash-lite)')
+  assert.equal(names['gemini-2.5-pro'], 'Gemini 2.5 Pro', 'a unique name is left alone')
 })

@@ -257,10 +257,12 @@ export function modelForEffort(model, effort, available) {
   // No effort requested, or the requested level is not served: the base id alone
   // is NOT a valid model. Measured 2026-11-05: sending `gemini-3.8-flash` or
   // `gpt-oss-120b` returns 404 NOT_FOUND, because the account only serves the
-  // suffixed ids. Fall back to a served variant: the exact id if present,
-  // otherwise the FIRST variant in catalog order.
+  // suffixed ids. Prefer the LOWEST level (the owner's default), not the first
+  // catalog row: the account lists high, medium, low, so "Default" previously
+  // resolved to high while the picker looked neutral.
   if (ids.length > 0) {
     if (ids.includes(model)) return model
+    if (ids.includes(base + '-low')) return base + '-low'
     if (variants.length > 0) return variants[0]
   }
   // Unknown catalog: keep a suffixed id when the caller already gave one.

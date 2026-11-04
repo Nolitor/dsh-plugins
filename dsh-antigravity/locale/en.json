@@ -9,7 +9,7 @@
   "sectionHint": "Runs on your Antigravity subscription. The CLI worker and the HTTP model route share one credential.",
   "switchesTitle": "Surfaces",
   "enabledLabel": "Enabled",
-  "enabledHint": "Master switch. Off removes the model route, this section and the usage chip.",
+  "enabledHint": "Master switch. Off removes the model route, the CLI worker, the subagent and the usage chip. This panel stays so you can turn it back on.",
   "modelServingLabel": "Model serving",
   "modelServingHint": "Offer the `antigravity` route to the model picker.",
   "cliWorkerLabel": "CLI worker",
@@ -36,6 +36,7 @@
   "usageReasoning": "reasoning",
   "usageResetButton": "Reset",
   "saveError": "Could not save",
+  "loadError": "Could not load",
   "disabledNotice": "Antigravity is disabled. Turn it on to use the model route and CLI worker.",
   "pillLabel": "usage",
   "noModels": "No models reported for this account."

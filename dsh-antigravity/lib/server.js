@@ -6,15 +6,56 @@
  * does not exist. A profile with no `connection` service (headless) simply gets
  * no panel routes; the model surface is unaffected.
  *
- * Every handler answers with plain JSON. Nothing here writes to the CLI
- * credential file, and the client secret is never echoed back.
+ * EVERY handler returns a WHATWG `Response`. The seam's `fetch(route)` is typed
+ * `(request: Request) => Promise<Response>`; returning a plain object made the
+ * carrier answer 400 with an empty body while the route itself was registered
+ * (measured 2026-11-05: settings section showed "Could not save: HTTP 400").
+ * DeepInfra wraps every handler in its `json()` helper for the same reason.
+ *
+ * Nothing here writes to the CLI credential file, and the client secret is never
+ * echoed back.
  *
  * @module @nolit/dsh-antigravity/server
  */
 import { configValue } from './settings.js'
 
+/** Settings namespace the host derives for this row (the Cordis entry id). */
+export const SETTINGS_ID = 'dsh-antigravity'
+
+/**
+ * Build a JSON `Response`.
+ * @param data - JSON-serializable payload.
+ * @param status - HTTP status.
+ * @returns a WHATWG Response.
+ */
+export function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+  })
+}
+
+/**
+ * Write one patch through the host settings service.
+ *
+ * The plugin config is a Cordis accessor, not a mutable object: the previous
+ * implementation called `config[key].set(...)`, which does not exist on the
+ * host's config wrapper, so every toggle reported success while changing
+ * nothing. `settings.update(rowId, patch)` is the seam the host actually owns
+ * (measured in dsh-deepinfra).
+ *
+ * @param settings - the scoped `settings` service, when available.
+ * @param patch - fields to persist.
+ * @returns true when the write was accepted.
+ */
+async function persist(settings, patch) {
+  if (typeof settings?.update !== 'function') return false
+  await settings.update(SETTINGS_ID, patch)
+  return true
+}
+
 /** Route suffix -> handler. Prefixed with `/api/local/<plugin>/`. */
-function createRoutes({ config, catalog, endpointOf }) {
+function createRoutes({ config, catalog, endpointOf, ledger, settings, installed, invalidate }) {
   return {
     /** Panel bootstrap: switches, account, catalog and quota in one call. */
     info: async () => {
@@ -28,6 +69,10 @@ function createRoutes({ config, catalog, endpointOf }) {
         },
         account: account ?? null,
         endpoint: { baseUrl: endpointOf().baseUrl, project: endpointOf().project },
+        // What the host actually holds right now, so a toggle can be verified
+        // without guessing from a cached picker.
+        installed: installed?.() ?? null,
+        usage: ledger.summary(),
       }
     },
 
@@ -35,14 +80,15 @@ function createRoutes({ config, catalog, endpointOf }) {
     switches: async (request) => {
       const body = await request.json?.().catch(() => ({})) ?? {}
       const allowed = ['enabled', 'modelServing', 'cliWorker', 'usagePill']
-      const applied = {}
+      const patch = {}
       for (const key of allowed) {
-        if (typeof body?.[key] !== 'boolean') continue
-        const holder = config[key]
-        if (holder && typeof holder.set === 'function') holder.set(body[key])
-        applied[key] = body[key]
+        if (typeof body?.[key] === 'boolean') patch[key] = body[key]
       }
-      return { ok: true, applied }
+      if (Object.keys(patch).length === 0) return json({ error: 'no supported switch in the request' }, 400)
+      if (!(await persist(settings, patch))) {
+        return json({ error: 'this host exposes no settings service; edit the profile patch instead' }, 409)
+      }
+      return json({ ok: true, applied: patch })
     },
 
     /** Live catalog with quota and the current enable state. */
@@ -66,44 +112,76 @@ function createRoutes({ config, catalog, endpointOf }) {
     'models/apply': async (request) => {
       const body = await request.json?.().catch(() => ({})) ?? {}
       const next = Array.isArray(body?.enabled) ? body.enabled.filter((id) => typeof id === 'string') : []
-      const holder = config.enabledModels
-      if (holder && typeof holder.set === 'function') holder.set(next)
-      return { ok: true, enabled: next }
+      if (!(await persist(settings, { enabledModels: next }))) {
+        return json({ error: 'this host exposes no settings service; edit the profile patch instead' }, 409)
+      }
+      invalidate?.()
+      return json({ ok: true, enabled: next })
     },
 
     /** Usage counters accumulated by this plugin from real turns. */
-    usage: async ({ ledger }) => ledger?.summary?.() ?? { requests: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 },
+    usage: async () => ledger.summary(),
   }
 }
 
 /**
  * Register the panel routes on the web seam.
  * @param ctx - cordis context.
- * @param deps - `{ config, catalog, endpointOf, pluginName }`.
+ * @param deps - `{ config, catalog, endpointOf, ledger, pluginName }`.
+ * @param scoped - scoped context that owns `connection` and `settings`.
  * @returns a disposer, or undefined when the seam is unavailable.
  */
-export function registerRoutes(ctx, deps) {
-  let connection
-  try {
-    connection = ctx.connection
-  } catch {
-    connection = undefined
+export function registerRoutes(ctx, deps, scoped) {
+  // The ROOT context does not own `connection`: cordis throws on an undeclared
+  // service read, and even a guarded read returns undefined on the web profile.
+  // The routes must be registered from a SCOPED context obtained with
+  // `ctx.inject(['connection','settings'], fn)` — the pattern dsh-deepinfra
+  // measured (its panel answered 404 while its unit suite stayed green).
+  let connection = scoped?.connection
+  if (connection === undefined) {
+    try {
+      connection = ctx.connection
+    } catch {
+      connection = undefined
+    }
   }
+  const settings = scoped?.settings
   const register = connection?.fetch?.register
   if (typeof register !== 'function') {
     ctx?.logger?.warn?.(deps.pluginName + ': connection seam exposes no fetch.register; settings panel routes unavailable')
     return undefined
   }
 
-  const ledger = createLedger()
-  const routes = createRoutes(deps)
+  const ledger = deps.ledger ?? createLedger()
+  const routes = createRoutes({ ...deps, ledger, settings })
   const releases = []
   for (const [suffix, handler] of Object.entries(routes)) {
     try {
-      const release = register.call(connection.fetch, {
+      // The route descriptor field is `fetch`, NOT `handler`. Measured 2026-11-05:
+      // `handler` is silently ignored by the router, so the route never registers
+      // and every panel request answers 404 while the plugin itself looks healthy.
+      // `methods` and `requestBody` are part of the descriptor too.
+      const registerOne = () => register.call(connection.fetch, {
         path: '/api/local/' + deps.pluginName.replace('@nolit/', '') + '/' + suffix,
-        handler: (request) => handler(request, { ledger }),
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          try {
+            const result = await handler(request)
+            // The carrier requires a Response. A plain object reaches the bridge
+            // as an invalid payload and is answered with 400.
+            return result instanceof Response ? result : json(result)
+          } catch (error) {
+            ctx?.logger?.warn?.(deps.pluginName + ': ' + suffix + ' failed: ' + (error instanceof Error ? error.message : String(error)))
+            return json({ error: error instanceof Error ? error.message : String(error) }, 500)
+          }
+        },
       })
+      // ctx.effect ties the registration to the plugin lifetime; without it a
+      // reload leaves the previous route mounted.
+      const release = typeof ctx.effect === 'function'
+        ? ctx.effect(registerOne, deps.pluginName + ': ' + suffix)
+        : registerOne()
       if (typeof release === 'function') releases.push(release)
     } catch (error) {
       ctx?.logger?.warn?.(deps.pluginName + ': could not register ' + suffix + ': ' + (error instanceof Error ? error.message : String(error)))

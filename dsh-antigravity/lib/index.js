@@ -18,10 +18,12 @@
  *
  * DISABLE SEMANTICS
  *   `enabled: false` removes the provider route (the model disappears from the
- *   picker), the settings section, and the usage chip in one switch. Individual
- *   surfaces can then be switched off independently with `modelServing`,
- *   `cliWorker` and `usagePill`. Every removal goes through a disposer that the
- *   host already runs, so nothing leaks a half-registered surface.
+ *   picker), the CLI command/tool, the subagent provider and the usage chip in
+ *   one switch. Individual surfaces can then be switched off independently with
+ *   `modelServing`, `cliWorker`, `subagent` and `usagePill`. The settings panel
+ *   stays mounted so the master can be turned back on; plugin-level removal is
+ *   the Plugins page. Every removal goes through a disposer the host already
+ *   runs, so nothing leaks a half-registered surface.
  */
 import Schema from '@deepseek-ai/schemastery'
 
@@ -33,7 +35,7 @@ import { configValue, resolveEndpoint } from './settings.js'
 import { readSelection, writeSelection } from './selection.js'
 import { listAgyModels, runAgyWorker } from './worker.js'
 import { AntigravitySubagentProvider } from './subagent.js'
-import { registerRoutes } from './server.js'
+import { createLedger, registerRoutes } from './server.js'
 
 /** Provider route owned by the model surface. */
 export const PROVIDER_ID = 'antigravity'
@@ -240,6 +242,10 @@ export function createCatalog({ config, tokens, fetchImpl, log, now, onChanged }
 
   return {
     snapshot,
+    /** Drop the cached catalog so the next list read re-applies enabledModels. */
+    invalidate() {
+      cache = null
+    },
     /** Normalized model list (efforts attached). */
     list: async (signal) => (await snapshot(signal)).entries,
     /** Every model the account serves, ignoring `enabledModels`. */
@@ -253,15 +259,78 @@ export function createCatalog({ config, tokens, fetchImpl, log, now, onChanged }
 
 /**
  * Plugin apply function.
+ *
+ * Services arrive in two waves on a real Cordis host: `llm` is injected and
+ * therefore present when apply() runs, while `tools`, `commands`, `subagents`
+ * and `connection`/ `settings` activate later. Reading an uninjected service
+ * throws, so the old `optional()` reads returned undefined on the web profile
+ * and silently skipped the CLI, command and subagent surfaces while every mock
+ * test passed (measured 2026-11-05: the slash menu listed no /agy). Each surface
+ * therefore acquires its services through ctx.inject() and installs itself when
+ * they appear.
+ *
+ * Config fields are VOLATILE (cordis keeps the same reference and updates it in
+ * place), so a settings write does not re-run apply(). Reconciliation is driven
+ * by the host's `app-boot/config-reload` event, which fires after a profile
+ * recompose: every surface re-checks its gate and installs or disposes exactly
+ * once.
+ *
  * @param ctx - cordis context.
  * @param config - validated plugin config.
  * @returns a disposer releasing every surface this plugin registered.
  */
 export function apply(ctx, config) {
+  /** Services acquired from deferred sub-contexts. */
+  const services = {}
+  /** Installed surfaces, keyed so each can be released independently. */
+  const parts = new Map()
+  /** Long-lived disposers (injection bindings + the reload listener). */
   const disposers = []
   const endpointOf = () => resolveEndpoint(config)
 
+  const warn = (message) => {
+    try {
+      ctx?.logger?.warn?.(message)
+    } catch {
+      // Logging is advisory.
+    }
+  }
+  /** One warning per collision key: reconcile runs on every config reload. */
+  const warned = new Set()
+  const warnOnce = (key, message) => {
+    if (warned.has(key)) return
+    warned.add(key)
+    warn(message)
+  }
+
+  /** Master + one surface gate. */
+  const gate = (field) => configValue(config, 'enabled') !== false && configValue(config, field) !== false
+
+  /** Release one installed surface. */
+  const release = (key) => {
+    const disposer = parts.get(key)
+    if (disposer === undefined) return
+    parts.delete(key)
+    try {
+      disposer()
+    } catch {
+      // Already released.
+    }
+  }
+
+  /** Release every surface (plugin unload). */
+  const releaseAll = () => {
+    for (const key of [...parts.keys()].reverse()) release(key)
+  }
+
   const tokens = new TokenProvider({ config, fetchImpl: globalThis.fetch, log: ctx?.logger })
+  // One ledger for the adapter that RECORDS usage and the panel routes that read
+  // it. Previously the routes created their own ledger, so the chip could only
+  // ever show zero even when the adapter served real turns.
+  const ledger = createLedger()
+  // The catalog filters by enabledModels at fetch time and caches for 15 min, so
+  // a settings write must drop the cache or the picker keeps the old set.
+  let lastEnabledModels = JSON.stringify(configValue(config, 'enabledModels') ?? [])
   const catalog = createCatalog({
     config,
     tokens,
@@ -272,166 +341,275 @@ export function apply(ctx, config) {
   })
 
   // ---- model surface -----------------------------------------------------
-  // The route is registered ONLY when every gate is open, so a disabled plugin
-  // never advertises a model the harness would then fail to serve.
-  if (configValue(config, 'enabled') !== false && configValue(config, 'modelServing') !== false) {
-    const adapter = new AntigravityAdapter({
-      settings: () => config,
-      tokens,
-      catalog: async (signal) => ({
-        list: (sig) => catalog.list(sig ?? signal),
-        find: (id, sig) => catalog.find(sig ?? signal, id),
-      }),
-      fetch: async (url, init) => {
-        const headers = { ...init.headers, ...(configValue(config, 'extraHeaders') ?? {}) }
-        return globalThis.fetch(url, { ...init, headers })
-      },
-      log: ctx?.logger,
-    })
-    const registration = ctx.llm.registerAdapter([PROVIDER_ID], adapter)
-    disposers.push(() => {
-      try {
-        registration()
-      } catch {
-        // Already released.
-      }
-    })
-    // Warm the catalog so the first picker read answers from memory.
-    void catalog.account()
-  }
-
-  // ---- CLI surface -------------------------------------------------------
-  const cliOn = configValue(config, 'enabled') !== false && configValue(config, 'cliWorker') !== false
-  const tools = optional(ctx, 'tools')
-  const subprocess = optional(ctx, 'subprocess')
-
-  if (cliOn && tools && subprocess && configValue(config, 'workerEnabled') !== false) {
-    // Duplicate tool names abort the whole plugin row, so yield instead of throwing.
-    const existing = typeof tools.get === 'function' ? tools.get(TOOL_NAME) : undefined
-    if (existing) {
-      ctx?.logger?.warn?.(`antigravity: tool "${TOOL_NAME}" is already registered; skipping the CLI worker tool`)
-    } else {
-      try {
-        tools.register({
-          name: TOOL_NAME,
-          description: DESCRIPTION,
-          parameters: {
-            type: 'object',
-            properties: { task: { type: 'string', description: 'Self-contained task text for the worker.' } },
-            required: ['task'],
-          },
-          handler: async (args, toolCtx) => {
-            // The worker reads `options.prompt`; the tool argument is `task`.
-            const result = await runAgyWorker(ctx, config, { prompt: String(args?.task ?? ''), cwd: process.cwd(), signal: toolCtx?.signal })
-            return { content: result.text, isError: result.ok === false }
-          },
-          presentResult: (_args, result) => ({ card: 'generic', title: 'Antigravity', content: result.content }),
-        })
-      } catch (error) {
-        ctx?.logger?.warn?.(`antigravity: tool registration failed: ${error instanceof Error ? error.message : String(error)}`)
-      }
+  const syncModel = () => {
+    if (!gate('modelServing')) {
+      release('model')
+      return
+    }
+    if (parts.has('model')) return
+    try {
+      const adapter = new AntigravityAdapter({
+        settings: () => config,
+        tokens,
+        ledger,
+        catalog: async (signal) => ({
+          list: (sig) => catalog.list(sig ?? signal),
+          find: (id, sig) => catalog.find(sig ?? signal, id),
+        }),
+        fetch: async (url, init) => {
+          const headers = { ...init.headers, ...(configValue(config, 'extraHeaders') ?? {}) }
+          return globalThis.fetch(url, { ...init, headers })
+        },
+        log: ctx?.logger,
+      })
+      const registration = ctx.llm.registerAdapter([PROVIDER_ID], adapter)
+      parts.set('model', () => {
+        try {
+          registration()
+        } catch {
+          // Already released.
+        }
+      })
+      // Warm the catalog so the first picker read answers from memory.
+      void catalog.account()
+    } catch (error) {
+      warn('antigravity: model route registration failed: ' + (error instanceof Error ? error.message : String(error)))
     }
   }
 
-  const commands = optional(ctx, 'commands')
-  if (cliOn && commands) {
-    const existing = typeof commands.get === 'function' ? commands.get(COMMAND_NAME) : undefined
-    if (existing) {
-      ctx?.logger?.warn?.(`antigravity: command "/${COMMAND_NAME}" is already registered; skipping`)
-    } else {
-      try {
-        const registration = commands.register({
-          name: COMMAND_NAME,
-          input: { hint: '<task>   (--model <id> --effort <level> --mode <mode> --timeout <ms>)' },
-          description: 'Run the Antigravity (agy) CLI worker. Usage: /agy [options] <task>. Bare /agy reuses the last selected model.',
-          handler: async ({ rawInput }) => {
-            const saved = await readSelection('agy').catch(() => ({}))
-            const parts = String(rawInput ?? '').trim()
-            if (parts === '' || parts === 'help') return { kind: 'success', text: USAGE }
-            if (parts === 'models') {
-              const listing = await listAgyModels(ctx, config, process.cwd())
-              return { kind: listing.ok ? 'success' : 'error', text: listing.text || '(no models reported)' }
-            }
-            const result = await runAgyWorker(ctx, config, { prompt: parts, cwd: process.cwd() })
-            if (result.ok && result.model) await writeSelection('agy', { model: result.model }).catch(() => {})
-            return { kind: result.ok ? 'success' : 'error', text: result.text }
-          },
-        })
-        disposers.push(() => {
-          try {
-            if (typeof registration === 'function') registration()
-            else commands.unregister?.(COMMAND_NAME)
-          } catch {
-            // Already released.
-          }
-        })
-      } catch (error) {
-        ctx?.logger?.warn?.(`antigravity: command registration failed: ${error instanceof Error ? error.message : String(error)}`)
+  // ---- CLI surface -------------------------------------------------------
+  /** Registry-ready tool definition (DSH 0.2.2 contract: output + execute). */
+  const toolDefinition = () => ({
+    name: TOOL_NAME,
+    description: DESCRIPTION,
+    parameters: {
+      type: 'object',
+      properties: { task: { type: 'string', description: 'Self-contained task text for the worker.' } },
+      required: ['task'],
+      additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: { content: { type: 'string' }, isError: { type: 'boolean' } },
+        required: ['content'],
+        additionalProperties: false,
+      },
+      render: (_args, value) => [{ type: 'text', text: String(value?.content ?? '') }],
+    },
+    execute: async (args, exec) => {
+      const result = await runAgyWorker(ctx, config, {
+        prompt: String(args?.task ?? ''),
+        cwd: process.cwd(),
+        signal: exec?.signal,
+      })
+      return { content: result.text, isError: result.ok === false }
+    },
+  })
+
+  /** Command definition shared by the live surface and the tests. */
+  const commandDefinition = () => ({
+    name: COMMAND_NAME,
+    input: { hint: '<task>   (--model <id> --effort <level> --mode <mode> --timeout <ms>)' },
+    description: 'Run the Antigravity (agy) CLI worker. Usage: /agy [options] <task>. Bare /agy reuses the last selected model.',
+    handler: async ({ rawInput }) => {
+      const saved = await readSelection('agy').catch(() => ({}))
+      const parts = String(rawInput ?? '').trim()
+      if (parts === '' || parts === 'help') return { kind: 'success', text: USAGE }
+      if (parts === 'models') {
+        const listing = await listAgyModels(ctx, config, process.cwd())
+        return { kind: listing.ok ? 'success' : 'error', text: listing.text || '(no models reported)' }
+      }
+      const result = await runAgyWorker(ctx, config, { prompt: parts, cwd: process.cwd() })
+      if (result.ok && result.model) await writeSelection('agy', { model: result.model }).catch(() => {})
+      return { kind: result.ok ? 'success' : 'error', text: result.text }
+    },
+  })
+
+  const syncCli = () => {
+    if (!gate('cliWorker')) {
+      release('cli-tool')
+      release('cli-command')
+      return
+    }
+    const { tools, subprocess, commands } = services
+    if (!parts.has('cli-tool') && tools && subprocess && configValue(config, 'workerEnabled') !== false) {
+      // Duplicate tool names abort the whole plugin row, so yield instead of throwing.
+      const existing = typeof tools.get === 'function' ? tools.get(TOOL_NAME) : undefined
+      if (existing) {
+        warnOnce('tool', `antigravity: tool "${TOOL_NAME}" is already registered; skipping the CLI worker tool`)
+      } else {
+        try {
+          const registration = tools.register(toolDefinition())
+          parts.set('cli-tool', typeof registration === 'function' ? registration : () => {})
+        } catch (error) {
+          warn(`antigravity: tool registration failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+    }
+    if (!parts.has('cli-command') && commands) {
+      const existing = typeof commands.get === 'function' ? commands.get(COMMAND_NAME) : undefined
+      if (existing) {
+        warnOnce('command', `antigravity: command "/${COMMAND_NAME}" is already registered; skipping`)
+      } else {
+        try {
+          const registration = commands.register(commandDefinition())
+          parts.set('cli-command', typeof registration === 'function'
+            ? registration
+            : () => commands.unregister?.(COMMAND_NAME))
+        } catch (error) {
+          warn(`antigravity: command registration failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
       }
     }
   }
 
   // ---- subagent surface --------------------------------------------------
-  // The provider registers on ctx.subagents; the shared delegation tool is a
-  // SEPARATE row (@deepseek-ai/dsh-tool-subagent) bound to this provider name,
-  // the same split the shipped codex/claude-code bundles use. That row lives in
-  // cordis.patch.yml, so disabling this provider here leaves the tool pointing at
-  // a name with no provider — hence the tool row is gated on the same switch in
-  // the patch's documentation, not silently here.
-  const subagents = optional(ctx, 'subagents')
-  if (configValue(config, 'enabled') !== false && configValue(config, 'subagent') !== false && subagents) {
+  const syncSubagent = () => {
+    if (!gate('subagent') || !services.subagents) {
+      release('subagent')
+      return
+    }
+    if (parts.has('subagent')) return
+    const providerName = configValue(config, 'subagentProviderName') || 'antigravity'
     // A second provider under the same name would shadow the first. The older
     // @nolit/dsh-subagent-antigravity package registers `antigravity` too, so a
     // profile carrying both must not lose one silently: yield and say so.
-    const taken = typeof subagents.getProvider === 'function'
-      ? subagents.getProvider(configValue(config, 'subagentProviderName') || 'antigravity')
+    const taken = typeof services.subagents.getProvider === 'function'
+      ? services.subagents.getProvider(providerName)
       : undefined
     if (taken) {
-      ctx?.logger?.warn?.('antigravity: a subagent provider named "' + (configValue(config, 'subagentProviderName') || 'antigravity') + '" is already registered; skipping the merged one')
-    } else try {
-      const provider = new AntigravitySubagentProvider(
-        configValue(config, 'subagentProviderName') || 'antigravity',
-        ctx,
-        {
-          agyPath: configValue(config, 'agyPath') || 'agy',
-          model: configValue(config, 'model') || DEFAULT_MODEL,
-          effort: configValue(config, 'effort') || DEFAULT_EFFORT,
-          mode: configValue(config, 'mode') || DEFAULT_MODE,
-          timeoutMs: Number(configValue(config, 'subagentTimeoutMs')) || 900000,
-          disposeGraceMs: Number(configValue(config, 'subagentDisposeGraceMs')) || 5000,
-          env: configValue(config, 'subagentEnv') ?? {},
-        },
-      )
-      const release = subagents.registerProvider(provider)
-      if (typeof release === 'function') disposers.push(release)
+      warnOnce('subagent', 'antigravity: a subagent provider named "' + providerName + '" is already registered; skipping the merged one')
+      return
+    }
+    try {
+      const provider = new AntigravitySubagentProvider(providerName, ctx, {
+        agyPath: configValue(config, 'agyPath') || 'agy',
+        model: configValue(config, 'model') || DEFAULT_MODEL,
+        effort: configValue(config, 'effort') || DEFAULT_EFFORT,
+        mode: configValue(config, 'mode') || DEFAULT_MODE,
+        timeoutMs: Number(configValue(config, 'subagentTimeoutMs')) || 900000,
+        disposeGraceMs: Number(configValue(config, 'subagentDisposeGraceMs')) || 5000,
+        env: configValue(config, 'subagentEnv') ?? {},
+      })
+      const registration = services.subagents.registerProvider(provider)
+      parts.set('subagent', typeof registration === 'function' ? registration : () => {})
     } catch (error) {
-      ctx?.logger?.warn?.(`antigravity: subagent provider registration failed: ${error instanceof Error ? error.message : String(error)}`)
+      warn(`antigravity: subagent provider registration failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
   // ---- panel routes ------------------------------------------------------
-  // The settings section and the usage chip read these. They are registered
-  // only while at least one of those surfaces is on.
-  const panelOn = configValue(config, 'enabled') !== false
-    && (configValue(config, 'modelServing') !== false || configValue(config, 'usagePill') !== false)
-  if (panelOn) {
-    const disposed = registerRoutes(ctx, {
-      config,
-      catalog,
-      endpointOf,
-      pluginName: name,
-    })
-    if (typeof disposed === 'function') disposers.push(disposed)
+  const syncPanel = () => {
+    // The panel is the CONTROL surface, not a product surface: it stays mounted
+    // even when the master switch is off, because it is the only place the
+    // master can be turned back on. Plugin-level removal is the Plugins page,
+    // which unloads this whole row.
+    if (!services.connection) {
+      release('panel')
+      return
+    }
+    if (parts.has('panel')) return
+    try {
+      const deps = {
+        config,
+        catalog,
+        endpointOf,
+        ledger,
+        invalidate: () => catalog.invalidate(),
+        pluginName: name,
+        installed: () => ({
+          model: parts.has('model'),
+          cliTool: parts.has('cli-tool'),
+          cliCommand: parts.has('cli-command'),
+          subagent: parts.has('subagent'),
+          panel: parts.has('panel'),
+        }),
+      }
+      const disposed = registerRoutes(ctx, deps, services)
+      if (typeof disposed === 'function') parts.set('panel', disposed)
+    } catch (error) {
+      warn('antigravity: panel route registration failed: ' + (error instanceof Error ? error.message : String(error)))
+    }
   }
 
-  const dispose = () => {
-    for (const release of disposers.splice(0).reverse()) {
+  /** Reconcile every surface against the live config. Idempotent. */
+  const syncAll = () => {
+    const enabledModels = JSON.stringify(configValue(config, 'enabledModels') ?? [])
+    if (enabledModels !== lastEnabledModels) {
+      lastEnabledModels = enabledModels
+      catalog.invalidate()
+      ctx?.emit?.('llm/models-updated', PROVIDER_ID)
+    }
+    syncModel()
+    syncCli()
+    syncSubagent()
+    syncPanel()
+  }
+
+  /**
+   * Acquire one service group through deferred injection.
+   * @param deps - service names to wait for.
+   */
+  const bind = (deps) => {
+    if (typeof ctx.inject === 'function') {
       try {
-        release()
+        const off = ctx.inject(deps, (scoped) => {
+          for (const dep of deps) services[dep] = scoped[dep]
+          syncAll()
+          return () => {
+            // Drop only the surfaces that owned these services. Re-running
+            // syncAll here would re-register a surface during plugin disposal.
+            for (const dep of deps) services[dep] = undefined
+            if (deps.includes('tools') || deps.includes('subprocess')) release('cli-tool')
+            if (deps.includes('commands')) release('cli-command')
+            if (deps.includes('subagents')) release('subagent')
+            if (deps.includes('connection')) release('panel')
+          }
+        })
+        if (typeof off === 'function') disposers.push(off)
+        return
+      } catch (error) {
+        warn('antigravity: deferred injection failed: ' + (error instanceof Error ? error.message : String(error)))
+      }
+    }
+    // Hosts without deferred injection (and the unit-test context) expose the
+    // services directly. Reading an undeclared service throws, so each read is
+    // guarded; the absence simply leaves that surface uninstalled.
+    for (const dep of deps) {
+      try {
+        services[dep] = ctx[dep]
+      } catch {
+        services[dep] = undefined
+      }
+    }
+    syncAll()
+  }
+
+  bind(['tools', 'subprocess'])
+  bind(['commands'])
+  bind(['subagents'])
+  bind(['connection', 'settings'])
+
+  // Volatile config updates do not re-run apply(); the host announces the
+  // completed recompose instead, and that is when gates must be re-evaluated.
+  try {
+    const off = ctx.on?.('app-boot/config-reload', syncAll)
+    if (typeof off === 'function') disposers.push(off)
+  } catch (error) {
+    warn('antigravity: config-reload listener unavailable: ' + (error instanceof Error ? error.message : String(error)))
+  }
+
+  syncAll()
+
+  return () => {
+    releaseAll()
+    for (const off of disposers.splice(0).reverse()) {
+      try {
+        off()
       } catch {
         // A failing disposer must not block the rest.
       }
     }
   }
-  return dispose
 }

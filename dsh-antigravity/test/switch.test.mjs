@@ -48,13 +48,15 @@ test('all switches on registers every surface', () => {
   assert.deepEqual(r.subagents, ['antigravity'], 'the delegation provider registers')
 })
 
-test('master off removes every surface', () => {
+test('master off removes every PRODUCT surface but keeps the control panel', () => {
   const r = mount({ enabled: false })
   assert.deepEqual(r.providers, [], 'no provider route when disabled')
   assert.deepEqual(r.commands, [], 'no /agy command when disabled')
   assert.deepEqual(r.tools, [], 'no agy_worker tool when disabled')
-  assert.deepEqual(r.routes, [], 'no panel routes when disabled')
   assert.deepEqual(r.subagents, [], 'no subagent provider when disabled')
+  // The panel is the control surface: disposing it would make the off switch
+  // impossible to reverse from the UI. Plugin-level removal is the Plugins page.
+  assert.ok(r.routes.length > 0, 'the panel stays so the master can be turned back on')
 })
 
 test('subagent off removes only the delegation provider', () => {

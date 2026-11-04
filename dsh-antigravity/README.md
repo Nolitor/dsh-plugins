@@ -97,7 +97,7 @@ provider) instead.
 agy --version && agy models
 
 # 2. Link the package into the profile.
-dsh plugin --profile web add /path/to/dsh-antigravity
+dsh plugin --profile web add link:/path/to/dsh-antigravity
 
 # 3. Verify the mount (a real boot, not just --dump-config).
 dsh --profile web --no-open --port 18099
@@ -167,7 +167,7 @@ Every value resolves **config → environment → built-in default**.
 
 | Switch | Off removes |
 | :--- | :--- |
-| `enabled` | everything below, plus all panel routes |
+| `enabled` | the model route, CLI surface, subagent and usage chip (the panel stays so it can be turned back on) |
 | `modelServing` | the `antigravity` provider route |
 | `cliWorker` | `/agy` and `agy_worker` |
 | `workerEnabled` | `agy_worker` only (keeps `/agy`) |
@@ -175,8 +175,13 @@ Every value resolves **config → environment → built-in default**.
 | `usagePill` | the composer usage chip |
 
 The settings section stays visible while the plugin is mounted so a surface can be switched back
-on; it shows a notice and disables its controls when the master switch is off. The usage chip
-renders nothing at all when off, leaving no empty node in the composer.
+on; it shows a notice and disables its product controls when the master switch is off. The usage
+chip renders nothing at all when off, leaving no empty node in the composer.
+
+Switches are live: the host announces `app-boot/config-reload` after a settings write, the plugin
+re-evaluates every gate, and the ADAPTER / tool / command / provider is disposed or re-registered
+without a restart. Model filtering (`enabledModels`) also invalidates the catalog cache, so the
+picker reflects a saved selection immediately.
 
 ---
 
@@ -198,7 +203,7 @@ inherits) and never targets a bare element selector. See
 ```bash
 npm run build    # regenerate the locale table and the browser bundle
 npm run check    # syntax check every module
-npm test         # 74+ tests, no network
+npm test         # 82 tests, no network
 ```
 
 ## Measured protocol notes

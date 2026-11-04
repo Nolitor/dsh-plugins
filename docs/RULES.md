@@ -1,10 +1,10 @@
 # DSH Plugins — Detailed Rules
 
 <!-- skeleton:
-version: 1.4
+version: 1.5
 kind: rule
 status: active
-updated: 2026-11-02
+updated: 2026-11-05
 summary: Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting — with the failure ledger as required reading.
 -->
 
@@ -93,12 +93,17 @@ Never let a glob stand in for an empty listing.
 
 ## 5.1 Typography and visual style (mandatory)
 
-Every plugin surface states its own `font-size: 14px; line-height: 22px` root. DSH defines no
-font-size token and sets none on `body`, so an omitted size inherits the browser's 16px and the
-surface renders larger than the rest of the UI (measured: the sidebar panel and the notify
-settings section both computed 16px before this rule). Full standard, including the token
-pitfalls (`--dsw-alias-bg-layer-4` is unset at runtime; `--dsw-alias-brand-primary` is near-white
-in dark mode): [PLUGIN-STYLE-STANDARD.md](PLUGIN-STYLE-STANDARD.md).
+Every plugin surface consumes the **live** DSH typography tokens:
+`font-size: var(--dsh-content-font-size, 14px)` with
+`line-height: calc(22px + var(--dsh-content-font-delta, 0px))`, and the derived secondaries
+(`--dsh-content-font-size-secondary`, `--dsh-content-font-delta-secondary`) for hints and meta.
+DSH sets these on `body` at runtime from Settings → font size (this profile: 13px; measured
+2026-11-05). A hardcoded `14px` is the F-41 defect: it ignores the user's setting and renders one
+step too large. Never set `font-family` (inherit) and never target a bare element selector.
+
+Full standard, including the token pitfalls (`--dsw-alias-bg-layer-4` is unset at runtime;
+`--dsw-alias-brand-primary` is near-white in dark mode):
+[PLUGIN-STYLE-STANDARD.md](PLUGIN-STYLE-STANDARD.md) v2.0.
 
 ## 6. Documentation contract (skeleton indexing)
 

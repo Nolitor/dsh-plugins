@@ -8,7 +8,74 @@ updated: 2026-11-05
 summary: Engineering history for @nolit/dsh-antigravity. Created 2026-11-05 by merging the CLI worker surface of @nolit/dsh-antigravity-cli with the HTTP model route proven in @nolit/dsh-antigravity-directsdk, plus a settings section, a usage chip and per-surface switches.
 -->
 
-Current version: `0.0.1-rc.3`
+Current version: `0.0.1-rc.4`
+
+## 0.0.1-rc.4 — 2026-11-05 (live-defect correction)
+
+rc.3 passed 75 unit tests and its client module loaded in isolation, but the live profile did not
+contain the package and three host contracts were still wrong. Measured after the 05:13 KST
+restart; everything below is a measured before → after, not a plan.
+
+### Live state — the direct cause of the two reported symptoms (F-47)
+
+| Check | Measured |
+| :--- | :--- |
+| `~/.dsh/profiles/web/package.json` dependencies | no `@nolit/dsh-antigravity`, no `@nolit/dsh-antigravity-cli` |
+| same `dsh.profile.bundles` | no antigravity entry at all |
+| `~/.dsh/profiles/web/node_modules/@nolit/` | no `dsh-antigravity` link |
+| `dsh --profile web --dump-config` | **207 rows, zero antigravity rows** |
+| `@nolit/dsh-subagent-antigravity` | present as a dependency, but not in `bundles` and mounted **0 rows** |
+
+So the missing model route and the missing settings tab were a **missing install**, not a client
+regression. The 02:51 "Profile swap" entry below was not true at measurement time; it is kept as
+history and corrected here.
+
+### Fixed defects (each measured in an isolated profile, DSH 0.2.2-alpha.3)
+
+| # | Defect | Measured evidence | Fix |
+| :--- | :--- | :--- | :--- |
+| 1 | Every panel route answered **400** while registered | browser `POST /api/local/dsh-antigravity/info` -> 400, empty body; section showed "Could not save: HTTP 400" | the seam requires a WHATWG `Response`; handlers now return one via `json()` (F-45) |
+| 2 | `/agy`, `agy_worker` and the subagent provider were **never registered** | slash menu listed no `/agy`; `installed` diagnostic was false | acquire `tools`/`subprocess`/`commands`/`subagents` through `ctx.inject` instead of un-injected property reads (F-44) |
+| 3 | `agy_worker` used the pre-0.2 tool shape (`handler`, no `output`) | `tools.register` would reject it even when the service was reachable | `output:{schema,render}` + `execute` (DSH 0.2.2 contract) |
+| 4 | Usage chip could only ever show zero | routes created a second `createLedger()` the adapter never saw | one ledger shared by adapter and routes; the adapter records before yielding `usage` |
+| 5 | Surface switches saved but did not take effect | `info` showed `modelServing:false` while the route stayed mounted | volatile fields do not re-run `apply`; reconcile every surface on `app-boot/config-reload` (F-46) |
+| 6 | `enabledModels` was ignored by the picker until TTL/restart | 15-minute catalog cache | invalidate the catalog on an `enabledModels` change; picker updates immediately |
+| 7 | Three picker rows all named "Gemini 3.5 Flash Lite" | server returns the same `displayName` for `gemini-2.5-flash`, `-lite`, `-thinking` | append the id only for duplicated names |
+| 8 | Load failure said "Could not save" | the error branch reused `saveError` | new `loadError` string in EN/KO |
+| 9 | Master off removed the panel and could not be undone | routes disposed with the product surfaces | panel stays mounted; product surfaces still dispose |
+| 10 | "Default" reasoning sent the **high** variant | catalog order is high, medium, low; `modelForEffort` took the first variant when no effort was requested | advertise `reasoning.defaultEffort: 'low'` and prefer `<base>-low` when the host omits an effort |
+| 11 | The usage chip claimed the **single** `conversation.input.activity` seat already owned by `tk` | live pageerror `single slot "conversation.input.activity" already has a registration at priority 0 (registered by tk)`; the chip never rendered | register in the additive list slot `conversation.input.right`, the same visual position, so no single seat is contested |
+
+### Verification
+
+- **82 tests pass, 0 fail** (`test/server.test.mjs` and `test/ledger.test.mjs` are new; `switch.test.mjs` now asserts the panel-stays rule).
+- Isolated profile `/tmp/agtest` with a real Chromium boot:
+  - settings tab **Antigravity** renders the switches, account tier, 19 models and usage counters;
+  - `/agy` appears in the slash menu;
+  - the model picker shows the `Antigravity (subscription)` route, with the duplicated
+    "Gemini 3.5 Flash Lite" names disambiguated by id;
+  - `POST switches {"modelServing":false}` flips `installed.model` true -> false -> true **without a restart**;
+  - `models/apply {"enabled":["gemini-3.8-flash-low"]}` leaves one picker row immediately;
+  - a **real turn** on `gemini-3.8-flash-low` (the model label read "Gemini 3.8 Flash,
+    reasoning effort Low") answered `PONG` in 3 s, and the composer chip rendered
+    `usage 9,153`; `/info` then reported `requests:2, input:8,950, output:5,
+    reasoning:198` — the ledger is wired, not invented.
+  - `/agy` is listed in the slash menu. The headless automation could not produce a
+    command transcript for `/agy models` (the composer kept opening a fresh session),
+    so the command's worker path is covered by `test/cli-worker.test.mjs` rather than
+    claimed as a live run.
+- **Live install (05:42 KST, no restart).** `dsh plugin --profile web add link:…/dsh-antigravity`
+  added the dependency and the bundle. `dsh --profile web --dump-config` went **207 -> 209 rows**
+  (this row + `tool-subagent-antigravity`). The service kept `MainPID=2009037` and
+  `ActiveEnterTimestamp=05:13:10`, so the host reconciled the new bundle **without a restart**.
+  Live `POST /api/local/dsh-antigravity/info` -> **200** with
+  `installed:{model,cliTool,cliCommand,subagent,panel}:true`; the live Korean Settings pane lists
+  **안티그래비티** and renders the account, 19 models and switches; the live model picker lists
+  **Antigravity (subscription)** and the Gemini/Claude rows.
+- One pre-existing console error remains: the single `conversation.input.activity` seat is claimed
+  by `tk` and by deepinfra. The merged plugin no longer joins that seat (moved to
+  `conversation.input.right`), so the error count dropped by one; that remaining pair is outside
+  this package (the owner asked to keep other plugins out of this round).
 
 ## [0.1.0] — 2026-11-05
 
@@ -32,8 +99,10 @@ Created by merging two proven pieces plus new UI surface.
 - **Settings section** (`settings.section`, id `antigravity`): master switch plus
   per-surface switches, account tier, live model list with per-model quota, and
   usage counters.
-- **Usage chip** (`conversation.input.activity`): total measured tokens beside the
-  model selector. Renders nothing when disabled, so no empty node is left.
+- **Usage chip** (`conversation.input.right`, a list slot): total measured tokens
+  beside the model selector. The single `conversation.input.activity` seat is
+  already owned by the token-economizer, so this uses the additive right-hand list.
+  Renders nothing when disabled, so no empty node is left.
 - **Server routes**: `info`, `switches`, `models`, `models/apply`, `usage`.
 - **EN/KO locale**: `locale/*.json` is the source of truth,
   `scripts/gen-locale.mjs` and `scripts/build-client.mjs` bake it into the bundle,
@@ -41,8 +110,10 @@ Created by merging two proven pieces plus new UI surface.
 
 ### Measured decisions
 
-- `enabled: false` removes the route, command, tool and panel routes. Asserted
-  against a mock host for every switch combination (`test/switch.test.mjs`).
+- `enabled: false` removes the route, command, tool and subagent provider. The
+  panel stays mounted so the master can be turned back on; plugin-level removal is
+  the Plugins page. Asserted against a mock host for every switch combination
+  (`test/switch.test.mjs`), and re-measured live in rc.4 (`installed` state).
 - A pre-existing `/agy` or `agy_worker` (the older CLI plugin) is **yielded**, not
   a fatal duplicate, so mounting both cannot abort the plugin row.
 - The stylesheet sets no `font-family` and no bare element selector; both are

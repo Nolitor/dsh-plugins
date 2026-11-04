@@ -5,8 +5,9 @@
 # (@nolit/dsh-antigravity).
 #
 # ONE PLUGIN, FOUR SWITCHES
-#   enabled      master. false removes the model route, the settings section and
-#                the usage chip in one action.
+#   enabled      master. false removes the model route, the CLI worker, the
+#                subagent and the usage chip in one action. The settings panel
+#                stays mounted so the switch can be turned back on.
 #   modelServing the `antigravity` provider route (HTTP, no CLI).
 #   cliWorker    /agy command and agy_worker tool (spawns the agy binary).
 #   usagePill    the composer usage chip.

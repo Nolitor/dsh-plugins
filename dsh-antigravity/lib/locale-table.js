@@ -15,7 +15,7 @@ export const I18N = {
     "sectionHint": "Runs on your Antigravity subscription. The CLI worker and the HTTP model route share one credential.",
     "switchesTitle": "Surfaces",
     "enabledLabel": "Enabled",
-    "enabledHint": "Master switch. Off removes the model route, this section and the usage chip.",
+    "enabledHint": "Master switch. Off removes the model route, the CLI worker, the subagent and the usage chip. This panel stays so you can turn it back on.",
     "modelServingLabel": "Model serving",
     "modelServingHint": "Offer the `antigravity` route to the model picker.",
     "cliWorkerLabel": "CLI worker",
@@ -42,6 +42,7 @@ export const I18N = {
     "usageReasoning": "reasoning",
     "usageResetButton": "Reset",
     "saveError": "Could not save",
+    "loadError": "Could not load",
     "disabledNotice": "Antigravity is disabled. Turn it on to use the model route and CLI worker.",
     "pillLabel": "usage",
     "noModels": "No models reported for this account."
@@ -57,7 +58,7 @@ export const I18N = {
     "sectionHint": "안티그래비티 구독으로 동작합니다. CLI 워커와 HTTP 모델 라우트가 하나의 자격증명을 함께 씁니다.",
     "switchesTitle": "표면",
     "enabledLabel": "활성화",
-    "enabledHint": "마스터 스위치입니다. 끄면 모델 라우트, 이 설정 탭, 사용량 칩이 모두 사라집니다.",
+    "enabledHint": "마스터 스위치입니다. 끄면 모델 라우트, CLI 워커, 서브에이전트, 사용량 칩이 사라집니다. 이 탭은 다시 켤 수 있도록 남습니다.",
     "modelServingLabel": "모델 서빙",
     "modelServingHint": "`antigravity` 라우트를 모델 선택기에 제공합니다.",
     "cliWorkerLabel": "CLI 워커",
@@ -84,6 +85,7 @@ export const I18N = {
     "usageReasoning": "추론",
     "usageResetButton": "초기화",
     "saveError": "저장할 수 없습니다",
+    "loadError": "불러오지 못했습니다",
     "disabledNotice": "안티그래비티가 비활성화되어 있습니다. 모델 라우트와 CLI 워커를 쓰려면 켜세요.",
     "pillLabel": "사용량",
     "noModels": "이 계정에서 보고된 모델이 없습니다."

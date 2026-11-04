@@ -5,7 +5,13 @@
  * tracks:
  *
  *   1. settings.section              -> the "Antigravity" / "안티그래비티" card.
- *   2. conversation.input.activity   -> the usage chip beside the model selector.
+ *   2. conversation.input.right      -> the usage chip beside the model selector.
+ *
+ *      The composer's `conversation.input.activity` slot is SINGLE and already
+ *      owned by the token-economizer ("tk") in the live profile. Registering a
+ *      second occupant there throws a page error and hides the chip (measured
+ *      2026-11-05). `input.right` is a LIST slot with the same visual position,
+ *      so the chip is additive and never fights for a single seat.
  *
  * MODULE FORMAT: served to the browser as-is and evaluated by
  * window.__ModuleLoader__, so it must be a CommonJS factory. ESM import/export
@@ -48,7 +54,7 @@ window.__ModuleLoader__.load({
     "sectionHint": "Runs on your Antigravity subscription. The CLI worker and the HTTP model route share one credential.",
     "switchesTitle": "Surfaces",
     "enabledLabel": "Enabled",
-    "enabledHint": "Master switch. Off removes the model route, this section and the usage chip.",
+    "enabledHint": "Master switch. Off removes the model route, the CLI worker, the subagent and the usage chip. This panel stays so you can turn it back on.",
     "modelServingLabel": "Model serving",
     "modelServingHint": "Offer the `antigravity` route to the model picker.",
     "cliWorkerLabel": "CLI worker",
@@ -75,6 +81,7 @@ window.__ModuleLoader__.load({
     "usageReasoning": "reasoning",
     "usageResetButton": "Reset",
     "saveError": "Could not save",
+    "loadError": "Could not load",
     "disabledNotice": "Antigravity is disabled. Turn it on to use the model route and CLI worker.",
     "pillLabel": "usage",
     "noModels": "No models reported for this account."
@@ -90,7 +97,7 @@ window.__ModuleLoader__.load({
     "sectionHint": "안티그래비티 구독으로 동작합니다. CLI 워커와 HTTP 모델 라우트가 하나의 자격증명을 함께 씁니다.",
     "switchesTitle": "표면",
     "enabledLabel": "활성화",
-    "enabledHint": "마스터 스위치입니다. 끄면 모델 라우트, 이 설정 탭, 사용량 칩이 모두 사라집니다.",
+    "enabledHint": "마스터 스위치입니다. 끄면 모델 라우트, CLI 워커, 서브에이전트, 사용량 칩이 사라집니다. 이 탭은 다시 켤 수 있도록 남습니다.",
     "modelServingLabel": "모델 서빙",
     "modelServingHint": "`antigravity` 라우트를 모델 선택기에 제공합니다.",
     "cliWorkerLabel": "CLI 워커",
@@ -117,6 +124,7 @@ window.__ModuleLoader__.load({
     "usageReasoning": "추론",
     "usageResetButton": "초기화",
     "saveError": "저장할 수 없습니다",
+    "loadError": "불러오지 못했습니다",
     "disabledNotice": "안티그래비티가 비활성화되어 있습니다. 모델 라우트와 CLI 워커를 쓰려면 켜세요.",
     "pillLabel": "사용량",
     "noModels": "이 계정에서 보고된 모델이 없습니다."
@@ -179,9 +187,19 @@ window.__ModuleLoader__.load({
       document.head.appendChild(style)
     }
 
-    /** Read one panel route. */
+    /**
+     * Read one panel route.
+     *
+     * POST, not GET: the host route descriptor declares `methods: ['POST']` (the
+     * same descriptor dsh-deepinfra uses), so a GET never reaches the handler and
+     * the fetch answers 404 even though the route is registered.
+     */
     async function get(suffix) {
-      const response = await fetch('/api/local/dsh-antigravity/' + suffix)
+      const response = await fetch('/api/local/dsh-antigravity/' + suffix, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
       if (!response.ok) throw new Error('HTTP ' + response.status)
       return response.json()
     }
@@ -253,7 +271,7 @@ window.__ModuleLoader__.load({
       if (state.status === 'error') {
         return h('section', { className: 'agSection' },
           h('h3', { className: 'agHeading' }, t('sectionTitle')),
-          h('p', { className: 'agError' }, t('saveError') + ': ' + state.error))
+          h('p', { className: 'agError' }, t('loadError') + ': ' + state.error))
       }
 
       const info = state.info
@@ -411,9 +429,9 @@ window.__ModuleLoader__.load({
           { name: 'settings.section', id: 'antigravity', order: 62, label: () => (currentLang() === 'ko' ? '\uc548\ud2f0\uadf8\ub798\ube44\ud2f0' : 'Antigravity') },
           AntigravitySection,
         )))
-      releases.push(ctx.slots.inject('conversation.input.activity', () =>
+      releases.push(ctx.slots.inject('conversation.input.right', () =>
         ctx.slots.register(
-          { name: 'conversation.input.activity', id: 'antigravity-usage', order: 1 },
+          { name: 'conversation.input.right', id: 'antigravity-usage', order: 1 },
           UsageChip,
         )))
       return () => {

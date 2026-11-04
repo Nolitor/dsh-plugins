@@ -279,7 +279,13 @@ export class AntigravityAdapter extends LlmAdapter {
     if (!sawText && !sawTool) {
       throw new LlmError('Antigravity returned an empty completion', 'EMPTY_RESPONSE')
     }
-    if (usage) yield { type: 'usage', usage }
+    if (usage) {
+      // Record BEFORE yielding the terminal usage chunk: the host may stop
+      // iterating as soon as it sees `finish`, so a record after the yield can be
+      // missed. The ledger is process-local and has no cost figure.
+      this.dependencies.ledger?.record?.(usage)
+      yield { type: 'usage', usage }
+    }
     yield { type: 'finish', reason: finishReason ?? (sawTool ? { kind: 'tool-calls' } : { kind: 'stop' }) }
   }
 }

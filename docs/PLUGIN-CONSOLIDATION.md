@@ -18,7 +18,7 @@ that vendor's account:
 
 | Vendor | Package | Version | Surfaces |
 | :--- | :--- | :--- | :--- |
-| Antigravity | `@nolit/dsh-antigravity` | `0.0.1-rc.3` | `/agy`, `agy_worker`, `antigravity` model route, `subagent_antigravity`, settings section, usage chip |
+| Antigravity | `@nolit/dsh-antigravity` | `0.0.1-rc.4` | `/agy`, `agy_worker`, `antigravity` model route, `subagent_antigravity`, settings section, usage chip |
 | OpenCode | `@nolit/dsh-opencode-v2` | `0.0.2-rc.1` | `opencode` tool, `/ocode`, `cli_worker`, `opencode-http-agent` route, `subagent_opencode` |
 
 ### The forcing reason
@@ -120,7 +120,7 @@ The owner's scheme is written `0.0.1.rc3`. **pnpm rejects it:**
 
 A dot-separated `rc` is not valid semver (`semver.valid('0.0.1.rc3') === null`), so the package
 cannot be installed at all. Both `0.0.1-rc3` and `0.0.1-rc.3` install cleanly; this repo uses
-`0.0.1-rc.3` so the number is still explicit.
+the `0.0.1-rc.<k>` form (`0.0.1-rc.4` for the current Antigravity build) so the number is explicit.
 
 **If the owner wants the literal `.rc` form, the install step must change too** — it cannot be
 satisfied by the package version alone.

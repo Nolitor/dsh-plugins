@@ -78,6 +78,12 @@ test('effortMatchesModel reads the id suffix', () => {
 test('modelForEffort selects the suffixed id when the catalog serves it', () => {
   const available = ['gemini-3.8-flash-low', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-high']
   assert.equal(modelForEffort('gemini-3.8-flash-low', 'high', available), 'gemini-3.8-flash-high')
+  // Catalog order is high, medium, low; "no effort" must still mean LOW.
+  assert.equal(
+    modelForEffort('gemini-3.8-flash', undefined, ['gemini-3.8-flash-high', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-low']),
+    'gemini-3.8-flash-low',
+    'the default effort is the lowest served level, not the first catalog row',
+  )
   assert.equal(modelForEffort('gemini-3.8-flash-low', 'medium', available), 'gemini-3.8-flash-medium')
   // xhigh and max collapse onto high: the API exposes no finer level.
   assert.equal(modelForEffort('gemini-3.8-flash-low', 'max', available), 'gemini-3.8-flash-high')
