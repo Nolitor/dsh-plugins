@@ -37,6 +37,42 @@ Removing it also removed the whole claim-file subsystem (`lib/exclusion.js`, `ex
 the beta dependency in three test files). The `conflictPolicy` guard stays: it handles a legacy
 `opencode-go`/`opencode` provider, which is a real third-party collision.
 
+### 0.0.2-rc.1.3 The pill matched a MODEL PREFIX, so other routers still showed it (2026-11-04)
+
+Owner report after the previous fix: "오픈코드 v2 서빙된 모델이 아닌 다른 라우터에서 부른 모델인데 왜
+이렇게 모델 서빙 옆에 붙냐 ... 이거 버그라고".
+
+**Cause.** `usingOwnRoute()` accepted `provider === 'opencode-http-agent'` **or** any model id
+matching `/^opencode(-go)?\//`. The model id comes from OpenCode's CATALOG, not from this
+adapter, so every router that resells `opencode-go/*` ids matched it. Reproduced against the
+predicate directly:
+
+| provider | model | before | after |
+|---|---|---|---|
+| `opencode-http-agent` | `opencode-go/deepseek-v4.1-flash` | SHOWED | SHOWED |
+| `subrouter` | `opencode-go/deepseek-v4.1-flash` | **SHOWED** | hidden |
+| `deepseek-account` | `opencode-go/deepseek-v4.1-flash` | **SHOWED** | hidden |
+| `opencode-zen`, `opencodeai`, `my-opencode-agent` | any | SHOWED/hidden by accident | hidden |
+
+**Fix.** Only the PROVIDER id decides, and the accepted set is the ids this package actually
+registers: `lib/http.js` registers `opencode-http-agent`, `lib/provider.js` registers
+`opencode-agent`. The model id is read only to prove the node is a route chip; it is never
+matched.
+
+**Verified live** on the running service (fresh token; the earlier attempt silently measured an
+expired-token page that had no composer at all — recorded so the evidence is not over-read):
+
+| step | route | pill |
+|---|---|---|
+| 1 | `opencode-http-agent/opencode-go/deepseek-v4.1-flash` | `$0.67…` |
+| 2 | `subrouter/opencode-go/deepseek-v4.1-flash` | **none** (was the leak) |
+| 3 | `deepseek-account/opencode-go/deepseek-v4.1-flash` | **none** |
+| 4 | back to ours | `$0.67…` |
+
+**Regression gate.** `test/cost-pill-gate.test.mjs` now derives the accepted ids from the
+bundle's own `OWN_PROVIDER_IDS` declaration, asserts a foreign router serving an
+`opencode-go/` id is hidden, and fails if the gate consults the model id at all.
+
 ### 0.0.2-rc.1.2 The cost pill is event-driven
 
 Owner instruction: "1초 폴링 대신 MutationObserver나 모델 변경 이벤트 리스너로".

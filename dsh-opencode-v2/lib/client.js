@@ -550,6 +550,15 @@ window.__ModuleLoader__.load({
      * read off a live sibling rather than hardcoded (they are hashed per build).
      */
     /**
+     * The provider ids THIS PACKAGE registers.
+     *
+     * `lib/http.js` registers `opencode-http-agent`; `lib/provider.js` registers
+     * `opencode-agent`. Both are this plugin's own route, and that id — not a
+     * model-name prefix — is what the host stamps on the composer chip.
+     */
+    const OWN_PROVIDER_IDS = ['opencode-http-agent', 'opencode-agent']
+
+    /**
      * Whether the composer is currently pointed at this plugin's route.
      *
      * The model chip carries the machine-readable route
@@ -564,10 +573,14 @@ window.__ModuleLoader__.load({
       if (typeof document === 'undefined') return false
       const node = document.querySelector('[data-provider-id][data-model-id]')
       if (!node) return false
+      // ONLY the provider id decides. The model id is NOT evidence: a different
+      // router can serve a model whose catalog id begins with `opencode-go/`
+      // (that is where the id comes from — OpenCode's catalog — not from this
+      // adapter). Measured 2026-11-04, owner report: "오픈코드 v2 서빙된 모델이 아닌
+      // 다른 라우터에서 부른 모델인데 왜 이렇게 모델 서빙 옆에 붙냐". Matching the
+      // model prefix showed the chip on every router that resells the same ids.
       const provider = node.getAttribute('data-provider-id') ?? ''
-      const model = node.getAttribute('data-model-id') ?? ''
-      return provider === 'opencode-http-agent' || provider === 'opencode-v2' ||
-        /^opencode(-go)?\//.test(model)
+      return OWN_PROVIDER_IDS.includes(provider)
     }
 
     function paintCostPill(text, title) {
