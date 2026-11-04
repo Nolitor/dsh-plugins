@@ -1400,3 +1400,103 @@ test('a zen route reaches the zen root and a go route the go root', async () => 
   }
 })
 
+
+
+// --- Tier A integration: the guards run inside stream() ---
+
+test('a malformed tool block fails before any backend request is sent', async () => {
+  const { state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      tools: [
+        { name: 'bash', parameters: { type: 'object' } },
+        { name: 'bash', parameters: { type: 'object' } },
+      ],
+    }))
+    assert.equal(state.chatRequests.length, 0, 'the request must never reach the route')
+    const finish = chunks.at(-1)
+    assert.equal(finish.reason.kind, 'error')
+    assert.equal(finish.reason.failure.code, 'OPENCODE_REQUEST_INVALID')
+    assert.match(finish.reason.failure.message, /Duplicate tool name 'bash'/)
+  } finally {
+    await close()
+  }
+})
+
+test('the completion budget is clamped to the window left by the prompt', async () => {
+  // The route advertises a 32,768-token window; the prompt is far larger than
+  // that, so the reservation has to come down instead of asking for 16,384.
+  const models = [
+    { providerID: 'opencode-go', id: 'beam-free', name: 'Beam Free', limit: { context: 4000, output: 8192 } },
+  ]
+  const { state, close } = await startServer({ models })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    // Prime the catalog: with catalogSyncMs 0 the shared cache answers stale and
+    // revalidates in the background, so a first request may read the previous
+    // test's routes. Priming pins the window this case is about.
+    adapter.catalog.prime({
+      models: [{ id: 'opencode-go/beam-free', name: 'Beam Free', inputModalities: ['text'], contextWindow: 4000, maxTokens: 8192 }],
+    })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/beam-free',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'x'.repeat(7000) }] }],
+      maxTokens: 16384,
+    }))
+    const sent = state.chatRequests[0]
+    assert.ok(sent, 'the request was sent')
+    assert.ok(sent.max_tokens >= 1 && sent.max_tokens < 16384, `max_tokens ${sent.max_tokens} must be clamped`)
+    assert.equal(chunks.at(-1).type, 'finish')
+  } finally {
+    await close()
+  }
+})
+
+test('a prompt larger than the window is refused as an overflow, not sent', async () => {
+  const models = [
+    { providerID: 'opencode-go', id: 'beam-free', name: 'Beam Free', limit: { context: 1000, output: 8192 } },
+  ]
+  const { state, close } = await startServer({ models })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    adapter.catalog.prime({
+      models: [{ id: 'opencode-go/beam-free', name: 'Beam Free', inputModalities: ['text'], contextWindow: 1000, maxTokens: 8192 }],
+    })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/beam-free',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'x'.repeat(200000) }] }],
+      maxTokens: 16384,
+    }))
+    assert.equal(state.chatRequests.length, 0, 'an unservable prompt must not be uploaded')
+    assert.equal(chunks.at(-1).reason.failure.code, 'OPENCODE_CONTEXT_OVERFLOW')
+  } finally {
+    await close()
+  }
+})
+
+test('an unknown upstream finish_reason reaches the host as an error', async () => {
+  const events = [
+    { choices: [{ delta: { content: 'partial' }, finish_reason: 'content_filter' }] },
+  ]
+  const { state, close } = await startServer({ events })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/minimax-m3.1-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    }))
+    const finish = chunks.at(-1)
+    assert.equal(finish.reason.kind, 'error')
+    assert.equal(finish.reason.failure.code, 'OPENCODE_FINISH_FILTERED')
+  } finally {
+    await close()
+  }
+})
+

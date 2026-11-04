@@ -12,6 +12,79 @@ summary: Engineering history for @nolit/dsh-opencode-v2, moved out of README.md 
 > [VERIFICATION.md](VERIFICATION.md) and [VERIFICATION-ARCHIVE.md](VERIFICATION-ARCHIVE.md).
 > This file records **what changed and why**, in the order the owner instructed it.
 
+## 0.0.2 — Tier A guards, beta track split, verified prerequisites (2026-11-04)
+
+Owner instruction: version to `0.0.2`, beta to `0.0.2-beta.1`, beta stabilises through
+`0.0.2-beta.N` and becomes `0.0.3`, at which point `0.0.2` is the lower version.
+
+| Field | Value |
+|---|---|
+| `package.json` | `0.0.2` (was `0.0.1-rc.10`) |
+| `lib/http.js` load-beacon `VERSION` | `0.0.2` |
+| beta package | `@nolit/dsh-opencode-v2-beta` `0.0.2-beta.1`, peer `~0.0.2` |
+| Tests | 401 stable (was 359), 12 beta |
+| Artifacts | `artifacts/nolit-dsh-opencode-v2-0.0.2.tgz`, `artifacts/nolit-dsh-opencode-v2-beta-0.0.2-beta.1.tgz` |
+
+### 0.0.2.1 Request guards (Tier A) — deepseek-recipe rules applied
+
+- `max_tokens` is clamped to `min(reservation, contextWindow - promptTokens)`, floored at 1.
+  A prompt that cannot fit is refused as `OPENCODE_CONTEXT_OVERFLOW` **before upload**.
+  Basis: recipe `ConversationRequest::resolve_max_tokens`; measured on this profile, 3,140
+  recorded requests carried more than 120k prompt characters and none was checked.
+- Full upstream `finish_reason` mapping. `content_filter`, `insufficient_system_resource` and
+  any unknown reason are now `error` with their own codes instead of a silent `stop`.
+- Pre-flight tool validation: non-empty name, at most 128 bytes, `^[a-zA-Z0-9_-]+$`,
+  uniqueness, and `parameters` must be a JSON object. Stop lists: at most 16, none empty.
+  Basis: recipe `protocol/validation.rs`.
+- Reasoning-token accounting: absence of `completion_tokens_details.reasoning_tokens` is
+  recorded on the trace finish line and warned once per stream. The host's `TokenUsage` has
+  no field for an absence, so the trace carries it.
+- Prompt tokens are ESTIMATED at 3.5 chars/token (conservative end of the measured range).
+  An exact count needs `deepseek-recipe-encoding` and is deliberately not a dependency.
+
+### 0.0.2.2 Beta track `@nolit/dsh-opencode-v2-beta` (Tier B and C)
+
+- Canonical DeepSeek V4/V4.1 token table extracted from recipe by code point. A hand-typed
+  draft was wrong in five of eighteen entries; every entry is now asserted in a test.
+- Staged protocol parser modelled on recipe's `OutputParser`. Two defects were found and
+  fixed by measurement during the port: a hold-back limited to the token spelling loses the
+  opener at one-code-unit chunking, and eating a partial closer destroys the block terminator.
+- Conformance corpus (7 cases, each naming its recipe source) plus a re-chunking oracle
+  (300 splits invariant).
+
+### 0.0.2.3 Mutual exclusion (both packages, mandatory)
+
+Both packages register `opencode-http-agent`, the `opencode` tool and the same commands, so
+only one may be active per profile. One implementation (`lib/exclusion.js`) serves both:
+a mount-time claim at `$DSH_HOME/cache/opencode-claim.json` (stale pid taken over) and a
+runtime live-sibling check. Measured end to end: the second activation is refused and names
+the owner, pid and timestamp.
+
+Two defects were found while wiring it, both by measurement rather than review:
+
+- The first runtime check read `llm.adapters()`, which this host does not provide — a guard
+  that could never fire. The real surface is `llm.listProviders()` (`dsh-llm` `LlmRuntime`).
+- The corrected check then treated the SHARED provider id as proof of a sibling, so it stood
+  down on its own registration and silenced the pre-existing `already registered by another
+  instance` warning (caught by `conflicts.test.mjs`). Both packages register
+  `opencode-http-agent`, so that id can never name an owner: ownership belongs to the claim
+  file, and the runtime check only reports a *foreign* provider id or the shared tool name.
+
+### 0.0.2.4 Documentation
+
+README gained `## Prerequisites (measured 2026-11-04)` — OpenCode v2.2.0 install shape, web
+auth and token storage (`~/.local/share/opencode/auth.json`, mode 0644, integration ids that
+differ from the route id, oauth-before-key selection), and PATH resolution with a five-step
+validation ladder. Also `## Request guards` and `## Mutual exclusion`.
+
+### 0.0.2.5 What did NOT change
+
+- The stable parse path. The regex classifier still serves; the canonical parser lives in the
+  beta package and is not on the stream path.
+- No runtime dependency on deepseek-recipe: the repository has no Node binding (measured),
+  so adoption is a Rust or Python sidecar. Four specs and one test oracle were copied instead.
+- `turnMaxTokens` stays 16384. The clamp changes the value only when the window is tighter.
+
 ## 0. Version — 0.0.1 baseline, 0.0.1-rc.9 on instruction
 
 | Field | Value |

@@ -1,11 +1,11 @@
 # @nolit/dsh-opencode-v2
 
 <!-- skeleton:
-version: 4.0
+version: 4.1
 kind: readme
 status: active
-updated: 2026-11-03
-summary: Operator manual for @nolit/dsh-opencode-v2 — a native DSH LLM adapter that streams from OpenAI-compatible backends (OpenCode Go) while the DSH agent loop keeps ownership of tools, history and workspace. Covers the three provided surfaces (opencode-http-agent route, opencode tool + /opencode command, cli_worker), configuration through the single "OpenCode V2" settings panel, and installation. Engineering history lives in CHANGELOG.md.
+updated: 2026-11-04
+summary: Operator manual for @nolit/dsh-opencode-v2 — a native DSH LLM adapter that streams from OpenAI-compatible backends (OpenCode Go) while the DSH agent loop keeps ownership of tools, history and workspace. Covers the three provided surfaces (opencode-http-agent route, opencode tool + /opencode command, cli_worker), Tier A request guards derived from deepseek-recipe, mutual exclusion against the beta package, verified prerequisites (CLI version, web auth and token store, PATH resolution), and installation. Engineering history lives in CHANGELOG.md.
 -->
 
 OpenCode models inside DeepSeek Harness, served **natively** through the DSH model
@@ -14,9 +14,10 @@ registry.
 | | |
 |---|---|
 | Package | `@nolit/dsh-opencode-v2` |
-| Version | `0.0.1-rc.10` |
+| Version | `0.0.2` |
 | Host | DSH `>=0.2.2-alpha.2 <0.3.0` |
 | History | [CHANGELOG.md](CHANGELOG.md) |
+| Beta track | `@nolit/dsh-opencode-v2-beta` `0.0.2-beta.1` (mutually exclusive with this package) |
 | Proof of record | [VERIFICATION.md](VERIFICATION.md) |
 
 ---
@@ -103,6 +104,65 @@ strips them from every settings response. Leave them empty to use the credential
 stored by `opencode auth login`; the adapter reads it from the local control plane.
 
 ---
+
+## Release ladder (owner instruction, 2026-11-04)
+
+| Step | Package | Version | Meaning |
+|---|---|---|---|
+| 1 | `@nolit/dsh-opencode-v2` | `0.0.2` | Tier A is applied. This is the served package. |
+| 2 | `@nolit/dsh-opencode-v2-beta` | `0.0.2-beta.1`, `-beta.2`, … | Beta cycles step the rc number only. Each step must keep the conformance and invariance suites green before the next one starts. |
+| 3 | `@nolit/dsh-opencode-v2` | `0.0.3` | Once the beta parser is accepted, its work is promoted and `0.0.3` becomes the current release. `0.0.2` then becomes the **lower version** — kept for rollback, not developed further. |
+
+Rules taken from the instruction and from the standing policy:
+
+- The stable version changes only on an explicit owner instruction; a green test run is not one.
+- The beta version advances one `-beta.N` step per instructed cycle, never a new minor.
+- `0.0.3` is produced by **promotion**, not by editing the beta in place: the beta package
+  keeps its own identity so a rollback is a profile change, not a rebuild.
+- Only one of the two packages may be active at a time (see Mutual exclusion below).
+
+## Request guards (Tier A, 2026-11-04)
+
+Four protections run before a request leaves the adapter. Each is either a rule copied
+from [deepseek-ai/deepseek-recipe](https://github.com/deepseek-ai/deepseek-recipe) or a
+defect measured on this profile's recorded traffic.
+
+| Guard | Rule | Why |
+|---|---|---|
+| `max_tokens` clamp | `min(reservation, contextWindow - promptTokens)`, floored at 1 | recipe `resolve_max_tokens`; 3,140 recorded requests carried >120k prompt characters and none was checked against the window |
+| Context overflow | prompt alone > window -> `OPENCODE_CONTEXT_OVERFLOW`, request never sent | an unservable prompt is rejected by the route only after the whole upload |
+| Tool validation | non-empty name, at most 128 bytes, `^[a-zA-Z0-9_-]+$`, unique, `parameters` is an object | recipe `protocol/validation.rs`; otherwise an opaque mid-turn 400 (`OPENCODE_REQUEST_INVALID`) |
+| Stop validation | at most 16 entries, none empty | recipe `validate_stop_sequences` |
+| Finish reason | `stop`, `tool-calls`, `max-tokens`, or `error`; any other upstream reason is an error | a filtered response used to read as a clean `stop` and the host committed it |
+
+Prompt tokens for the clamp are estimated (3.5 chars/token, the conservative end of the
+measured range) because this package ships no tokenizer. An exact count needs
+`deepseek-recipe-encoding` and is deliberately not a dependency.
+
+Reasoning accounting: the host's `TokenUsage` has no field for "the route did not report
+`reasoning_tokens`", so the adapter records it on the trace's finish line and warns once
+per stream. Measured: reasoning is 86.1% of output characters on this profile, yet the
+field arrives in 2 of 35 recorded steps.
+
+
+## Mutual exclusion with the beta package
+
+`@nolit/dsh-opencode-v2-beta` carries the canonical protocol parser (Tier B). Both
+packages register `opencode-http-agent`, the `opencode` tool and the same commands, so
+only one may be active per profile. One implementation (`lib/exclusion.js`) serves both
+sides:
+
+1. **Mount-time** -- an exclusive claim at `$DSH_HOME/cache/opencode-claim.json` (or
+   `exclusionStatePath`). A second package activating in the same profile is refused, and
+   the message names the owning package, pid and timestamp. A claim left by a dead
+   process is taken over.
+2. **Runtime** -- before serving, the live `ctx.tools` is read for the shared tool name. The
+   provider registry is consulted only for a *foreign* id: because both packages register the
+   same `opencode-http-agent`, its presence cannot name an owner, so ownership belongs to the
+   claim file alone (measured: treating the shared id as evidence made the guard stand down on
+   itself and silenced the pre-existing conflict warning).
+
+Recovery from a crash: delete the claim file, or let the stale-pid takeover handle it.
 
 ## Reference — measured OpenCode v2.2.0 facts
 
@@ -462,6 +522,90 @@ opencode run --format json --thinking -m 'opencode-go/minimax-m3.1-flash#low' --
 opencode session export <ses_…>           # -> info.tokens.{input,output,reasoning,cache}
 ```
 
+## Prerequisites (measured 2026-11-04)
+
+Every value below was read from this machine with the command shown. Nothing here
+is copied from upstream documentation.
+
+### 1. OpenCode v2 CLI
+
+| Requirement | Measured on this host | Verified with |
+|---|---|---|
+| Binary | `opencode v2.2.0` | `/home/minami/.bun/bin/opencode --version` |
+| Install shape | bun shim -> `@opencode/cli/bin/opencode.exe` | `ls -la /home/minami/.bun/bin/opencode` |
+| Minimum for this plugin | v2.2.0 | `GET /api/info` reports `version`; the plugin refuses v1 flags |
+
+```bash
+bun install -g @opencode/cli        # measured install on this host
+# or: npm install -g @opencode/cli
+opencode --version                  # must report v2.2.x or newer v2
+```
+
+v1 is not supported: v2 removed `--attach` and `--pure`, so either flag makes
+`opencode run` exit 1 with a usage dump (see `cordis.patch.yml`).
+
+### 2. Web authentication and token storage
+
+The adapter never reads the credential file itself. It asks the control plane
+(`GET /api/credential`) for the **active** entry, so the login must be done through the
+CLI, not by hand-editing a file.
+
+```bash
+opencode auth login   # web (OAuth) login; the token lands in the store below
+opencode auth list    # what the store currently holds
+```
+
+| Fact | Measured value |
+|---|---|
+| Store | `~/.local/share/opencode/auth.json`, mode 0644 on this host |
+| Entry shape | `{ "<integration>": { "type": "api_key" or "oauth", "key" or "access": "..." } }` |
+| Integrations present | `opencode`, `opencode-zen`, `zen` — the model route is `opencode-go`, so the credential owner id does not match the route id |
+| Selection order | active `oauth` first, then active `key`, then the first active entry; `credentialLabel` pins one |
+
+The store is plaintext at mode 0644 in the measured install, so treat it as a secret
+(`chmod 600` on a shared host). If it holds a revoked `key` next to a live `oauth`
+token, the selection order above is what stops the adapter sending the dead one
+(measured 2026-10-30: the Go endpoint answers 401 for the revoked key, 200 for the web
+token).
+
+### 3. Binary path resolution (the most common failure)
+
+`opencodePath` defaults to `'opencode'`, which is PATH resolution **at spawn time**. A
+service unit (`dsh-web.service`) does not inherit an interactive shell's PATH, so the
+bare name fails there while the same command works in a terminal. Pin the absolute path:
+
+```yaml
+- id: dsh-opencode-v2-http
+  name: '@nolit/dsh-opencode-v2/http'
+  config:
+    opencodePath: '/home/minami/.bun/bin/opencode'   # absolute: the service PATH has no ~/.bun/bin
+```
+
+Validate in this order before restarting:
+
+```bash
+# 1. exists and is executable
+test -x /home/minami/.bun/bin/opencode && echo ok
+
+# 2. is v2 (a v1 binary fails on every flag the plugin passes)
+/home/minami/.bun/bin/opencode --version
+
+# 3. the control plane answers
+/home/minami/.bun/bin/opencode serve --port 4096 &
+curl -s http://127.0.0.1:4096/api/info          # {"version":"2.2.0",...}
+
+# 4. a credential is present AND active
+curl -s http://127.0.0.1:4096/api/credential    # look for active:true + oauth/key
+
+# 5. one real generation on the exact route the plugin uses
+/home/minami/.bun/bin/opencode run --format json --thinking \
+  -m 'opencode-go/minimax-m3.1-flash#low' -- 'say hi'
+```
+
+Failure mapping: step 3 failing surfaces as `no OpenCode server: ... and spawnServer is
+disabled` (or the adapter spawns its own); step 4 failing surfaces as
+`OPENCODE_BACKEND_AUTH` on every request -- fix the login, not the config.
+
 ## Install
 
 Installing into the live profile requires a shell with a writable `~/.dsh` and a
@@ -493,6 +637,8 @@ dsh-opencode-v2/
 │   ├── upstream-map.js   # OpenAI / AI SDK delta -> typed part (reasoning | text | tool-call)
 │   ├── stream-parser.js  # TOP: explicit state machine, content -> typed parts
 │   ├── display-gate.js   # BOTTOM: parser channel vs screen channel
+│   ├── request-guards.js # Tier A: max_tokens clamp, tool/stop validation (recipe-derived)
+│   ├── exclusion.js      # mutual exclusion vs the beta package (claim file + live check)
 │   ├── display-clean.js  # retained: stripThinkingTags only; off the stream path
 │   ├── trace.js          # opt-in real-traffic shape trace (OPENCODE_V2_TRACE=0 disables, 8 MB cap)
 │   └── shared.js         # argv, ndjson parser, usage mapping/fetch

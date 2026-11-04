@@ -58,6 +58,13 @@ import { createTrace, summarizePart, summarizeRequest } from './trace.js'
 import { stripThinkingTags } from './display-clean.js'
 import { mapChatDelta } from './upstream-map.js'
 import { createCostLedger, createCostStore, describeCost, parseCost, pickSession } from './cost.js'
+import {
+  INVALID_REQUEST,
+  RequestShapeError,
+  resolveRequestMaxTokens,
+  validateRequest,
+} from './request-guards.js'
+import { claimActivation, detectSibling, releaseClaim, resolveClaimPath } from './exclusion.js'
 
 /** Plugin name; the cordis row uses the `@nolit/dsh-opencode-v2/http` specifier. */
 export const name = 'dsh-opencode-v2-http'
@@ -95,7 +102,7 @@ const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
 /** Version string of this module, for the load beacon. Must match package.json. */
-const VERSION = '0.0.1-rc.10'
+const VERSION = '0.0.2'
 
 export const Config = Schema.object({
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
@@ -172,6 +179,13 @@ export const Config = Schema.object({
    * here wastes context on every turn. See DEFAULT_TURN_MAX_TOKENS.
    */
   turnMaxTokens: Schema.number().default(DEFAULT_TURN_MAX_TOKENS).volatile(),
+  /**
+   * Where the mutual-exclusion claim lives. Empty follows the catalog rule
+   * (profile dir, then `$DSH_HOME/cache`). The stable and beta packages share
+   * this file: only one of them may be active in a profile, because both
+   * register `opencode-http-agent`, the `opencode` tool and the same commands.
+   */
+  exclusionStatePath: Schema.string().default('').volatile(),
   timeoutMs: Schema.number().default(1800000).volatile(),
   requestTimeoutMs: Schema.number().default(30000).volatile(),
   /**
@@ -658,6 +672,8 @@ export function buildChatRequest(options, ref, config) {
     stream_options: { include_usage: true },
   }
   if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens
+  // The clamp lives in `stream()` (it needs the live catalog window), not here:
+  // buildChatRequest stays a pure translation of GenerateOptions.
   if (options.temperature !== undefined) body.temperature = options.temperature
   if (options.stop !== undefined) body.stop = options.stop
   if (options.reasoningEffort !== undefined && options.reasoningEffort !== 'off') {
@@ -694,17 +710,112 @@ export function usageFromOpenAi(raw) {
   return usage
 }
 
-/** Map OpenAI finish reasons onto DSH finish kinds. */
-export function finishFromOpenAi(reason) {
-  switch (reason) {
-    case 'tool_calls':
-    case 'function_call':
-      return { kind: 'tool-calls' }
-    case 'length':
-      return { kind: 'max-tokens' }
-    default:
-      return { kind: 'stop' }
+/**
+ * Count the prompt the way the wire will: characters of every message body plus
+ * the tool schemas. Only used when the host supplies no measured count.
+ *
+ * Deliberately crude and labelled as such — recipe's exact answer needs a
+ * tokenizer, and this adapter has none. A 3.5 chars/token divisor is the
+ * conservative end of the measured range for this traffic, so the estimate errs
+ * toward clamping earlier, never later.
+ *
+ * @param {object} body - the built chat request.
+ * @returns {number} estimated prompt tokens.
+ */
+export function estimatePromptTokens(body) {
+  let chars = 0
+  for (const message of body?.messages ?? []) {
+    if (typeof message.content === 'string') chars += message.content.length
+    if (Array.isArray(message.tool_calls)) chars += JSON.stringify(message.tool_calls).length
   }
+  if (Array.isArray(body?.tools)) chars += JSON.stringify(body.tools).length
+  return Math.ceil(chars / 3.5)
+}
+
+/**
+ * Upstream finish reasons that mean "the model stopped on its own terms".
+ *
+ * Kept apart from the unknown reason on purpose: collapsing an UNRECOGNISED
+ * reason into `stop` (the previous behaviour) reports a filtered or
+ * resource-starved response as a clean completion, and the host commits it.
+ */
+const STOP_REASONS = new Set(['stop', 'end_turn', 'eos', 'completed', 'stop_sequence', null, undefined])
+/** Reasons that end the response normally even though a tool call is involved. */
+const TOOL_REASONS = new Set(['tool_calls', 'function_call', 'tool_use', 'tool_use_start'])
+/** Reasons that mean the output hit its budget. */
+const LENGTH_REASONS = new Set(['length', 'max_tokens', 'max_output_tokens', 'token_limit'])
+/** Reasons that mean the provider intervened: an error, never a clean stop. */
+const FILTER_REASONS = new Set(['content_filter', 'safety', 'refusal', 'blocked', 'guardrail'])
+/** Reasons that mean the provider was out of capacity mid-generation. */
+const RESOURCE_REASONS = new Set(['insufficient_system_resource', 'server_busy', 'overloaded'])
+
+/**
+ * Map an upstream `finish_reason` onto a DSH finish reason.
+ *
+ * The host's vocabulary is fixed (`stop | tool-calls | max-tokens | aborted |
+ * error`; measured in dsh-llm `FinishReasonMap`), so a provider-specific reason
+ * has to land on one of those five. `error` is the honest home for the ones that
+ * are not a clean completion; the failure code says which family it came from.
+ *
+ * Measured 2026-11-04: 6,131 recorded finishes produced only three distinct
+ * outcomes before this change, because every unrecognised reason fell through to
+ * `stop`.
+ *
+ * @param {string|null|undefined} reason - the upstream `finish_reason`.
+ * @returns {{kind: string, failure?: {code: string, message: string}}}
+ */
+export function finishFromOpenAi(reason) {
+  const value = typeof reason === 'string' ? reason.toLowerCase() : reason
+  if (TOOL_REASONS.has(value)) return { kind: 'tool-calls' }
+  if (LENGTH_REASONS.has(value)) return { kind: 'max-tokens' }
+  if (STOP_REASONS.has(value)) return { kind: 'stop' }
+  if (FILTER_REASONS.has(value)) {
+    return {
+      kind: 'error',
+      failure: {
+        code: 'OPENCODE_FINISH_FILTERED',
+        message: `the route stopped the response with finish_reason "${reason}"; the output is incomplete`,
+      },
+    }
+  }
+  if (RESOURCE_REASONS.has(value)) {
+    return {
+      kind: 'error',
+      failure: {
+        code: 'OPENCODE_FINISH_RESOURCE',
+        message: `the route ran out of capacity with finish_reason "${reason}"; the output is incomplete`,
+      },
+    }
+  }
+  return {
+    kind: 'error',
+    failure: {
+      code: 'OPENCODE_FINISH_UNKNOWN',
+      message: `the route reported finish_reason "${reason}", which this adapter does not classify; treating it as an incomplete response rather than a clean stop`,
+    },
+  }
+}
+
+/**
+ * Reasoning-token accounting for one stream.
+ *
+ * Two measured facts drive this helper. Reasoning is 86.1% of this profile's
+ * output characters (761 reasoning vs 123 content characters per recorded step),
+ * yet `reasoning_tokens` reaches the adapter in 2 of 35 recorded steps. A number
+ * that is either absent or zero looks identical downstream, so the absence is
+ * reported instead of being silently dropped.
+ *
+ * @param {object|null} usage - the final `usage` object of the stream.
+ * @returns {{ state: 'reported'|'measured-zero'|'not-reported', tokens: number|null,
+ *   hasField: boolean }}
+ */
+export function reasoningAccounting(usage) {
+  const detail = usage?.completion_tokens_details
+  const hasField = Boolean(detail) && Object.prototype.hasOwnProperty.call(detail, 'reasoning_tokens')
+  const tokens = hasField ? Number(detail.reasoning_tokens) : null
+  if (!hasField) return { state: 'not-reported', tokens: null, hasField: false }
+  if (Number.isFinite(tokens) && tokens > 0) return { state: 'reported', tokens, hasField: true }
+  return { state: 'measured-zero', tokens: 0, hasField: true }
 }
 
 /** Local control-plane catalog + pure OpenAI-compatible generation. */
@@ -1367,6 +1478,10 @@ export class OpencodeHttpAdapter {
     let response = null
     let backend = null
     let usage = null
+    // Whether the route reported `reasoning_tokens`, and what it said. Kept
+    // beside `usage` so the two never disagree: dropping the field and never
+    // receiving it are different facts (measured 2026-11-04: 2 of 35 steps had it).
+    let lastReasoning = reasoningAccounting(null)
     let finishReason = null
     let textStarted = false
     let reasoningStarted = false
@@ -1583,7 +1698,55 @@ export class OpencodeHttpAdapter {
 
     try {
       backend = await this.resolveBackend(signal, { model: options.model })
+
+      // Pre-flight: a malformed tool block is a bug in the caller's request, and
+      // the route answers it with an opaque 400 after the whole prompt has been
+      // uploaded. Fail here instead, with a code the operator can search for.
+      const guard = validateRequest(options)
+      if (!guard.ok) {
+        yield {
+          type: 'finish',
+          reason: {
+            kind: 'error',
+            failure: { code: INVALID_REQUEST, message: guard.errors.join('; ').slice(0, 600) },
+          },
+        }
+        return
+      }
+
       const body = buildChatRequest(options, ref, config)
+
+      // The completion budget cannot exceed the context left. The host normally
+      // supplies `maxTokens` (its reservation), but a session restored from an
+      // older build, or a caller that sets its own, can still ask for more than
+      // the window holds. Measured 2026-11-04: 3,140 recorded requests carried
+      // >120k prompt characters and none of them was checked against the window.
+      const routeWindow = await this.lookupModel(options.model).catch(() => null)
+      const promptEstimate = estimatePromptTokens(body)
+      const budget = resolveRequestMaxTokens({
+        reservation: options.maxTokens ?? turnCompletionReservation(routeWindow?.maxTokens, config.turnMaxTokens.get()),
+        promptTokens: promptEstimate,
+        contextWindow: routeWindow?.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+      })
+      if (budget.overflow) {
+        yield {
+          type: 'finish',
+          reason: {
+            kind: 'error',
+            failure: {
+              code: 'OPENCODE_CONTEXT_OVERFLOW',
+              message: `the prompt alone is ~${budget.overflow.promptTokens} tokens and the route's window is ${budget.overflow.contextWindow}; the request cannot be served without compaction`,
+            },
+          },
+        }
+        return
+      }
+      body.max_tokens = budget.maxTokens
+      if (budget.clamped && options.maxTokens !== undefined) {
+        this.ctx?.logger?.debug?.(
+          `opencode-http-agent: max_tokens lowered from ${options.maxTokens} to ${budget.maxTokens} (${budget.remaining} left of the window)`,
+        )
+      }
       // Real-traffic evidence (no bodies, no credentials): a short probe cannot
       // reproduce the leak because it produces almost no output. Opt out with
       // OPENCODE_V2_TRACE=0.
@@ -1640,6 +1803,7 @@ export class OpencodeHttpAdapter {
         if (String(options.model ?? '').includes('/')) this.observe(options.model, 'usable')
 
         usage = null
+        lastReasoning = reasoningAccounting(null)
         finishReason = null
         textStarted = false
         reasoningStarted = false
@@ -1651,6 +1815,15 @@ export class OpencodeHttpAdapter {
           for await (const chunk of chatSseEvents(response.body, signal, sseState)) {
             if (chunk?.usage) {
               usage = usageFromOpenAi(chunk.usage)
+              // Reasoning accounting: the raw object decides whether the route
+              // reported the field, the mapping only carries the value.
+              const reasoning = reasoningAccounting(chunk.usage)
+              lastReasoning = reasoning
+              if (reasoning.state !== 'reported' && (traceChars.reasoning > 0 || reasoningStarted)) {
+                this.ctx?.logger?.debug?.(
+                  `opencode-http-agent: the route reported no reasoning_tokens for this stream (${reasoning.state}); reasoning characters were streamed`,
+                )
+              }
               // The same chunk carries what the request cost: cost/opencode.*.
               // Parsed here, on the one event that reports it, and handed to the
               // cost ledger — the streaming and display paths stay untouched.
@@ -1716,12 +1889,21 @@ export class OpencodeHttpAdapter {
           } else if (timeout.aborted) {
             yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_TIMEOUT', message: `OpenCode backend exceeded timeoutMs=${config.timeoutMs.get()}` } } }
           } else {
+            // Reasoning accounting travels with the finish record: the trace is
+            // where "the route did not report reasoning_tokens" is measured,
+            // because the host's TokenUsage type has no field for an absence.
+            if (lastReasoning.state !== 'reported' && traceChars.reasoning > 0) {
+              this.ctx?.logger?.warn?.(
+                `opencode-http-agent: streamed ${traceChars.reasoning} reasoning characters but the route reported no reasoning_tokens (${lastReasoning.state})`,
+              )
+            }
             trace.finish({
               finish: finishReason ?? null,
               parts: { ...traceCounts },
               chars: { ...traceChars },
               blocks: blocks.size,
               toolCalls: [...blocks.values()].filter((block) => block.kind === 'tool-call').length,
+              reasoning: lastReasoning,
             })
             yield { type: 'finish', reason: finishFromOpenAi(finishReason) }
           }
@@ -2053,9 +2235,36 @@ export function addUsage(previous, next) {
  * Plugin body: register the native `opencode-http-agent` route, own its
  * catalog/server lifecycle, and reconcile runtime conflicts.
  */
+/** This package's identity, for the mutual-exclusion guard. */
+const PACKAGE_NAME = '@nolit/dsh-opencode-v2'
+
 export function apply(ctx, config) {
   const providerId = 'opencode-http-agent'
   const adapter = new OpencodeHttpAdapter(ctx, config, { providerId })
+
+  // MUTUAL EXCLUSION (stable side). The beta package under the same repository
+  // claims the same route and tool, and a double registration both shadows this
+  // adapter and bills the same route twice. Claim first, then check for a live
+  // sibling: a stale claim from a crashed process is taken over, a live
+  // registration is a stand-down.
+  const claimPath = resolveClaimPath({
+    explicit: typeof config?.exclusionStatePath?.get === 'function'
+      ? config.exclusionStatePath.get()
+      : config?.exclusionStatePath,
+    dshHome: process.env.DSH_HOME,
+  })
+  const claim = claimActivation({ owner: PACKAGE_NAME, path: claimPath })
+  if (!claim.ok) {
+    adapter.standDown = true
+    ctx?.logger?.warn?.(claim.message)
+    return () => releaseClaim(claimPath, PACKAGE_NAME)
+  }
+  const sibling = detectSibling({ owner: PACKAGE_NAME, llm: ctx?.llm, tools: ctx?.tools, providerId })
+  if (sibling.conflict) {
+    ctx?.logger?.warn?.(sibling.evidence.join('; ') + ' — standing down; only one OpenCode package may be active')
+    return () => releaseClaim(claimPath, PACKAGE_NAME)
+  }
+  ctx?.on?.('dispose', () => releaseClaim(claimPath, PACKAGE_NAME))
 
   const policy = () => normalizeConflictPolicy(
     typeof config?.conflictPolicy?.get === 'function'
