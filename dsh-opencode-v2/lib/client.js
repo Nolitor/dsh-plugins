@@ -884,7 +884,30 @@ window.__ModuleLoader__.load({
       return () => observer.disconnect()
     }
 
-    function CostPill() {
+    /**
+     * The pill as the composer's activity occupant.
+     *
+     * The slot contract (`InputActivityOwnerProps`, measured in the installed
+     * `dsh-client-ui-conversation` types) gives an occupant `locked` and
+     * `onActiveChange`, and states: "a toolbar activity hides ordinary accessory
+     * controls while expanded; its occupant must release expansion on unmount."
+     *
+     * This occupant never expands — the chip is a fixed-size inline button — so it
+     * reports `active: false` once on mount and again on unmount. Without that the
+     * composer could stay in the expanded state after the chip disappears (for
+     * example when the operator switches to another provider and the gate returns
+     * null), hiding the model selector and the other accessory controls.
+     *
+     * @param {object} [props] - slot props from the host.
+     * @param {(active: boolean) => void} [props.onActiveChange] - expansion report.
+     */
+    function CostPill(props) {
+      const onActiveChange = typeof props?.onActiveChange === 'function' ? props.onActiveChange : null
+      React.useEffect(() => {
+        if (onActiveChange === null) return undefined
+        onActiveChange(false)
+        return () => onActiveChange(false)
+      }, [])
       /**
        * Whether an OpenCode V2 model is selected RIGHT NOW.
        *

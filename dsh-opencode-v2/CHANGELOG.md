@@ -37,6 +37,52 @@ Removing it also removed the whole claim-file subsystem (`lib/exclusion.js`, `ex
 the beta dependency in three test files). The `conflictPolicy` guard stays: it handles a legacy
 `opencode-go`/`opencode` provider, which is a real third-party collision.
 
+### 0.0.2-rc.1.5 The composer slot has a contract the pill was ignoring (2026-11-04)
+
+Owner pointed at `docs/upgrade-guide/v0.2.2-alpha.3/chat-process-activity-context` and asked whether
+the context was designed for the current version. Checking that guide led to the slot contract
+the pill is registered under.
+
+**First, the version question.** The guide sits under `v0.2.2-alpha.3/` in master, but the
+`dsh-v0.2.2-alpha.3` **tag does not contain it**, and the tag's source has no `context` member:
+
+| Source | `ProcessActivity` union | `RunningProcessActivity` |
+|---|---|---|
+| installed `0.2.2-alpha.3` | 13 members, no `context` | absent |
+| tag `dsh-v0.2.2-alpha.3` | 13 members, no `context` | absent |
+| master (`0.2.2-rc.1`) | 14 members, includes `context` | `Exclude<ProcessActivity,'context'>` |
+
+So the guide documents a change that ships in a LATER release; the installed host does not have
+it. **This plugin is unaffected**: `lib/client.js` contains zero references to
+`ProcessActivity`/`processActivity` and registers no process-activity UI.
+
+**What the check did find — a real gap in this plugin.** The pill occupies
+`conversation.input.activity`, whose installed contract is:
+
+```ts
+interface InputActivityOwnerProps extends InputControlOwnerProps {
+  onActiveChange: (active: boolean) => void
+}
+// "A toolbar activity hides ordinary accessory controls while expanded; its
+//  occupant must release expansion on unmount."
+```
+
+`CostPill()` took no props and never called `onActiveChange`. Because the pill returns
+`null` when another provider is selected, an unreleased expansion could outlive the
+chip and leave the composer hiding the model selector and other accessory controls.
+
+Fixed: the component now accepts props, reports `onActiveChange(false)` on mount and on
+unmount, and does nothing when the host passes no props. It never reports `true` — this
+occupant is a fixed-size chip that never needs the expanded toolbar.
+
+`test/slot-contract.test.mjs` pins all four facts, and separately records that the
+`settings.section` registration correctly ignores `SettingsSectionOwnerProps.close`
+(that prop is for a section that navigates the operator elsewhere; this one does not).
+
+Tests: 406 pass. Live re-check after repacking: pill shows on our route, is absent for
+`subrouter` and `deepseek-account` even when they serve an `opencode-go/` model id, and
+returns on our route.
+
 ### 0.0.2-rc.1.4 Stage plan written; the staging code is preserved as source (2026-11-04)
 
 Owner instruction: plan the beta work properly and make stages 2 and 3 reachable **after
