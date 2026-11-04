@@ -164,6 +164,26 @@ sides:
 
 Recovery from a crash: delete the claim file, or let the stale-pid takeover handle it.
 
+### What the message does and does not mean
+
+`@nolit/dsh-opencode-v2 cannot activate: @nolit/dsh-opencode-v2-beta already owns this
+profile` is **not** about two different plugins coexisting. It only ever names the
+STABLE and the BETA build of this same adapter, because they are the only two packages
+that register the same `opencode-http-agent` route, the same `opencode` tool and the
+same commands — a duplicate registration is a hard mount failure, and a silent
+shadowing would bill the same route twice.
+
+Other plugins coexist normally:
+
+| Package | What it registers | Coexists with this one? |
+|---|---|---|
+| `@nolit/dsh-opencode-v2` | `opencode` tool, `/opencode` + `/ocode`, `cli_worker`, `opencode-http-agent` | — |
+| `@nolit/dsh-opencode-v2-beta` | the same four names | **No** (mutually exclusive, by design) |
+| `@nolit/dsh-subagent-opencode` | `subagent_opencode` tool, `subagents` service | Yes — measured installed side by side |
+
+The claim file is stale-safe: a claim written by a process that no longer exists is
+taken over on the next activation, so a crash cannot lock a profile.
+
 ## Reference — measured OpenCode v2.2.0 facts
 
 | Fact (measured) | Consequence in this plugin |

@@ -76,7 +76,43 @@ rejected read as "not observable". Both entries use it for every service they do
 than given a new version (the release itself was never usable). `SHA256SUMS.opencode-v2` carries
 the replaced hash history for it; no version number was invented.
 
-### 0.0.2.2 Request guards (Tier A) — deepseek-recipe rules applied
+### 0.0.2.2 Cost pill was rendered for every provider (2026-11-04)
+
+Owner report: "오픈코드 v2 플러그인 모델이 아닌 다른 모델을 사용해도 모델 서빙 오른쪽에 붙은 저게
+무료로 바뀌고 오픈코드를 불러오는 구조던데, 오픈코드 모델이 아닌 다른 api나 dsh 자체 모델에서는
+아예 감춰져야 하는거 아닌가?" — measured true.
+
+**Cause.** The pill exists in two generations of code. The old DOM painter
+(`paintCostPill`) checks `usingOwnRoute()` and removes itself on a foreign route. The
+React slot component (`CostPill`, registered at `conversation.input.activity`) replaced
+that path and did **not** carry the check — it rendered for every provider, polled
+`cost/session` every 15 s, fell back to the locale's zero label ("무료") when the session
+had no OpenCode cost, and its click opened the OpenCode plan panel from a model this
+plugin does not serve.
+
+**Fix.** The component now applies the same single gate:
+
+- `usingOwnRoute()` is polled every second (the slot does not remount when the operator
+  switches models), so the chip appears only on `opencode-http-agent` / `opencode*` routes;
+- on any other route it returns **null** — no seat, no cost request, no plan panel;
+- returning null (not an empty chip) is what makes it disappear without shifting the
+  host's own pills.
+
+**Verified live** (playwright against the running service, route attribute rewritten to a
+foreign model and back):
+
+| step | route | pills rendered |
+|---|---|---|
+| 1 | `opencode-http-agent/opencode-go/deepseek-v4.1-flash` | `$0.42…` |
+| 2 | `deepseek-account/deepseek-flash` | **none** |
+| 3 | back to `opencode-http-agent/…` | `$0.42…` |
+
+**Regression gate.** `test/cost-pill-gate.test.mjs` pins the rule at the source level:
+the gate reads the provider/model attributes, the component consults it before rendering,
+it renders nothing on a foreign route, it does not poll cost there, and exactly one
+function decides ownership so the two paths cannot drift again.
+
+### 0.0.2.3 Request guards (Tier A) — deepseek-recipe rules applied
 
 - `max_tokens` is clamped to `min(reservation, contextWindow - promptTokens)`, floored at 1.
   A prompt that cannot fit is refused as `OPENCODE_CONTEXT_OVERFLOW` **before upload**.
@@ -93,7 +129,7 @@ the replaced hash history for it; no version number was invented.
 - Prompt tokens are ESTIMATED at 3.5 chars/token (conservative end of the measured range).
   An exact count needs `deepseek-recipe-encoding` and is deliberately not a dependency.
 
-### 0.0.2.3 Beta track `@nolit/dsh-opencode-v2-beta` (Tier B and C)
+### 0.0.2.4 Beta track `@nolit/dsh-opencode-v2-beta` (Tier B and C)
 
 - Canonical DeepSeek V4/V4.1 token table extracted from recipe by code point. A hand-typed
   draft was wrong in five of eighteen entries; every entry is now asserted in a test.
@@ -103,7 +139,7 @@ the replaced hash history for it; no version number was invented.
 - Conformance corpus (7 cases, each naming its recipe source) plus a re-chunking oracle
   (300 splits invariant).
 
-### 0.0.2.4 Mutual exclusion (both packages, mandatory)
+### 0.0.2.5 Mutual exclusion (both packages, mandatory)
 
 Both packages register `opencode-http-agent`, the `opencode` tool and the same commands, so
 only one may be active per profile. One implementation (`lib/exclusion.js`) serves both:
@@ -121,14 +157,14 @@ Two defects were found while wiring it, both by measurement rather than review:
   `opencode-http-agent`, so that id can never name an owner: ownership belongs to the claim
   file, and the runtime check only reports a *foreign* provider id or the shared tool name.
 
-### 0.0.2.5 Documentation
+### 0.0.2.6 Documentation
 
 README gained `## Prerequisites (measured 2026-11-04)` — OpenCode v2.2.0 install shape, web
 auth and token storage (`~/.local/share/opencode/auth.json`, mode 0644, integration ids that
 differ from the route id, oauth-before-key selection), and PATH resolution with a five-step
 validation ladder. Also `## Request guards` and `## Mutual exclusion`.
 
-### 0.0.2.6 What did NOT change
+### 0.0.2.7 What did NOT change
 
 - The stable parse path. The regex classifier still serves; the canonical parser lives in the
   beta package and is not on the stream path.

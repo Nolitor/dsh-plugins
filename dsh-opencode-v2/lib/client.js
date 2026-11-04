@@ -802,12 +802,38 @@ window.__ModuleLoader__.load({
      */
 
 
+    /** How often the route gate re-reads the composer's model chip. */
+    const ROUTE_POLL_MS = 1000
+
     function CostPill() {
+      /**
+       * Whether an OpenCode V2 model is selected RIGHT NOW.
+       *
+       * This component is rendered for every provider, so without the gate the
+       * chip appeared next to models this plugin does not serve — measured
+       * 2026-11-04 by the owner ("오픈코드 모델이 아닌 다른 api나 dsh 자체 모델에서는
+       * 아예 감춰져야 하는거 아닌가?"). `paintCostPill` (the old DOM path) already
+       * had the rule; the slot component that replaced it did not.
+       *
+       * The chip is a DOM fact (no client service), so the value is polled: the
+       * provider/model pair changes when the operator switches models, and a
+       * slot has no subscription to that.
+       */
+      const [onRoute, setOnRoute] = React.useState(() => usingOwnRoute())
       // Start at the zero label, not an empty string: an empty first render used
       // to remove the chip until the first poll answered.
       const [text, setText] = React.useState(() => t('costFree'))
       const [title, setTitle] = React.useState('')
       React.useEffect(() => {
+        const sync = () => setOnRoute(usingOwnRoute())
+        sync()
+        const gate = setInterval(sync, ROUTE_POLL_MS)
+        return () => clearInterval(gate)
+      }, [])
+      React.useEffect(() => {
+        // Nothing to poll while this plugin's route is not the selected one: the
+        // figure would describe a session this adapter never served.
+        if (!onRoute) return undefined
         let live = true
         const refresh = async () => {
           const sessionId = document.querySelector('[data-conversation-session]')?.getAttribute('data-conversation-session') ?? ''
@@ -829,10 +855,13 @@ window.__ModuleLoader__.load({
         void refresh()
         const timer = setInterval(() => void refresh(), COST_POLL_MS)
         return () => { live = false; clearInterval(timer) }
-      }, [])
-      // Never return null: a missing figure must not remove the chip, or the
-      // meter disappears exactly while a turn is running. The initial state is
-      // the zero label, so the seat is occupied from the first paint.
+      }, [onRoute])
+      // A different provider is selected: occupy no seat at all. Returning null
+      // (not an empty chip) is what makes the figure disappear, and the slot
+      // collapses so the host toolbar keeps its own spacing.
+      if (!onRoute) return null
+      // On our route: never return null for a missing figure, or the meter
+      // disappears exactly while a turn is running.
       return h(
         'button',
         {
