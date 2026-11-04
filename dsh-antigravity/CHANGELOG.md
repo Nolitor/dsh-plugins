@@ -45,12 +45,14 @@ history and corrected here.
 | 9 | Master off removed the panel and could not be undone | routes disposed with the product surfaces | panel stays mounted; product surfaces still dispose |
 | 10 | "Default" reasoning sent the **high** variant | catalog order is high, medium, low; `modelForEffort` took the first variant when no effort was requested | advertise `reasoning.defaultEffort: 'low'` and prefer `<base>-low` when the host omits an effort |
 | 11 | The usage chip claimed the **single** `conversation.input.activity` seat already owned by `tk` | live pageerror `single slot "conversation.input.activity" already has a registration at priority 0 (registered by tk)`; the chip never rendered | register in the additive list slot `conversation.input.right`, the same visual position, so no single seat is contested |
+| 12 | The Antigravity tab duplicated the plugin's own options | owner: the master/CLI/usage switches and the account/usage cards belong to the plugin row, not the model surface | the tab now contains **model selection only** (live list, checkboxes, Save); plugin enable/disable stays on the Plugins page |
 
 ### Verification
 
 - **82 tests pass, 0 fail** (`test/server.test.mjs` and `test/ledger.test.mjs` are new; `switch.test.mjs` now asserts the panel-stays rule).
 - Isolated profile `/tmp/agtest` with a real Chromium boot:
-  - settings tab **Antigravity** renders the switches, account tier, 19 models and usage counters;
+  - settings tab **Antigravity** renders **only the model list, checkboxes and Save selection**
+    (no duplicate plugin switches, account card or usage counters);
   - `/agy` appears in the slash menu;
   - the model picker shows the `Antigravity (subscription)` route, with the duplicated
     "Gemini 3.5 Flash Lite" names disambiguated by id;
@@ -70,7 +72,8 @@ history and corrected here.
   `ActiveEnterTimestamp=05:13:10`, so the host reconciled the new bundle **without a restart**.
   Live `POST /api/local/dsh-antigravity/info` -> **200** with
   `installed:{model,cliTool,cliCommand,subagent,panel}:true`; the live Korean Settings pane lists
-  **안티그래비티** and renders the account, 19 models and switches; the live model picker lists
+  **안티그래비티** and renders **only the model list + Save selection** (the duplicated switches,
+  account and usage cards were removed in row 12); the live model picker lists
   **Antigravity (subscription)** and the Gemini/Claude rows.
 - One pre-existing console error remains: the single `conversation.input.activity` seat is claimed
   by `tk` and by deepinfra. The merged plugin no longer joins that seat (moved to

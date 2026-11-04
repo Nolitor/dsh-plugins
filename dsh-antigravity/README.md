@@ -7,7 +7,7 @@ One plugin, every Antigravity surface, one account.
 | **CLI worker** | `/agy <task>` command and `agy_worker` tool, spawning the `agy` binary | `cliWorker` (+ `workerEnabled`) |
 | **Model serving** | the `antigravity` provider route, pure HTTP to `cloudcode-pa` | `modelServing` |
 | **Subagent** | `subagent_antigravity` delegation provider | `subagent` |
-| **UI** | an "Antigravity" settings section and a composer usage chip | `usagePill` |
+| **UI** | an "Antigravity" settings tab for **model selection** and a composer usage chip | `usagePill` |
 
 `enabled` is the master switch. The plugin itself can also be disabled from the **DSH Plugins page**, which unmounts every surface at once.
 
@@ -174,14 +174,16 @@ Every value resolves **config → environment → built-in default**.
 | `subagent` | the subagent provider |
 | `usagePill` | the composer usage chip |
 
-The settings section stays visible while the plugin is mounted so a surface can be switched back
-on; it shows a notice and disables its product controls when the master switch is off. The usage
-chip renders nothing at all when off, leaving no empty node in the composer.
+The **settings tab contains model selection only**: the live account catalog, the checkboxes and
+Save selection. The plugin's own switches are profile config (the table above), not duplicated in
+the tab; the whole plugin is enabled/disabled from the **DSH Plugins page**. The tab stays mounted
+while the plugin is mounted so the model list remains reachable. The usage chip renders nothing
+when off, leaving no empty node in the composer.
 
-Switches are live: the host announces `app-boot/config-reload` after a settings write, the plugin
-re-evaluates every gate, and the ADAPTER / tool / command / provider is disposed or re-registered
-without a restart. Model filtering (`enabledModels`) also invalidates the catalog cache, so the
-picker reflects a saved selection immediately.
+Config switches are live: the host announces `app-boot/config-reload` after a profile/settings
+write, the plugin re-evaluates every gate, and the adapter / tool / command / provider is disposed
+or re-registered without a restart. Model filtering (`enabledModels`) also invalidates the catalog
+cache, so the picker reflects a saved selection immediately.
 
 ---
 

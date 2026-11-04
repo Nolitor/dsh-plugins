@@ -215,33 +215,25 @@ window.__ModuleLoader__.load({
       return response.json()
     }
 
-    /** A labelled toggle row. */
-    function ToggleRow(props) {
-      return h('div', { className: 'agRow' },
-        h('div', { className: 'agRowText' },
-          h('span', { className: 'agRowLabel' }, props.label),
-          h('p', { className: 'agRowHint' }, props.hint)),
-        h('button', {
-          type: 'button',
-          className: 'agToggle',
-          'aria-pressed': Boolean(props.checked),
-          'aria-label': props.label,
-          disabled: Boolean(props.disabled),
-          onClick: props.onChange,
-        }))
-    }
-
-    /** The settings section. */
+    /**
+     * The settings section: MODEL SELECTION ONLY.
+     *
+     * The plugin's own options (master enable, modelServing, cliWorker,
+     * usagePill) live in the plugin row / profile patch and are toggled from the
+     * DSH Plugins page. Repeating them here duplicated the control surface and
+     * made the tab noisy, so this section keeps only the one task that has no
+     * other home: choosing which account models the picker advertises.
+     */
     function AntigravitySection() {
       ensureStyle()
       const [state, setState] = React.useState({ status: 'loading' })
-      const [busy, setBusy] = React.useState('')
+      const [busy, setBusy] = React.useState(false)
       const [notice, setNotice] = React.useState('')
       const [, forceRender] = React.useReducer((n) => n + 1, 0)
 
       const load = React.useCallback(() => {
-        return Promise.all([get('info'), get('models')])
-          .then(([info, models]) => setState({ status: 'ready', info, models }))
+        return get('models')
+          .then((models) => setState({ status: 'ready', models }))
           .catch((error) => setState({ status: 'error', error: error.message }))
       }, [])
 
@@ -254,17 +246,6 @@ window.__ModuleLoader__.load({
         return () => { alive = false; if (typeof unsubscribe === 'function') unsubscribe() }
       }, [load])
 
-      const toggle = (key, value) => {
-        setState((prev) => prev.status === 'ready'
-          ? { ...prev, info: { ...prev.info, switches: { ...prev.info.switches, [key]: value } } }
-          : prev)
-        setBusy(key)
-        post('switches', { [key]: value })
-          .then(() => { setNotice(''); return load() })
-          .catch((error) => setNotice(t('saveError') + ': ' + error.message))
-          .finally(() => setBusy(''))
-      }
-
       if (state.status === 'loading') {
         return h('section', { className: 'agSection' }, h('p', { className: 'agHint' }, t('loading')))
       }
@@ -274,38 +255,12 @@ window.__ModuleLoader__.load({
           h('p', { className: 'agError' }, t('loadError') + ': ' + state.error))
       }
 
-      const info = state.info
       const models = state.models
-      const sw = info.switches
-      const enabled = sw.enabled !== false
       const enabledCount = models.models.filter((row) => row.enabled).length
 
       return h('section', { className: 'agSection' },
         h('h3', { className: 'agHeading' }, t('sectionTitle')),
         h('p', { className: 'agHint' }, t('sectionHint')),
-
-        h('div', { className: 'agCard' },
-          h('div', { className: 'agCardHead' }, h('h4', { className: 'agCardTitle' }, t('switchesTitle'))),
-          h(ToggleRow, { label: t('enabledLabel'), hint: t('enabledHint'), checked: enabled, disabled: busy === 'enabled', onChange: () => toggle('enabled', !enabled) }),
-          h(ToggleRow, { label: t('modelServingLabel'), hint: t('modelServingHint'), checked: sw.modelServing, disabled: !enabled || busy === 'modelServing', onChange: () => toggle('modelServing', !sw.modelServing) }),
-          h(ToggleRow, { label: t('cliWorkerLabel'), hint: t('cliWorkerHint'), checked: sw.cliWorker, disabled: !enabled || busy === 'cliWorker', onChange: () => toggle('cliWorker', !sw.cliWorker) }),
-          h(ToggleRow, { label: t('usagePillLabel'), hint: t('usagePillHint'), checked: sw.usagePill, disabled: !enabled || busy === 'usagePill', onChange: () => toggle('usagePill', !sw.usagePill) }),
-          !enabled ? h('p', { className: 'agNotice' }, t('disabledNotice')) : null),
-
-        h('div', { className: 'agCard' },
-          h('div', { className: 'agCardHead' },
-            h('h4', { className: 'agCardTitle' }, t('accountTitle')),
-            h('span', { className: 'agMeta' }, info.endpoint?.baseUrl ?? '')),
-          h('div', { className: 'agStats' },
-            h('div', { className: 'agStat' },
-              h('span', { className: 'agStatLabel' }, t('tier')),
-              h('span', { className: 'agStatValue' }, info.account?.tier ?? '\u2014')),
-            h('div', { className: 'agStat' },
-              h('span', { className: 'agStatLabel' }, t('paidTier')),
-              h('span', { className: 'agStatValue' }, info.account?.paidTier ?? '\u2014')),
-            h('div', { className: 'agStat' },
-              h('span', { className: 'agStatLabel' }, t('project')),
-              h('span', { className: 'agStatValue' }, info.account?.project ?? info.endpoint?.project ?? '\u2014')))),
 
         h('div', { className: 'agCard' },
           h('div', { className: 'agCardHead' },
@@ -319,7 +274,6 @@ window.__ModuleLoader__.load({
                   h('input', {
                     type: 'checkbox',
                     checked: row.enabled,
-                    disabled: !enabled,
                     onChange: () => {
                       const next = models.models.map((item) => (item.id === row.id ? { ...item, enabled: !row.enabled } : item))
                       setState((prev) => ({ ...prev, models: { ...prev.models, models: next } }))
@@ -336,34 +290,17 @@ window.__ModuleLoader__.load({
             h('button', {
               type: 'button',
               className: 'agButton',
-              disabled: !enabled || busy === 'models',
+              disabled: busy,
               onClick: () => {
-                setBusy('models')
+                setBusy(true)
                 const picked = state.models.models.filter((row) => row.enabled).map((row) => row.id)
                 post('models/apply', { enabled: picked })
                   .then(() => { setNotice(t('modelsSaved')); return load() })
                   .catch((error) => setNotice(t('saveError') + ': ' + error.message))
-                  .finally(() => setBusy(''))
+                  .finally(() => setBusy(false))
               },
             }, t('modelsSave')),
-            notice ? h('span', { className: 'agNotice' }, notice) : null)),
-
-        h('div', { className: 'agCard' },
-          h('div', { className: 'agCardHead' }, h('h4', { className: 'agCardTitle' }, t('usageTitle'))),
-          h('p', { className: 'agHint' }, t('usageHint')),
-          h('div', { className: 'agStats' },
-            h('div', { className: 'agStat' },
-              h('span', { className: 'agStatLabel' }, t('usageRequests')),
-              h('span', { className: 'agStatValue' }, String(info.usage?.requests ?? 0))),
-            h('div', { className: 'agStat' },
-              h('span', { className: 'agStatLabel' }, t('usageInput')),
-              h('span', { className: 'agStatValue' }, String(info.usage?.inputTokens ?? 0))),
-            h('div', { className: 'agStat' },
-              h('span', { className: 'agStatLabel' }, t('usageOutput')),
-              h('span', { className: 'agStatValue' }, String(info.usage?.outputTokens ?? 0))),
-            h('div', { className: 'agStat' },
-              h('span', { className: 'agStatLabel' }, t('usageReasoning')),
-              h('span', { className: 'agStatValue' }, String(info.usage?.reasoningTokens ?? 0))))))
+            notice ? h('span', { className: 'agNotice' }, notice) : null)))
     }
 
     /**

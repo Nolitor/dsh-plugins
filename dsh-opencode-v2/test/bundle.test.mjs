@@ -62,8 +62,10 @@ test('manifest integrity: package.json name is exactly @nolit/dsh-opencode-v2', 
   assert.equal(pkg.name, '@nolit/dsh-opencode-v2')
 })
 
-test('upstream plugin stays a dependency and is never patched', () => {
-  assert.equal(pkg.dependencies['@quonaro/dsh-plugin-opencode'], '^0.1.2')
+test('the upstream plugin is not a runtime dependency (only a historical reference)', () => {
+  // The 0.1.x code was structurally diffed once; no module imports it. Keeping
+  // it as a dependency made an unused package ship with every install.
+  assert.equal(pkg.dependencies['@quonaro/dsh-plugin-opencode'], undefined)
 })
 
 /**
@@ -127,6 +129,9 @@ test('the bundle ships the tool row plus the autonomous HTTP router row', async 
     [
       ['dsh-opencode-v2', '@nolit/dsh-opencode-v2'],
       ['dsh-opencode-v2-http', '@nolit/dsh-opencode-v2/http'],
+      // The delegation TOOL is a host-owned row bound to this package's
+      // provider; it is not a subpath export of this package.
+      ['tool-subagent-opencode', '@deepseek-ai/dsh-tool-subagent'],
     ],
   )
   // The HTTP route is the only conversation pipeline and is mounted natively.
@@ -160,9 +165,14 @@ test('the HTTP row config parses and pins the native-router settings', () => {
   assert.match(parsed.defaultModel.get(), /^opencode(-go)?\//)
 })
 
-test('row plugin names match package.json exports keys', () => {
+test('own row plugin names match package.json exports keys', () => {
   assert.equal(rows[0].name, pkg.name)
   for (const row of rows) {
+    if (row.name.startsWith('@deepseek-ai/')) {
+      // Host-owned rows (the shared tool) are not exports of this package.
+      assert.equal(row.name, '@deepseek-ai/dsh-tool-subagent')
+      continue
+    }
     const subpath = row.name === pkg.name ? '.' : `.${row.name.slice(pkg.name.length)}`
     assert.ok(subpath in pkg.exports, `${subpath} must be exported`)
   }

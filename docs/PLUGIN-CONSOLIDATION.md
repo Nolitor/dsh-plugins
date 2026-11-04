@@ -19,7 +19,7 @@ that vendor's account:
 | Vendor | Package | Version | Surfaces |
 | :--- | :--- | :--- | :--- |
 | Antigravity | `@nolit/dsh-antigravity` | `0.0.1-rc.4` | `/agy`, `agy_worker`, `antigravity` model route, `subagent_antigravity`, settings section, usage chip |
-| OpenCode | `@nolit/dsh-opencode-v2` | `0.0.2-rc.1` | `opencode` tool, `/ocode`, `cli_worker`, `opencode-http-agent` route, `subagent_opencode` |
+| OpenCode | `@nolit/dsh-opencode-v2` | `0.0.2-rc.2` | `opencode` tool, `/ocode`, `cli_worker`, `opencode-http-agent` route, `subagent_opencode` provider + tool |
 
 ### The forcing reason
 
@@ -41,7 +41,7 @@ These remain in the repository as history. **Do not reinstall them.**
 | :--- | :--- | :--- | :--- |
 | `@nolit/dsh-antigravity-cli` | 0.1.0 | `@nolit/dsh-antigravity` | `/agy`, `agy_worker` |
 | `@nolit/dsh-subagent-antigravity` | 0.1.0 | `@nolit/dsh-antigravity` | `subagent_antigravity` |
-| `@nolit/dsh-subagent-opencode` | 0.1.0 | `@nolit/dsh-opencode-v2` | `subagent_opencode` |
+| `@nolit/dsh-subagent-opencode` | 0.1.0 | `@nolit/dsh-opencode-v2` | `subagent_opencode` provider + tool row (removed from the live profile 2026-11-05) |
 
 Each package README and CHANGELOG now carries a `SUPERSEDED` banner naming its replacement. The
 source was **not deleted** and its tests still pass — it is superseded, not broken.

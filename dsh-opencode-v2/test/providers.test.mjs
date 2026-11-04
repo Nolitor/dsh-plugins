@@ -571,8 +571,8 @@ test('tool apply registers the opencode tool and the /ocode command', async () =
   const ctx = {
     tools: { register(def) { tools.push(def) } },
     inject(services, callback) {
-      assert.deepEqual(services, ['commands'])
-      callback({ commands: { register(def) { commands.push(def) } } })
+      if (services[0] === 'commands') callback({ commands: { register(def) { commands.push(def) } } })
+      else if (services[0] === 'subagents') callback({ subagents: { getProvider: () => undefined, registerProvider: () => () => {} } })
     },
   }
   // `defineTool` is resolved from the host at apply() time; await the promise.
@@ -601,8 +601,9 @@ test('tool apply yields a duplicate opencode tool instead of aborting the row', 
       },
     },
     logger: { warn: (message) => warnings.push(String(message)) },
-    inject(_services, callback) {
-      callback({ commands: { register() {} } })
+    inject(services, callback) {
+      if (services[0] === 'commands') callback({ commands: { register() {} } })
+      else if (services[0] === 'subagents') callback({ subagents: { getProvider: () => undefined, registerProvider: () => () => {} } })
     },
   }
   await tool.apply(ctx, fakeConfig({}))
@@ -621,8 +622,9 @@ test('tool apply catches a host duplicate-tool throw and keeps loading', async (
       },
     },
     logger: { warn: (message) => warnings.push(String(message)) },
-    inject(_services, callback) {
-      callback({ commands: { register() {} } })
+    inject(services, callback) {
+      if (services[0] === 'commands') callback({ commands: { register() {} } })
+      else if (services[0] === 'subagents') callback({ subagents: { getProvider: () => undefined, registerProvider: () => () => {} } })
     },
   }
   await assert.doesNotReject(() => tool.apply(ctx, fakeConfig({})))

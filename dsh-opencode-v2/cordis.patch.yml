@@ -95,3 +95,14 @@
       # (384000) left only 55% of a 1M route usable. Measured per-step output on this
       # profile: p50 661, p99 13077, and 0.76% of steps above 16384.
       turnMaxTokens: 16384
+  # The delegation TOOL is a separate shipped row bound to the provider name,
+  # exactly as the codex/claude-code bundles split it (and as the Antigravity
+  # bundle does). The superseded @nolit/dsh-subagent-opencode supplied this row;
+  # the merged package now must, or removing the old bundle silently drops
+  # `subagent_opencode` while the provider still exists.
+  - id: tool-subagent-opencode
+    name: '@deepseek-ai/dsh-tool-subagent'
+    config:
+      provider: opencode
+      toolName: subagent_opencode
+      maxDepth: provider-managed

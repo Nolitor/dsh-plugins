@@ -1,42 +1,64 @@
 # Changelog — @nolit/dsh-opencode-v2
 
 <!-- skeleton:
-version: 1.0
+version: 1.2
 kind: report
 status: active
 updated: 2026-11-05
-summary: Engineering history for @nolit/dsh-opencode-v2. The subagent delegation provider was merged in from @nolit/dsh-subagent-opencode 0.1.0 on 2026-11-05.
+summary: Engineering history for @nolit/dsh-opencode-v2, including the completed subagent merge, the 0.0.2-rc.2 cleanup, and the measured host contracts behind every change.
 -->
 
-Current version: `0.0.2-rc.1`
+Current version: `0.0.2-rc.2`
 
-## Subagent merge — 2026-11-05
+## Subagent merge completed — 2026-11-05
 
-`@nolit/dsh-subagent-opencode` 0.1.0 merged into this package as `lib/subagent.js`.
-One install now carries every OpenCode surface:
+The first merge moved the provider code into `lib/subagent.js` but left it unreachable on a real
+Cordis host: `index.js` read `ctx.subagents` through `optionalService()`, which catches the
+"cannot get property without inject" throw and returns undefined. The provider therefore never
+registered, and the superseded `@nolit/dsh-subagent-opencode` provider kept serving the name. A
+green mock suite could not see it because the mock exposed every service as a plain property.
 
-| Surface | Registration | Switch |
-| :--- | :--- | :--- |
-| `opencode` delegation tool + `/ocode` | `ctx.tools` / `ctx.commands` | always (existing) |
-| `cli_worker` | `ctx.tools` | `workerEnabled` |
-| `opencode-http-agent` route | `ctx.llm.registerAdapter` | existing |
-| `subagent_opencode` provider | `ctx.subagents.registerProvider` | **`subagent`** (new) |
+Fixed in this round:
 
-**Duplicate-provider guard.** The old package registers `opencode` on `ctx.subagents` too; this
-plugin now calls `getProvider(name)` first and yields with a warning rather than shadowing it.
+| Defect | Fix |
+| :--- | :--- |
+| `ctx.subagents` read without `inject` | acquire it with `ctx.inject(['subagents'], scoped => …)` and return the provider's disposer |
+| the unified bundle had no `tool-subagent-opencode` row | added it to `cordis.patch.yml`; the old package supplied that row, so removing it would have silently dropped the `subagent_opencode` tool |
+| the old package remained installed | removed `@nolit/dsh-subagent-opencode` from the live profile (dependency + bundle); the source tree is kept as history |
 
-**Not changed:** the existing route, command, tool, HTTP adapter and worker behaviour. The 406
-pre-existing tests still pass unmodified; 5 new tests cover the merged provider.
+Measured after the cleanup:
 
-# Changelog — @nolit/dsh-opencode-v2
+- `dsh --profile web --dump-config` has exactly `dsh-opencode-v2`, `dsh-opencode-v2-http` and
+  `tool-subagent-opencode` for this package — no `subagent-opencode` provider row.
+- The Plugins page lists one `Opencode v2 Agent` card; `OpenCode 서브에이전트` is gone.
+- The live service still runs the module it loaded at 05:13 (`/tmp/opencode-v2-boot.jsonl`,
+  `pid 2009037`, `version 0.0.2-rc.1`). The fixed provider registers on the next restart; the
+  `subagent_opencode` tool row is already in the composed profile.
 
-<!-- skeleton:
-version: 1.1
-kind: report
-status: active
-updated: 2026-11-04
-summary: Engineering history for @nolit/dsh-opencode-v2, moved out of README.md so the README can serve as an operator manual. Every entry records what was measured, what changed, and what stayed unchanged; per-round proof lives in VERIFICATION.md and VERIFICATION-ARCHIVE.md.
--->
+## 0.0.2-rc.2 — cleanup and version truth — 2026-11-05
+
+| Change | Why |
+| :--- | :--- |
+| `lib/http.js` `VERSION` `0.0.2-rc.1` -> `0.0.2-rc.2` | the load beacon named the previous build (F-26: a version constant outside package.json is part of the release) |
+| removed the `@quonaro/dsh-plugin-opencode` runtime dependency | no module imports it; it was a structural diff reference only, so every install shipped an unused package |
+| the test that asserted that dependency now asserts it is absent | the test encoded the leftover rather than the contract |
+| merged the duplicate changelog header | the file carried two skeleton headers, `Current version` twice, and a wrong rc in the first one |
+| `README.md` version row -> `0.0.2-rc.2` | operator-facing version must match `package.json` |
+
+**Not changed:** the route, `/ocode`, `opencode` tool, `cli_worker`, HTTP adapter, stream/display
+pipeline and stage-1 open items (O1/O2/O3) are untouched. The stage plan's gate still applies; no
+stage-2 work was opened.
+
+### Verification
+
+- `npm test`: **411 pass, 0 fail**.
+- `npm run check`: every module parses.
+- `opencode --version`: **v2.2.0**; `opencode models`: route catalog returns.
+- Real CLI smoke: `opencode run -m opencode-go/beam-free --format json "Reply with exactly: CLI-OK"`
+  exited 0 and returned `CLI-OK`.
+- Isolated profile with only this package: `--dump-config` composes the three rows and a real web
+  boot starts with no activation warnings.
+- Live: old subagent package removed; plugin cards collapsed to one; `--dump-config` clean.
 
 ## Documentation alignment (2026-11-04)
 
@@ -812,23 +834,3 @@ and the marker does not reach the screen, and reasoning prose without a marker s
 | `npm test` | **295/295 pass**, 0 fail (293 before; **2** new) |
 | `npm run check` | exit 0 |
 | artifact | `artifacts/nolit-dsh-opencode-v2-0.0.1-rc.7.tgz` |
-| sha256 | `79e6ddf7d0fa7e640654783b7fd243d8a36295c68ebd07747530790322a2d442` |
-
-**Status: applied on disk, pending restart.** The serving process (pid 2422772) still runs rc.6;
-the recovered-call count is a replay of recorded traffic, not a live rate. After the restart the
-same trace should show the reasoning marker deltas falling while the `tool_calls` finish count
-rises. Detail: `VERIFICATION.md` §46, ledger F-34.
-
-### 0.8 `0.0.1-rc.8` — assistant history is prose only
-
-The rc.7 traffic left two owner-visible symptoms: turns that **restated tool calls in a loop**
-(session `edeabe91`, 2026-11-02 07:02–07:06 KST) and protocol notation that still reached the
-screen (the same session's final step printed a run of `</run_code>` / `</function>` closers as
-reasoning; session `bca2c2f7` is the second reference).
-
-Measured on those two sessions by rebuilding the request body from the recorded transcript:
-
-| Measure (one request built from the whole session) | `bca2c2f7` | `edeabe91` |
-|---|---|---|
-| wire characters, before → after | 634,761 → **388,841** (−38.7%) | 133,684 → **66,405** (−50.3%) |
-| `<thinking>` wrappers sent back to the route | **73** → 0 | 12 → 0 |

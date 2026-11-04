@@ -17,7 +17,6 @@ import { JsonRunParser, buildRunArgv, fetchUsage, forwardedEnv, sendPrompt, stri
 import { readSelection, writeSelection } from './selection.js'
 import { WORKER_BACKENDS } from './workers/backends.js'
 import { registerCliWorker } from './workers/index.js'
-import { optionalService } from './optional-service.js'
 import { OpenCodeSubagentProvider } from './subagent.js'
 
 /** Host plugin name; must match package.json `name` and the cordis.patch.yml row id. */
@@ -509,16 +508,26 @@ export async function apply(ctx, config) {
   // Subagent delegation provider, merged from @nolit/dsh-subagent-opencode
   // (2026-11-05) so one package owns every OpenCode surface. Gated on its own
   // switch: a profile that wants only the chat route can turn delegation off.
-  const subagents = optionalService(ctx, 'subagents')
-  if (config.subagent.get() !== false && subagents) {
-    // The older @nolit/dsh-subagent-opencode registers `opencode` too; yield
-    // rather than shadow it, and report which one won.
-    const takenName = config.subagentProviderName.get() || 'opencode'
-    const taken = typeof subagents.getProvider === 'function' ? subagents.getProvider(takenName) : undefined
+  // The subagent surface was merged from @nolit/dsh-subagent-opencode, but
+  // reading the `subagents` service without declaring it THROWS on a real Cordis host.
+  // `optionalService` swallowed that throw, so the merged provider never
+  // registered while the old package's provider shadowed it — the merge looked
+  // done and was not. Acquire the service through a deferred sub-context and
+  // register there; the disposer releases it with the plugin.
+  ctx.inject(['subagents'], (scoped) => {
+    if (config.subagent.get() === false) return undefined
+    const subagents = scoped.subagents
+    const providerName = config.subagentProviderName.get() || 'opencode'
+    // A profile that still carries the superseded package must not lose a
+    // provider silently: yield with a warning so the operator removes the old
+    // row, which is the real fix.
+    const taken = typeof subagents.getProvider === 'function' ? subagents.getProvider(providerName) : undefined
     if (taken) {
-      ctx.logger?.warn?.('opencode-v2: a subagent provider named "' + takenName + '" is already registered; skipping the merged one')
-    } else try {
-      const provider = new OpenCodeSubagentProvider(config.subagentProviderName.get() || 'opencode', ctx, {
+      ctx.logger?.warn?.('opencode-v2: a subagent provider named "' + providerName + '" is already registered; skipping the merged one (remove @nolit/dsh-subagent-opencode)')
+      return undefined
+    }
+    try {
+      const provider = new OpenCodeSubagentProvider(providerName, ctx, {
         opencodePath: config.opencodePath.get(),
         model: config.model.get(),
         agent: config.agent.get(),
@@ -528,9 +537,10 @@ export async function apply(ctx, config) {
         env: config.subagentEnv.get(),
       })
       const release = subagents.registerProvider(provider)
-      if (typeof release === 'function') ctx.effect?.(() => release)
+      return typeof release === 'function' ? release : undefined
     } catch (error) {
       ctx.logger?.warn?.(`opencode-v2: subagent provider registration failed: ${error instanceof Error ? error.message : String(error)}`)
+      return undefined
     }
-  }
+  })
 }

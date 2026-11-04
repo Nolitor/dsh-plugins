@@ -14,7 +14,7 @@ registry.
 | | |
 |---|---|
 | Package | `@nolit/dsh-opencode-v2` |
-| Version | `0.0.2-rc.1` |
+| Version | `0.0.2-rc.2` |
 | Host | DSH `>=0.2.2-alpha.2 <0.3.0` |
 | History | [CHANGELOG.md](CHANGELOG.md) |
 | Release line | `0.0.2-rc.N` fixes first; the next stable line starts only after that is quiet |
