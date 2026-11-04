@@ -124,6 +124,20 @@ Rules:
 - A promoted change keeps the same package identity, so a rollback is a version change, not a
   profile rebuild.
 
+**Read before opening a stage:** [docs/OPENCODE-V2-STAGE-PLAN.md](../docs/OPENCODE-V2-STAGE-PLAN.md)
+— the seven stage-1 exit criteria, the stage-2 acceptance gates, the three adversarial inputs
+that must round-trip, and the rollback route.
+
+**Check the gate, do not assert it:**
+
+```bash
+scripts/opencode-v2-stabilisation-status.sh --boot --browser
+```
+
+It prints S1–S7 with PASS/FAIL/UNKNOWN and exits non-zero unless every machine-decidable
+criterion passes. `S6` (soak) is owner-reported and always prints UNKNOWN — that is the
+criterion `0.0.2` skipped, which is why it broke on its first boot.
+
 
 ## Request guards (Tier A, 2026-11-04)
 

@@ -1,5 +1,19 @@
 # Failure Ledger — Mistakes Made Here, and the Rule That Prevents a Repeat
 
+> **2026-11-04 — staged package shipped as a plugin, and a green suite stood in for a soak.**
+> `@nolit/dsh-opencode-v2-beta` was created to stage a better protocol parser, but it
+> registered the same tool, commands, worker and model route as the stable package (so only
+> one could ever be active) and shipped no `locale`, so its plugin card rendered as the bare
+> specifier next to `Opencode v2 Agent`. Separately, `0.0.2` was released on a green suite
+> alone and failed its first live boot (`ctx.tools` without `inject` → "1 entry did not
+> activate"). **Rule:** a staged change is source under `staging/`, never an installable
+> package; and a release needs the `S6` soak, measured by
+> `scripts/opencode-v2-stabilisation-status.sh`, not by a passing suite. See
+> [OPENCODE-V2-STAGE-PLAN.md](OPENCODE-V2-STAGE-PLAN.md).
+> **Second, related:** the cost pill was gated on a MODEL id prefix, so other routers serving
+> `opencode-go/*` showed it. **Rule:** ownership is the provider id the package registers,
+> never a model name it does not control.
+
 <!-- skeleton:
 version: 2.7
 kind: rule

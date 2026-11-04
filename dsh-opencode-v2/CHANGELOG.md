@@ -37,6 +37,28 @@ Removing it also removed the whole claim-file subsystem (`lib/exclusion.js`, `ex
 the beta dependency in three test files). The `conflictPolicy` guard stays: it handles a legacy
 `opencode-go`/`opencode` provider, which is a real third-party collision.
 
+### 0.0.2-rc.1.4 Stage plan written; the staging code is preserved as source (2026-11-04)
+
+Owner instruction: plan the beta work properly and make stages 2 and 3 reachable **after
+stabilisation**, not instead of it.
+
+- [docs/OPENCODE-V2-STAGE-PLAN.md](../docs/OPENCODE-V2-STAGE-PLAN.md) defines stage 1 exit
+  criteria S1–S7, the stage-2 acceptance gates S2-1…S2-5, the stage-3 gates S3-1…S3-4, the
+  three adversarial inputs that must round-trip, and the rule that only an owner instruction
+  opens a stage.
+- `scripts/opencode-v2-stabilisation-status.sh` turns S1–S5 and S7 into a command. It prints
+  PASS/FAIL/UNKNOWN per criterion and exits non-zero unless every machine-decidable one
+  passes. S6 (soak) always prints UNKNOWN: it is owner-reported, and it is the criterion the
+  `0.0.2` release skipped.
+- `scripts/opencode-v2-browser-boot.mjs` is the S5 probe (real shell boot, not a route probe).
+- The deleted beta package's parser work was recovered from git into `staging/`, which is
+  **source, not a plugin**: no package.json, no mount, no `npm pack` entry. `scripts/doc-index.mjs`
+  skips it so it cannot pollute the documentation index.
+
+Measured when this was written (`--boot --browser`): S1 PASS, S2 PASS (`0.0.2-rc.1`),
+S3 PASS (401 tests), S4 PASS (isolated boot, 0 activation warnings), S5 PASS (shell renders,
+own client entry present, no page errors), S7 PASS. S6 UNKNOWN — the soak has not happened.
+
 ### 0.0.2-rc.1.3 The pill matched a MODEL PREFIX, so other routers still showed it (2026-11-04)
 
 Owner report after the previous fix: "오픈코드 v2 서빙된 모델이 아닌 다른 라우터에서 부른 모델인데 왜

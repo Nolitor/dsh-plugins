@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from '
 import { join, relative } from 'node:path'
 
 const root = new URL('..', import.meta.url).pathname
-const SKIP_DIRS = new Set(['node_modules', '.git', '.runtime-measure', 'prototype-windows', 'prototype-harness', 'market', 'locale', 'test', 'lib', 'scripts', 'artifacts'])
+const SKIP_DIRS = new Set(['node_modules', '.git', '.runtime-measure', 'prototype-windows', 'prototype-harness', 'market', 'locale', 'test', 'lib', 'scripts', 'artifacts', 'staging'])
 const KINDS = ['rule', 'boot', 'spec', 'report', 'measurement', 'policy', 'readme', 'index']
 
 /** Walk for *.md, skipping generated/vendor dirs and submodule trees we don't own. */

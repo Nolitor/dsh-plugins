@@ -96,6 +96,8 @@
 
 ## other
 
+- **1.0** · active · 2026-11-04 · [docs/OPENCODE-V2-STAGE-PLAN.md](OPENCODE-V2-STAGE-PLAN.md)
+  Stage plan for @nolit/dsh-opencode-v2 — what "stabilised" means as a measurable gate, then stage 2 (move the canonical recipe-derived protocol parser into this single package) and stage 3 (ship the conformance oracle in the test suite). Replaces the deleted beta package. Records the exact defects that block promotion, the acceptance thresholds taken from recorded traffic, the rollback route, and who is allowed to open a stage.
 - **1.0** · active · 2026-11-02 · [docs/LIGHTPANDA-CDP.md](LIGHTPANDA-CDP.md)
   Durable record of the shared Lightpanda CDP browser daemon (127.0.0.1:9333) — what runs where, measured baselines, guarantees, known limits, agent integration paths, and how to reproduce the deployment.
 - **2.0** · implemented · 2026-10-29 · [docs/CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md)
@@ -116,4 +118,4 @@
 
 ---
 
-76 indexed (43 boot cards), 0 missing header, 76 total.
+77 indexed (43 boot cards), 0 missing header, 77 total.
