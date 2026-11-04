@@ -87,7 +87,13 @@ obligations, not suggestions:
 7. Secrets are **cordis-native**: schemastery `Config` + env fallback
    (`!!js process.env.DEEPINFRA_API_KEY`). Do **not** read ad-hoc key files in code.
 8. Every request must carry `attributionHeaders()`.
-9. Verification follows `docs/testing.md`: unit tier, and a real-API e2e that **self-skips
+9. `GenerateOptions.purpose` (auxiliary request classification) exists on the installed host
+   and may arrive at the adapter; DeepInfra has no wire field for it, so ignore it explicitly
+   and say so. If this plugin ever *produces* an auxiliary request, declare its own key via
+   module augmentation of `LlmRequestPurposeMap` (guide `v0.2.2-alpha.2`).
+10. The contract's source of truth is the **installed** `dsh-llm/lib/types/types.d.ts` plus
+   `docs/upgrade-guide/**` — not the subsystem docs alone. See §11.
+11. Verification follows `docs/testing.md`: unit tier, and a real-API e2e that **self-skips
    without its key** so a keyless run stays green.
 
 ## 4. Design that falls out of the measurements
@@ -188,3 +194,32 @@ dsh-deepinfra/
 2. Write `lib/wire.js` + `lib/map.js` + `lib/usage.js` against those answers, with tests that
    use recorded SSE fixtures.
 3. Only then `adapter.js` and the entry, then the isolated + browser boot gate.
+
+## 11. Upgrade-guide deltas that bind this build (read before writing code)
+
+The brief above was written from the *current* docs. The harness also publishes an
+**upgrade-guide channel** — one directory per release — and that is where contract changes
+land. Every guide was scanned (119 English guides in `docs/upgrade-guide/**`); these four
+affect an LLM adapter. **The installed host is `0.2.2-alpha.3`, so all four already apply.**
+
+| Guide | Change | Effect on this plugin |
+|---|---|---|
+| `v0.2.2-alpha.2/llm-request-purpose-declarations` | `GenerateOptions.purpose` now derives from the declaration-mergeable `LlmRequestPurposeMap`; `@deepseek-ai/dsh-llm` no longer declares `compaction` or `session-title` | An adapter may **receive** `purpose` (verified present in the installed `types.d.ts` line 579) and may map it to model-hidden metadata. DeepInfra has no such field, so the adapter must **ignore it explicitly and document that**, rather than pass an unknown key to the wire. If this plugin ever *produces* an auxiliary request it must declare its own purpose key. |
+| `v0.2.2-alpha.3/chat-process-activity-context` | `ProcessActivity` gains a `context` member; `ProcessActivitySummary.running` is now `RunningProcessActivity` (excludes `context`) | Only bites if the client half renders activity or switches exhaustively over `ProcessActivity`. **The OpenCode client does not touch it** (verified: zero references). If the DeepInfra client half shows any streaming indicator, add a `context` branch or type it as `RunningProcessActivity`. |
+| `v0.2.2-alpha.3/subagent-names` | `send_message`/`interrupt_agent` take `agent` (name or session id) not `agent_id`; `list_agents` rows are `{name,status,description?}`; `SubagentActivation.name` is required; catalog payload version 3 | No effect on an LLM adapter. Listed because any test fixture or script that drives subagents must use the new argument names. |
+| `v0.2.1-rc.4/reasoning-body-props` | `conversation.chat.reasoning.body` contributions get `rawText` for the original output; `text` is display-prepared | If the client half shows reasoning, read `rawText` when the raw model bytes matter. The cost pill work already learned this slot family is easy to misuse (the `input.model.label` regression). |
+
+**Rule this adds to §3 (the DSH contract):** the adapter contract is defined by the installed
+package's `types.d.ts`, and the upgrade-guide channel is the list of deltas that produced it.
+Reading only `docs/subsystems` and the cookbook is not sufficient — that is exactly how
+`purpose` was missed here.
+
+### Verification that this brief matches the installed host
+
+| Claim in this brief | Checked against | Result |
+|---|---|---|
+| `TokenUsage` is disjoint, `reasoningTokens` optional | installed `dsh-llm/lib/types/types.d.ts` | matches (same docstring, same fields) |
+| `usage` before `finish`, two error paths | `docs/subsystems/llm-streaming.md` + cookbook | matches |
+| `purpose` is a live `GenerateOptions` field | installed `types.d.ts:579` | **was missing from this brief — added above** |
+| Client halves must handle `ProcessActivity.context` | alpha.3 guide | not applicable today (no reference in our client) |
+
