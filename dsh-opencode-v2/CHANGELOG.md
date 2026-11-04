@@ -35,7 +35,48 @@ named `nolit-dsh-opencode-v2-<version>.tgz` and built through
 `scripts/pack-opencode-v2.sh`, which renames after packing and rewrites the
 `artifacts/SHA256SUMS.opencode-v2` rows against the final name.
 
-### 0.0.2.1 Request guards (Tier A) — deepseek-recipe rules applied
+### 0.0.2.1 Hotfix — the exclusion guard killed the entry it was protecting (2026-11-04)
+
+Owner report, immediately after the 0.0.2 restart: "플러그인 2개가 안올라왔어 하나는 오류이고".
+
+Measured from the journal of the new pid 1694267:
+
+```
+dsh: warning: 1 entry did not activate
+dsh-opencode-v2-http (@nolit/dsh-opencode-v2/http): Error: cannot get property "tools" without inject
+    at new apply (.../dsh-opencode-v2/lib/http.js:2262:81)
+```
+
+**Cause.** cordis proxies `ctx` and THROWS on reading a service the plugin did not declare in
+`inject`. The `dsh-opencode-v2-http` entry declares
+`['llm','subprocess','sessions','connection','settings']`, and the new mutual-exclusion guard
+read `ctx?.tools`. Optional chaining does not help — the throw happens on the property read
+itself — so `apply()` aborted, the model route never registered, and the whole row was dropped.
+
+**Why the suite missed it.** Every test built `ctx` as a plain object, where `ctx.tools` is
+simply `undefined`. A plain object cannot reproduce a throwing proxy, so 402 tests passed while
+the production mount failed. The beta entry had the same defect (`inject = []`, reading
+`ctx.llm` and `ctx.tools`) and would have failed the moment it was mounted.
+
+**Fix.** `lib/optional-service.js` — `optionalService(ctx, name)` reads a service and treats a
+rejected read as "not observable". Both entries use it for every service they do not declare.
+
+**Regression gates added (three layers, because one was not enough):**
+
+1. `test/optional-service.test.mjs` — the helper against a throwing proxy.
+2. `test/apply-cordis.test.mjs` — mounts both entries on a cordis-like proxy and on the REAL
+   `@deepseek-ai/cordis` Context, asserting `apply()` does not throw and the provider registers.
+3. `test/service-inject-gate.test.mjs` — reads the SOURCE and fails if any entry module reads an
+   undeclared service directly instead of through the helper.
+
+**Verified by a real isolated boot** (copied profile, `DSH_HOME` under `/tmp`, port 0):
+`did not activate` count 0, load beacon `{"version":"0.0.2","event":"load"}`.
+
+**Artifact note.** The first `0.0.2` tarball never mounted, so it is replaced in place rather
+than given a new version (the release itself was never usable). `SHA256SUMS.opencode-v2` carries
+the replaced hash history for it; no version number was invented.
+
+### 0.0.2.2 Request guards (Tier A) — deepseek-recipe rules applied
 
 - `max_tokens` is clamped to `min(reservation, contextWindow - promptTokens)`, floored at 1.
   A prompt that cannot fit is refused as `OPENCODE_CONTEXT_OVERFLOW` **before upload**.
@@ -52,7 +93,7 @@ named `nolit-dsh-opencode-v2-<version>.tgz` and built through
 - Prompt tokens are ESTIMATED at 3.5 chars/token (conservative end of the measured range).
   An exact count needs `deepseek-recipe-encoding` and is deliberately not a dependency.
 
-### 0.0.2.2 Beta track `@nolit/dsh-opencode-v2-beta` (Tier B and C)
+### 0.0.2.3 Beta track `@nolit/dsh-opencode-v2-beta` (Tier B and C)
 
 - Canonical DeepSeek V4/V4.1 token table extracted from recipe by code point. A hand-typed
   draft was wrong in five of eighteen entries; every entry is now asserted in a test.
@@ -62,7 +103,7 @@ named `nolit-dsh-opencode-v2-<version>.tgz` and built through
 - Conformance corpus (7 cases, each naming its recipe source) plus a re-chunking oracle
   (300 splits invariant).
 
-### 0.0.2.3 Mutual exclusion (both packages, mandatory)
+### 0.0.2.4 Mutual exclusion (both packages, mandatory)
 
 Both packages register `opencode-http-agent`, the `opencode` tool and the same commands, so
 only one may be active per profile. One implementation (`lib/exclusion.js`) serves both:
@@ -80,14 +121,14 @@ Two defects were found while wiring it, both by measurement rather than review:
   `opencode-http-agent`, so that id can never name an owner: ownership belongs to the claim
   file, and the runtime check only reports a *foreign* provider id or the shared tool name.
 
-### 0.0.2.4 Documentation
+### 0.0.2.5 Documentation
 
 README gained `## Prerequisites (measured 2026-11-04)` — OpenCode v2.2.0 install shape, web
 auth and token storage (`~/.local/share/opencode/auth.json`, mode 0644, integration ids that
 differ from the route id, oauth-before-key selection), and PATH resolution with a five-step
 validation ladder. Also `## Request guards` and `## Mutual exclusion`.
 
-### 0.0.2.5 What did NOT change
+### 0.0.2.6 What did NOT change
 
 - The stable parse path. The regex classifier still serves; the canonical parser lives in the
   beta package and is not on the stream path.

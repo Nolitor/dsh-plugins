@@ -18,6 +18,7 @@ import {
   releaseClaim,
   resolveClaimPath,
 } from '@nolit/dsh-opencode-v2/lib/exclusion.js'
+import { optionalService } from '@nolit/dsh-opencode-v2/lib/optional-service.js'
 
 import { BETA_PACKAGE, BETA_PROVIDER_ID, BETA_TOOL_NAME } from './identity.js'
 import { createProtocolParser, PARSER_VERSION } from './protocol-parser.js'
@@ -69,8 +70,10 @@ export function apply(ctx, config) {
 
   const sibling = detectSibling({
     owner: BETA_PACKAGE,
-    llm: ctx?.llm,
-    tools: ctx?.tools,
+    // This entry injects nothing, so cordis throws on any service read; both are
+    // read optionally (the same defect that killed the stable row on 2026-11-04).
+    llm: optionalService(ctx, 'llm'),
+    tools: optionalService(ctx, 'tools'),
     providerId: BETA_PROVIDER_ID,
     toolName: BETA_TOOL_NAME,
   })

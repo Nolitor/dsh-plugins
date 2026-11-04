@@ -65,6 +65,7 @@ import {
   validateRequest,
 } from './request-guards.js'
 import { claimActivation, detectSibling, releaseClaim, resolveClaimPath } from './exclusion.js'
+import { optionalService } from './optional-service.js'
 
 /** Plugin name; the cordis row uses the `@nolit/dsh-opencode-v2/http` specifier. */
 export const name = 'dsh-opencode-v2-http'
@@ -2259,7 +2260,15 @@ export function apply(ctx, config) {
     ctx?.logger?.warn?.(claim.message)
     return () => releaseClaim(claimPath, PACKAGE_NAME)
   }
-  const sibling = detectSibling({ owner: PACKAGE_NAME, llm: ctx?.llm, tools: ctx?.tools, providerId })
+  // `tools` is NOT in this entry's `inject` list, and cordis throws on reading an
+  // undeclared service (measured 2026-11-04: this exact line killed the row and
+  // the profile booted with "1 entry did not activate"). Read it optionally.
+  const sibling = detectSibling({
+    owner: PACKAGE_NAME,
+    llm: ctx?.llm,
+    tools: optionalService(ctx, 'tools'),
+    providerId,
+  })
   if (sibling.conflict) {
     ctx?.logger?.warn?.(sibling.evidence.join('; ') + ' — standing down; only one OpenCode package may be active')
     return () => releaseClaim(claimPath, PACKAGE_NAME)
