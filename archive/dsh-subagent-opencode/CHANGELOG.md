@@ -1,5 +1,11 @@
 # Changelog — @nolit/dsh-subagent-opencode
 
+> ## ⚠️ ARCHIVED — superseded by `@nolit/dsh-opencode-v2`
+>
+> Absorbed 2026-11-05 and moved to `archive/` the same day on owner instruction. The
+> the `opencode` subagent provider (`subagent_opencode` tool row plus `lib/subagent.js`) now live in `@nolit/dsh-opencode-v2`. Kept as the historical record; do not
+> install.
+
 <!-- skeleton:
 version: 1.0
 kind: report

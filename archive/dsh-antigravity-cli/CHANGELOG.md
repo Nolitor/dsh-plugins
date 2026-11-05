@@ -1,5 +1,11 @@
 # Changelog — @nolit/dsh-antigravity-cli
 
+> ## ⚠️ ARCHIVED — superseded by `@nolit/dsh-antigravity`
+>
+> Absorbed 2026-11-05 and moved to `archive/` the same day on owner instruction. The
+> `/agy` command and `agy_worker` tool now live in `@nolit/dsh-antigravity`. Kept as the historical record; do not
+> install.
+
 <!-- skeleton:
 version: 1.0
 kind: report

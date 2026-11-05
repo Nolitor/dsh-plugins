@@ -1,5 +1,11 @@
 # Changelog — @nolit/dsh-subagent-antigravity
 
+> ## ⚠️ ARCHIVED — superseded by `@nolit/dsh-antigravity`
+>
+> Absorbed 2026-11-05 and moved to `archive/` the same day on owner instruction. The
+> the `antigravity` subagent provider (`subagent_antigravity` tool row plus `lib/subagent.js`) now live in `@nolit/dsh-antigravity`. Kept as the historical record; do not
+> install.
+
 <!-- skeleton:
 version: 1.0
 kind: report

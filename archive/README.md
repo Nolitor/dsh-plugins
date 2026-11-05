@@ -5,7 +5,7 @@ version: 1.0
 kind: index
 status: reference
 updated: 2026-11-05
-summary: What lives under archive/, the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
+summary: What lives under archive/ (four absorbed tracks: directsdk, antigravity-cli, subagent-antigravity, subagent-opencode), the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
 -->
 
 **Nothing in this directory is installed, linked, packed, or imported by a shipped package.**
@@ -25,6 +25,14 @@ symlink scaffolding and is gitignored.
 `docs/PLUGIN-CONSOLIDATION.md` §2.1 is the authority for the three locations
 (`dsh-<track>/` active, `archive/` absorbed, `staging/` staged-but-not-installed).
 
-| Track | Absorbed into | Archived | Why |
+| Track | Absorbed into | Archived | Surface now served by the replacement |
 | :--- | :--- | :--- | :--- |
-| `dsh-antigravity-directsdk` | `@nolit/dsh-antigravity` | 2026-11-05 | owner: "통합되어서 안쓰는거 아닌가 … 예전버전이면 아카이브에 보관해". Its `antigravity` provider route is now registered by the merged package, and two registrations of the same route cannot coexist. 25/25 tests still pass. |
+| `dsh-antigravity-directsdk` | `@nolit/dsh-antigravity` | 2026-11-05 | the `antigravity` provider route (`ctx.llm.registerAdapter`) |
+| `dsh-antigravity-cli` | `@nolit/dsh-antigravity` | 2026-11-05 | `/agy` command, `agy_worker` tool |
+| `dsh-subagent-antigravity` | `@nolit/dsh-antigravity` | 2026-11-05 | `antigravity` subagent provider + `subagent_antigravity` row |
+| `dsh-subagent-opencode` | `@nolit/dsh-opencode-v2` | 2026-11-05 | `opencode` subagent provider + `subagent_opencode` row |
+
+Owner instruction for the subagent moves (2026-11-05): "이미 서브에이전트는 안티그래비티에 통합되어
+서비스 되고 있는데 … 서브에이전트도 아카이브에 들어가야 하는거 잖아". The earlier round archived only
+`directsdk`; that was an incomplete read of the same rule, and the three remaining absorbed tracks
+were moved in the follow-up.

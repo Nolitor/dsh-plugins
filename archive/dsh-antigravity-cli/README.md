@@ -1,5 +1,20 @@
 # @nolit/dsh-antigravity-cli
 
+> ## ⚠️ ARCHIVED / SUPERSEDED — do not install this package
+>
+> This package was **absorbed into `@nolit/dsh-antigravity`** on 2026-11-05 and moved to
+> `archive/` on the owner's instruction: same owner instruction: the absorbed CLI surface lives in the merged package
+>
+> | | |
+> | :--- | :--- |
+> | **Replacement** | `@nolit/dsh-antigravity` |
+> | **Surface now in the replacement** | `/agy` command and `agy_worker` tool |
+> | **Measured state (2026-11-05)** | the merged package exports `/agy` and `agy_worker`; this track is absent from the profile `dependencies`, from `dsh.profile.bundles`, and contributes **0** rows to `dsh --profile web --dump-config` |
+> | **Why it cannot be reinstalled alongside the replacement** | the merged package already registers the same provider/tool names; a duplicate tool name aborts the whole plugin row and a duplicate provider name silently shadows (docs/RULES.md §4, docs/PLUGIN-CONSOLIDATION.md) |
+> | **What to do** | Nothing. Read it as history. Install `@nolit/dsh-antigravity`. |
+>
+> Its tests still pass; it is superseded, not broken.
+
 > ## ⚠️ SUPERSEDED — do not install this package
 >
 > This package was **absorbed into `@nolit/dsh-antigravity`** on 2026-11-05.

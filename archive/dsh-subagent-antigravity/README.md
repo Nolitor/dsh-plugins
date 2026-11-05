@@ -1,5 +1,20 @@
 # @nolit/dsh-subagent-antigravity
 
+> ## ⚠️ ARCHIVED / SUPERSEDED — do not install this package
+>
+> This package was **absorbed into `@nolit/dsh-antigravity`** on 2026-11-05 and moved to
+> `archive/` on the owner's instruction: "이미 서브에이전트는 안티그래비티에 통합되어 서비스 되고 있는데 … 서브에이전트도 아카이브에 들어가야 하는거 잖아" (owner, 2026-11-05)
+>
+> | | |
+> | :--- | :--- |
+> | **Replacement** | `@nolit/dsh-antigravity` |
+> | **Surface now in the replacement** | the `antigravity` subagent provider (`subagent_antigravity` tool row plus `lib/subagent.js`) |
+> | **Measured state (2026-11-05)** | provider `antigravity` is registered by `@nolit/dsh-antigravity/lib/index.js`; a live boot composes the single `tool-subagent-antigravity` row from that package; this track contributes **0** rows and is not in the profile |
+> | **Why it cannot be reinstalled alongside the replacement** | the merged package already registers the same provider/tool names; a duplicate tool name aborts the whole plugin row and a duplicate provider name silently shadows (docs/RULES.md §4, docs/PLUGIN-CONSOLIDATION.md) |
+> | **What to do** | Nothing. Read it as history. Install `@nolit/dsh-antigravity`. |
+>
+> Its tests still pass; it is superseded, not broken.
+
 > ## ⚠️ SUPERSEDED — do not install this package
 >
 > This package was **absorbed into `@nolit/dsh-antigravity`** on 2026-11-05.

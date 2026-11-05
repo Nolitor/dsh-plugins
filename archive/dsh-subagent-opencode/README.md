@@ -1,5 +1,20 @@
 # @nolit/dsh-subagent-opencode
 
+> ## ⚠️ ARCHIVED / SUPERSEDED — do not install this package
+>
+> This package was **absorbed into `@nolit/dsh-opencode-v2`** on 2026-11-05 and moved to
+> `archive/` on the owner's instruction: same owner instruction: an absorbed subagent surface is archived with the package that absorbed it
+>
+> | | |
+> | :--- | :--- |
+> | **Replacement** | `@nolit/dsh-opencode-v2` |
+> | **Surface now in the replacement** | the `opencode` subagent provider (`subagent_opencode` tool row plus `lib/subagent.js`) |
+> | **Measured state (2026-11-05)** | provider `opencode` is registered by `@nolit/dsh-opencode-v2/lib/index.js` (merged 2026-11-05); the live profile composes the single `tool-subagent-opencode` row from that package; this track contributes **0** rows and is not in the profile |
+> | **Why it cannot be reinstalled alongside the replacement** | the merged package already registers the same provider/tool names; a duplicate tool name aborts the whole plugin row and a duplicate provider name silently shadows (docs/RULES.md §4, docs/PLUGIN-CONSOLIDATION.md) |
+> | **What to do** | Nothing. Read it as history. Install `@nolit/dsh-opencode-v2`. |
+>
+> Its tests still pass; it is superseded, not broken.
+
 > ## ⚠️ SUPERSEDED — do not install this package
 >
 > This package was **absorbed into `@nolit/dsh-opencode-v2`** on 2026-11-05.

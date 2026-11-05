@@ -102,7 +102,7 @@
 ## index
 
 - **1.0** · reference · 2026-11-05 · [archive/README.md](../archive/README.md)
-  What lives under archive/, the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
+  What lives under archive/ (four absorbed tracks: directsdk, antigravity-cli, subagent-antigravity, subagent-opencode), the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
 - **3.1** · active · 2026-11-04 · [AGENTS.md](../AGENTS.md)
   Tier-1 auto-loaded entry. Points to detailed rules, the doc skeleton index, active plans, and the latest boot card. Keep it tiny.
 - **1.0** · reference · 2026-10-29 · [verification/README.md](../verification/README.md)

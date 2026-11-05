@@ -38,12 +38,20 @@ a vendor that already had a CLI plugin.
 
 These remain in the repository as history. **Do not reinstall them.**
 
-| Superseded | Version | Absorbed into | Moved surface |
-| :--- | :--- | :--- | :--- |
-| `@nolit/dsh-antigravity-cli` | 0.1.0 (now `0.0.1-rc.1`) | `@nolit/dsh-antigravity` | `/agy`, `agy_worker` |
-| `@nolit/dsh-subagent-antigravity` | 0.1.0 (now `0.0.1-rc.1`) | `@nolit/dsh-antigravity` | `subagent_antigravity` |
-| `@nolit/dsh-subagent-opencode` | 0.1.0 (now `0.0.1-rc.1`) | `@nolit/dsh-opencode-v2` | `subagent_opencode` provider + tool row (removed from the live profile 2026-11-05) |
-| `@nolit/dsh-antigravity-directsdk` | 0.0.1-rc.1 | `@nolit/dsh-antigravity` | the `antigravity` provider route (`ctx.llm.registerAdapter`) — **moved to `archive/dsh-antigravity-directsdk/` on 2026-11-05** |
+**All four are now archived** (2026-11-05). "Superseded" and "still sitting in the active tree" are
+not compatible states: an absorbed track moves to `archive/` as soon as the replacement serves its
+surfaces.
+
+| Superseded | Version at archival | Absorbed into | Moved surface | Location |
+| :--- | :--- | :--- | :--- | :--- |
+| `@nolit/dsh-antigravity-cli` | `0.0.1-rc.1` | `@nolit/dsh-antigravity` | `/agy`, `agy_worker` | `archive/dsh-antigravity-cli/` |
+| `@nolit/dsh-subagent-antigravity` | `0.0.1-rc.1` | `@nolit/dsh-antigravity` | `antigravity` provider + `subagent_antigravity` row | `archive/dsh-subagent-antigravity/` |
+| `@nolit/dsh-subagent-opencode` | `0.0.1-rc.1` | `@nolit/dsh-opencode-v2` | `opencode` provider + `subagent_opencode` row | `archive/dsh-subagent-opencode/` |
+| `@nolit/dsh-antigravity-directsdk` | `0.0.1-rc.1` | `@nolit/dsh-antigravity` | the `antigravity` provider route (`ctx.llm.registerAdapter`) | `archive/dsh-antigravity-directsdk/` |
+
+The subagent moves were the second half of the same instruction: the owner pointed out that the
+subagent surfaces were already merged into `@nolit/dsh-antigravity` and were being served, so they
+belonged in `archive/` too. Archiving only `directsdk` was an incomplete read of the rule.
 
 ### 2.1 Where superseded code lives now
 
