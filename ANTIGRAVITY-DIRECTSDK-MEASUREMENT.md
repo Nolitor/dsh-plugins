@@ -153,7 +153,8 @@ It is a Hermes *provider plugin* (Python), not an SDK. What ported conceptually 
 2. Scope: text-only adapter, or does it need DSH tool execution?
 3. If tools are needed: is `--json-schema` + a forced "return a tool call or FINISH" contract acceptable (measured unreliable, B3)?
 4. Where does the quota show? `/usage` exists in Hermes; the DSH equivalent is `cost.js`-style ledger — does agy expose quota in stream-json? (not measured).
-5. Ownership: new `dsh-antigravity-directsdk/` track per the single-writer rule.
+5. Ownership: a new track per the single-writer rule (it became `dsh-antigravity-directsdk/`, now
+   archived under `archive/` after the merge).
 
 ## 10. Reproduction
 
@@ -318,7 +319,9 @@ SSE frames of `data: {"response": {"candidates":[{"content":{"role":"model","par
 HTTP direct is **feasible and verified**. The CLI is not required. Build target is a pure `LlmAdapter` in the `opencode-http-agent` shape, using the refresh token, this UA, and this envelope.
 ## 15. Implementation — @nolit/dsh-antigravity-directsdk 0.0.1 (2026-11-05)
 
-Built at `dsh-antigravity-directsdk/`. Pure `LlmAdapter`, route `antigravity`. 8 lib modules, 25 unit tests, live-verified.
+Built at `dsh-antigravity-directsdk/`, later **absorbed into `@nolit/dsh-antigravity`** and moved to
+`archive/dsh-antigravity-directsdk/` (2026-11-05, owner instruction). Pure `LlmAdapter`, route
+`antigravity`. 8 lib modules, 25 unit tests, live-verified.
 
 ### Two bugs found only by running it (not by reading the protocol)
 

@@ -15,7 +15,7 @@
 > never a model name it does not control.
 
 <!-- skeleton:
-version: 2.8
+version: 2.9
 kind: rule
 status: active
 updated: 2026-11-05
@@ -62,6 +62,7 @@ change cannot satisfy it, say so before acting, not after.
 | F-12 | Raw `GET /api/credential` output was printed once, including `oc_sk_…` key values. | **Credentials: names, ids and lengths only.** Mask every value in tool output, evidence files and docs. |
 | F-13 | A credential was almost deleted based on a stale boot-card claim; the deletion then happened only after re-measuring the key itself. | **A deletion is a decision, not a cleanup.** Re-measure the artifact, protect the account-critical entries (`opencode` OAuth / master keys), delete only the named dead one, and verify serving afterwards. |
 | F-14 | Settings were written to the live profile while verifying a UI feature (plan toggle). The write was valid but unannounced at the time. | **Announce every live write with its blast radius** in the same reply, or probe in an isolated profile. |
+| F-49 | A live API key was copied into subagent session logs. Two teammates were verifying a feature with an **isolated `DSH_HOME`**, copied the live profile, and ran `grep`/`sed -n` on `cordis.patch.yml` to inspect the rows — so the whole file, including `apiKey: sk-di-…`, became a `tool/result` in their transcripts. Measured after the fact: the value is in **9 session logs (tool results only, never a user/system message or a request header)**, in `~/.dsh/session-search.db` (+`-wal`) because that index stores message text, and in the pre-upgrade quarantine copies of the patch. It is **not** in the repository, in any commit, in any `artifacts/*.tgz`, or in any model prompt body. | **Reading a config file is a credential read.** Before `cat`/`grep`/`sed` on `~/.dsh/profiles/*/cordis.patch.yml` (or any credential file), mask the value first: `sed -E 's/(apiKey|apiKey[[:space:]]*):[[:space:]]*.*/\1: <redacted>/'`, or read only the keys with `grep -oE '^\s*[a-zA-Z]+:'`. When copying a live profile for isolation, redact the copy **before** any command can print it, and prefer `DSH_HOME` copy + explicit `cfg = { … }` over dumping the file. A secret that reaches a tool result is in the session log forever, and the search index too. Prefer `apiKeyEnv`/`.env` over inline keys for any key that gets re-read (see `docs/DSH-HOME-ISOLATION.md` §4). |
 
 ## 4. Reporting
 
