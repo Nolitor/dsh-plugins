@@ -35,6 +35,12 @@ summary: Detailed project rules (tier 2): measurement, live-state gates, single-
 - `~/.dsh` (profiles, sessions, credentials, registry) and the running 3080 service are the
   user's. Do not write or restart them without explicit approval.
 - Experiments use an isolated `DSH_HOME` under `/tmp` or the workspace.
+- **Every script or test that launches `dsh` (or a TokenEconomizer engine that spawns it) must
+  own a throwaway `DSH_HOME`** and clean it up; a read-only audit may read the live home but
+  never launch or write it; an owner-run live install must be explicitly gated. Enforced by
+  `node scripts/check-dsh-isolation.mjs` — see
+  [DSH-HOME-ISOLATION.md](DSH-HOME-ISOLATION.md). A harness that leaks into the live home creates
+  the sidebar "그룹 없음" orphan logs ([ORPHAN-SESSION-CLEANUP.md](ORPHAN-SESSION-CLEANUP.md)).
 - After any live change record: what changed, backup path, and the verification command.
 
 ## 3. Single-writer rule (see DSH-HARNESS-POLICY §3.2)
@@ -198,4 +204,7 @@ node scripts/check-plugin-history.mjs    # every plugin track owns CHANGELOG (+ 
 (cd dsh-opencode-v2 && npm test)
 node scripts/audit-promoted-state.mjs
 node scripts/audit-installed-vs-packaged.mjs
+node scripts/check-dsh-isolation.mjs      # no unisolated dsh launcher in scripts/tests
+node --test scripts/check-dsh-isolation.test.mjs scripts/cleanup-orphan-sessions.test.mjs
+node scripts/cleanup-orphan-sessions.mjs  # orphan-session DRY RUN (owner applies)
 ```

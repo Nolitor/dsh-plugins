@@ -1,15 +1,17 @@
 # UI Slot Architecture — three tiers for DSH plugin surfaces
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: design
 status: active
 updated: 2026-11-05
-summary: Owner-approved placement rule for token/usage surfaces — global header for the tk system ledger, conversation.input.right for per-provider composer chips, sidebar/settings for management — with the measured slot seats and the migration that removes the tk/deepinfra single-slot collision.
+summary: Owner-approved placement rule for token/usage surfaces — global header for the tk system ledger, conversation.input.right for per-provider composer chips — with the measured slot seats; opencode-v2 migrated in 0.0.2-rc.4, DeepInfra and tk still pending.
 -->
 
-> Status: **recorded 2026-11-05; not implemented yet.** This is the standard for the
-> upcoming UI slot cleanup/advancement. It does not change any registration by itself.
+> Status: **partly implemented.** opencode-v2 moved its cost chip to
+> `conversation.input.right` in `0.0.2-rc.4` (2026-11-05) and Antigravity was already on that
+> seat. DeepInfra (still a second registration in the single `activity` slot) and the tk
+> header move are **not implemented**; steps 1, 2 and the DeepInfra half of step 3 remain.
 
 ## 1. The placement rule (owner instruction)
 
@@ -27,10 +29,10 @@ seat, and the global monitor must not live in the composer at all.
 
 | Plugin | Slot | Kind | Current effect |
 | :--- | :--- | :--- | :--- |
-| `tk` (token-economizer) | `conversation.input.activity` | single | owns the seat |
-| `@nolit/dsh-deepinfra` | `conversation.input.activity` | single | attempts a second registration → pageerror |
-| `@nolit/dsh-opencode-v2` | `conversation.input.activity` | single | attempts a second registration |
-| `@nolit/dsh-antigravity` | `conversation.input.right` | list | already migrated; additive |
+| `tk` (token-economizer) | none | — | **correction 2026-11-05**: the track has no browser half at all (`HEAD` has no `lib/client.js`), so the earlier "tk owns the activity seat" pageerror was a transient working-tree state, not this package. Its new rc.1 dev-stats card uses `settings.section` only. |
+| `@nolit/dsh-deepinfra` | `conversation.input.right` | list | **migrated 2026-11-05** (`0.0.1-rc.8`): was the only remaining `activity` registration; now label+value chip beside the selector, provider-id gate, no seat without a measured figure |
+| `@nolit/dsh-opencode-v2` | `conversation.input.right` | list | migrated (`0.0.2-rc.4`, renumbered `0.0.1-rc.1` in the version normalization); label+value chip, provider-id gate |
+| `@nolit/dsh-antigravity` | `conversation.input.right` | list | migrated; additive; route-gated (`0.0.1-rc.6`, renumbered rc.7 by the rc.1 round) |
 
 Observed live pageerror:
 
@@ -62,9 +64,11 @@ must happen:
 3. Use `shell.bottom` (single) only if exactly one global monitor will ever occupy it. This does not
    scale and is not the recommended shape.
 
-Do **not** solve this by giving `tk` and `deepinfra` different priorities in the single
+Do **not** solve a chip conflict by giving two plugins different priorities in the single
 `conversation.input.activity` seat: the slot contract says a single seat renders one occupant, so
-the other becomes invisible. That is a workaround, not the layout.
+the other becomes invisible. That is a workaround, not the layout. (Measured correction: the
+token-economizer has no browser half in this repository, so it never occupied that seat; the
+pageerror recorded on 2026-11-05 came from a transient working tree.)
 
 ## 4. Composer chips — the shape
 
@@ -83,16 +87,23 @@ the other becomes invisible. That is a workaround, not the layout.
 
 ## 6. Migration order (future work)
 
-1. Measure and, if needed, add the host global-header list slot.
+1. Measure and, if needed, add the host global-header list slot. — **pending; no longer urgent
+   for a tk composer chip, because tk registers no composer surface** (its new developer-stats card
+   uses `settings.section`).
 2. Move `tk` to the global header; remove its `conversation.input.activity` registration; verify the
-   ledger still updates.
-3. Move DeepInfra and OpenCode v2 chips to `conversation.input.right`; remove their
-   `activity` registrations.
-4. Re-run the browser boot check and assert the single-slot pageerror is gone.
-5. Keep Antigravity on `input.right`; it is the reference implementation.
+   ledger still updates. — **not applicable as written**: measured 2026-11-05, tk has no browser
+   half and registers no slot. Re-scope this step only if tk ever adds a global monitor.
+3. Move DeepInfra and OpenCode v2 chips to `conversation.input.right`; remove their `activity`
+   registrations. — **done**: OpenCode v2 (verified in an isolated browser boot) and DeepInfra
+   `0.0.1-rc.8` (isolated rc.1 boot: chip immediately left of the selector, 0 page errors, absent
+   off-route). No track registers `conversation.input.activity` any more (measured).
+4. Re-run the browser boot check and assert the single-slot pageerror is gone. — **done**: rc.1
+   isolated boots report 0 page errors and no single-slot registration error.
+5. Keep Antigravity on `input.right`; it is the reference implementation. — **done**
 
-No step is applied in this round. The live collision remains until steps 2–3 run; the S5 browser
-checks document it as a pre-existing, non-Antigravity error.
+The composer migration is complete for every chip this workspace owns. The remaining "global header"
+idea (step 1/2) is a tk design question, not a collision; it is parked until tk has a second
+composer surface.
 
 ## 7. Related documents
 

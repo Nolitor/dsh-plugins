@@ -15,6 +15,8 @@
 
 ## rule
 
+- **1.0** · active · 2026-11-05 · [docs/DSH-HOME-ISOLATION.md](DSH-HOME-ISOLATION.md)
+  Every repo script/test that launches dsh or a TokenEconomizer engine must own a throwaway DSH_HOME (plus TOKENECONOMIZER_HOME when applicable), clean it up, and never write the live home; enforced by scripts/check-dsh-isolation.mjs and its tests.
 - **2.8** · active · 2026-11-05 · [docs/FAILURE-LEDGER.md](FAILURE-LEDGER.md)
   Every defect and wrong turn this workspace actually made, including a literal marker whitelist that missed a new notation family, a stream recogniser tested only on whole payloads and a scrub keyed to one vendor token that missed the model's other pipe-wrapped tokens, and a synthetic A/B probe offered as evidence for a streaming defect that only appears in long output-heavy turns, a role map that sent DSH's leading system-role message to the model as `user` so every system instruction was lost, a body-call classifier that ran only on the content channel while calls written into `reasoning_content` were stripped and dropped, and an assistant-history serializer that re-sent the model its own protocol notation (rendered calls and `<thinking>` wrappers) while the scrub knew each notation's openers but not its bare closers, with the standing rule that keeps it from happening again, and a headless side-call profile that pointed at an account provider while the bundle had disabled the three services that provider needs, so the identical sign-in error came from two different missing dependencies. Read before changing a plugin, a doc, or a live service.
 - **2.0** · active · 2026-11-05 · [docs/PLUGIN-STYLE-STANDARD.md](PLUGIN-STYLE-STANDARD.md)
@@ -39,6 +41,10 @@
 
 ## report
 
+- **1.0** · measured · 2026-11-05 · [docs/DSH-RC1-PLUGIN-DELTA.md](DSH-RC1-PLUGIN-DELTA.md)
+  Measured diff between the alpha.3 runtime our plugins were built against and the installed 0.2.2-rc.1 release, limited to plugin/extension surfaces, with per-track impact and the actions this workspace applies.
+- **1.0** · measured · 2026-11-05 · [docs/ORPHAN-SESSION-CLEANUP.md](ORPHAN-SESSION-CLEANUP.md)
+  Read-only classification of the live DSH session logs behind the sidebar "그룹 없음" section (120 logs: 98 bound, 22 unregistered, only 2 removable /tmp leftovers), with the owner-runnable digest-gated cleanup script and what exactly it would move.
 - **1.0** · active · 2026-11-05 · [docs/PLUGIN-CONSOLIDATION.md](PLUGIN-CONSOLIDATION.md)
   Why the per-surface plugins were folded into one package per vendor, which packages are superseded, and what a future agent must check before reinstalling any of them.
 - **1.0** · measured · 2026-11-03 · [DSH-0.2.2-ALPHA.3-PLUGIN-VERIFICATION.md](../DSH-0.2.2-ALPHA.3-PLUGIN-VERIFICATION.md)
@@ -104,8 +110,8 @@
 
 - **1.0** · active · 2026-11-05 · [docs/ANTIGRAVITY-STAGE-PLAN.md](ANTIGRAVITY-STAGE-PLAN.md)
   Stage-1 stabilisation gate for @nolit/dsh-antigravity, the measured S1–S7 status after today's reinforcement, and the rule that its stage 2/3 upgrades ride with the OpenCode v2 stage plan.
-- **1.0** · active · 2026-11-05 · [docs/UI-SLOT-ARCHITECTURE.md](UI-SLOT-ARCHITECTURE.md)
-  Owner-approved placement rule for token/usage surfaces — global header for the tk system ledger, conversation.input.right for per-provider composer chips, sidebar/settings for management — with the measured slot seats and the migration that removes the tk/deepinfra single-slot collision.
+- **1.1** · active · 2026-11-05 · [docs/UI-SLOT-ARCHITECTURE.md](UI-SLOT-ARCHITECTURE.md)
+  Owner-approved placement rule for token/usage surfaces — global header for the tk system ledger, conversation.input.right for per-provider composer chips — with the measured slot seats; opencode-v2 migrated in 0.0.2-rc.4, DeepInfra and tk still pending.
 - **1.0** · active · 2026-11-04 · [docs/OPENCODE-V2-STAGE-PLAN.md](OPENCODE-V2-STAGE-PLAN.md)
   Stage plan for @nolit/dsh-opencode-v2 — what "stabilised" means as a measurable gate, then stage 2 (move the canonical recipe-derived protocol parser into this single package) and stage 3 (ship the conformance oracle in the test suite). Replaces the deleted beta package. Records the exact defects that block promotion, the acceptance thresholds taken from recorded traffic, the rollback route, and who is allowed to open a stage.
 - **1.0** · active · 2026-11-02 · [docs/LIGHTPANDA-CDP.md](LIGHTPANDA-CDP.md)
@@ -128,4 +134,4 @@
 
 ---
 
-82 indexed (43 boot cards), 0 missing header, 82 total.
+85 indexed (43 boot cards), 0 missing header, 85 total.
