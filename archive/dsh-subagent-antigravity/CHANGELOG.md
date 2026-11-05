@@ -18,6 +18,30 @@ summary: Engineering history for @nolit/dsh-subagent-antigravity. Seeded from gi
 
 Current version: `0.0.1-rc.1`
 
+## 2026-11-05 — archived as an absorbed track (no version change) — `0.0.1-rc.1`
+
+Moved from `dsh-subagent-antigravity/` to `archive/dsh-subagent-antigravity/`. The `antigravity`
+subagent provider and the `subagent_antigravity` tool row have been served by
+`@nolit/dsh-antigravity` since the 2026-11-05 merge.
+
+### Measured at archival
+
+| Check | Measured |
+| :--- | :--- |
+| provider `antigravity` registered by | `@nolit/dsh-antigravity/lib/index.js` |
+| live `--dump-config` row `tool-subagent-antigravity` supplied by | `@nolit/dsh-antigravity` (`# == @nolit/dsh-antigravity`) |
+| rows owned by THIS package | **0** |
+| profile `dependencies` / `dsh.profile.bundles` | absent / absent |
+| broken `node_modules/@nolit/dsh-subagent-antigravity` link in the live profile | **was present**, removed the same day ([F-51](../../docs/FAILURE-LEDGER.md)); a manifest is kept at `~/.dsh/quarantine-backups/broken-links-20261105_151848.txt` |
+| its own tests | **6/6 pass** — superseded, not broken |
+
+### Process note
+
+The owner corrected the handoff: "이미 서브에이전트는 안티그래비티에 통합되어 서비스 되고 있는데 …
+서브에이전트도 아카이브에 들어가야 하는거 잖아". Both halves of that — the directory and the stale
+profile link — are now recorded as standing rules
+([HISTORY.md H-1/H-2](../../HISTORY.md), [F-50/F-51](../../docs/FAILURE-LEDGER.md)).
+
 ## 0.0.1-rc.1 — version ladder for a superseded package — 2026-11-05
 
 Owner decision: every `@nolit` track reports `0.0.1-rc.N`; `0.1.0` → `0.0.1-rc.1`. The package

@@ -60,6 +60,23 @@ This change is **applied pending restart**: the live service still runs the modu
 the owner restarts to pick up the managed delegation path. No version bump in this session (owner
 decision: the track stays at `0.0.1-rc.1`; the next modifying session proposes `0.0.1-rc.2`).
 
+### 2026-11-05 — absorbed tracks moved to `archive/`
+
+| Track | Surface this package serves | Archived |
+| :--- | :--- | :--- |
+| `dsh-subagent-opencode` | `opencode` subagent provider + `subagent_opencode` tool row | `archive/dsh-subagent-opencode/` |
+
+Measured before the move: the track contributed **0** rows to `dsh --profile web --dump-config`;
+the live `tool-subagent-opencode` row is composed from THIS package
+(`# == @nolit/dsh-opencode-v2`); the track was absent from the profile `dependencies` and
+`dsh.profile.bundles`. A broken `node_modules/@nolit/dsh-subagent-opencode` symlink (created
+2026-10-30) was removed the same day with a manifest at
+`~/.dsh/quarantine-backups/broken-links-20261105_151848.txt`.
+
+The duplicate-provider yield guard in `lib/index.js` stays: it protects the window where the old
+package could still be mounted beside this one. Version unchanged (`0.0.1-rc.1`) — no code changed.
+Process record: [HISTORY.md H-1/H-2](../HISTORY.md), [F-50/F-51](../docs/FAILURE-LEDGER.md).
+
 ## 0.0.1-rc.1 — version ladder + English-by-default locale pass — 2026-11-05
 
 Owner decision (2026-11-05): normalize every `@nolit` track to `0.0.1-rc.N`; this track moved

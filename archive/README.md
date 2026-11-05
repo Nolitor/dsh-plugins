@@ -22,6 +22,7 @@ Moving a track here is a **move, not a delete**: the CHANGELOG and README stay, 
 `ARCHIVED` banner naming the replacement. `node_modules/` inside an archived track is local
 symlink scaffolding and is gitignored.
 
+The chain of these moves is [HISTORY.md](../HISTORY.md) §2–§3.
 `docs/PLUGIN-CONSOLIDATION.md` §2.1 is the authority for the three locations
 (`dsh-<track>/` active, `archive/` absorbed, `staging/` staged-but-not-installed).
 

@@ -71,6 +71,9 @@ sitting beside the packages that replaced it.
 Each package README and CHANGELOG now carries a `SUPERSEDED` banner naming its replacement. The
 source was **not deleted** and its tests still pass — it is superseded, not broken.
 
+> The chronological chain of merges, version ladders and archived tracks is
+> [HISTORY.md](../HISTORY.md); this file is the per-package authority it links to.
+
 ## 3. What a future agent must do
 
 ### Before installing anything vendor-related

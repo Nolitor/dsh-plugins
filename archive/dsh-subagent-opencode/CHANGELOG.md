@@ -18,6 +18,30 @@ summary: Engineering history for @nolit/dsh-subagent-opencode. Seeded from git h
 
 Current version: `0.0.1-rc.1`
 
+## 2026-11-05 — archived as an absorbed track (no version change) — `0.0.1-rc.1`
+
+Moved from `dsh-subagent-opencode/` to `archive/dsh-subagent-opencode/`. The `opencode` subagent
+provider and the `subagent_opencode` tool row have been served by `@nolit/dsh-opencode-v2` since the
+2026-11-05 merge.
+
+### Measured at archival
+
+| Check | Measured |
+| :--- | :--- |
+| provider `opencode` registered by | `@nolit/dsh-opencode-v2/lib/index.js` (merged surface) |
+| live `--dump-config` row `tool-subagent-opencode` supplied by | `@nolit/dsh-opencode-v2` (`# == @nolit/dsh-opencode-v2`) |
+| rows owned by THIS package | **0** |
+| profile `dependencies` / `dsh.profile.bundles` | absent / absent |
+| broken `node_modules/@nolit/dsh-subagent-opencode` link (linked 2026-10-30) | **was present for 6 days**, removed 2026-11-05 ([F-51](../../docs/FAILURE-LEDGER.md)) |
+| its own tests | **6/6 pass** — superseded, not broken |
+
+### Why the merge guard still exists in the replacement
+
+`@nolit/dsh-opencode-v2` warns when a provider named `opencode` is already registered and yields
+instead of shadowing. That guard was written for exactly the window this entry closes: while this
+package could still be mounted beside its replacement
+([docs/PLUGIN-CONSOLIDATION.md](../../docs/PLUGIN-CONSOLIDATION.md)).
+
 ## 0.0.1-rc.1 — version ladder for a superseded package — 2026-11-05
 
 Owner decision: every `@nolit` track reports `0.0.1-rc.N`; `0.1.0` → `0.0.1-rc.1`. The package

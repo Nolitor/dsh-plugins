@@ -11,6 +11,31 @@ summary: Engineering history for @nolit/dsh-antigravity, including the rc.6 fix 
 Current version: `0.0.1-rc.7`
 
 
+### 2026-11-05 — absorbed tracks moved to `archive/` (this package now owns their surfaces)
+
+Three tracks this package absorbed were still sitting in the active tree; they were moved to
+`archive/` the same day, and two stale `node_modules` links were removed from the live profile.
+
+| Track | Surface this package serves | Archived |
+| :--- | :--- | :--- |
+| `dsh-antigravity-directsdk` | the `antigravity` provider route (`ctx.llm.registerAdapter`) | `archive/dsh-antigravity-directsdk/` |
+| `dsh-antigravity-cli` | `/agy`, `agy_worker` | `archive/dsh-antigravity-cli/` |
+| `dsh-subagent-antigravity` | `antigravity` subagent provider + `subagent_antigravity` row | `archive/dsh-subagent-antigravity/` |
+
+Measured state that made the move safe: all three contributed **0** rows to
+`dsh --profile web --dump-config`, were absent from the profile `dependencies` and
+`dsh.profile.bundles`, and nothing in `lib/` imported them. The live `tool-subagent-antigravity` row
+is composed from THIS package (`# == @nolit/dsh-antigravity`), not from the archived track.
+
+A broken `node_modules/@nolit/dsh-subagent-antigravity` symlink had been left in the live profile
+since 2026-11-05 05:42; it was removed with a manifest at
+`~/.dsh/quarantine-backups/broken-links-20261105_151848.txt`.
+
+Version unchanged (`0.0.1-rc.7`): no code in this package changed. Process record:
+[HISTORY.md H-1/H-2](../HISTORY.md), [docs/FAILURE-LEDGER.md F-50/F-51](../docs/FAILURE-LEDGER.md).
+Absorbed tracks leaving the active tree is now a standing rule
+([docs/PLUGIN-CONSOLIDATION.md §2.1](../docs/PLUGIN-CONSOLIDATION.md)).
+
 ## 0.0.1-rc.7 — version ladder + DSH 0.2.2-rc.1 policy pass — 2026-11-05
 
 Owner decision (2026-11-05): every `@nolit` track reports `0.0.1-rc.N`; the rc number is the

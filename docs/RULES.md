@@ -1,11 +1,11 @@
 # DSH Plugins — Detailed Rules
 
 <!-- skeleton:
-version: 1.5
+version: 1.6
 kind: rule
 status: active
 updated: 2026-11-05
-summary: Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, reporting — with the failure ledger as required reading.
+summary: Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement (browser-boot mount), docs/skeleton contract, absorbed-track archiving, reporting — with the failure ledger as required reading.
 -->
 
 > **Reading chain:** global rules (`~/.dsh/AGENTS.md`) → **this file** (project rules) →
@@ -159,6 +159,29 @@ Rules that follow:
 - Root `docs/` keeps only what spans plugins: the stage plans that govern several tracks, the
   harness policy, the failure ledger. A per-plugin detail copied into root `docs/` is
   **fragmentation** and is the mistake this rule exists to prevent.
+
+### 6.1a Absorbed tracks leave the active tree (owner instruction, 2026-11-05)
+
+The owner's words: *"통합되고 아카이브로 옮겼어야 할 디렉토리 방치 및 잔재 플러그인 환경 설정 제거하지
+못한 점, 맥락을 잊고 예전 버전 설치한 점"*.
+
+A merge has **three** completion conditions, and all three land in the same round:
+
+| # | Condition | Verify with |
+| :-: | :--- | :--- |
+| 1 | The absorbing package registers the surface | `dsh --profile <p> --dump-config`, row owned by the replacement |
+| 2 | The absorbed directory is moved to `archive/` with an `ARCHIVED` banner | the five-bar test in [archive/README.md](../archive/README.md) |
+| 3 | The absorbed package is gone from **every** profile: dependency, `dsh.profile.bundles`, **and** the `node_modules` link | `python3 -c` over the profile manifest + `readlink`/`[ -e ]` over `node_modules/@nolit/*` |
+
+- **"Superseded but still in the active tree" is a defect, not a state.** It claims liveness the
+  runtime does not have, and it is exactly what produced F-50 and F-51.
+- Archive **every** absorbed track in the round, not only the one the owner names (F-50).
+- A removal that skips the `node_modules` link leaves a broken symlink that is invisible in the UI
+  and misleads the next reader (F-51).
+- The chain record for a round goes in [HISTORY.md](../HISTORY.md) (what spans tracks) and each
+  affected `dsh-<track>/CHANGELOG.md` (what changed for that package). Both, not either.
+- Read [PLUGIN-CONSOLIDATION.md](PLUGIN-CONSOLIDATION.md) §2 **before** touching a vendor surface;
+  not reading it is how the merge gets re-litigated (F-52).
 
 ### 6.2 Comparing against a new upstream version (owner instruction, 2026-11-04)
 

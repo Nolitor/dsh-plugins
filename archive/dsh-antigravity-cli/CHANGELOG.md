@@ -18,6 +18,31 @@ summary: Engineering history for @nolit/dsh-antigravity-cli. Seeded from git his
 
 Current version: `0.0.1-rc.1`
 
+## 2026-11-05 — archived as an absorbed track (no version change) — `0.0.1-rc.1`
+
+This track was moved from `dsh-antigravity-cli/` to `archive/dsh-antigravity-cli/`. Its surfaces
+(`/agy`, `agy_worker`) have been served by `@nolit/dsh-antigravity` since the 2026-11-05 merge; this
+move only makes the tree honest about that.
+
+### Measured at archival
+
+| Check | Measured |
+| :--- | :--- |
+| profile `dependencies` (`~/.dsh/profiles/web/package.json`) | absent |
+| `dsh.profile.bundles` | absent |
+| `dsh --profile web --dump-config` rows owned by this package | **0** |
+| imports from active packages | none (`@nolit/dsh-antigravity` has no dependency on it) |
+| its own tests | **12/12 pass** — superseded, not broken |
+
+### Process note (recorded, not a code change)
+
+The merge happened earlier in the same day but the directory was left in the active tree. The owner
+had to point out that merged surfaces must not stay beside their replacement
+([HISTORY.md H-1](../../HISTORY.md), [docs/FAILURE-LEDGER.md F-50](../../docs/FAILURE-LEDGER.md)).
+The tree now follows the three-location rule in
+[docs/PLUGIN-CONSOLIDATION.md §2.1](../../docs/PLUGIN-CONSOLIDATION.md): `dsh-<track>/` active,
+`archive/` absorbed, `staging/` staged.
+
 ## 0.0.1-rc.1 — version ladder; tool notice is English by default — 2026-11-05
 
 Owner decision: every `@nolit` track reports `0.0.1-rc.N`; `0.1.0` → `0.0.1-rc.1`.
