@@ -58,7 +58,7 @@ summary: Measured diff between the alpha.3 runtime our plugins were built agains
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | dsh-antigravity | 0.0.1-rc.6 | `^22.19 \|\| >=24.0` | `>=0.2.2-alpha.2 <0.3.0` | `^4.0.4` | tool def already rc.1-shaped |
 | dsh-antigravity-cli | 0.1.0 | `^22.19 \|\| >=24.0` | same | `^4.0.4` | historical track |
-| dsh-antigravity-directsdk | 0.0.1 | `^22.19 \|\| >=24.0` | same | `^4.0.4` | untracked new track |
+| dsh-antigravity-directsdk | 0.0.1 | `^22.19 \|\| >=24.0` | same | `^4.0.4` | **archived 2026-11-05** into `archive/` (absorbed by dsh-antigravity) |
 | dsh-command-skill | 0.1.0 | **absent** | same | absent | skills repo, not a Loader package |
 | dsh-deepinfra | 0.0.1-rc.7 | `^22.19 \|\| >=24.0` | `>=0.2.2-alpha.3 <0.3.0` | `^4.0.4` | chip still on single `activity` seat |
 | dsh-korean-locale | 0.2.5 | `>=24` | same | absent | generated from alpha.3 (3,088 keys) |
@@ -76,7 +76,7 @@ summary: Measured diff between the alpha.3 runtime our plugins were built agains
 | :--- | :--- | :--- | :--- |
 | dsh-antigravity | `0.0.1-rc.7` | `>=24.9` | en/ko files, English default, Korean only under `ko` |
 | dsh-antigravity-cli | `0.0.1-rc.1` | `>=24.9` | plan notice no longer Korean by default |
-| dsh-antigravity-directsdk | `0.0.1-rc.1` | `>=24.9` | metadata locale files added |
+| ~~dsh-antigravity-directsdk~~ | `0.0.1-rc.1` (archived) | `>=24.9` | not an active track: moved to `archive/` after the merge was measured complete |
 | dsh-command-skill | `0.0.1-rc.1` | `>=24.9` | not a Loader package (`private`, no client) |
 | dsh-deepinfra | `0.0.1-rc.8` | `>=24.9` | navigator fallback removed; chip migrated to `input.right` + verified |
 | dsh-korean-locale | `0.0.1-rc.1` | `>=24.9` | regenerated against rc.1: **74 namespaces / 3,843 keys** (was 69/3,088); `addLanguage({id:'ko',label:'한국어',fallback:'en'})` |
@@ -94,7 +94,7 @@ Cordis peer ranges admit the installed 4.1.0 (`notify` was the one exception and
 No track registers `conversation.input.activity` or reads internal `tools.resolve`/`executable`;
 no track registers a Session Projection. Full runs: antigravity 103/103, deepinfra 155 pass
 (162 total, 7 skip), opencode-v2 427/427, sidebar 142/142, subrouter 12/12, subagent providers 6/6
-each, antigravity-cli 12/12, directsdk 25/25, notify 51/51, tk 131 pass/1 skip, delegate 52/52,
+each, antigravity-cli 12/12, directsdk 25/25 (archived), notify 51/51, tk 131 pass/1 skip, delegate 52/52,
 Korean pack verify 74 ns / 3,843 keys / 0 missing.
 
 ## 4. What this workspace does about it

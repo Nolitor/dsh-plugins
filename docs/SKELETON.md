@@ -45,8 +45,8 @@
   Measured diff between the alpha.3 runtime our plugins were built against and the installed 0.2.2-rc.1 release, limited to plugin/extension surfaces, with per-track impact and the actions this workspace applies.
 - **1.0** · measured · 2026-11-05 · [docs/ORPHAN-SESSION-CLEANUP.md](ORPHAN-SESSION-CLEANUP.md)
   Read-only classification of the live DSH session logs behind the sidebar "그룹 없음" section (120 logs: 98 bound, 22 unregistered, only 2 removable /tmp leftovers), with the owner-runnable digest-gated cleanup script and what exactly it would move.
-- **1.0** · active · 2026-11-05 · [docs/PLUGIN-CONSOLIDATION.md](PLUGIN-CONSOLIDATION.md)
-  Why the per-surface plugins were folded into one package per vendor, which packages are superseded, and what a future agent must check before reinstalling any of them.
+- **1.1** · active · 2026-11-05 · [docs/PLUGIN-CONSOLIDATION.md](PLUGIN-CONSOLIDATION.md)
+  Why the per-surface plugins were folded into one package per vendor, which packages are superseded (and that one is now archived under archive/), and what a future agent must check before reinstalling any of them.
 - **1.0** · measured · 2026-11-03 · [DSH-0.2.2-ALPHA.3-PLUGIN-VERIFICATION.md](../DSH-0.2.2-ALPHA.3-PLUGIN-VERIFICATION.md)
   Per-plugin verification against DSH 0.2.2-alpha.3 (excluding opencode-v2) — measured mount state, test results, Korean locale delta, notify settings restyle, sidebar/UTM harness and TE KV-cache interaction.
 - **3.2** · active · 2026-11-01 · [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md)
@@ -101,6 +101,8 @@
 
 ## index
 
+- **1.0** · reference · 2026-11-05 · [archive/README.md](../archive/README.md)
+  What lives under archive/, the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
 - **3.1** · active · 2026-11-04 · [AGENTS.md](../AGENTS.md)
   Tier-1 auto-loaded entry. Points to detailed rules, the doc skeleton index, active plans, and the latest boot card. Keep it tiny.
 - **1.0** · reference · 2026-10-29 · [verification/README.md](../verification/README.md)
@@ -134,4 +136,4 @@
 
 ---
 
-85 indexed (43 boot cards), 0 missing header, 85 total.
+86 indexed (43 boot cards), 0 missing header, 86 total.

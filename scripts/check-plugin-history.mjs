@@ -26,7 +26,11 @@ const failures = []
 const checked = []
 
 for (const entry of readdirSync(root, { withFileTypes: true })) {
-  if (!entry.isDirectory() || !entry.name.startsWith('dsh-')) continue
+  if (!entry.isDirectory()) continue
+  // archive/ holds absorbed tracks that no profile installs (owner instruction 2026-11-05):
+  // they keep their CHANGELOG as history but are not active tracks this gate must police.
+  if (entry.name === 'archive' || entry.name === 'staging') continue
+  if (!entry.name.startsWith('dsh-')) continue
   const dir = join(root, entry.name)
   const pkgPath = join(dir, 'package.json')
   if (!existsSync(pkgPath)) continue

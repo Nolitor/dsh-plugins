@@ -1,0 +1,83 @@
+{
+ "errors": [],
+ "onAntigravity": {
+  "route": "antigravity/gemini-3.8-flash",
+  "modelChip": {
+   "x": 1026,
+   "y": 524,
+   "w": 101,
+   "h": 19
+  },
+  "modelText": "Gemini 3.8 Flash",
+  "antigravityChip": {
+   "text": "사용량 1,025",
+   "box": {
+    "x": 930,
+    "y": 525,
+    "w": 76,
+    "h": 18
+   }
+  },
+  "opencodeChip": null,
+  "rightSlotBeforeModel": true
+ },
+ "antigravityIdle": {
+  "infoCallsAfter": 0
+ },
+ "onDeepinfra": {
+  "route": "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  "modelChip": {
+   "x": 849,
+   "y": 524,
+   "w": 240,
+   "h": 19
+  },
+  "modelText": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  "antigravityChip": null,
+  "opencodeChip": null,
+  "rightSlotBeforeModel": true
+ },
+ "deepinfraIdle": {
+  "infoCallsAfter": 0,
+  "costCallsAfter": 0
+ },
+ "rewrittenToOpencode": {
+  "route": "opencode-http-agent/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  "modelChip": {
+   "x": 876,
+   "y": 524,
+   "w": 240,
+   "h": 19
+  },
+  "modelText": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  "antigravityChip": null,
+  "opencodeChip": {
+   "text": "비용 $0.0042",
+   "box": {
+    "x": 778,
+    "y": 525,
+    "w": 78,
+    "h": 18
+   }
+  },
+  "rightSlotBeforeModel": true
+ },
+ "foreignAgain": {
+  "route": "deepseek-account/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  "modelChip": {
+   "x": 876,
+   "y": 524,
+   "w": 240,
+   "h": 19
+  },
+  "modelText": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  "antigravityChip": null,
+  "opencodeChip": null,
+  "rightSlotBeforeModel": true
+ },
+ "callsTotal": {
+  "info": 4,
+  "cost": 2
+ },
+ "pageErrorsFinal": []
+}

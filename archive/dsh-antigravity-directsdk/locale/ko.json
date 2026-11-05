@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "안티그래비티 DirectSDK",
+    "description": "Antigravity 구독을 위한 DeepSeek Harness 순수 LLM 어댑터입니다. antigravity 제공자 라우트가 소비자 OAuth 자격 증명으로 cloudcode-pa를 직접 호출합니다. CLI도, 프로세스 실행도, 에이전트 페르소나도 없습니다."
+  }
+}

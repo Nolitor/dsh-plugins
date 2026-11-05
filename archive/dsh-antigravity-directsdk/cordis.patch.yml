@@ -1,0 +1,38 @@
+# Bundle config layer for @nolit/dsh-antigravity-directsdk.
+#
+# The row id is the settings namespace the loader derives for volatile Config
+# fields, so it MUST equal the plugin name exported by lib/index.js
+# (dsh-antigravity-directsdk).
+#
+# CREDENTIAL MODEL
+#   clientId / clientSecret default to the values extracted from the `agy`
+#   binary (measured 2026-11-05). They are installed-application credentials
+#   that Google ships inside the public CLI, not private keys, but they are
+#   deliberately left empty here: an empty value means "use the built-in
+#   default resolved in lib/settings.js", so a rotated pair is a settings edit
+#   and the defaults stay visible in one place instead of being copied around.
+#   refreshToken is read from the CLI credential file by default and never
+#   persisted by this plugin.
+- insert:
+  - id: dsh-antigravity-directsdk
+    name: '@nolit/dsh-antigravity-directsdk'
+    config:
+      # "" = built-in default (agy-extracted). Override when the CLI rotates it.
+      clientId: ''
+      clientSecret: ''
+      # "" = probe ~/.gemini/antigravity-cli/{jetski-standalone-,}oauth-token.
+      tokenFile: ''
+      # "" = use the credential file. Setting this wins over the file.
+      refreshToken: ''
+      # "" = https://cloudcode-pa.googleapis.com
+      baseUrl: ''
+      # "" = aicode-consumers (consumer tier, measured from loadCodeAssist).
+      project: ''
+      # "" = the measured agy User-Agent. The API rejects requests without an
+      # antigravity/cli/ agent string (403 "no valid license").
+      userAgent: ''
+      # Models and quota move; re-read every 15 minutes.
+      catalogTtlMs: 900000
+      # "" entries means "every model the account currently serves".
+      enabledModels: []
+      extraHeaders: {}

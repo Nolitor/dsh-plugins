@@ -1,0 +1,87 @@
+{
+  "name": "@nolit/dsh-antigravity-directsdk",
+  "version": "0.0.1-rc.1",
+  "private": false,
+  "description": "Antigravity subscription pure LLM adapter for DeepSeek Harness: an `antigravity` provider route that calls cloudcode-pa.googleapis.com/v1internal:streamGenerateContent directly with the Antigravity consumer OAuth credential (refresh-token grant, client id/secret overridable). Streaming text/thought/tool-call deltas, per-call usage with reasoning tokens, dynamic model serving with per-model quota. No CLI, no spawn, no agent persona.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "cordis",
+    "antigravity",
+    "gemini",
+    "llm-adapter"
+  ],
+  "license": "MIT",
+  "author": "nolit",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./auth": {
+      "default": "./lib/auth.js"
+    },
+    "./wire": {
+      "default": "./lib/wire.js"
+    },
+    "./sse": {
+      "default": "./lib/sse.js"
+    },
+    "./map": {
+      "default": "./lib/map.js"
+    },
+    "./usage": {
+      "default": "./lib/usage.js"
+    },
+    "./catalog": {
+      "default": "./lib/catalog.js"
+    },
+    "./adapter": {
+      "default": "./lib/adapter.js"
+    },
+    "./settings": {
+      "default": "./lib/settings.js"
+    }
+  },
+  "files": [
+    "lib/",
+    "locale/",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check lib/index.js && node --check lib/auth.js && node --check lib/wire.js && node --check lib/sse.js && node --check lib/map.js && node --check lib/usage.js && node --check lib/catalog.js && node --check lib/adapter.js && node --check lib/settings.js"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=24.9",
+    "dsh": ">=0.2.2-alpha.2 <0.3.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-llm": "^0.2.2-alpha.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^1.0.0"
+  }
+}

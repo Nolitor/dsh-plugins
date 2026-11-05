@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Antigravity DirectSDK",
+    "description": "Antigravity subscription pure LLM adapter for DeepSeek Harness: the antigravity provider route calls cloudcode-pa directly with the consumer OAuth credential. No CLI, no spawn, no agent persona."
+  }
+}

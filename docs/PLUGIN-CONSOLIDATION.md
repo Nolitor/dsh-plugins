@@ -1,11 +1,11 @@
 # Plugin Consolidation Record
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: report
 status: active
 updated: 2026-11-05
-summary: Why the per-surface plugins were folded into one package per vendor, which packages are superseded, and what a future agent must check before reinstalling any of them.
+summary: Why the per-surface plugins were folded into one package per vendor, which packages are superseded (and that one is now archived under archive/), and what a future agent must check before reinstalling any of them.
 -->
 
 > **Read this before touching, reinstalling, or "cleaning up" any plugin named here.**
@@ -18,8 +18,9 @@ that vendor's account:
 
 | Vendor | Package | Version | Surfaces |
 | :--- | :--- | :--- | :--- |
-| Antigravity | `@nolit/dsh-antigravity` | `0.0.1-rc.4` | `/agy`, `agy_worker`, `antigravity` model route, `subagent_antigravity`, settings section, usage chip |
-| OpenCode | `@nolit/dsh-opencode-v2` | `0.0.2-rc.2` | `opencode` tool, `/ocode`, `cli_worker`, `opencode-http-agent` route, `subagent_opencode` provider + tool |
+| Antigravity | `@nolit/dsh-antigravity` | `0.0.1-rc.7` | `/agy`, `agy_worker`, `antigravity` model route, `subagent_antigravity`, settings section, usage chip |
+| OpenCode | `@nolit/dsh-opencode-v2` | `0.0.1-rc.1` (was `0.0.2-rc.4`; renumbered by the 2026-11-05 rc.1 normalization) | `opencode` tool, `/ocode`, `cli_worker`, `opencode-http-agent` route, `subagent_opencode` provider + tool |
+| Local CLI (experimental) | `@nolit/dsh-subagent-local` | `0.0.1-rc.1` | `delegate_local` tool over agy / opencode / codex / claude |
 
 ### The forcing reason
 
@@ -39,9 +40,25 @@ These remain in the repository as history. **Do not reinstall them.**
 
 | Superseded | Version | Absorbed into | Moved surface |
 | :--- | :--- | :--- | :--- |
-| `@nolit/dsh-antigravity-cli` | 0.1.0 | `@nolit/dsh-antigravity` | `/agy`, `agy_worker` |
-| `@nolit/dsh-subagent-antigravity` | 0.1.0 | `@nolit/dsh-antigravity` | `subagent_antigravity` |
-| `@nolit/dsh-subagent-opencode` | 0.1.0 | `@nolit/dsh-opencode-v2` | `subagent_opencode` provider + tool row (removed from the live profile 2026-11-05) |
+| `@nolit/dsh-antigravity-cli` | 0.1.0 (now `0.0.1-rc.1`) | `@nolit/dsh-antigravity` | `/agy`, `agy_worker` |
+| `@nolit/dsh-subagent-antigravity` | 0.1.0 (now `0.0.1-rc.1`) | `@nolit/dsh-antigravity` | `subagent_antigravity` |
+| `@nolit/dsh-subagent-opencode` | 0.1.0 (now `0.0.1-rc.1`) | `@nolit/dsh-opencode-v2` | `subagent_opencode` provider + tool row (removed from the live profile 2026-11-05) |
+| `@nolit/dsh-antigravity-directsdk` | 0.0.1-rc.1 | `@nolit/dsh-antigravity` | the `antigravity` provider route (`ctx.llm.registerAdapter`) — **moved to `archive/dsh-antigravity-directsdk/` on 2026-11-05** |
+
+### 2.1 Where superseded code lives now
+
+Owner instruction 2026-11-05: a track that is fully absorbed must leave the active tree instead of
+sitting beside the packages that replaced it.
+
+| Location | Meaning |
+| :--- | :--- |
+| `archive/<track>/` | absorbed and **not installed anywhere**; banner at the top of its README + CHANGELOG; excluded from the doc index and the plugin-history gate |
+| `staging/<track>/` | code held for a later stage, never installed (see `staging/README.md`) |
+| `dsh-<track>/` | an active track: installed in a profile, tested, and owning its CHANGELOG |
+
+`dsh-antigravity-directsdk` was measured dead before the move: not in the live profile
+`package.json`, not in `dsh.profile.bundles`, **0** hits in `dsh --profile web --dump-config`, no
+`@nolit` node_modules link, and `dsh-antigravity/lib/*` imports nothing from it.
 
 Each package README and CHANGELOG now carries a `SUPERSEDED` banner naming its replacement. The
 source was **not deleted** and its tests still pass — it is superseded, not broken.
