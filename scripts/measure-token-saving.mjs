@@ -12,16 +12,26 @@
  *      outputs it would have replaced
  *   4. the cost structure: context growth, tool-output share, pruner reach
  *
+ * READ-ONLY against whatever DSH_HOME is set: this script only reads session logs and
+ * never launches DSH. Running it against the live home reads the owner's logs but writes
+ * nothing there; --json must point OUTSIDE the read home. See docs/DSH-HOME-ISOLATION.md.
+ *
  * Usage: node scripts/measure-token-saving.mjs [--json <file>]
  *         DSH_HOME=... TOKENECONOMIZER_HOME=... node scripts/measure-token-saving.mjs
  */
+// dsh-isolation: read-only-live-home — reads session logs, launches nothing.
 import { readdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { resolve, sep } from 'node:path'
 import { join } from 'node:path'
 import { zstdDecompressSync } from 'node:zlib'
 import { createHash } from 'node:crypto'
 
 const DSH_HOME = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+const READING_LIVE_HOME = process.env.DSH_HOME === undefined
+if (READING_LIVE_HOME) {
+  console.error('[measure] DSH_HOME unset: READING the live home ' + DSH_HOME + ' (read-only; no DSH is launched)')
+}
 const TE_HOME = process.env.TOKENECONOMIZER_HOME ?? join(homedir(), '.tokeneconomizer')
 const SESSIONS = join(DSH_HOME, 'sessions')
 const POINTER = /\[Output identical to step (\d+) \(hash: ([0-9a-f]+)\), content omitted to save context\]/
@@ -232,4 +242,12 @@ for (const s of report.topSessions) {
 }
 
 const jsonIndex = process.argv.indexOf('--json')
-if (jsonIndex !== -1 && process.argv[jsonIndex + 1]) writeFileSync(process.argv[jsonIndex + 1], `${JSON.stringify(report, null, 1)}\n`)
+if (jsonIndex !== -1 && process.argv[jsonIndex + 1]) {
+  const target = process.argv[jsonIndex + 1]
+  // A read-only measurement must not create files inside the home it is reading.
+  if (resolve(target).startsWith(resolve(DSH_HOME) + sep)) {
+    console.error('[measure] refusing --json inside DSH_HOME (' + target + '); pass an output path outside it')
+    process.exit(2)
+  }
+  writeFileSync(target, `${JSON.stringify(report, null, 1)}\n`)
+}

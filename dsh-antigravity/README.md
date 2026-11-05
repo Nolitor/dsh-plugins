@@ -4,7 +4,7 @@ One plugin, every Antigravity surface, one account.
 
 | Surface | What it does | Switch |
 | :--- | :--- | :--- |
-| **CLI worker** | `/agy <task>` command and `agy_worker` tool, spawning the `agy` binary | `cliWorker` (+ `workerEnabled`) |
+| **CLI worker** | `/agy <task>` command and `agy_worker` tool, starting a **managed child session** through the `antigravity` subagent provider | `cliWorker` (+ `workerEnabled`, and the `subagent` provider) |
 | **Model serving** | the `antigravity` provider route, pure HTTP to `cloudcode-pa` | `modelServing` |
 | **Subagent** | `subagent_antigravity` delegation provider | `subagent` |
 | **UI** | an "Antigravity" settings tab for **grouped model selection** and a composer usage chip | `usagePill` |
@@ -34,6 +34,11 @@ agy models                    # must list models, proving the sign-in works
 
 The CLI surfaces (`/agy`, `agy_worker`, `subagent_antigravity`) **require this binary**.
 The model-serving surface does not spawn it, but it still reads the CLI's credential file (below).
+
+The `/agy` command and `agy_worker` tool also require the shared subagent service
+(`@deepseek-ai/dsh-subagent`) and this plugin's `subagent` surface. They do **not** spawn a bare
+`agy` process: they start a tracked child session and return its id. When either dependency is
+missing the call fails with a message naming it — there is no untracked-process fallback.
 
 ### 2. A web-authenticated Antigravity subscription
 
@@ -114,20 +119,32 @@ whether the package resolves or the plugin activates.
 ### `/agy` — the user-run CLI worker
 
 ```
-/agy <task>                     run one isolated agy turn
+/agy <task>                     start a managed child session for the task
 /agy models                     list the models the account serves
-/agy --model <id> <task>        pick a model for this call
-/agy --effort <level> <task>    low | medium | high | xhigh | max
-/agy --mode <mode> <task>       accept-edits | auto | plan
-/agy --timeout <ms> <task>      wall-clock limit
 ```
 
-The worker sees only the task text, never this conversation, and returns its final message.
+The command prints the child session id immediately; the answer (or failure) arrives later as a
+**completion notice**, not in the command reply. The child is listed in the parent session's
+subagent panel (`서브에이전트 N개`), not as a separate top-level sidebar session. The child sees only
+the task text, never this conversation. The model, effort and mode come from this plugin's settings; there are no per-call
+`--model`/`--effort` flags on the activation path.
+
+`/agy models` is a read-only listing (`agy models`) that starts no session and is unaffected.
 
 ### `agy_worker` — the model-facing tool
 
-The agent calls it for self-contained jobs that should not stream into the chat. Same isolation as
-`/agy`.
+The agent calls it for self-contained jobs that should run in a tracked child session. It returns:
+
+```json
+{ "kind": "activation", "subagentId": "<child session id>", "provider": "antigravity", "label": "<first line of the task>", "status": "started" }
+```
+
+and the final answer or failure arrives as a completion notice. The tool does not wait for the
+result, so the model should start the work and continue elsewhere; the notice carries the outcome.
+
+Errors surface as the tool call's error text when the dependency is missing (no subagent service,
+no registered `antigravity` provider, no calling agent, empty task). Once a child has started, a
+failure is delivered in the completion notice instead of the tool result.
 
 ### `antigravity` — the model route
 
@@ -188,7 +205,7 @@ Every value resolves **config → environment → built-in default**.
 | `modelServing` | the `antigravity` provider route |
 | `cliWorker` | `/agy` and `agy_worker` |
 | `workerEnabled` | `agy_worker` only (keeps `/agy`) |
-| `subagent` | the subagent provider |
+| `subagent` | the subagent provider (the CLI worker then reports a missing-provider error instead of spawning) |
 | `usagePill` | the composer usage chip |
 
 The **settings tab contains grouped model selection only**: the live account catalog is grouped by

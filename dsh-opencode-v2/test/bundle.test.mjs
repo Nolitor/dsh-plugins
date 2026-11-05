@@ -41,7 +41,7 @@ const rows = doc.flatMap((entry) => entry.insert ?? [])
 
 test('package.json has the exact engine window required by boot card rule 4', () => {
   assert.equal(pkg.engines.dsh, '>=0.2.2-alpha.2 <0.3.0')
-  assert.equal(pkg.engines.node, '^22.19.0 || >=24.0.0')
+  assert.equal(pkg.engines.node, '>=24.9')
 })
 
 test('package.json declares its own bundle patch, not upstream\'s', () => {

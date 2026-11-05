@@ -1,20 +1,18 @@
 /**
- * The cost pill is a composer ACTIVITY occupant, and that slot has a contract.
+ * The cost chip is a composer `conversation.input.right` occupant.
  *
- * Measured 2026-11-04 against the installed `dsh-client-ui-conversation` types
- * (`InputActivityOwnerProps`, alpha.3):
+ * OWNER INSTRUCTION 2026-11-05: "오픈코드 v2에서 모델서빙 오른쪽으로 표시되는거 지금
+ * 안티그래비티 처럼 표시되게 수정해 주라". Antigravity's usage chip is the reference
+ * implementation (docs/UI-SLOT-ARCHITECTURE.md §4): it registers in
+ * `conversation.input.right`, a LIST slot beside the model selector, and renders one
+ * label+value pill.
  *
- *   interface InputActivityOwnerProps extends InputControlOwnerProps {
- *     onActiveChange: (active: boolean) => void   // "whether the occupant needs the
- *   }                                             //  toolbar width before submit"
- *
- *   "A toolbar activity hides ordinary accessory controls while expanded; its
- *    occupant must release expansion on unmount."
- *
- * The pill never expands, so the correct behaviour is to report `false` at mount and
- * again at unmount. Skipping it can leave the composer expanded after the chip is
- * removed (the route gate returns null when another provider is selected), hiding the
- * model selector and the other accessory controls.
+ * The previous seat was `conversation.input.activity` — a SINGLE slot. The
+ * token-economizer ("tk") already registers there in the live profile, so this
+ * plugin's registration was a second occupant in a one-occupant seat; measured live
+ * pageerror: `single slot "conversation.input.activity" already has a registration`.
+ * The single-slot activity contract (`InputActivityOwnerProps.onActiveChange`) no
+ * longer applies to this component and must not be re-introduced.
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -31,34 +29,49 @@ function bodyOf(name) {
   return end < 0 ? rest : rest.slice(0, end)
 }
 
-test('the pill reads the slot props instead of ignoring them', () => {
-  const pill = bodyOf('CostPill')
-  assert.match(pill, /function CostPill\(props\)/, 'the occupant must accept its props')
-  assert.match(pill, /props\?\.onActiveChange/, 'and must read onActiveChange')
+test('the chip registers in the additive input.right slot', () => {
+  assert.match(SRC, /slots\.inject\('conversation\.input\.right'/, 'the seat is the list slot Antigravity uses')
+  assert.match(SRC, /name: 'conversation\.input\.right', id: 'opencode-v2-cost'/, 'provider-owned id in the same slot')
 })
 
-test('it releases expansion at mount and at unmount, as the slot requires', () => {
-  const pill = bodyOf('CostPill')
-  const calls = pill.match(/onActiveChange\(false\)/g) ?? []
-  assert.ok(calls.length >= 2, 'report false on mount AND release on unmount (found ' + calls.length + ')')
-  assert.match(pill, /return \(\) => onActiveChange\(false\)/, 'the cleanup must release expansion')
+test('the single activity seat is no longer registered by this plugin', () => {
+  assert.doesNotMatch(
+    SRC,
+    /slots\.inject\('conversation\.input\.activity'/,
+    'the activity seat is single and owned by tk; a second registration is a page error',
+  )
 })
 
-test('a host that passes no props does not crash the occupant', () => {
+test('the chip does not carry the activity-expansion contract', () => {
   const pill = bodyOf('CostPill')
-  assert.match(pill, /typeof props\?\.onActiveChange === 'function'/, 'the prop must be optional')
-  assert.match(pill, /if \(onActiveChange === null\) return undefined/, 'no prop means no effect work')
+  assert.doesNotMatch(pill, /onActiveChange/, 'input.right has no expansion contract to report')
+  assert.doesNotMatch(pill, /function CostPill\(props\)/, 'the list occupant takes no activity props')
 })
 
-test('the expansion report never turns the pill into an expanding occupant', () => {
+test('it renders as the same label + value pill Antigravity uses', () => {
   const pill = bodyOf('CostPill')
-  assert.doesNotMatch(pill, /onActiveChange\(true\)/, 'this occupant never needs extra width')
+  assert.match(pill, /className: 'ocv2Pill'/, 'the pill owns the reference shape')
+  assert.match(pill, /ocv2PillValue/, 'the number is the secondary, tabular value')
+  assert.match(pill, /t\('pillLabel'\)/, 'a label precedes the value, like "사용량 179,958"')
+  assert.match(SRC, /\.ocv2Pill\{[^}]*font-size:var\(--dsh-content-font-size-secondary,13px\)/, 'DSH typography token, not a fixed px')
+  assert.match(SRC, /\.ocv2Pill\{[^}]*line-height:calc\(20px \+ var\(--dsh-content-font-delta-secondary,0px\)\)/, 'DSH line-height token')
+  assert.match(SRC, /\.ocv2PillValue\{[^}]*font-variant-numeric:tabular-nums/, 'the value aligns like the reference chip')
 })
 
-test('the other registration (settings.section) needs no close handler', () => {
-  // SettingsSectionOwnerProps.close exists, but only for a section that navigates the
-  // operator somewhere else. This one does not, so not calling it is correct and is
-  // recorded here so a future reader does not "fix" it by inventing a close button.
-  assert.match(SRC, /slots\.inject\('settings\.section'/)
-  assert.doesNotMatch(SRC, /onboarding|openSection/, 'the section never leaves itself')
+test('no measured spend means no chip, never an invented zero label', () => {
+  const pill = bodyOf('CostPill')
+  assert.match(pill, /if \(text === ''\) return null/, 'the figure appears with the first measured request')
+  assert.doesNotMatch(pill, /costFree/, 'the rejected "free / 0" label must not come back')
+})
+
+test('a foreign route hides the chip and stops the cost poll', () => {
+  const pill = bodyOf('CostPill')
+  assert.match(pill, /if \(!onRoute\) return null/, 'off-route occupies no seat')
+  assert.match(pill, /if \(!onRoute\) return undefined/, 'and does not poll another provider\'s session')
+  assert.match(pill, /watchRoute\b/, 'a model switch re-evaluates the gate')
+})
+
+test('the dead DOM painter is gone, so only one painter exists', () => {
+  assert.doesNotMatch(SRC, /paintCostPill/, 'the DOM patch path had no owner after the slot migration')
+  assert.doesNotMatch(SRC, /startCostPill/, 'and neither did its entry point')
 })

@@ -5,10 +5,122 @@ version: 1.0
 kind: report
 status: active
 updated: 2026-11-05
-summary: Engineering history for @nolit/dsh-antigravity. Created 2026-11-05 by merging the CLI worker surface of @nolit/dsh-antigravity-cli with the HTTP model route proven in @nolit/dsh-antigravity-directsdk, plus a settings section, a usage chip and per-surface switches.
+summary: Engineering history for @nolit/dsh-antigravity, including the rc.6 fix for empty stored answers and the route-gated usage chip. Created 2026-11-05 by merging the CLI worker surface of @nolit/dsh-antigravity-cli with the HTTP model route proven in @nolit/dsh-antigravity-directsdk, plus a settings section, a usage chip and per-surface switches.
 -->
 
-Current version: `0.0.1-rc.5`
+Current version: `0.0.1-rc.7`
+
+
+## 0.0.1-rc.7 — version ladder + DSH 0.2.2-rc.1 policy pass — 2026-11-05
+
+Owner decision (2026-11-05): every `@nolit` track reports `0.0.1-rc.N`; the rc number is the
+only part that moves per session. This track moved `0.0.1-rc.6` → `0.0.1-rc.7`.
+
+| Surface | Before | After |
+| :--- | :--- | :--- |
+| `package.json.version` | `0.0.1-rc.6` | `0.0.1-rc.7` |
+| `engines.node` | `^22.19.0 \|\| >=24.0.0` | `>=24.9` (DSH 0.2.2-rc.1 minimum) |
+| `engines.dsh` | `>=0.2.2-alpha.2 <0.3.0` | unchanged — the range already admits `0.2.2-rc.1` |
+| Locale | English default, Korean via `locale/*.json` | unchanged; `locale/en.json` + `locale/ko.json` both complete |
+| Tests | 103/103 | 103/103 green |
+
+rc.1 audit (measured against the installed 0.2.2-rc.1 tree): both tool registrations are already
+`defineTool`-shaped and use `tools.register` (no internal `tools.resolve`/`executable` read);
+no Session Projection registration, no `app-boot`/official-bundles import; `peerDependencies.cordis`
+`^4.0.4` admits 4.1.0; the usage chip already occupies the additive `conversation.input.right` list
+seat. Nothing structural was needed.
+
+### CLI worker now runs as a managed child session (same rc.7, owner decision 2026-11-05)
+
+Owner decision, measured symptom: bare CLI execution left sessions in the sidebar's ungrouped
+bucket because the work never became a tracked child session. The worker surfaces now delegate
+through the shared subagent seam. Version stays `0.0.1-rc.7` (same session, owner normalization).
+
+| Surface | Before | After |
+| :--- | :--- | :--- |
+| `agy_worker` execute | spawned `agy` directly (`runAgyWorker`), awaited stdout, returned the final text | calls `ctx.subagents.startActivation({provider: subagentProviderName (default `antigravity`), label, request: {parent: exec.agent, prompt: [text], cwd?}, signal: exec.signal, delivery: 'parent'})` and returns `{kind:'activation', subagentId, provider, label, status}` immediately |
+| `/agy <task>` | spawned `agy` directly, awaited and returned the final text | starts the same managed child, prints its id, and states that the answer arrives as a completion notice |
+| `/agy models` | read-only `agy models` process | **unchanged** (still a read-only listing, starts no session) |
+| Missing `ctx.subagents` | would have spawned an untracked process | fails with a message naming the missing subagent service; **no process is spawned** |
+| Missing provider / calling agent | n/a (no provider needed) | fails with a message naming the missing provider (or agent); no process is spawned |
+| Per-call model/effort/mode/timeout | documented flags were not parsed by the merged command | removed from the documented surface: model/effort/mode are the plugin settings the subagent provider uses; the `/agy` hint no longer advertises non-working flags |
+| Direct CLI code | `lib/worker.js` carried `runAgyWorker` + argv/collection helpers; `lib/selection.js` carried the last-selection store | `runAgyWorker` and `readSelection`/`writeSelection` removed; `lib/worker.js` keeps only `listAgyModels`; `lib/selection.js` deleted. The provider (`lib/subagent.js`) still runs `agy` for the child, as before |
+| Tool shape | `output: {content, isError}` | `output: {kind, subagentId, provider, label, status}` + `presentCall`/`presentResult` cards |
+| Tests | `test/cli-worker.test.mjs` exercised `runAgyWorker` directly (4 tests) | rewritten to 16 activation/error/listing/provider tests with a mocked `ctx.subagents`; suite `103/103` → `115/115` |
+
+UX the owner must know: `/agy <task>` and `agy_worker` no longer return the answer inline. They
+return a child session id; the result is delivered later as a completion notice, and the child is
+visible as a tracked session. A failure after the child starts is reported in that notice, not in
+the tool result. `/agy models` behaviour is unchanged.
+
+#### Defect found by this change (measured in an isolated boot)
+
+The first isolated `/agy` execution returned
+`could not start the Antigravity child session: cannot get property "subprocess" without inject`.
+Cause: the subagent provider was constructed with the plugin's outer `ctx`, which injects only
+`llm`, while `AntigravitySubagentProvider.start()` reads `ctx.subprocess` — an undeclared service
+read (FAILURE-LEDGER F-44 class). The provider had never been exercised through a real activation,
+so unit mocks with plain properties stayed green. Fixed by handing the provider the acquired
+`{ subprocess: services.subprocess }` service object and by not registering the provider until that
+service exists; two regression tests now cover provider start and the no-subprocess case.
+
+#### Verification (isolated DSH_HOME, real browser, real agy)
+
+| Step | Measured |
+| :--- | :--- |
+| isolated `--dump-config` | exit 0, 321 rows, `dsh-antigravity` + `tool-subagent-antigravity` rows present |
+| boot | no `did not activate` / `cannot resolve` / `Invalid effect` |
+| browser: type `/agy Reply with exactly CHILD-OK and nothing else.` | page errors 0; transcript shows `started Antigravity child session d7962b40-bace-4274-ad7d-55e1aec2a657 (antigravity)`; panel shows **서브에이전트 1개** |
+| session log `command/done` | `kind: "success"`, same child id |
+| session log `subagent/catalog` | `childId: d7962b40…`, `mode: "external"`, `label: "Reply with exactly CHILD-OK and nothing else."` |
+| session log later | `agent/inbox/spliced` + `user/message` of source kind `subagent-settled`: “Background subagent d7962b40… finished.” with closing message **`CHILD-OK`** — the completion notice arrived on the parent |
+| parent turn | ended `ACCOUNT_SIGN_IN_REQUIRED` only because the isolated DSH_HOME has no DeepSeek account credential; the command and child path completed independently of the model route |
+| bare-process check | no `agy -p` process owned by the plugin; `agy` ran as the subagent provider's child process, watched by the activation manager |
+
+The child is an **external** activation: it is tracked in the parent session's subagent catalog
+(and in the sub-agent panel) but creates no separate top-level DSH session, which is the behaviour
+the owner asked for.
+
+## 0.0.1-rc.6 — the answer is no longer eaten; the usage chip is route-gated — 2026-11-05
+
+Two owner-reported defects, measured in the live session log
+`session-13e95450-0a9b-4a5a-b49b-a3ac85237e4d` (read-only, not modified) and reproduced in an
+isolated DSH_HOME. Version moved `0.0.1-rc.5` → `0.0.1-rc.6` (rc is agent-owned; numeric track
+owner-owned). **applied pending restart** — the running daemon still serves the module loaded at boot.
+
+### D1 — every final answer was stored as an empty assistant message ("AI가 한 답변을 모두 먹어버리는")
+
+| Measured before (session-13e95450, event 178 / 186) | After |
+| :--- | :--- |
+| `text-chunks` carried 49 and 55 text fragments (2,403 and 2,696 chars), then `block-end` emitted `{"type":"text","text":""}` | `block-end` emits the concatenation of the block's deltas |
+| the host persisted `content:[{type:'text',text:''}]` — the transcript showed no reply | the stored message carries the full answer |
+| reasoning blocks had the same defect (`block-end` text `''`) | reasoning text is accumulated too |
+
+Cause: the provider streams whole parts, and `lib/adapter.js` closed every block with a hardcoded
+empty string. `block-end` is the authoritative block the host persists, so every streamed answer
+was discarded. Fixed by accumulating per index (`textByIndex`) and emitting that on close. The
+deltas are still emitted for the live view.
+
+### D2 — the usage chip was not gated on the selected route ("다른 플러그인 모델 서빙해도 이렇게 표시가 되네")
+
+The chip rendered whenever the plugin was enabled and the ledger was non-zero. It therefore kept
+showing Antigravity's cumulative token count beside another provider's model selector — the
+screenshot in the report showed the DeepSeek model selector with `사용량 179,958` still attached.
+Fixed: `isOwnRoute()` reads the composer's `data-provider-id` chip (the same measured DOM contract
+the opencode-v2 track uses) and compares it with `PROVIDER_ID = 'antigravity'`; `watchRoute()` is an
+attribute-filtered `MutationObserver`, and the 5 s `/info` poll only runs while the route is ours.
+No chip, no poll, no request on a foreign route.
+
+### Verification (isolated DSH_HOME, real browser, real client bundle)
+
+| Step | Measured |
+| :--- | :--- |
+| shell boot | 0 page errors, all entries active |
+| picker → `antigravity/gemini-3.8-flash` | chip `사용량 1,025` at x=930,y=525; model selector at x=1026,y=524 (chip immediately left) |
+| picker → `deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017` | chip **absent**; 0 `/info` requests in the 6 s after the switch (before the fix it kept the chip and polling) |
+| route rewrite → `deepseek-account` | chip absent |
+| real turn on `antigravity/gemini-3.8-flash` | prompt `Reply with exactly this token…` → assistant message **`ANTIGRAVITY-OK`** rendered in the transcript; chip read `사용량 11,570` beside the selector — the stored answer is no longer empty |
+| `npm test` | 103/103 (2 new adapter cases, 7 new chip-gate cases) |
 
 ## 0.0.1-rc.5 — generation retry parity — 2026-11-05
 

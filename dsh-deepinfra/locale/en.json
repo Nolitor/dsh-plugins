@@ -62,5 +62,6 @@
   "platformTps": "Tokens/s",
   "platformRps": "Requests/s",
   "platformTtft": "First token",
-  "platformUnavailable": "Live metrics unavailable right now."
+  "platformUnavailable": "Live metrics unavailable right now.",
+  "pillLabel": "Cost"
 }

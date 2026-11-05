@@ -1,11 +1,25 @@
 #!/usr/bin/env bash
 # Install or verify @nolit/dsh-korean-locale in the live DSH web profile.
+# dsh-isolation: live-intentional (owner-run install; requires DSH_LIVE_INSTALL=1)
 # Run this OUTSIDE the read-only agent sandbox, as the DSH service user.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN="$ROOT/dsh-korean-locale"
 DSH_HOME_DIR="${DSH_HOME:-$HOME/.dsh}"
+# dsh-isolation: live-intentional — this script exists to write the live profile.
+# It refuses to touch the live home unless the owner confirms with DSH_LIVE_INSTALL=1
+# (or points DSH_HOME at a non-live tree). See docs/DSH-HOME-ISOLATION.md.
+LIVE_HOME="$(cd "$HOME" && pwd -P)/.dsh"
+TARGET_HOME="$(cd "$DSH_HOME_DIR" 2>/dev/null && pwd -P || true)"
+if [ -n "$TARGET_HOME" ] && [ "$TARGET_HOME" = "$LIVE_HOME" ] && [ "${DSH_LIVE_INSTALL:-0}" != "1" ]; then
+  echo "REFUSING: this would write the live DSH home: $TARGET_HOME" >&2
+  echo "Review docs/DSH-HOME-ISOLATION.md, then re-run with DSH_LIVE_INSTALL=1." >&2
+  exit 3
+fi
+if [ -n "$TARGET_HOME" ] && [ "$TARGET_HOME" = "$LIVE_HOME" ]; then
+  echo "LIVE WRITE: $TARGET_HOME (confirmed with DSH_LIVE_INSTALL=1)" >&2
+fi
 PROFILE_DIR="$DSH_HOME_DIR/profiles/web"
 PROFILE_PKG="$PROFILE_DIR/package.json"
 NAME='@nolit/dsh-korean-locale'

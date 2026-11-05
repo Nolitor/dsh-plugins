@@ -20,6 +20,21 @@ test('the running DSH prerelease is inside the declared window', () => {
   assert.match(pkg.engines.dsh, /^>=0\.2\.2-alpha\.2 <0\.3\.0$/)
 })
 
+test('the track follows the owner version and the rc.1 runtime floor', () => {
+  // Owner decision 2026-11-05: every @nolit track is normalized to 0.0.1-rc.N, and rc.1 needs
+  // Node >= 24.9. Both are packaging facts, so they are pinned rather than left to review.
+  assert.equal(pkg.version, '0.0.1-rc.1')
+  assert.equal(pkg.engines.node, '>=24.9')
+  assert.equal(pkg.dsh.manifestVersion, 1)
+})
+
+test('the browser half is declared: a ./client export and the rc.1 client manifest', () => {
+  assert.equal(pkg.exports['./client'].default, './lib/client.js')
+  assert.equal(pkg.dsh.client.platform, 'web')
+  assert.ok(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-settings'))
+  assert.ok(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-client-locale'))
+})
+
 test('the bundle row mounts the plugin under its exported name', () => {
   assert.match(bundle, /id: tokeneconomizer-dsh/)
   assert.match(bundle, /name: '@nolit\/dsh-tokeneconomizer'/)
@@ -72,8 +87,16 @@ test('the side call keeps its Session inside the throwaway directory', () => {
   assert.match(hunk, /TemporaryDirectory/, 'dsh_call lost its throwaway directory')
 })
 
-test('the operator entry points exist', () => {
-  for (const file of ['bin/te-dsh.mjs', 'scripts/bootstrap.mjs', 'lib/index.js', 'lib/bridge.js']) {
+test('the operator and statistics entry points exist', () => {
+  for (const file of [
+    'bin/te-dsh.mjs',
+    'scripts/bootstrap.mjs',
+    'lib/index.js',
+    'lib/bridge.js',
+    'lib/devstats.js',
+    'lib/devstats-server.js',
+    'lib/client.js',
+  ]) {
     assert.ok(existsSync(`${root}${file}`), `${file} is missing`)
   }
 })

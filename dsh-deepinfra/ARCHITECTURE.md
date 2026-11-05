@@ -14,13 +14,16 @@ summary: Module map, data flow and host-contract boundaries for @nolit/dsh-deepi
 ## 1. One route, two halves, no daemon
 
 The plugin registers **one** LLM provider route (`deepinfra`) and adds exactly two UI slots.
+The chip sits in `conversation.input.right` (an additive **list** slot) — never in the single
+`conversation.input.activity` seat, which the token-economizer owns (measured 2026-11-05: a second
+occupant there never rendered).
 There is no control plane, no child process, no credential store and no OAuth: the only external
 dependency is one HTTPS endpoint.
 
 ```
                     ┌──────────────── browser ────────────────┐
                     │ lib/client.js                           │
-                    │  conversation.input.activity -> CostPill│
+                    │  conversation.input.right -> CostPill   │
                     │  settings.section -> DeepInfraSection   │
                     └───────────────┬─────────────────────────┘
                           fetch /api/local/deepinfra/*

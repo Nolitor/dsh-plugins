@@ -7,6 +7,9 @@
     "docs:index": "node scripts/doc-index.mjs",
     "docs:check": "node scripts/doc-index.mjs --check",
     "bootcard": "node scripts/new-bootcard.mjs",
-    "docs:new": "node scripts/new-doc.mjs"
+    "docs:new": "node scripts/new-doc.mjs",
+    "dsh:isolation": "node scripts/check-dsh-isolation.mjs",
+    "test:isolation": "node --test scripts/check-dsh-isolation.test.mjs scripts/cleanup-orphan-sessions.test.mjs",
+    "cleanup:orphans": "node scripts/cleanup-orphan-sessions.mjs"
   }
 }

@@ -335,16 +335,15 @@ window.__ModuleLoader__.load({
     /**
      * Active language, resolved from the injected `locale` service and
      * re-read on every `t()` call so a language switch applies without a reload.
-     * `navigator.language` is only the fallback when the service is absent.
+     * The DSH locale service is the ONLY Korean signal: without it (or with any
+     * other active language) this surface renders English. `navigator.language`
+     * is deliberately not consulted — a Korean browser must not override the
+     * harness locale choice (owner rule 2026-11-05).
      */
     function activeLanguage() {
       const snapshot = typeof appContext === 'undefined' ? undefined : appContext?.locale?.getSnapshot?.()
       const active = typeof snapshot?.active === 'string' ? snapshot.active : ''
-      if (active.toLowerCase().startsWith('ko')) return 'ko'
-      if (active !== '') return 'en'
-      return typeof navigator !== 'undefined' && String(navigator.language || '').toLowerCase().startsWith('ko')
-        ? 'ko'
-        : 'en'
+      return active.toLowerCase().startsWith('ko') ? 'ko' : 'en'
     }
 
     function t(key, vars) {

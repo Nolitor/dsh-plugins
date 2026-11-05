@@ -191,6 +191,71 @@ window.__ModuleLoader__.load({
       return String(value).replace(/\{(\w+)\}/g, (match, name) => String(vars[name] ?? ''))
     }
 
+    /**
+     * The provider id this package registers (`lib/index.js` `PROVIDER_ID`).
+     *
+     * The usage chip is about THIS route's traffic, so it may only be rendered while
+     * this route is the selected one. Ownership is decided by the provider id alone:
+     * the model chip carries `data-provider-id` / `data-model-id` (measured live
+     * 2026-11-04 by the opencode-v2 track), and the model id is never evidence —
+     * other routers can serve the same catalog ids.
+     */
+    const PROVIDER_ID = 'antigravity'
+
+    /**
+     * Whether the composer is currently pointed at the Antigravity route.
+     *
+     * MEASURED 2026-11-05, owner report ("프롬프트에서 안티그래비티 모델서빙해서 사용한
+     * 이후 다른 플러그인 모델 서빙해도 이렇게 표시가 되네"): the chip had no route gate, so
+     * the cumulative Antigravity token count stayed beside a DeepSeek model selector.
+     * A figure for a route this plugin does not serve would be a lie.
+     *
+     * @returns {boolean} true when `data-provider-id` is this plugin's route.
+     */
+    function isOwnRoute() {
+      if (typeof document === 'undefined') return false
+      const node = document.querySelector('[data-provider-id][data-model-id]')
+      if (node === null || node === undefined) return false
+      return (node.getAttribute('data-provider-id') ?? '') === PROVIDER_ID
+    }
+
+    /**
+     * Watch the composer's model chip and report every route change.
+     *
+     * The slot does not remount when the operator switches models, so the gate is
+     * re-read from the DOM. Event-driven, not polled: a MutationObserver on the chip's
+     * two attributes fires only when the selection actually changes.
+     *
+     * @param {() => void} onChange - called when the provider/model pair changes.
+     * @returns {() => void} disconnect callback.
+     */
+    function watchRoute(onChange) {
+      if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return () => {}
+      let last = ''
+      const current = () => {
+        const node = document.querySelector('[data-provider-id][data-model-id]')
+        return node === null || node === undefined
+          ? ''
+          : (node.getAttribute('data-provider-id') ?? '') + '|' + (node.getAttribute('data-model-id') ?? '')
+      }
+      last = current()
+      const check = () => {
+        const next = current()
+        if (next === last) return
+        last = next
+        onChange()
+      }
+      const observer = new MutationObserver(check)
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-provider-id', 'data-model-id'],
+      })
+      check()
+      return () => observer.disconnect()
+    }
+
     /** Inject the stylesheet once, keyed so a reload replaces it. */
     function ensureStyle() {
       if (typeof document === 'undefined' || !document.head) return
@@ -354,15 +419,28 @@ window.__ModuleLoader__.load({
     /**
      * The usage chip.
      *
-     * Renders nothing unless the plugin is enabled and its usage switch is on, so
-     * a disabled plugin leaves no empty node in the composer toolbar. The count
-     * is this plugin's own measured usage, never a guessed price: the
-     * subscription has no per-call dollar figure.
+     * Renders nothing unless this plugin is enabled, its usage switch is on, AND the
+     * composer is pointed at this plugin's own route. A disabled plugin leaves no
+     * empty node in the composer toolbar, and neither does a foreign route: the
+     * chip was measured 2026-11-05 still showing Antigravity's cumulative count
+     * beside another plugin's model. The count is this plugin's own measured usage,
+     * never a guessed price: the subscription has no per-call dollar figure.
      */
     function UsageChip() {
       ensureStyle()
+      const [onRoute, setOnRoute] = React.useState(() => isOwnRoute())
       const [snapshot, setSnapshot] = React.useState(null)
       React.useEffect(() => {
+        const disconnect = watchRoute(() => setOnRoute(isOwnRoute()))
+        // The chip may not exist yet at mount (the composer renders after the slot),
+        // so the first read happens here rather than only in useState.
+        setOnRoute(isOwnRoute())
+        return disconnect
+      }, [])
+      React.useEffect(() => {
+        // Nothing to poll while another provider is selected: the figure would
+        // describe a route this plugin never served.
+        if (!onRoute) return undefined
         let alive = true
         const tick = () => get('info')
           .then((value) => { if (alive) setSnapshot(value) })
@@ -370,7 +448,8 @@ window.__ModuleLoader__.load({
         void tick()
         const timer = setInterval(tick, 5000)
         return () => { alive = false; clearInterval(timer) }
-      }, [])
+      }, [onRoute])
+      if (!onRoute) return null
       if (!snapshot) return null
       if (snapshot.switches.enabled === false || snapshot.switches.usagePill === false) return null
       const usage = snapshot.usage ?? {}
@@ -429,6 +508,8 @@ window.__ModuleLoader__.load({
     exports.apply = apply
     exports.inject = inject
     exports.I18N = I18N
+    exports.PROVIDER_ID = PROVIDER_ID
+    exports.isOwnRoute = isOwnRoute
     exports.UsageChip = UsageChip
     exports.AntigravitySection = AntigravitySection
     return module.exports

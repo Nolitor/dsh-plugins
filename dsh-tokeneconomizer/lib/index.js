@@ -59,6 +59,7 @@ import {
   writeExport,
 } from './bridge.js'
 import { createDedupStore, SHORT_HASH_CHARS } from './dedup.js'
+import { createDevStatsServer, registerDevStatsRoutes } from './devstats-server.js'
 import { composePinnedText, createPrefixGuard, pinnedSection } from './prefix.js'
 import { repoKeyFor } from './repokey.js'
 import { mergeSettings, readSettingsFile } from './settings.js'
@@ -428,6 +429,58 @@ export function apply(ctx, config) {
   const diagOn = diagnosticsEnabled()
   const diagRoot = stateRoot({ ...process.env, TOKENECONOMIZER_HOME: bins.root })
 
+  /**
+   * Read the harness's own session projections for one session, when the composition registered
+   * them. The token-meter units are the DSH ledger vocabulary this plugin's developer statistics
+   * mirrors (`tokenUsage`, `contextPressure`, `contextBreakdown`), and `sessionStats` appears when
+   * the host's session-stats plugin is composed. A composition without a projection registry — a
+   * headless one-shot, a unit-test context — simply reports none.
+   * @param {object} session - the DSH session.
+   * @returns {{asOfSeq: number|null, values: object} | null} the projection cut, or null.
+   */
+  function readProjectionSnapshot(session) {
+    if (typeof ctx.get !== 'function') return null
+    let registry
+    try {
+      registry = ctx.get('sessionProjections')
+    } catch {
+      return null
+    }
+    if (registry === null || registry === undefined || typeof registry.snapshot !== 'function') return null
+    try {
+      const snapshot = registry.snapshot(session, [
+        'tokenUsage',
+        'contextPressure',
+        'contextBreakdown',
+        'sessionStats',
+      ])
+      return { asOfSeq: snapshot?.asOfSeq ?? null, values: snapshot?.values ?? {} }
+    } catch {
+      return null
+    }
+  }
+
+  // Developer statistics: a read-only camera over the session ledger plus this plugin's counters.
+  // It is mounted through the connection seam only when the host has one, so a headless profile
+  // boots the plugin with the surface inert (never a failed row).
+  const devStats = createDevStatsServer({
+    sessions,
+    readProjections: readProjectionSnapshot,
+    log: { warn: settingsWarn },
+  })
+  const mountDevStats = (scoped) => {
+    registerDevStatsRoutes({ ctx, scoped, server: devStats, log: { warn: settingsWarn } })
+  }
+  if (typeof ctx.inject === 'function') {
+    try {
+      ctx.inject(['connection'], mountDevStats)
+    } catch {
+      mountDevStats()
+    }
+  } else {
+    mountDevStats()
+  }
+
   // The harness dispatches the tool events through a scope carrier. These two root-level
   // listeners are the routing verification: they count what a listener on the plugin's own
   // context receives, next to the counts of the agent-scoped listeners above.
@@ -473,6 +526,27 @@ export function apply(ctx, config) {
       tiered: 0,
       tieredTurn: 0,
       requests: 0,
+      /**
+       * Counters for the read-only developer statistics surface. They are plain numbers so a
+       * serialization of the ledger view cannot pull a live object out of the host, and every
+       * bump is fail-open: a statistics counter must never break the feature it counts.
+       */
+      stats: {
+        mode: config.mode,
+        startedAt: Date.now(),
+        updatedAt: Date.now(),
+        dedupHits: 0,
+        dedupSavedChars: 0,
+        tierShadowTokens: 0,
+        breakerTrips: 0,
+        watchdogWarns: 0,
+        watchdogInterrupts: 0,
+        toolCalls: 0,
+        toolErrors: 0,
+        notices: 0,
+        pinned: false,
+        thinkInCode: config.thinkInCode === true,
+      },
       /** Whether this session already spent its one prior-session recall. */
       recallDone: false,
     }
@@ -526,12 +600,16 @@ export function apply(ctx, config) {
     // is on, the routing guidance that sends a large inspection through one script. Mounting an
     // empty section would be noise, so an empty composition mounts nothing.
     const pinned = composePinnedText(config.pinnedRules, config.thinkInCode)
+    state.stats.pinned = Boolean(applying() && pinned)
     if (applying() && pinned) {
       state.agent.ctx.systemPrompt.section(pinnedSection(pinned, config.pinnedRulesOrder))
     }
     state.agent.ctx.on('tools/post-execute', async (exec, result, next) => {
       DELIVERY.agentPost += 1
       const decision = await next()
+      state.stats.updatedAt = Date.now()
+      state.stats.toolCalls += 1
+      if (result?.isError === true) state.stats.toolErrors += 1
       if (state.closed) return decision
       // Observe mode keeps the routing counters and the evidence hooks, but hands the tool result
       // through untouched: no breaker prompt, no pointer substitution.
@@ -722,6 +800,7 @@ export function apply(ctx, config) {
         policy,
       })
       if (replacement === undefined) continue
+      const shadowTokens = meter.estimateMessage(original)
       const message = Object.freeze({
         ...original,
         content: Object.freeze([{ type: 'text', text: replacement }]),
@@ -730,13 +809,15 @@ export function apply(ctx, config) {
         session.append('compaction/prune', {
           shadowedRange: { start: seq, end: seq },
           shadowedSeqs: [seq],
-          shadowedTokenCount: meter.estimateMessage(original),
+          shadowedTokenCount: shadowTokens,
         })
         session.append('tool/result', { ...event.data, message }, {
           surfaceOp: { op: 'replace', startSeq: seq, endSeq: seq },
           sourceEventSeqs: [seq],
         })
         state.tiered += 1
+        state.stats.tierShadowTokens += Number.isFinite(Number(shadowTokens)) ? Number(shadowTokens) : 0
+        state.stats.updatedAt = Date.now()
       } catch {
         /* fail open: a session that cannot be re-tiered keeps its context */
       }
@@ -787,6 +868,7 @@ export function apply(ctx, config) {
     }
     if (event.type === 'assistant/message') {
       state.requests += 1
+      state.stats.updatedAt = Date.now()
       return
     }
     if (event.type === 'turn/start') {
@@ -932,6 +1014,8 @@ export function apply(ctx, config) {
     if (!text) return undefined
     const repeat = state.dedup.observe(text, call.step)
     if (repeat === undefined) return undefined
+    state.stats.dedupHits += 1
+    state.stats.dedupSavedChars += Math.max(0, text.length - repeat.text.length)
     notice(
       state,
       `dedup: tool=${exec.name} repeated-output replaced hits=${repeat.count} first-step=${repeat.step} `
@@ -958,6 +1042,7 @@ export function apply(ctx, config) {
     )
     if (trip === undefined) return undefined
     state.broken = true
+    state.stats.breakerTrips += 1
     return trip
   }
 
@@ -999,6 +1084,7 @@ export function apply(ctx, config) {
    */
   function onWatchdogWarn(state, elapsedMs, meta) {
     if (state.closed) return
+    state.stats.watchdogWarns += 1
     const what = meta?.phase === 'tool' ? 'tool call' : 'turn'
     noticeUser(state, `watchdog: ${what} made no progress for ${Math.round(elapsedMs)} ms — warning only, the turn continues`)
   }
@@ -1022,6 +1108,7 @@ export function apply(ctx, config) {
     const what = meta?.phase === 'tool' ? 'tool call' : 'turn'
     // Record the interrupt first so the turn-exit reason names a system issuer instead of an
     // anonymous abort. Fail-open: a missing registry must never stop the cancel below.
+    state.stats.watchdogInterrupts += 1
     const record = interruptRecorder.record(state.sid, WATCHDOG_ISSUER)
     noticeUser(state, `watchdog: ${what} made no progress for ${budgetMs} ms, action=interrupted (` + (record.recorded ? record.wording : 'registry unavailable') + ')')
     try {
@@ -1192,6 +1279,10 @@ export function apply(ctx, config) {
    */
   function notice(state, text) {
     if (state.closed) return
+    if (state.stats !== null && typeof state.stats === 'object') {
+      state.stats.notices += 1
+      state.stats.updatedAt = Date.now()
+    }
     process.stderr.write(`[tokeneconomizer] ${text}\n`)
   }
 

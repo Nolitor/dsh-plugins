@@ -62,5 +62,6 @@
   "platformTps": "토큰/초",
   "platformRps": "요청/초",
   "platformTtft": "첫 토큰",
-  "platformUnavailable": "지금은 실시간 지표를 가져올 수 없습니다."
+  "platformUnavailable": "지금은 실시간 지표를 가져올 수 없습니다.",
+  "pillLabel": "비용"
 }

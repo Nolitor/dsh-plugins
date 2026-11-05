@@ -1,11 +1,15 @@
 /**
  * @nolit/dsh-deepinfra -- browser half.
  *
- * Two slots, each replicated from the verified opencode-v2 implementation:
+ * Two slots:
  *
- *   1. conversation.input.activity -> the composer cost chip, rendered immediately
- *      AFTER the model selector.
- *   2. settings.section            -> the "DeepInfra" / "딥인프라" settings card.
+ *   1. conversation.input.right -> the composer cost chip, rendered beside the
+ *      model selector. The seat is the additive LIST slot Antigravity's usage
+ *      chip and OpenCode v2's cost chip occupy (owner instruction 2026-11-05).
+ *      The old seat, conversation.input.activity, is a SINGLE slot already owned
+ *      by the token-economizer ("tk"); a second occupant there throws and the
+ *      chip never renders.
+ *   2. settings.section        -> the "DeepInfra" / "딥인프라" settings card.
  *
  * MODULE FORMAT: this file is served to the browser as-is and evaluated by
  * window.__ModuleLoader__, so it must be a CommonJS factory. Measured 2026-11-04
@@ -16,18 +20,13 @@
  * Both produced "web boot: 1 entry did not activate / @nolit/dsh-deepinfra: import
  * failed". The factory shape below is the one the reference plugin proves.
  *
- * SLOT CONTRACT (installed dsh-client-ui-conversation types):
+ * SLOT CONTRACT (installed dsh-client-ui-conversation 0.2.2-rc.1 types):
  *
- *   interface InputControlOwnerProps { locked: boolean }
- *   interface InputActivityOwnerProps extends InputControlOwnerProps {
- *     onActiveChange: (active: boolean) => void
- *   }
+ *   'conversation.input.right': { kind: 'list', scope: 'session' }
  *
- * "A toolbar activity hides ordinary accessory controls while expanded; its
- * occupant must release expansion on unmount." This occupant never expands — the
- * chip is a fixed-size inline button — so it reports active:false on mount and
- * again on unmount. Without that, switching away could leave the composer
- * expanded, hiding the model selector.
+ * List seats are additive and carry no owner props, so this occupant needs no
+ * expansion handshake (the single `activity` seat's InputActivityOwnerProps no
+ * longer applies).
  *
  * The chip is gated on the PROVIDER ID only. A model id is shared across routers,
  * so matching it would show the chip on routes this adapter never served.
@@ -89,6 +88,7 @@ window.__ModuleLoader__.load({
       usageResetButton: "Reset usage",
       usageReset: "Usage reset.",
       costFree: "$0",
+      pillLabel: "Cost",
       costTitle: "{n} requests this session",
       modelsTitle: "Served models",
       modelsHint: "Only ticked models appear in the model picker. Promotional routes are listed first.",
@@ -155,6 +155,7 @@ window.__ModuleLoader__.load({
       usageResetButton: "사용량 초기화",
       usageReset: "사용량을 초기화했습니다.",
       costFree: "$0",
+      pillLabel: "비용",
       costTitle: "이 세션 요청 {n}건",
       modelsTitle: "서빙 모델",
       modelsHint: "체크한 모델만 모델 선택기에 나타납니다. 프로모션 경로가 먼저 표시됩니다.",
@@ -214,8 +215,10 @@ window.__ModuleLoader__.load({
   '.difStat{display:flex;flex-direction:column;gap:2px;min-width:0}',
   '.difStatLabel{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
   '.difStatValue{color:var(--dsw-alias-label-primary);font-size:14px;line-height:22px;font-variant-numeric:tabular-nums}',
-  '.difChip{box-sizing:border-box;display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:var(--dsw-radius-sm);background:0 0;border:0;cursor:pointer;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);line-height:19px;white-space:nowrap;font-variant-numeric:tabular-nums}',
-  '.difChip:hover{background:var(--dsw-alias-interactive-bg-hover-solid);color:var(--dsw-alias-label-secondary)}',
+  '.difChip{box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;padding:0 6px;border-radius:var(--dsw-radius-sm);background:0 0;border:0;cursor:pointer;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:nowrap}',
+  '.difChip:hover{background:var(--dsw-alias-interactive-bg-hover-solid)}',
+  '.difChipLabel{color:var(--dsw-alias-label-tertiary)}',
+  '.difChipValue{color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}',
   '.difToolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}',
   '.difSearch{flex:1 1 160px;min-width:120px}',
   '.difList{border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-lg);margin:0;padding:8px;list-style:none;display:flex;flex-direction:column;gap:2px;max-height:340px;overflow:auto}',
@@ -238,11 +241,14 @@ window.__ModuleLoader__.load({
       document.head.appendChild(tag)
     }
 
-    /** Current host language; falls back to the browser locale. */
+    /**
+     * Current host language. English is the default: this surface renders Korean
+     * ONLY while the injected DSH locale service names `ko`. The browser locale is
+     * deliberately not a fallback (owner rule 2026-11-05).
+     */
     let localeReader = () => ''
     function currentLang() {
-      const active = String(localeReader() || (typeof navigator !== 'undefined' ? navigator.language : '') || '')
-      return /^ko/i.test(active) ? 'ko' : 'en'
+      return /^ko/i.test(String(localeReader() || '')) ? 'ko' : 'en'
     }
 
     /**
@@ -320,18 +326,38 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Format a measured USD amount for the chip.
+     *
+     * Sub-cent totals keep six decimals (measured plan burns are fractions of a
+     * cent); larger ones use four. An absent or non-finite amount formats to '',
+     * which is how the chip knows there is no measured figure.
+     *
+     * @param {number|null|undefined} value - measured USD amount.
+     * @returns {string} e.g. `$0.0032`, `$1.2345`, or ''.
+     */
+    function formatUsd(value) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return ''
+      if (value === 0) return '$0'
+      if (value < 0.0001) return '$' + value.toFixed(6)
+      return '$' + value.toFixed(4)
+    }
+
+    /**
      * The composer cost chip.
-     * @param {object} props - InputActivityOwnerProps.
+     *
+     * SEAT: `conversation.input.right` — the additive LIST slot Antigravity's usage
+     * chip and OpenCode v2's cost chip occupy. The previous seat,
+     * `conversation.input.activity`, is a SINGLE slot already owned by the
+     * token-economizer ("tk") in the live profile, so this registration was a
+     * second occupant that never rendered (owner report: the chip was invisible).
+     *
+     * GATE: the PROVIDER id, never a model id. Off-route it returns null.
+     * EMPTY STATE: no seat until the ledger has a measured figure — an invented
+     * "$0"/free label would be a fabricated number.
+     *
      * @returns {object|null} the chip, or null to occupy no seat.
      */
-    function CostPill(props) {
-      const onActiveChange = typeof props?.onActiveChange === 'function' ? props.onActiveChange : null
-      // Release composer expansion on mount and unmount: never expands.
-      React.useEffect(() => {
-        if (onActiveChange === null) return undefined
-        onActiveChange(false)
-        return () => onActiveChange(false)
-      }, [])
+    function CostPill() {
       const [onRoute, setOnRoute] = React.useState(() => usingOwnRoute())
       const [text, setText] = React.useState('')
       const [title, setTitle] = React.useState('')
@@ -352,7 +378,13 @@ window.__ModuleLoader__.load({
             const entry = payload.session ?? (payload.totals && payload.totals.requests > 0
               ? { requests: payload.totals.requests, costUsd: payload.totals.costUsd }
               : null)
-            setText(typeof payload.text === 'string' ? payload.text : '')
+            // The server sends the session's formatted spend; before the session id
+            // resolves it may be empty, so fall back to the measured aggregate. Both
+            // are real figures — never a placeholder.
+            const measured = typeof payload.text === 'string' && payload.text !== ''
+              ? payload.text
+              : formatUsd(entry?.costUsd)
+            setText(measured)
             setTitle(entry ? t('costTitle', { n: entry.requests ?? 0 }) : '')
           } catch {
             /* keep the last value */
@@ -376,13 +408,19 @@ window.__ModuleLoader__.load({
       }, [onRoute])
       // Another provider is selected: occupy no seat at all.
       if (!onRoute) return null
+      // Nothing measured yet: no seat, and no fabricated zero (owner rule
+      // docs/UI-SLOT-ARCHITECTURE.md §4). The pill appears with the first
+      // measured request and disappears if the route changes.
+      if (text === '') return null
       return h('button', {
         type: 'button',
         className: 'difChip',
         title,
         'data-dif-cost': '1',
         onClick: (event) => { event.preventDefault() },
-      }, text === '' ? t('costFree') : text)
+      },
+      h('span', { className: 'difChipLabel' }, t('pillLabel')),
+      h('span', { className: 'difChipValue' }, text))
     }
 
     /**
@@ -668,9 +706,12 @@ window.__ModuleLoader__.load({
           return typeof dispose === 'function' ? dispose : undefined
         }
       }
-      ctx.slots.inject('conversation.input.activity', () =>
+      // LIST seat: additive, so DeepInfra + Antigravity + OpenCode chips coexist.
+      // A single-slot seat (the old conversation.input.activity) renders one
+      // occupant, which is why the DeepInfra chip never appeared.
+      ctx.slots.inject('conversation.input.right', () =>
         ctx.slots.register(
-          { name: 'conversation.input.activity', id: 'deepinfra-cost', order: 0 },
+          { name: 'conversation.input.right', id: 'deepinfra-cost', order: 3 },
           CostPill,
         ))
       ctx.slots.inject('settings.section', () =>

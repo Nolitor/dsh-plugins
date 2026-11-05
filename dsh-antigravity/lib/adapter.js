@@ -282,6 +282,13 @@ export class AntigravityAdapter extends LlmAdapter {
     let reasoningIndex = -1
     let textIndex = -1
     const open = new Set()
+    // Accumulated text per open block, so `block-end` carries the whole answer.
+    // MEASURED 2026-11-05 (session-13e95450): the provider streams whole parts, and
+    // the adapter re-emitted `text: ''` when closing a block, so the host stored an
+    // empty assistant message and the answer vanished from the transcript even
+    // though every delta had arrived. The block-end block is the authoritative
+    // content for the host, so it must be the concatenation, not a placeholder.
+    const textByIndex = new Map()
     let usage
     let finishReason
 
@@ -298,7 +305,10 @@ export class AntigravityAdapter extends LlmAdapter {
             open.add(reasoningIndex)
             yield { type: 'block-start', index: reasoningIndex, blockType: 'reasoning' }
           }
-          if (part.text) yield { type: 'reasoning-delta', index: reasoningIndex, text: part.text }
+          if (part.text) {
+            textByIndex.set(reasoningIndex, (textByIndex.get(reasoningIndex) ?? '') + part.text)
+            yield { type: 'reasoning-delta', index: reasoningIndex, text: part.text }
+          }
         } else if (kind === 'text') {
           if (!part.text) continue
           if (textIndex === -1) {
@@ -307,6 +317,7 @@ export class AntigravityAdapter extends LlmAdapter {
             yield { type: 'block-start', index: textIndex, blockType: 'text' }
           }
           sawText = true
+          textByIndex.set(textIndex, (textByIndex.get(textIndex) ?? '') + part.text)
           yield { type: 'text-delta', index: textIndex, text: part.text }
         } else if (kind === 'tool-call') {
           const call = part.functionCall
@@ -339,7 +350,7 @@ export class AntigravityAdapter extends LlmAdapter {
     // Close blocks that are still open, in index order.
     for (const blockIndex of [...open].sort((a, b) => a - b)) {
       const blockType = blockIndex === reasoningIndex ? 'reasoning' : 'text'
-      yield { type: 'block-end', index: blockIndex, block: { type: blockType, text: '' } }
+      yield { type: 'block-end', index: blockIndex, block: { type: blockType, text: textByIndex.get(blockIndex) ?? '' } }
     }
 
     if (!sawText && !sawTool) {

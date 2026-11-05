@@ -3,9 +3,28 @@
  * when a turn pushes old tool outputs out of the working window.
  */
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { apply, resolveConfig } from '../lib/index.js'
+
+/**
+ * A throwaway TokenEconomizer state root for one test.
+ *
+ * The plugin exports a session log under its state root on `agent/created`; without an
+ * override that root defaults to the live `~/.tokeneconomizer` and the write fails
+ * (or worse, lands live). Isolate it per test and remove it afterwards.
+ *
+ * @param {object} t - the node:test context, used for cleanup.
+ * @returns {string} the temporary state root.
+ */
+function isolatedState (t) {
+  const home = mkdtempSync(join(tmpdir(), 'te-tiering-state-'))
+  t.after(() => rmSync(home, { recursive: true, force: true }))
+  return home
+}
 
 /**
  * A session stub with the surface the harness exposes: the nodes, the event at
@@ -81,7 +100,7 @@ function fakeAgent (session) {
 
 const BIG = 'L'.repeat(9000)
 
-test('a turn grades the outputs that fell out of the working window', async () => {
+test('a turn grades the outputs that fell out of the working window', async (t) => {
   const result = {
     type: 'tool/result',
     data: {
@@ -98,7 +117,7 @@ test('a turn grades the outputs that fell out of the working window', async () =
   const session = fakeSession([result])
   const agent = fakeAgent(session)
   const ctx = fakeContext()
-  apply(ctx, resolveConfig({}))
+  apply(ctx, { stateHome: isolatedState(t) })
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
 
   const requestHandlers = agent.handlers.get('agent/request') ?? []
@@ -121,7 +140,7 @@ test('a turn grades the outputs that fell out of the working window', async () =
   assert.ok(text.length < 500, 'the model-visible output is a pointer, not the output')
 })
 
-test('the newest turns are left untouched', async () => {
+test('the newest turns are left untouched', async (t) => {
   const result = {
     type: 'tool/result',
     data: {
@@ -138,7 +157,7 @@ test('the newest turns are left untouched', async () => {
   const session = fakeSession([result])
   const agent = fakeAgent(session)
   const ctx = fakeContext()
-  apply(ctx, resolveConfig({}))
+  apply(ctx, { stateHome: isolatedState(t) })
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
 
   for (const handler of agent.handlers.get('agent/request') ?? []) {

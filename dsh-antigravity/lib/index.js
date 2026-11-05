@@ -3,8 +3,10 @@
  *
  * ONE plugin, three surfaces over ONE account:
  *
- *   1. CLI surface   -- `/agy <task>` command + `agy_worker` tool, which spawn
- *                       `agy` as an isolated one-shot process.
+ *   1. CLI surface   -- `/agy <task>` command + `agy_worker` tool, which start a
+ *                       managed subagent child session (provider `antigravity`)
+ *                       and return its id; the answer arrives as a completion
+ *                       notice. No bare `agy` process is spawned by the worker.
  *   2. Model surface -- the `antigravity` provider route, a pure LlmAdapter
  *                       calling cloudcode-pa over HTTP with the subscription
  *                       credential (no CLI, no persona).
@@ -32,8 +34,8 @@ import { TokenProvider } from './auth.js'
 import { DEFAULT_EFFORT, DEFAULT_MODE, DEFAULT_MODEL, EFFORTS, MODES } from './backends.js'
 import { parseAccount, parseCatalog, splitEffort } from './catalog.js'
 import { configValue, resolveEndpoint } from './settings.js'
-import { readSelection, writeSelection } from './selection.js'
-import { listAgyModels, runAgyWorker } from './worker.js'
+import { listAgyModels } from './worker.js'
+import { startCliChild } from './cli-activation.js'
 import { AntigravitySubagentProvider } from './subagent.js'
 import { bootBeacon } from './beacon.js'
 import { createLedger, registerRoutes } from './server.js'
@@ -69,17 +71,15 @@ const TOOL_NAME = 'agy_worker'
 const COMMAND_NAME = 'agy'
 
 const DESCRIPTION =
-  'Run a one-shot Antigravity (agy) CLI worker. The worker sees only the task text you pass, never this conversation, and returns its final message plus any collected artifacts. Use it for self-contained build, test, or edit jobs that should not stream into the chat.'
+  'Start a managed Antigravity CLI child session for one self-contained task. The child sees only the task text you pass, never this conversation. This tool returns the child session id immediately; the final answer or failure arrives later as a completion notice, so do not wait for the result in this call. Use it for build, test, or edit jobs that should run in a tracked child session rather than a bare process.'
 
 const USAGE = [
-  'Usage: /agy [options] <task>',
+  'Usage: /agy <task>',
   '       /agy models',
   '',
-  'Options:',
-  '  --model <id>        agy model id (default: the last selected model)',
-  '  --effort <level>    low | medium | high | xhigh | max',
-  '  --mode <mode>       accept-edits | auto | plan',
-  '  --timeout <ms>      hard wall-clock limit',
+  'Runs the task in a managed Antigravity child session and prints its id;',
+  'the answer arrives later as a completion notice. The model, effort and mode',
+  'come from this plugin\'s settings (Antigravity panel), not per-call flags.',
 ].join('\n')
 
 /** Config surface: defaults live here; GUI edits validate against this schema. */
@@ -432,45 +432,100 @@ export function apply(ctx, config) {
     description: DESCRIPTION,
     parameters: {
       type: 'object',
-      properties: { task: { type: 'string', description: 'Self-contained task text for the worker.' } },
+      properties: {
+        task: { type: 'string', description: 'Self-contained task text for the child session.' },
+        cwd: {
+          type: 'string',
+          description: 'Optional child directory. Omitted inherits the calling session\'s working directory.',
+        },
+      },
       required: ['task'],
       additionalProperties: false,
     },
     output: {
       schema: {
         type: 'object',
-        properties: { content: { type: 'string' }, isError: { type: 'boolean' } },
-        required: ['content'],
+        properties: {
+          kind: { type: 'string', const: 'activation' },
+          subagentId: { type: 'string' },
+          provider: { type: 'string' },
+          label: { type: 'string' },
+          status: { type: 'string' },
+        },
+        required: ['kind', 'subagentId', 'provider', 'label', 'status'],
         additionalProperties: false,
       },
-      render: (_args, value) => [{ type: 'text', text: String(value?.content ?? '') }],
+      render: (_args, value) => [{ type: 'text', text: renderActivation(value) }],
     },
+    presentCall: (args) => ({
+      card: 'generic',
+      title: 'agy child session',
+      rawInput: args,
+    }),
+    presentResult: (args, value) => ({
+      card: 'generic',
+      title: `antigravity · ${value?.label || 'agy task'}`,
+      content: renderActivation(value),
+    }),
     execute: async (args, exec) => {
-      const result = await runAgyWorker(ctx, config, {
+      const activation = await startCliChild({
+        services,
+        config,
         prompt: String(args?.task ?? ''),
-        cwd: process.cwd(),
+        cwd: args?.cwd,
+        agent: exec?.agent,
         signal: exec?.signal,
       })
-      return { content: result.text, isError: result.ok === false }
+      return activationValue(activation)
     },
+  })
+
+  /** Model-facing text for one started activation. */
+  const renderActivation = (value) => {
+    const id = String(value?.subagentId ?? '')
+    const provider = String(value?.provider ?? 'antigravity')
+    const label = String(value?.label ?? '')
+    return `started ${provider} child session ${id}${label ? ` — ${label}` : ''}\n`
+      + 'The answer or failure arrives as a completion notice; this call did not wait for it.'
+  }
+
+  /** Canonical tool value for one started activation. */
+  const activationValue = (activation) => ({
+    kind: 'activation',
+    subagentId: activation.childId,
+    provider: activation.provider,
+    label: activation.label,
+    status: 'started',
   })
 
   /** Command definition shared by the live surface and the tests. */
   const commandDefinition = () => ({
     name: COMMAND_NAME,
-    input: { hint: '<task>   (--model <id> --effort <level> --mode <mode> --timeout <ms>)' },
-    description: 'Run the Antigravity (agy) CLI worker. Usage: /agy [options] <task>. Bare /agy reuses the last selected model.',
-    handler: async ({ rawInput }) => {
-      const saved = await readSelection('agy').catch(() => ({}))
+    input: { hint: '<task>   (/agy models lists the account\'s models)' },
+    description: 'Start a managed Antigravity CLI child session. Usage: /agy <task>. The answer arrives later as a completion notice; /agy models keeps working.',
+    handler: async ({ rawInput, agent, signal }) => {
       const parts = String(rawInput ?? '').trim()
       if (parts === '' || parts === 'help') return { kind: 'success', text: USAGE }
       if (parts === 'models') {
         const listing = await listAgyModels(ctx, config, process.cwd())
         return { kind: listing.ok ? 'success' : 'error', text: listing.text || '(no models reported)' }
       }
-      const result = await runAgyWorker(ctx, config, { prompt: parts, cwd: process.cwd() })
-      if (result.ok && result.model) await writeSelection('agy', { model: result.model }).catch(() => {})
-      return { kind: result.ok ? 'success' : 'error', text: result.text }
+      try {
+        const activation = await startCliChild({
+          services,
+          config,
+          prompt: parts,
+          agent,
+          signal,
+        })
+        return {
+          kind: 'success',
+          text: `started Antigravity child session ${activation.childId} (${activation.provider})\n`
+            + 'The answer or failure will arrive as a completion notice.',
+        }
+      } catch (error) {
+        return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
+      }
     },
   })
 
@@ -480,8 +535,11 @@ export function apply(ctx, config) {
       release('cli-command')
       return
     }
-    const { tools, subprocess, commands } = services
-    if (!parts.has('cli-tool') && tools && subprocess && configValue(config, 'workerEnabled') !== false) {
+    const { tools, commands } = services
+    // The tool no longer needs `subprocess`: the activation path runs the CLI
+    // through the subagent provider's own start(). `subprocess` is only used by
+    // the read-only `/agy models` listing.
+    if (!parts.has('cli-tool') && tools && configValue(config, 'workerEnabled') !== false) {
       // Duplicate tool names abort the whole plugin row, so yield instead of throwing.
       const existing = typeof tools.get === 'function' ? tools.get(TOOL_NAME) : undefined
       if (existing) {
@@ -518,6 +576,14 @@ export function apply(ctx, config) {
       release('subagent')
       return
     }
+    // The provider itself runs `agy`, so it needs the subprocess service. That
+    // service lives on a deferred sub-context; handing the provider the plugin
+    // context would make every child start throw "cannot get property
+    // subprocess without inject" (measured 2026-11-05 in an isolated boot).
+    if (!services.subprocess) {
+      release('subagent')
+      return
+    }
     if (parts.has('subagent')) return
     const providerName = configValue(config, 'subagentProviderName') || 'antigravity'
     // A second provider under the same name would shadow the first. The older
@@ -531,7 +597,7 @@ export function apply(ctx, config) {
       return
     }
     try {
-      const provider = new AntigravitySubagentProvider(providerName, ctx, {
+      const provider = new AntigravitySubagentProvider(providerName, { subprocess: services.subprocess }, {
         agyPath: configValue(config, 'agyPath') || 'agy',
         model: configValue(config, 'model') || DEFAULT_MODEL,
         effort: configValue(config, 'effort') || DEFAULT_EFFORT,

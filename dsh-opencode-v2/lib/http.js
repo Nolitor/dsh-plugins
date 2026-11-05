@@ -106,7 +106,7 @@ const REASONING_INDEX = 1
 const TOOL_INDEX_BASE = 2
 
 /** Version string of this module, for the load beacon. Must match package.json. */
-const VERSION = '0.0.2-rc.3'
+const VERSION = '0.0.1-rc.1'
 
 /**
  * HTTP statuses one generation request may be retried on.
@@ -2639,9 +2639,9 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
           workspace: data.workspace?.name ?? null,
           usageUrl: data.workspace?.usageURL ?? null,
           windows: {
-            rolling: window(go.rolling, '5시간'),
-            weekly: window(go.weekly, '7일'),
-            monthly: window(go.monthly, '30일'),
+            rolling: window(go.rolling, '5-hour'),
+            weekly: window(go.weekly, 'Weekly'),
+            monthly: window(go.monthly, 'Monthly'),
           },
           fetchedAt: now,
         }

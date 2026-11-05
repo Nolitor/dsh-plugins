@@ -11,7 +11,22 @@ summary: Engineering history for @nolit/dsh-subrouter. Seeded from git history o
 > History lives here (owner instruction 2026-11-04). Boot cards and `AGENTS.md` are narrowed to
 > the owner's unfinished asks; they are not a changelog. See [docs/RULES.md](../../docs/RULES.md) §6.1.
 
-Current version: `0.1.0`
+Current version: `0.0.1-rc.1`
+
+
+## 0.0.1-rc.1 — version ladder + rc.1 metadata — 2026-11-05
+
+Owner decision: every `@nolit` track reports `0.0.1-rc.N`; `0.1.0` → `0.0.1-rc.1`.
+
+| Surface | Before | After |
+| :--- | :--- | :--- |
+| `package.json.version` | `0.1.0` | `0.0.1-rc.1` |
+| `engines.node` | `^22.19.0 \|\| >=24.0.0` | `>=24.9` |
+| Display metadata | none | `locale/en.json` + `locale/ko.json` (meta only), exported as `./locale/*.json` and shipped |
+| Tests | 12/12 | 12/12 green |
+
+rc.1 audit: provider-only host plugin — no client half, no tool registration, no projection or
+app-boot import; `cordis` is not a peer here and stays absent.
 
 ## Seeded history (from git, before this file existed)
 

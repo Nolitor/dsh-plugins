@@ -49,18 +49,29 @@ test('every ctx service the client reads is declared', () => {
   assert.deepEqual(missing, [], 'undeclared client service(s): ' + missing.join(', '))
 })
 
-test('the cost chip occupies conversation.input.activity, not the model label seat', () => {
+test('the cost chip occupies conversation.input.right, not the single activity seat', () => {
+  // Measured 2026-11-05: `conversation.input.activity` is a SINGLE slot already
+  // owned by the token-economizer, so a second occupant there never rendered.
+  // `conversation.input.right` is the additive LIST seat Antigravity and
+  // OpenCode v2 use.
+  assert.match(code, /ctx\.slots\.inject\('conversation\.input\.right'/)
+  assert.equal(code.includes("ctx.slots.inject('conversation.input.activity'"), false)
   // Measured in opencode-v2: contributing to conversation.input.model.label
   // REPLACES the model name in the UI.
-  assert.match(code, /ctx\.slots\.inject\('conversation\.input\.activity'/)
   assert.equal(code.includes("ctx.slots.inject('conversation.input.model.label'"), false)
 })
 
-test('the chip releases composer expansion on mount AND unmount', () => {
-  // InputActivityOwnerProps: its occupant must release expansion on unmount, or
-  // the composer can stay expanded and hide the model selector.
+test('the chip carries no single-seat expansion handshake', () => {
+  // A list seat has no InputActivityOwnerProps; keeping the old callback would
+  // be dead code and a second owner of composer expansion state.
   const effect = code.slice(code.indexOf('function CostPill'), code.indexOf('function DeepInfraSection'))
-  assert.match(effect, /onActiveChange\(false\)[\s\S]*?return \(\) => onActiveChange\(false\)/)
+  assert.equal(effect.includes('onActiveChange'), false)
+})
+
+test('the chip shows no seat until a figure is measured', () => {
+  const effect = code.slice(code.indexOf('function CostPill'), code.indexOf('function DeepInfraSection'))
+  assert.match(effect, /if \(text === ''\) return null/)
+  assert.equal(effect.includes("text === '' ? t('costFree')"), false)
 })
 
 test('the chip is gated on the provider id, never a model id', () => {

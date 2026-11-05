@@ -28,7 +28,7 @@ export const STAT_ATTR = 'data-composer-stat'
 export const OWN_ATTR = 'data-ocv2-cost'
 
 /** Rendered when the session has cost the account nothing. */
-export const FREE_LABEL = '무료'
+export const FREE_LABEL = 'free'
 
 /**
  * Format US dollars so a sub-cent amount is still readable.
@@ -66,7 +66,7 @@ export function costPillText(session) {
   const cost = typeof session.costUsd === 'number' ? session.costUsd : 0
   const allowance = typeof session.allowanceUsd === 'number' ? session.allowanceUsd : 0
   const charged = cost > 0 ? formatUsd(cost) : FREE_LABEL
-  if (allowance > 0) return charged + ' · 플랜 ' + formatUsd(allowance)
+  if (allowance > 0) return charged + ' · plan ' + formatUsd(allowance)
   return charged
 }
 

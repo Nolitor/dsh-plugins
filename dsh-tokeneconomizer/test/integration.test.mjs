@@ -9,7 +9,7 @@
  */
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -28,7 +28,8 @@ const skip = engineHome ? false : 'set TE_DSH_TEST_HOME to a bootstrapped TokenE
 function status(home, cwd) {
   const out = execFileSync(join(home, 'bin', 'te'), ['--host', 'dsh', '--cwd', cwd, 'status', '--json'], {
     encoding: 'utf8',
-    env: { ...process.env, TOKENECONOMIZER_HOME: home },
+    // The engine may spawn `dsh --profile headless`; hand it the test's throwaway home.
+    env: { ...process.env, TOKENECONOMIZER_HOME: home, DSH_HOME: process.env.DSH_HOME },
   })
   return JSON.parse(out.slice(out.indexOf('{')))
 }
@@ -85,9 +86,24 @@ function fakeAgent(id, cwd) {
   return agent
 }
 
-test('one session crosses the bridge and is folded', { skip }, async () => {
+test('one session crosses the bridge and is folded', { skip }, async (t) => {
   const stateHome = mkdtempSync(join(tmpdir(), 'te-dsh-e2e-state-'))
   const repo = mkdtempSync(join(tmpdir(), 'te-dsh-e2e-repo-'))
+  // The engine spawns `dsh --profile headless` for side calls, so this test must own a
+  // throwaway DSH_HOME. Without it the call writes the owner's live session log under
+  // cwd = /tmp/te-*, which shows up as an orphan in the sidebar (measured 2026-11-05).
+  const isolatedDshHome = mkdtempSync(join(tmpdir(), 'te-dsh-e2e-dsh-home-'))
+  const previousDshHome = process.env.DSH_HOME
+  const previousTeHome = process.env.TOKENECONOMIZER_HOME
+  process.env.DSH_HOME = isolatedDshHome
+  process.env.TOKENECONOMIZER_HOME = stateHome
+  t.after(() => {
+    if (previousDshHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousDshHome
+    if (previousTeHome === undefined) delete process.env.TOKENECONOMIZER_HOME
+    else process.env.TOKENECONOMIZER_HOME = previousTeHome
+    rmSync(isolatedDshHome, { recursive: true, force: true })
+  })
   const ctx = { listeners: new Map(), tools: { definitions: () => [{ name: 'bash' }] } }
   ctx.on = (event, listener) => {
     ctx.listeners.set(event, listener)

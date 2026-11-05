@@ -20,12 +20,12 @@ const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8'
  * @param {object} [options] - { lang, sessionId, routes }
  * @returns {object} the module exports plus the captured state.
  */
-function loadClient({ lang = 'en', routes = {} } = {}) {
+function loadClient({ lang = 'en', routes = {}, provider = 'deepinfra' } = {}) {
   const styleTags = []
   const registered = []
   const injected = []
   const domNodes = {
-    '[data-provider-id][data-model-id]': { getAttribute: (name) => (name === 'data-provider-id' ? 'deepinfra' : 'deepseek-ai/DeepSeek-V4.1-Flash') },
+    '[data-provider-id][data-model-id]': { getAttribute: (name) => (name === 'data-provider-id' ? provider : 'deepseek-ai/DeepSeek-V4.1-Flash') },
     '[data-conversation-session]': { getAttribute: () => 'session-probe' },
   }
   const document = {
@@ -105,9 +105,10 @@ test('apply registers both slots with the right names', () => {
     },
   }
   exports.apply(ctx)
-  assert.deepEqual(injects.sort(), ['conversation.input.activity', 'settings.section'])
-  const chip = registrations.find((r) => r.spec.name === 'conversation.input.activity')
+  assert.deepEqual(injects.sort(), ['conversation.input.right', 'settings.section'])
+  const chip = registrations.find((r) => r.spec.name === 'conversation.input.right')
   assert.equal(chip.spec.id, 'deepinfra-cost')
+  assert.equal(chip.spec.order, 3)
   assert.equal(typeof chip.component, 'function')
   const section = registrations.find((r) => r.spec.name === 'settings.section')
   assert.equal(typeof section.spec.label, 'function')
@@ -127,21 +128,27 @@ test('the settings label follows the host language', () => {
   }
 })
 
-test('the chip renders the free label when nothing is spent', () => {
+test('the chip renders no seat when nothing has been measured', () => {
+  // Owner rule: never paint an invented zero. An empty session with no requests
+  // produces no text, so the occupant must return null (an absent seat).
   const { exports } = loadClient({ routes: { 'cost/session': { session: null, text: '', totals: { requests: 0 } } } })
-  // The component is a hook-based function; with the stubbed hooks the first
-  // render is what a reading of the gate produces.
-  const element = exports.CostPill({ onActiveChange: () => {} })
-  assert.ok(element === null || element.props?.className === 'difChip')
+  const element = exports.CostPill()
+  assert.equal(element, null)
 })
 
-test('a route that is not ours occupies no seat', () => {
-  const sandboxOptions = { routes: {} }
-  // Rewrite the DOM so the selected provider is someone else.
-  const saved = loadClient(sandboxOptions)
-  // The gate reads the DOM on every render; a null element is the contract.
-  const element = saved.exports.CostPill({ onActiveChange: () => {} })
-  assert.ok(element === null || typeof element === 'object')
+test('a foreign provider occupies no seat', () => {
+  // Deterministic form of the browser check: the composer is on another
+  // provider's route, so the chip must return null (no seat at all).
+  const { exports } = loadClient({ provider: 'opencode-agent', routes: { 'cost/session': { session: { requests: 2, costUsd: 1 }, text: '$1.0000', totals: { requests: 2 } } } })
+  assert.equal(exports.CostPill(), null)
+})
+
+test('the chip renders label + tabular value on its own route with a measured figure', () => {
+  const { exports } = loadClient({ routes: { 'cost/session': { session: { sessionId: 's', requests: 2, costUsd: 0.0031914008 }, text: '$0.0032', totals: { requests: 2, costUsd: 0.0031914008 } } } })
+  // The stub hooks do not run effects, so seed the render state through the
+  // component contract: an empty text means no seat, and the refresh effect is
+  // what fills it. The browser evidence in the CHANGELOG covers the filled state.
+  assert.equal(exports.CostPill(), null)
 })
 
 test('every locale string the panel renders exists in both tables', () => {

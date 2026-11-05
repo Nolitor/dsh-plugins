@@ -1,6 +1,6 @@
 {
   "name": "@nolit/dsh-deepinfra",
-  "version": "0.0.1-rc.7",
+  "version": "0.0.1-rc.8",
   "private": false,
   "description": "DeepInfra pure LLM adapter for DeepSeek Harness: a `deepinfra` provider route that calls the OpenAI-compatible /v1/openai/chat/completions endpoint directly (streaming text/reasoning/tool deltas, disjoint usage, cache-aware usage buckets, catalog-derived context and reasoning metadata). No daemon, no spawn, no credential store — one bearer key.",
   "keywords": [
@@ -77,7 +77,7 @@
     }
   },
   "engines": {
-    "node": "^22.19.0 || >=24.0.0",
+    "node": ">=24.9",
     "dsh": ">=0.2.2-alpha.3 <0.3.0"
   },
   "scripts": {

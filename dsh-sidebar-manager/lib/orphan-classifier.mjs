@@ -6,16 +6,47 @@
  * history is visible instead of silently missing from every group row.
  *
  * Classification (first match wins):
+ *   binding-mismatch - the log's directory disagrees with its header cwd (needs manual review)
  *   bound            - the session id is listed in a workspace's sessionIds (the
  *                      registry's actual membership; cwd alone is NOT membership)
- *   unregistered     - valid binding, but no workspace lists this session id
- *   legacy-orphan    - unregistered and older than the registration window
- *   binding-mismatch - the log's directory disagrees with its header cwd (needs manual review)
+ *   child            - a LINKED CHILD session (header parentSession, origin
+ *                      "subagent", or delegationDepth > 0) that is not bound. It is
+ *                      connected to a live parent session, NOT an orphan, and must
+ *                      never be offered for cleanup.
+ *   legacy-orphan    - unregistered, not a child, and older than the registration window
+ *   unregistered     - valid binding, not bound, not a child, inside the window
  *   unreadable       - the log could not be parsed
+ *
+ * `disconnected` (the cleanup-facing number) counts labels other than `bound` and
+ * `child`: a linked child is missing from the workspace rows but is not abandoned.
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import { encodeSegment, projcachePath, projectKey, readLogFile } from './session-log.mjs'
+
+/**
+ * Whether a header describes a linked child session.
+ *
+ * Measured on the live home (2026-11-05): 20 unregistered logs are children of a live
+ * session — `origin: "subagent"`, `parentSession: "session-…"`, `delegationDepth: 1`.
+ * They are not orphans. Any one of the three markers is enough; a standalone orphan
+ * has `delegationDepth: 0` and no parent.
+ *
+ * @param {object} header - session log header.
+ * @returns {{ child: boolean, parentSession?: string, origin?: string, delegationDepth?: number }} the link facts.
+ */
+function linkedChildOf(header) {
+  const parentSession = typeof header.parentSession === 'string' && header.parentSession !== '' ? header.parentSession : undefined
+  const origin = typeof header.origin === 'string' && header.origin !== '' ? header.origin : undefined
+  const depth = Number(header.delegationDepth)
+  const delegationDepth = Number.isFinite(depth) ? depth : undefined
+  return {
+    child: parentSession !== undefined || origin === 'subagent' || (delegationDepth !== undefined && delegationDepth > 0),
+    ...(parentSession === undefined ? {} : { parentSession }),
+    ...(origin === undefined ? {} : { origin }),
+    ...(delegationDepth === undefined ? {} : { delegationDepth }),
+  }
+}
 
 function norm(value) {
   return typeof value === 'string' ? path.resolve(value).replace(/\\/g, '/').toLowerCase() : ''
@@ -79,6 +110,7 @@ export function classifyOrphanLogs({ dshHome, workspaces = [], nowMs = Date.now(
     const createdAt = header.createdAt === undefined ? undefined : Date.parse(header.createdAt)
     const ageDays = Number.isFinite(createdAt) ? Math.floor((nowMs - createdAt) / 86_400_000) : undefined
 
+    const link = linkedChildOf(header)
     let label
     let reason
     if (!keyMatches || !idMatches) {
@@ -87,6 +119,12 @@ export function classifyOrphanLogs({ dshHome, workspaces = [], nowMs = Date.now(
     } else if (registered) {
       label = 'bound'
       reason = owner === undefined ? 'session id is referenced by a workspace' : `owned by ${owner.title}`
+    } else if (link.child) {
+      label = 'child'
+      const source = link.parentSession !== undefined
+        ? `parent ${link.parentSession}`
+        : link.origin === 'subagent' ? 'origin subagent' : `delegationDepth ${link.delegationDepth}`
+      reason = `linked child session (${source}); not an orphan`
     } else if (ageDays !== undefined && ageDays >= legacyAgeDays) {
       label = 'legacy-orphan'
       reason = `unregistered and ${ageDays} days old`
@@ -107,6 +145,7 @@ export function classifyOrphanLogs({ dshHome, workspaces = [], nowMs = Date.now(
       path: log.logPath,
       projectDirName: log.projectDirName,
       hasProjcache: fs.existsSync(cacheFile),
+      ...(label === 'child' ? { parentSession: link.parentSession, origin: link.origin, delegationDepth: link.delegationDepth } : {}),
     })
   }
 
@@ -115,7 +154,7 @@ export function classifyOrphanLogs({ dshHome, workspaces = [], nowMs = Date.now(
   const byCwd = {}
   const byCwdDetail = {}
   for (const entry of entries) {
-    if (entry.label === 'bound') continue
+    if (entry.label === 'bound' || entry.label === 'child') continue
     const key = entry.cwd ?? '(unknown)'
     byCwd[key] = (byCwd[key] ?? 0) + 1
     byCwdDetail[key] = byCwdDetail[key] ?? {}
@@ -127,7 +166,9 @@ export function classifyOrphanLogs({ dshHome, workspaces = [], nowMs = Date.now(
     counts,
     byCwd,
     byCwdDetail,
-    disconnected: entries.filter((entry) => entry.label !== 'bound'),
+    // Cleanup-facing count: a linked child is connected to a live parent, not abandoned.
+    disconnected: entries.filter((entry) => entry.label !== 'bound' && entry.label !== 'child'),
+    linkedChildren: entries.filter((entry) => entry.label === 'child').length,
     entries,
     destructive: false,
     note: 'Labeling only. No log was moved, rewritten, or deleted.',

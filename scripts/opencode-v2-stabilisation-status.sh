@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# dsh-isolation: isolated-temp-home (S4 boots a throwaway DSH_HOME; live home only read)
 # Stage-1 stabilisation status for @nolit/dsh-opencode-v2.
 #
 # docs/OPENCODE-V2-STAGE-PLAN.md §2 defines seven exit criteria. This script evaluates
@@ -68,8 +69,13 @@ if [ "$want_boot" = "1" ]; then
   for f in cordis.patch.yml cordis.yml package.json; do
     cp "$HOME/.dsh/profiles/web/$f" "$iso/profiles/web/" 2>/dev/null
   done
+  # Live absolute paths (e.g. the session-search index) must point into the throwaway
+  # home; a copied patch that still names $HOME/.dsh would write live state.
+  sed -i "s|$HOME/\.dsh|$iso|g" "$iso/profiles/web/cordis.patch.yml" 2>/dev/null || true
   ln -s "$HOME/.dsh/profiles/web/node_modules" "$iso/profiles/web/node_modules" 2>/dev/null
-  DSH_HOME="$iso" timeout 40 dsh web --no-open --port 0 > /tmp/stage1-boot.log 2>&1 &
+  mkdir -p "$iso/tk-home"
+  trap 'rm -rf "$iso"' EXIT
+  DSH_HOME="$iso" TOKENECONOMIZER_HOME="$iso/tk-home" timeout 40 dsh web --no-open --port 0 > /tmp/stage1-boot.log 2>&1 &
   bootpid=$!
   sleep 22
   n=$(grep -c "did not activate" /tmp/stage1-boot.log)

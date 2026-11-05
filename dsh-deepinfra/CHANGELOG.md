@@ -11,6 +11,45 @@ summary: Every change to this track with measured before/after: the 0.0.1-rc.1 a
 > History for this plugin only (RULES §6.1). Measurements that outlive one plugin belong in
 > root `docs/`. Every entry states what was measured, not what was intended.
 
+Current version: `0.0.1-rc.8`
+
+## 0.0.1-rc.8 — DeepInfra chip reaches the composer; version ladder + rc.1 pass — 2026-11-05
+
+**Owner report: "안 보여서 구현 안한줄 알았는데 버그였나" — the cost chip was registered, but never
+rendered.** Measured cause: it sat in `conversation.input.activity`, a **single** slot already owned
+by the token-economizer, so the second registration lost and no chip appeared. Version moved
+`0.0.1-rc.7` → `0.0.1-rc.8` (owner ladder).
+
+| Surface | Before | After |
+| :--- | :--- | :--- |
+| Chip seat | `conversation.input.activity` (single, occupied by tk) | `conversation.input.right` (additive list), id `deepinfra-cost`, order 3 |
+| Chip shape | one bare amount button | label + tabular value pill (`Cost` / `비용`), DSH typography tokens, no hardcoded px |
+| Empty state | painted `$0`/"free" before any measurement | returns `null` — no seat until a measured figure |
+| Gate | provider id; `onActiveChange` single-seat handshake | provider id only; re-read through the existing `MutationObserver` on `data-provider-id`/`data-model-id` |
+| Dead path | `onActiveChange` expansion callbacks (list seats have no owner props) | removed — one owner for the chip |
+| Locale | Korean when `navigator.language` is ko | English default; Korean only while the DSH locale service's active language is `ko` |
+| `engines.node` | `^22.19.0 \|\| >=24.0.0` | `>=24.9` (rc.1 minimum) |
+| Tests | 153 pass | 154 pass + new seat/no-zero contracts, 0 fail |
+
+### Verification — isolated DSH_HOME boot (not the live service)
+
+| Probe | Measured |
+| :--- | :--- |
+| Boot | `DSH_HOME=verification/rc1-boot/home dsh web --no-open --port 0`, rc.1, isolated profile copy (live `~/.dsh` untouched) |
+| Entry activation | `0` "did not activate" lines; `@nolit/dsh-deepinfra` among the activated client entries |
+| Chip on own route | with `agent-default-model = deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017` and a seeded measured ledger entry: `<button class="difChip" data-dif-cost="1"><span class="difChipLabel">비용</span><span class="difChipValue">$0.0032</span></button>`, label Korean because the active locale was `ko` |
+| Position | chip rect `right=916.16` / selector rect `left=928.16`, same row (`top` 575 vs 570) — immediately left of the model selector |
+| Page errors | `0` |
+| English default | second boot with `locale.preference: en`: page renders `New Session / Model / Workspace Write`, chip absent, 0 page errors |
+| Off-route | deterministic client test: composer on `opencode-agent` returns `null`; browser run on a non-DeepInfra default also shows no `data-dif-cost` node |
+
+The isolated copy was scratch only; the live `~/.dsh` profile was read, never written, and the live
+3080 service was not restarted. The credential value in the copied patch was masked before use.
+
+rc.1 audit: the adapter/tool surface already registers through the public `ctx.tools`; no projection,
+official-bundles or app-boot import; `cordis ^4.0.4` admits 4.1.0. The live 3080 service still serves
+the boot-time module — **applied pending restart**, and the owner restarts.
+
 ## 0.0.1-rc.7 — API surface probed, protocol conformance, and the ladder I broke (2026-11-05)
 
 **Owner: "니가 나한테 물어보고 버전업하는거야? 지멋대로 버전업을 해? 지금 0.0.1.rc7이잖아"

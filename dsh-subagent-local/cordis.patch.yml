@@ -1,0 +1,82 @@
+# Bundle config layer for @nolit/dsh-subagent-local.
+#
+# ONE row: the `delegate_local` tool. This package registers no subagent
+# provider and no command, so it cannot collide with the official
+# dsh-subagent-* providers or with `subagent_oar` (which registers a tool, not
+# this name). Registration-time fields are the top four; everything else is read
+# live per call.
+- insert:
+    - id: dsh-subagent-local
+      name: '@nolit/dsh-subagent-local'
+      config:
+        enabled: true
+        toolName: delegate_local
+        backend: auto
+        yieldToMountedTool: true
+        autoOrder:
+          - antigravity
+          - opencode
+          - codex
+          - claude
+        timeoutMs: 600000
+        maxOutputBytes: 8388608
+        artifactLimit: 100
+        artifactDir: ''
+        disposeGraceMs: 5000
+        locale: en
+        # Map a backend to an already-mounted ctx.subagents provider to yield to
+        # it instead of spawning a second CLI process. Empty by default so a raw
+        # CLI call is always possible.
+        yieldToProviders: {}
+        forwardEnv:
+          - PATH
+          - HOME
+          - USER
+          - SHELL
+          - TERM
+          - LANG
+          - LC_ALL
+          - XDG_CONFIG_HOME
+          - XDG_DATA_HOME
+          - XDG_CACHE_HOME
+          - GEMINI_CONFIG_DIR
+          - GOOGLE_APPLICATION_CREDENTIALS
+          - CLAUDE_CONFIG_DIR
+          - CODEX_HOME
+        backends:
+          antigravity:
+            enabled: true
+            path: agy
+            model: gemini-3.8-flash-low
+            effort: low
+            mode: accept-edits
+            timeoutMs: 0
+            auto: true
+            extraArgs: []
+          opencode:
+            enabled: true
+            path: opencode
+            model: ''
+            effort: ''
+            mode: ''
+            timeoutMs: 0
+            auto: true
+            extraArgs: []
+          codex:
+            enabled: true
+            path: codex
+            model: ''
+            effort: ''
+            mode: ''
+            timeoutMs: 0
+            auto: true
+            extraArgs: []
+          claude:
+            enabled: true
+            path: claude
+            model: ''
+            effort: ''
+            mode: ''
+            timeoutMs: 0
+            auto: true
+            extraArgs: []

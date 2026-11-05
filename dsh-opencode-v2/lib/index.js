@@ -10,9 +10,29 @@
  *
  * The output schema keeps upstream's keys exactly: dsh-tools declares
  * `additionalProperties: false`, so new data rides in rendered text only.
+ *
+ * DELEGATION MODEL (2026-11-05, owner decision): the `opencode` tool and the
+ * `/ocode` command do NOT spawn `opencode run` for a conversation delegation.
+ * They start a managed child session through the subagents service's `startActivation`
+ * with this package's registered `opencode` provider and `delivery: 'parent'`,
+ * return the child id immediately, and the child's result is delivered to the
+ * parent as a completion notice. A bare spawn is reachable only through the
+ * explicitly documented emergency fallback `DSH_OPENCODE_SPAWN_FALLBACK=1`
+ * (`runOpencode` below); it is never the default path. `/ocode models` and
+ * `listOpencodeModels` keep probing the CLI — a catalog read creates no session.
  */
 import Schema from '@deepseek-ai/schemastery'
 
+import {
+  activationLabel,
+  activationText,
+  fallbackEnabled,
+  fallbackText,
+  providerNameOf,
+  startChildSession,
+  unavailableMessage,
+  unsupportedChildArgs,
+} from './delegation.js'
 import { JsonRunParser, buildRunArgv, fetchUsage, forwardedEnv, sendPrompt, stripUnsupportedFlags } from './shared.js'
 import { readSelection, writeSelection } from './selection.js'
 import { WORKER_BACKENDS } from './workers/backends.js'
@@ -85,8 +105,15 @@ export const Config = Schema.object({
 })
 
 /**
- * Spawn `opencode run` once, collect bounded stdout/stderr, then (best effort)
- * over-fetch authoritative token usage from `opencode session export`.
+ * EMERGENCY FALLBACK ONLY — spawn `opencode run` once, collect bounded
+ * stdout/stderr, then (best effort) over-fetch authoritative token usage from
+ * `opencode session export`.
+ *
+ * A bare process is invisible to the harness: it gets no DSH session, no
+ * lineage, and no catalog row (the owner-observed "그룹 없음" leak). The default
+ * delegation path is a managed child session (`startChildSession`); this
+ * function is reachable only when `DSH_OPENCODE_SPAWN_FALLBACK=1` is set
+ * explicitly, and every result it produces is labelled as fallback work.
  */
 export async function runOpencode(ctx, config, options) {
   const env = forwardedEnv(config.forwardEnv.get())
@@ -214,16 +241,17 @@ export async function listOpencodeModels(ctx, config, cwd) {
   }
 }
 
-/** Usage text for the user-run `/ocode` command. */
+/** Usage text for the user-run `/ocode` command (managed child-session mode). */
 const OCODE_USAGE = [
-  'Usage: /ocode [options] <task>',
+  'Usage: /ocode <task>',
   '       /ocode models',
   '',
-  'Options:',
-  '  --model <route>     provider/model#variant (default: the last selected route)',
-  '  --timeout <ms>      hard budget for this call',
-  '  --json              append the raw result',
-  '  --models            list the opencode models available to this account',
+  'Starts a managed OpenCode child session and returns its id immediately; the',
+  'result arrives later as a completion notice. The route comes from the plugin',
+  'config. `--model`, `--timeout` and `--json` are accepted only by the',
+  'emergency bare-process fallback (DSH_OPENCODE_SPAWN_FALLBACK=1).',
+  '',
+  '  models              list the opencode models available to this account',
   '  --help              show this usage',
 ].join('\n')
 
@@ -316,7 +344,10 @@ export function toOutput(result) {
 }
 
 const DESCRIPTION =
-  'Delegate a task to the OpenCode agent (`opencode run`, headless). OpenCode works autonomously in the given directory and its final answer is returned as text. Prefer this for self-contained chunks of work you want a second agent to own end-to-end. The call blocks until OpenCode finishes or the configured timeout fires.'
+  'Start a managed OpenCode child session for one independent task and return its session id immediately. '
+  + 'The child runs on the plugin-configured route and its result arrives later as a completion notice, so continue with other work instead of waiting. '
+  + 'Only "prompt", "cwd" and "title" are honored per call; configure model/agent/thinking/auto in the plugin config. '
+  + 'The child is a real DSH session with this conversation as its parent (no orphan process).'
 
 /** Parameter map, upstream-compatible plus the v2-only additions. */
 export function parameters() {
@@ -332,62 +363,74 @@ export function parameters() {
     },
     model: {
       type: 'string',
-      description: `Model override in provider/model form (e.g. "opencode/deepseek-v4.1-flash-free"). Defaults to the plugin config value (${DEFAULT_MODEL}).`,
+      description: `Not honored per call in managed child-session mode (the child runs on the configured route, currently ${DEFAULT_MODEL}); supplying it is rejected. Set the plugin's model config instead.`,
     },
     agent: {
       type: 'string',
-      description: 'OpenCode sub-agent to run (e.g. "build", "plan"). Defaults to the plugin config value.',
+      description: 'Not honored per call in managed child-session mode; configure it in the plugin config.',
     },
     session: {
       type: 'string',
-      description: 'Continue an existing OpenCode session by id (ses_…) instead of starting a new one.',
+      description: 'Not supported in managed child-session mode: the child session is created by the harness, not continued from an OpenCode id.',
     },
     continueLast: {
       type: 'boolean',
-      description: 'Continue the most recent OpenCode session in cwd. Ignored when session is set.',
+      description: 'Not supported in managed child-session mode: each delegation is a fresh managed child.',
     },
     auto: {
       type: 'boolean',
-      description: 'Auto-approve permission requests (--auto). Headless runs cannot answer prompts; the default comes from plugin config.',
+      description: 'Not honored per call in managed child-session mode; configure it in the plugin config.',
     },
     thinking: {
       type: 'boolean',
-      description: 'Ask OpenCode to emit reasoning (--thinking). The summary reports that reasoning was produced; the full reasoning text is streamed by the opencode-agent provider route.',
+      description: 'Not honored per call in managed child-session mode; configure it in the plugin config.',
     },
     title: {
       type: 'string',
-      description: 'Session title for the new OpenCode session (--title).',
+      description: 'Short label for the child session in the catalog (defaults to the first line of the prompt).',
     },
     files: {
       type: 'array',
       items: { type: 'string' },
-      description: 'File paths to attach to the run (-f/--file). Repeatable.',
+      description: 'Not supported in managed child-session mode; attach paths inside the prompt instead.',
     },
     timeoutMs: {
       type: 'number',
-      description: 'Timeout in milliseconds for this call. Defaults to the plugin config value.',
+      description: 'Not honored per call in managed child-session mode; configure it in the plugin config.',
     },
   }
 }
 
-/** The canonical output declaration; keys are frozen by dsh-tools. */
+/**
+ * The canonical output declaration; keys are frozen by dsh-tools.
+ *
+ * `kind: 'activation'` is the normal path and carries the managed child id.
+ * `kind: 'fallback'` appears only under the explicit emergency env switch; it
+ * carries the legacy report in `summary` and an empty child id, so a consumer
+ * can never mistake fallback work for a managed child session.
+ */
 export function outputSchema() {
   return {
     type: 'object',
     properties: {
-      ok: { type: 'boolean', required: true },
-      exitCode: { type: 'integer', required: true },
-      signal: { type: 'string', required: true },
-      timedOut: { type: 'boolean', required: true },
-      truncated: { type: 'boolean', required: true },
-      sessionId: { type: 'string', required: true },
-      inputTokens: { type: 'integer', required: true },
-      outputTokens: { type: 'integer', required: true },
-      stdout: { type: 'string', required: true },
-      stderr: { type: 'string', required: true },
+      kind: { type: 'string', required: true, enum: ['activation', 'fallback'] },
+      subagentId: { type: 'string', required: true },
+      provider: { type: 'string', required: true },
+      summary: { type: 'string', required: true },
     },
     additionalProperties: false,
   }
+}
+
+/**
+ * Model-facing text for one tool value: the started child id, or the labelled
+ * emergency-fallback report.
+ * @param {{kind: string, subagentId: string, summary: string}} value - the canonical value.
+ * @returns {string} the rendered text.
+ */
+export function renderActivation(value) {
+  if (value.kind === 'fallback') return fallbackText(value.summary)
+  return activationText({ provider: value.provider, childId: value.subagentId })
 }
 
 /**
@@ -396,6 +439,12 @@ export function outputSchema() {
  * reverts them automatically.
  */
 export async function apply(ctx, config) {
+  // The subagent service is optional and is acquired later through `ctx.inject`
+  // (a Cordis context throws on an undeclared service read). Keeping the
+  // acquired handle here lets the tool and command decide between a managed
+  // child session and the explicit refusal — never an untracked spawn.
+  let subagents = null
+
   // Resolved lazily so the module stays importable (and unit-testable)
   // without the host toolchain installed; the host always provides it.
   const { defineTool } = await import('@deepseek-ai/dsh-tools')
@@ -405,11 +454,37 @@ export async function apply(ctx, config) {
     parameters: parameters(),
     output: {
       schema: outputSchema(),
-      // The canonical value is the upstream key set; usage rides in stdout's
-      // rendered text via the runner's stderr summary + renderResult.
-      render: (_args, value) => [{ type: 'text', text: renderResult(value) }],
+      render: (_args, value) => [{ type: 'text', text: renderActivation(value) }],
     },
     async execute(args, exec) {
+      const providerName = providerNameOf(config)
+      // With the managed path available, per-call overrides are refused rather
+      // than silently dropped: the child runs on the configured route.
+      if (subagents !== null) {
+        const unsupported = unsupportedChildArgs(args)
+        if (unsupported.length > 0) {
+          throw new Error(
+            'opencode delegation runs as a managed child session on the plugin-configured route; '
+            + `per-call ${unsupported.map((name) => '"' + name + '"').join(', ')} cannot be honored. `
+            + 'Configure model/agent/thinking/auto in the plugin config, or call the tool without them.',
+          )
+        }
+        const started = await startChildSession({
+          subagents,
+          providerName,
+          label: activationLabel({ title: args.title, prompt: args.prompt }),
+          prompt: args.prompt,
+          parent: exec.agent,
+          cwd: args.cwd,
+          signal: exec.signal,
+        })
+        return { kind: 'activation', subagentId: started.childId, provider: started.provider, summary: '' }
+      }
+      // No managed child is possible. Only the explicit emergency switch may
+      // spawn a bare process; otherwise refuse with an actionable message.
+      if (!fallbackEnabled()) {
+        throw new Error(unavailableMessage(providerName))
+      }
       const result = await runOpencode(ctx, config, {
         prompt: args.prompt,
         cwd: args.cwd ?? process.cwd(),
@@ -424,13 +499,10 @@ export async function apply(ctx, config) {
         timeoutMs: args.timeoutMs,
         signal: exec.signal,
       })
-      // The canonical value may carry only declared keys, so a successful
-      // usage fetch is folded into `stderr` (a declared string) and nothing
-      // else is added.
       const withUsage = result.usage
         ? { ...result, stderr: [result.stderr, formatUsage(result.usage)].filter(Boolean).join('\n') }
         : result
-      return toOutput(withUsage)
+      return { kind: 'fallback', subagentId: '', provider: providerName, summary: renderResult(toOutput(withUsage)) }
     },
     presentResult: (_args, result) => ({
       card: 'generic',
@@ -462,10 +534,10 @@ export async function apply(ctx, config) {
   ctx.inject(['commands'], (commandCtx) => {
     commandCtx.commands.register({
       name: 'ocode',
-      input: { hint: '<task>   (--model <provider/model#variant> --timeout <ms>)' },
+      input: { hint: '<task>   (/ocode models lists the catalog)' },
       description:
-        'Run the OpenCode CLI worker. Usage: /ocode [--model <provider/model#variant>] [--timeout <ms>] <task>. Bare /ocode reuses the last selected model.',
-      handler: async ({ rawInput }) => {
+        'Start a managed OpenCode child session for one task. Usage: /ocode <task>. The result arrives as a completion notice; /ocode models lists the catalog and /ocode --help shows the usage.',
+      handler: async ({ rawInput, agent, signal }) => {
         const { options, task, unknown } = parseOcodeInput(rawInput)
         if (unknown.length > 0) return { kind: 'error', text: `Unknown option: --${unknown[0]}\n\n${OCODE_USAGE}` }
         if (task === 'models' || options.models) {
@@ -479,6 +551,37 @@ export async function apply(ctx, config) {
             kind: 'success',
             text: `${OCODE_USAGE}\n\nCurrent: model ${model}\nModel list: \`opencode models\``,
           }
+        }
+        const providerName = providerNameOf(config)
+        // Managed child session: the route is the provider's configured one, so
+        // per-run overrides are refused instead of silently ignored.
+        if (subagents !== null) {
+          const rejected = []
+          if (options.model !== undefined) rejected.push('--model')
+          if (options.timeout !== undefined) rejected.push('--timeout')
+          if (options.json) rejected.push('--json')
+          if (rejected.length > 0) {
+            return {
+              kind: 'error',
+              text: 'Child-session mode runs on the plugin-configured OpenCode route, so '
+                + `${rejected.join(', ')} cannot be honored here. Set the route in the plugin config, `
+                + 'or keep using /ocode models to inspect the available models.',
+            }
+          }
+          const started = await startChildSession({
+            subagents,
+            providerName,
+            label: activationLabel({ prompt: task }),
+            prompt: task,
+            parent: agent,
+            signal,
+          })
+          return { kind: 'success', text: activationText(started) }
+        }
+        // No managed child is possible: the explicit emergency switch is the
+        // only path that may spawn a bare process.
+        if (!fallbackEnabled()) {
+          return { kind: 'error', text: unavailableMessage(providerName) }
         }
         const saved = await readSelection('ocode')
         const model = String(options.model ?? saved.model ?? config.model.get())
@@ -496,7 +599,7 @@ export async function apply(ctx, config) {
         const body = renderResult(result)
         const reasoning = result.reasoning ? `\n\n--- reasoning ---\n${result.reasoning}` : ''
         const raw = options.json ? `\n\n--- raw ---\n${JSON.stringify(result, null, 2)}` : ''
-        return { kind: result.ok ? 'success' : 'error', text: `${body}${reasoning}${raw}` }
+        return { kind: result.ok ? 'success' : 'error', text: fallbackText(`${body}${reasoning}${raw}`) }
       },
     })
   })
@@ -515,16 +618,20 @@ export async function apply(ctx, config) {
   // done and was not. Acquire the service through a deferred sub-context and
   // register there; the disposer releases it with the plugin.
   ctx.inject(['subagents'], (scoped) => {
-    if (config.subagent.get() === false) return undefined
-    const subagents = scoped.subagents
+    const service = scoped.subagents
+    subagents = service
+    const clear = () => {
+      if (subagents === service) subagents = null
+    }
+    if (config.subagent.get() === false) return clear
     const providerName = config.subagentProviderName.get() || 'opencode'
     // A profile that still carries the superseded package must not lose a
     // provider silently: yield with a warning so the operator removes the old
     // row, which is the real fix.
-    const taken = typeof subagents.getProvider === 'function' ? subagents.getProvider(providerName) : undefined
+    const taken = typeof service.getProvider === 'function' ? service.getProvider(providerName) : undefined
     if (taken) {
       ctx.logger?.warn?.('opencode-v2: a subagent provider named "' + providerName + '" is already registered; skipping the merged one (remove @nolit/dsh-subagent-opencode)')
-      return undefined
+      return clear
     }
     try {
       const provider = new OpenCodeSubagentProvider(providerName, ctx, {
@@ -536,11 +643,14 @@ export async function apply(ctx, config) {
         disposeGraceMs: config.subagentDisposeGraceMs.get(),
         env: config.subagentEnv.get(),
       })
-      const release = subagents.registerProvider(provider)
-      return typeof release === 'function' ? release : undefined
+      const release = service.registerProvider(provider)
+      return () => {
+        clear()
+        if (typeof release === 'function') release()
+      }
     } catch (error) {
       ctx.logger?.warn?.(`opencode-v2: subagent provider registration failed: ${error instanceof Error ? error.message : String(error)}`)
-      return undefined
+      return clear
     }
   })
 }

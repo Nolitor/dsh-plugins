@@ -1,0 +1,60 @@
+{
+  "name": "@nolit/dsh-subagent-local",
+  "version": "0.0.1-rc.1",
+  "private": false,
+  "description": "Experimental local-CLI delegation tool for DeepSeek Harness: one self-contained task to antigravity (agy), opencode, codex, or claude in an isolated child process, with collision-yield registration.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "cordis",
+    "delegation",
+    "cli-worker",
+    "antigravity",
+    "opencode",
+    "codex",
+    "claude"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "icon": "./icon.svg",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon.svg": "./icon.svg"
+  },
+  "files": [
+    "lib/",
+    "locale/",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "COMPATIBILITY.md",
+    "CHANGELOG.md",
+    "VERIFICATION.md"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=24.9",
+    "dsh": ">=0.2.2-alpha.2 <0.3.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.1.0",
+    "@deepseek-ai/dsh-subprocess": "^0.2.2-alpha.2",
+    "@deepseek-ai/dsh-tools": "^0.2.2-alpha.2",
+    "@deepseek-ai/schemastery": "~3.18.4"
+  }
+}

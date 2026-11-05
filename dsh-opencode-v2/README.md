@@ -14,10 +14,10 @@ registry.
 | | |
 |---|---|
 | Package | `@nolit/dsh-opencode-v2` |
-| Version | `0.0.2-rc.3` |
+| Version | `0.0.1-rc.1` |
 | Host | DSH `>=0.2.2-alpha.2 <0.3.0` |
 | History | [CHANGELOG.md](CHANGELOG.md) |
-| Release line | `0.0.2-rc.N` fixes first; the next stable line starts only after that is quiet |
+| Release line | `0.0.1-rc.N` (owner normalization 2026-11-05); the retired `0.0.2` name was the pre-normalization line |
 | Proof of record | [VERIFICATION.md](VERIFICATION.md) |
 | Upstream compatibility | [UPSTREAM-COMPAT.md](UPSTREAM-COMPAT.md) — per-release surface diff, tag-verified |
 
@@ -138,7 +138,7 @@ stored by `opencode auth login`; the adapter reads it from the local control pla
 
 | Step | Version | What ships |
 |---|---|---|
-| 1 | `0.0.2-rc.1`, `-rc.2`, … | Bug fixes on the released 0.0.2 line. Each `rc` is one instructed fix round. |
+| 1 | `0.0.1-rc.1`, `-rc.2`, … | Each `rc` is one instructed fix round on the single `0.0.1` line. |
 | 2 | next minor patch of the stable package | Only after the `rc` line is quiet. The canonical parser (former "beta") is added to THIS package, not to a second one. |
 | 3 | following stable line | The conformance oracle becomes part of the shipped test suite. |
 

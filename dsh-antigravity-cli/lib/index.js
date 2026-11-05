@@ -121,7 +121,7 @@ export function renderResult(result) {
     : result.ok
       ? `agy finished. (mode ${result.mode})`
       : `agy exited with code ${result.exitCode}${result.signal ? ` (signal ${result.signal})` : ''}. (mode ${result.mode})`
-  const plan = result.planOnly ? '\n[PLAN_ONLY — 파일 미반영] 계획/추론 결과만 표시됩니다.' : ''
+  const plan = result.planOnly ? '\n[PLAN_ONLY — no files changed] showing the plan/reasoning result only.' : ''
   const usage = `\n[tokens: input ${result.inputTokens}, output ${result.outputTokens}, thinking ${result.thinkingTokens}, cached ${result.cacheReadTokens}]`
   const reasoningNote = result.thinkingTokens > 0
     ? `\n[reasoning: agy reported ${result.thinkingTokens} thinking tokens but does not emit reasoning text]`

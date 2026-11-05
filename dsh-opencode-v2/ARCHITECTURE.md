@@ -20,7 +20,7 @@ because OpenCode exposes several planes.
 |---|---|---|
 | `opencode-http-agent` route | `lib/http.js` | `ctx.llm.registerAdapter` |
 | `opencode` tool + `/opencode` command + `cli_worker` | `lib/index.js`, `lib/provider.js` | tools, commands, worker |
-| Settings panel + cost chip | `lib/client.js` | `settings.section`, `conversation.input.activity` |
+| Settings panel + cost chip | `lib/client.js` | `settings.section`, `conversation.input.right` |
 
 ## 2. Control plane vs serving plane
 
@@ -73,14 +73,13 @@ never from its characters** (`lib/upstream-map.js`). No text scanners.
 
 Identical to `dsh-deepinfra`, because both use the same host seam:
 
-```ts
-interface InputActivityOwnerProps { locked: boolean; onActiveChange: (active: boolean) => void }
-```
-
-`CostPill` reports `active: false` on mount and unmount, returns `null` for a foreign provider,
-and gates on `data-provider-id` only. The measured rule stands: contributing to
-`conversation.input.model.label` **replaces** the model name, so `conversation.input.activity` is
-the only correct seat.
+`CostPill` renders in `conversation.input.right` — the additive LIST slot Antigravity's usage chip
+occupies, immediately left of the model selector — and returns `null` for a foreign provider. It
+gates on `data-provider-id` only (never a model-id prefix) and renders nothing until the session has
+a measured request. The measured rule stands: contributing to `conversation.input.model.label`
+**replaces** the model name. The previous seat, `conversation.input.activity`, is a SINGLE slot
+already registered by the token-economizer in the live profile, so it is not a seat this plugin may
+use; migration recorded in `CHANGELOG.md` `0.0.2-rc.4`.
 
 ## 6. Service declaration
 

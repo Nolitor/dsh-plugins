@@ -7,12 +7,14 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import zlib from 'node:zlib'
 
 import { resolveOptions, createTransactionRoutes } from '../lib/transaction.mjs'
 import { upsertGroup, readGroups, assignMember } from '../lib/groups.mjs'
 import { hqTitle, previewHq, scaffoldHq, renderCapsule, promoteHq } from '../lib/hq-promote.mjs'
 import { planBatchRename, applyBatchRename, readBatchJournal, recoverBatchRename, stagingPath } from '../lib/batch-rename.mjs'
 import { classifyOrphanLogs } from '../lib/orphan-classifier.mjs'
+import { encodeSegment, projectKey } from '../lib/session-log.mjs'
 import { estimateTokens, auditResidentBudget, detectDuplicatedCapsule, checkCrossGroupFork, DIET_BUDGETS } from '../lib/harness-diet.mjs'
 import { isSubagentHeader, attributeSession, auditSubagentArtifacts, verifyCaptureGuard } from '../lib/subagent-guard.mjs'
 import { gateG1, gateG2, gateG3, gateG4, gateG6, runPromotionGate } from '../lib/promotion-gate.mjs'
@@ -209,6 +211,72 @@ test('orphans: classification is read-only and reports counts', () => {
   assert.equal(result.destructive, false)
   assert.equal(result.total, 0)
   assert.deepEqual(result.counts, {})
+})
+
+/**
+ * Write one v4 session log with a single-frame header, at the directory the
+ * classifier derives from the header (projectKey/encodeSegment).
+ * @param {string} dshHome - DSH home.
+ * @param {object} header - session header (id, cwd, createdAt required).
+ * @returns {string} the log path.
+ */
+function writeSessionLog(dshHome, header) {
+  const dir = path.join(dshHome, 'sessions', projectKey(header.cwd), encodeSegment(header.id))
+  fs.mkdirSync(dir, { recursive: true })
+  const frame = zlib.zstdCompressSync(Buffer.from(JSON.stringify({ version: 4, createdAt: Date.now(), ...header }) + '\n', 'utf8'))
+  const file = path.join(dir, 'session.v4.jsonl.zstd')
+  fs.writeFileSync(file, frame)
+  return file
+}
+
+test('orphans: a linked child is classified child, never disconnected/orphan', () => {
+  const { options } = makeRoot()
+  const dshHome = options.dshHome
+  const cwd = path.join(options.projectsRoot, 'child-project')
+  fs.mkdirSync(cwd, { recursive: true })
+  writeSessionLog(dshHome, { id: 'session-child', cwd, parentSession: 'session-parent', origin: 'subagent', delegationDepth: 1 })
+  const result = classifyOrphanLogs({ dshHome, workspaces: [] })
+  const entry = result.entries.find((row) => row.sessionId === 'session-child')
+  assert.equal(entry.label, 'child')
+  assert.match(entry.reason, /linked child session/)
+  assert.equal(entry.parentSession, 'session-parent')
+  assert.equal(entry.origin, 'subagent')
+  assert.equal(entry.delegationDepth, 1)
+  assert.equal(result.counts.child, 1)
+  assert.equal(result.linkedChildren, 1)
+  assert.equal(result.disconnected.length, 0, 'a linked child is not a cleanup candidate')
+})
+
+test('orphans: origin/delegationDepth alone is enough to mark a child', () => {
+  const { options } = makeRoot()
+  const cwd = path.join(options.projectsRoot, 'child-2')
+  fs.mkdirSync(cwd, { recursive: true })
+  writeSessionLog(options.dshHome, { id: 'session-child-origin', cwd, origin: 'subagent', delegationDepth: 2 })
+  const result = classifyOrphanLogs({ dshHome: options.dshHome, workspaces: [] })
+  assert.equal(result.entries[0].label, 'child')
+  assert.match(result.entries[0].reason, /origin subagent|delegationDepth 2/)
+})
+
+test('orphans: bound, standalone, and malformed logs keep their distinct labels', () => {
+  const { options } = makeRoot()
+  const dshHome = options.dshHome
+  const cwd = path.join(options.projectsRoot, 'real-project')
+  fs.mkdirSync(cwd, { recursive: true })
+  writeSessionLog(dshHome, { id: 'session-bound', cwd, createdAt: Date.now() })
+  writeSessionLog(dshHome, { id: 'session-standalone', cwd: '/tmp/orphan-standalone-gone', createdAt: Date.now() })
+  const brokenDir = path.join(dshHome, 'sessions', 'broken', 'session-broken')
+  fs.mkdirSync(brokenDir, { recursive: true })
+  fs.writeFileSync(path.join(brokenDir, 'session.v4.jsonl.zstd'), 'not zstd')
+
+  const workspaces = [{ id: 'w1', path: cwd, title: 'project', sessionIds: ['session-bound'] }]
+  const result = classifyOrphanLogs({ dshHome, workspaces })
+  const byId = Object.fromEntries(result.entries.map((row) => [row.sessionId, row]))
+  assert.equal(byId['session-bound'].label, 'bound')
+  assert.equal(byId['session-standalone'].label, 'unregistered', 'standalone /tmp orphan is still reported')
+  assert.equal(byId['session-broken'].label, 'unreadable')
+  assert.deepEqual(result.counts, { bound: 1, unregistered: 1, unreadable: 1 })
+  assert.deepEqual(result.disconnected.map((row) => row.sessionId).sort(), ['session-broken', 'session-standalone'])
+  assert.equal(result.linkedChildren, 0)
 })
 
 // --- harness diet ------------------------------------------------------------

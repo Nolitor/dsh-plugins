@@ -27,8 +27,8 @@ part is one bearer key. Compare `dsh-opencode-v2`, which needed all four.
 | Surface | Where |
 |---|---|
 | Model route `deepinfra` | chat, tool calls, reasoning |
-| Settings card "DeepInfra" / "딥인프라" | Settings → Plugins |
-| Cost chip `$0.1736` | composer, immediately after the model selector |
+| Settings card "DeepInfra" (Korean "딥인프라" only while the DSH locale is `ko`) | Settings → Plugins |
+| Cost chip `$0.1736` | composer, in the additive `conversation.input.right` list seat beside the model selector; no seat until a measured figure exists |
 | Usage ledger | `$DSH_HOME[/profiles/<name>]/deepinfra-session-cost.json` |
 
 ## Install

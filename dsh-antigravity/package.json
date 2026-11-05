@@ -1,6 +1,6 @@
 {
   "name": "@nolit/dsh-antigravity",
-  "version": "0.0.1-rc.5",
+  "version": "0.0.1-rc.7",
   "private": false,
   "description": "Antigravity Agent for DeepSeek Harness: one plugin with the /agy CLI worker and agy_worker tool, a pure HTTP model route on the Antigravity subscription (cloudcode-pa, no CLI, no persona), an Antigravity settings section, and a composer usage chip. Master enable plus per-surface switches; English by default, Korean with the host locale.",
   "keywords": [
@@ -75,7 +75,7 @@
   "scripts": {
     "build": "node scripts/gen-locale.mjs && node scripts/build-client.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/auth.js && node --check lib/wire.js && node --check lib/sse.js && node --check lib/map.js && node --check lib/usage.js && node --check lib/catalog.js && node --check lib/adapter.js && node --check lib/settings.js && node --check lib/backends.js && node --check lib/server.js && node --check lib/client.js"
+    "check": "node --check lib/index.js && node --check lib/cli-activation.js && node --check lib/worker.js && node --check lib/auth.js && node --check lib/wire.js && node --check lib/sse.js && node --check lib/map.js && node --check lib/usage.js && node --check lib/catalog.js && node --check lib/adapter.js && node --check lib/settings.js && node --check lib/backends.js && node --check lib/server.js && node --check lib/client.js"
   },
   "dsh": {
     "manifestVersion": 1,
@@ -92,7 +92,7 @@
     }
   },
   "engines": {
-    "node": "^22.19.0 || >=24.0.0",
+    "node": ">=24.9",
     "dsh": ">=0.2.2-alpha.2 <0.3.0"
   },
   "peerDependencies": {

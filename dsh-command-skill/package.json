@@ -1,11 +1,12 @@
 {
   "name": "@nolit/dsh-command-skill",
-  "version": "0.1.0",
+  "version": "0.0.1-rc.1",
   "private": true,
   "type": "module",
   "description": "Documentation and contract authority for system-level command + skill surfaces. Registers nothing at runtime: the interrupt surfaces remain owned by @nolit/dsh-skill-interrupt until the four-step replacement moves them.",
   "engines": {
-    "dsh": ">=0.2.2-alpha.2 <0.3.0"
+    "dsh": ">=0.2.2-alpha.2 <0.3.0",
+    "node": ">=24.9"
   },
   "scripts": {
     "check": "node --check scripts/verify-contract.mjs"

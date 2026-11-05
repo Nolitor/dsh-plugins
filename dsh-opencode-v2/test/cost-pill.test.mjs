@@ -116,11 +116,11 @@ test('a sub-cent amount stays readable instead of printing $0.00', () => {
 
 test('the pill shows the charge and, on a plan, the burn separately', () => {
   // Go: charged nothing, but the monthly limit moved.
-  assert.equal(costPillText({ requests: 2, costUsd: 0, allowanceUsd: 0.00002786 }), '무료 · 플랜 $0.0000279')
+  assert.equal(costPillText({ requests: 2, costUsd: 0, allowanceUsd: 0.00002786 }), 'free · plan $0.0000279')
   // Balance: charged, no plan.
   assert.equal(costPillText({ requests: 1, costUsd: 0.00412, allowanceUsd: 0 }), '$0.00412')
   // Both.
-  assert.equal(costPillText({ requests: 1, costUsd: 0.00412, allowanceUsd: 0.001 }), '$0.00412 · 플랜 $0.001')
+  assert.equal(costPillText({ requests: 1, costUsd: 0.00412, allowanceUsd: 0.001 }), '$0.00412 · plan $0.001')
   // Nothing measured yet: no pill, rather than a misleading "$0".
   assert.equal(costPillText({ requests: 0 }), '')
   assert.equal(costPillText(null), '')
@@ -139,7 +139,7 @@ test('one pill is appended to the row and reused on the next update', () => {
   const row = statusRow(doc)
   assert.equal(findStatusRow(doc), row, 'the row is the parent of any stat anchor')
 
-  const first = renderCostPill(doc, '무료 · 플랜 $0.0000279', 'session cost')
+  const first = renderCostPill(doc, 'free · plan $0.0000279', 'session cost')
   assert.ok(first)
   assert.equal(row.querySelectorAll('[' + OWN_ATTR + ']').length, 1)
   // The host's three-span shape: anchor > pill > label. The FONT comes from the
@@ -152,7 +152,7 @@ test('one pill is appended to the row and reused on the next update', () => {
   assert.equal(label.className, 'bOPqQW_label')
   // The fake DOM does not aggregate descendant text, so read the label directly;
   // a real browser reports the same string through the wrapper's textContent.
-  assert.equal(label.textContent, '무료 · 플랜 $0.0000279')
+  assert.equal(label.textContent, 'free · plan $0.0000279')
   assert.equal(first.title, 'session cost')
 
   const second = renderCostPill(doc, '$0.00412', 'session cost')
@@ -174,7 +174,7 @@ test('nothing is injected when the composer row is absent', () => {
 test('the observer re-attaches the pill after React replaces the row', () => {
   const doc = fakeDocument()
   statusRow(doc)
-  let text = '무료'
+  let text = 'free'
   const observers = []
   class FakeObserver {
     constructor(handler) { this.handler = handler; observers.push(this) }

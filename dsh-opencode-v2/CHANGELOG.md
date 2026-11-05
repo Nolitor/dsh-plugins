@@ -1,14 +1,113 @@
 # Changelog — @nolit/dsh-opencode-v2
 
 <!-- skeleton:
-version: 1.2
+version: 1.3
 kind: report
 status: active
 updated: 2026-11-05
-summary: Engineering history for @nolit/dsh-opencode-v2, including the completed subagent merge, the 0.0.2-rc.2 cleanup, and the measured host contracts behind every change.
+summary: Engineering history for @nolit/dsh-opencode-v2, including the completed subagent merge, the 0.0.2-rc.2 cleanup, the rc.4 cost-chip seat migration, and the managed child-session delegation cutover.
 -->
 
-Current version: `0.0.2-rc.3`
+Current version: `0.0.1-rc.1`
+
+## Managed child-session delegation — `opencode` tool + `/ocode` — 2026-11-05
+
+Owner decision (2026-11-05, measured symptom: sessions accumulating in the sidebar's
+"그룹 없음"). A CLI worker must not spawn a bare `opencode run` for a conversation delegation: the
+bare process gets no DSH session, no lineage and no catalog row, so its work surfaced as an orphan
+the harness could not attribute. The `opencode` tool and `/ocode` now delegate through the
+subagent seam, using the provider this package already registers
+(`Config.subagentProviderName`, default `opencode`) and `delivery: 'parent'`.
+
+| Surface | Before | After |
+| :--- | :--- | :--- |
+| `opencode` tool execution | spawned `opencode run`, blocked until the CLI exited, returned the CLI report (`ok`/`exitCode`/`stdout`/…) | calls `subagents.startActivation({ provider, label, request: { prompt, parent: exec.agent, cwd? }, signal: exec.signal, delivery: 'parent' })`, returns **immediately** with the managed child id |
+| Tool output value | upstream key set (`ok`, `exitCode`, `sessionId`, tokens, stdout, stderr) | `{ kind: 'activation' \| 'fallback', subagentId, provider, summary }`; normal path is `kind: 'activation'` with the child id |
+| `/ocode <task>` | ran the CLI in the foreground and printed the answer | starts the child and prints its id; the answer arrives later as a **completion notice** in the parent conversation |
+| Orphan risk | a delegation could exist only as an untracked CLI process | the child is a real DSH session with the calling agent as parent |
+| Missing `subagents` service | would have spawn-fallen-back | **clear refusal** (`Refusing to spawn an untracked opencode process…`) and no `subprocess.spawn` call |
+| Per-call overrides (`model`, `agent`, `session`, `continueLast`, `auto`, `thinking`, `files`, `timeoutMs`) | honored by the CLI argv | rejected with a message naming the plugin config, because the child runs on the provider's configured route |
+| Bare spawn | the only path | removed from the default path; retained only as the **documented emergency fallback** behind `DSH_OPENCODE_SPAWN_FALLBACK=1`, and every result it produces is labelled `kind: 'fallback'` + a warning |
+| `/ocode models` | `opencode models` probe | unchanged (a catalog read creates no session) |
+| Route, settings surface, `cli_worker` | — | untouched (the isolated batch tool `cli_worker` remains the documented batch path; it is not a conversation delegation) |
+
+### Files
+
+- `lib/delegation.js` (new) — pure helpers (`providerNameOf`, `promptBlocks`, `activationLabel`,
+  `unsupportedChildArgs`, `fallbackEnabled`, `unavailableMessage`) and `startChildSession`, which
+  validates the service/provider/parent/prompt and calls `startActivation`; the activation's
+  `result` is owned by the subagent manager and is deliberately never awaited.
+- `lib/index.js` — tool definition/description/output schema updated to the activation shape;
+  `execute` uses `exec.agent`/`exec.signal`; `/ocode` handler uses the command invocation's
+  `agent`/`signal`; the deferred `subagents` acquisition now retains the service for the tool and
+  command (still optional: mounting without it succeeds and the surfaces refuse clearly).
+- `test/delegation.test.mjs` (new, 14 cases) and `test/activation-tool.test.mjs` (new, 11 cases) —
+  activation spec (provider, label, prompt blocks, parent identity, cwd, signal, `delivery:
+  'parent'`), immediate child-id return, missing service → refusal with **zero spawns**, missing
+  provider, aborted signal, backend start failure, empty prompt, fallback env gate, `/ocode`
+  child-id report, `/ocode` override rejection, `/ocode models` unchanged.
+
+### Verification (measured)
+
+| Step | Measured |
+| :--- | :--- |
+| `npm test` | **452/452 pass** (was 427; +14 delegation +11 activation-tool cases) |
+| `node --check` | `lib/index.js`, `lib/delegation.js` (and the full `npm run check` list) pass |
+| isolated `DSH_HOME` browser boot (minimal profile: `dsh-base` + `dsh-web-app` + this package; thrown-away tree) | `@nolit/dsh-opencode-v2` client entry active, shell rendered, **0 page errors / 0 console errors**; typing `/ocode` in the composer lists the updated command ("Start a managed OpenCode child session… the result arrives as a completion notice") |
+| behaviour proof | unit/integration fakes assert the activation spec and that no `subprocess.spawn` happens on the default path — no model call or owner quota was spent |
+
+This change is **applied pending restart**: the live service still runs the module it loaded at boot;
+the owner restarts to pick up the managed delegation path. No version bump in this session (owner
+decision: the track stays at `0.0.1-rc.1`; the next modifying session proposes `0.0.1-rc.2`).
+
+## 0.0.1-rc.1 — version ladder + English-by-default locale pass — 2026-11-05
+
+Owner decision (2026-11-05): normalize every `@nolit` track to `0.0.1-rc.N`; this track moved
+`0.0.2-rc.4` → `0.0.1-rc.1` (the `0.0.2` line name is retired by the same instruction).
+
+| Surface | Before | After |
+| :--- | :--- | :--- |
+| `package.json.version` | `0.0.2-rc.4` | `0.0.1-rc.1` |
+| `lib/http.js` `VERSION` (load beacon) | `0.0.2-rc.4` | `0.0.1-rc.1` (a beacon must name the build it belongs to — F-26) |
+| `engines.node` | `^22.19.0 \|\| >=24.0.0` | `>=24.9` (DSH 0.2.2-rc.1 minimum) |
+| Locale resolver | DSH locale, then `navigator.language` | DSH locale only; English unless the active language is `ko` |
+| Plan-window labels | server-sent Korean (`5시간`/`7일`/`30일`) rendered verbatim | server sends stable English labels; the client localizes them (`windowRolling`/`windowWeekly`/`windowMonthly`, en + ko) |
+| Dead DOM pill module `lib/cost-pill.js` | Korean `무료` / `플랜` defaults | English `free` / `plan` (the live chip uses the slot component, not this module) |
+| Tests | 427 passing | 427 passing |
+
+rc.1 audit: the cost chip was already on the additive `conversation.input.right` seat (0.0.2-rc.4) and
+the tool registration already uses the public `ctx.tools`; no Session Projection, no app-boot import;
+`cordis ^4.0.4` admits 4.1.0. The `./http` subpath entry is the one rc.1 presentation change: rc.1
+no longer reads a separate `package.json` for a subpath plugin, so `./locale/*.json` is exported from
+the package root while `./http` itself needs no display metadata.
+
+## 0.0.2-rc.4 — the cost chip moves to the Antigravity seat — 2026-11-05
+
+Owner instruction: "오픈코드 v2에서 모델서빙 오른쪽으로 표시되는거 지금 안티그래비티 처럼 표시되게 수정해
+주라". Version moved `0.0.2-rc.3` → `0.0.2-rc.4` (rc is agent-owned; numeric track owner-owned).
+**applied pending restart** — the running daemon still serves the module loaded at boot.
+
+### What changed
+
+| Before (measured in `lib/client.js`) | After |
+| :--- | :--- |
+| registered at `conversation.input.activity` — a SINGLE slot already occupied by the token-economizer ("tk") in the live profile, so the chip was a second registration rendered to the right of the model selector | registered at `conversation.input.right` — the additive LIST slot Antigravity's usage chip uses, immediately left of the model selector |
+| a bare `$0.0042` button (`.ocv2CostChip`, 1 px smaller than the host's secondary type) | the reference shape: `비용 $0.0042` — label + tabular value, `--dsh-content-font-size-secondary` / `--dsh-content-font-delta-secondary` typography (`.ocv2Pill` / `.ocv2PillValue`) |
+| started at `t('costFree')` and painted `$0` before any request | renders nothing until `cost/session` returns a real entry — no invented zero, no empty seat (UI-SLOT-ARCHITECTURE §4) |
+| two painters existed (the slot component plus the dead DOM path `paintCostPill`/`startCostPill`) | the DOM painter is removed; one owner, one seat |
+
+The provider-id gate is unchanged and still the only ownership rule: `opencode-http-agent` /
+`opencode-agent`, never a model-id prefix.
+
+### Verification (isolated DSH_HOME, real browser, real client bundle)
+
+| Step | Measured |
+| :--- | :--- |
+| shell boot | 0 page errors, `@nolit/dsh-opencode-v2` and `@nolit/dsh-antigravity` entries active |
+| route `opencode-http-agent` | chip `비용 $0.0042` at x=778,y=525; model selector at x=876,y=524 — the chip sits immediately left of the model serving, where Antigravity's chip sits |
+| route `deepseek-account` | chip absent; 0 `/cost/session` requests after the switch |
+| DOM order | `[data-slot="conversation.input.right"]` precedes `[data-slot="conversation.input.model"]` in the trailing group |
+| `npm test` | 427/427 (the rewritten `slot-contract.test.mjs` pins the seat, the pill shape and the dead-path removal) |
 
 ## 0.0.2-rc.3 — resilience patch — 2026-11-05
 

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "서브라우터",
+    "description": "DeepSeek Harness용 핫플러그 OpenAI 호환 서브라우터 제공자입니다. DSH LLM 라우트를 추가로 등록하고 언로드 시 자동으로 제거합니다."
+  }
+}

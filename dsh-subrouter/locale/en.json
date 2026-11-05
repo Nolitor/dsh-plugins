@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Subrouter",
+    "description": "Hot-pluggable OpenAI-compatible sub-router provider for DeepSeek Harness. Registers an additional DSH LLM route and removes it automatically on unload."
+  }
+}

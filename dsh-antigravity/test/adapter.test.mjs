@@ -113,3 +113,50 @@ test('a 403 is not retried', async () => {
   )
   assert.equal(calls.length, 1)
 })
+
+// ---- block-end content (2026-11-05, the "answer eaten" bug) ----------------
+
+/**
+ * Build an SSE response from candidate frames.
+ *
+ * MEASURED 2026-11-05 in live session-13e95450-0a9b-4a5a-b49b-a3ac85237e4d:
+ * every `text-chunks` entry carried the answer, but the following `block-end`
+ * carried `{type:'text', text:''}`, the host stored the empty block, and the
+ * transcript showed no reply at all. The block-end payload is what the host
+ * persists, so it must be the accumulated text.
+ */
+const textSse = (frames) => new Response(
+  frames.map(frame).join('') + 'data: [DONE]\n\n',
+  { status: 200, headers: { 'content-type': 'text/event-stream' } },
+)
+
+test('a closed text block carries the accumulated text, not an empty string', async () => {
+  const { adapter } = makeAdapter([
+    textSse([
+      { response: { candidates: [{ content: { parts: [{ text: 'The answer ' }] } }] } },
+      { response: { candidates: [{ content: { parts: [{ text: 'is complete.' }] } }] } },
+    ]),
+  ])
+  const chunks = []
+  for await (const chunk of adapter.stream(requestOptions())) chunks.push(chunk)
+  const end = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block?.type === 'text')
+  assert.ok(end, 'the text block must be closed')
+  assert.equal(end.block.text, 'The answer is complete.')
+  assert.ok(
+    chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text === 'The answer '),
+    'deltas still stream for the live view',
+  )
+})
+
+test('a closed reasoning block carries the accumulated reasoning text', async () => {
+  const { adapter } = makeAdapter([
+    textSse([
+      { response: { candidates: [{ content: { parts: [{ text: 'thinking…', thought: true }, { text: 'done' }] } }] } },
+    ]),
+  ])
+  const chunks = []
+  for await (const chunk of adapter.stream(requestOptions())) chunks.push(chunk)
+  const reasoningEnd = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block?.type === 'reasoning')
+  assert.ok(reasoningEnd, 'the reasoning block must be closed')
+  assert.equal(reasoningEnd.block.text, 'thinking…')
+})

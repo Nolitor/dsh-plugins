@@ -1,0 +1,8 @@
+{
+  "meta": {
+    "title": "로컬 CLI 위임 (실험적)",
+    "description": "delegate_local 도구로 독립 작업 하나를 로컬 코딩 CLI(agy, opencode, codex, claude)에 위임합니다."
+  },
+  "tool.delegate_local.name": "로컬 CLI 위임",
+  "tool.delegate_local.description": "독립 작업을 격리된 로컬 CLI에서 완료까지 실행하고 응답, 종료 정보, 사용량, 산출물을 반환합니다."
+}

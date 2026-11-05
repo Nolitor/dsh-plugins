@@ -1,0 +1,8 @@
+{
+  "meta": {
+    "title": "Local CLI Delegation (experimental)",
+    "description": "Delegate one self-contained task to a local coding CLI (agy, opencode, codex, claude) through the delegate_local tool."
+  },
+  "tool.delegate_local.name": "Local CLI Delegate",
+  "tool.delegate_local.description": "Run one self-contained task to completion in an isolated local CLI and return its answer, exit facts, usage, and artifacts."
+}

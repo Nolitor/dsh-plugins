@@ -33,7 +33,7 @@ window.__ModuleLoader__.load({
     // ===== STYLESHEET START =====
     // Injected exactly like a native section does: one `<style data-plugin-css>`
     // tag keyed by a stable id, so a reload replaces rather than duplicates it.
-    const CSS = ".ocv2Section{min-width:0;max-width:720px;padding:16px 0;display:flex;flex-direction:column;gap:12px;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary)}.ocv2Heading{color:var(--dsw-alias-label-primary);margin:0;font-size:16px;font-weight:500;line-height:24px}.ocv2Hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:14px;line-height:22px}.ocv2Card{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}.ocv2CardHead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-width:0}.ocv2CardTitle{color:var(--dsw-alias-label-primary);margin:0;font-size:14px;font-weight:500;line-height:22px}.ocv2Meta{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;text-align:right;min-width:0}.ocv2Segmented{display:inline-flex;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);overflow:hidden}.ocv2Segment{appearance:none;background:0 0;border:0;cursor:pointer;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;line-height:20px;padding:5px 14px}.ocv2Segment+.ocv2Segment{border-left:.5px solid var(--dsw-alias-border-l4)}.ocv2Segment[aria-pressed=true]{background:var(--dsw-alias-button-ghost-active-fill);color:var(--dsw-alias-label-primary);font-weight:500}.ocv2Segment:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-solid)}.ocv2Segment:disabled{cursor:default;opacity:.55}.ocv2Actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.ocv2Count{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;margin-left:auto}.ocv2Models{border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-lg);margin:0;padding:10px;display:flex;flex-direction:column;gap:2px;max-height:320px;overflow:auto}.ocv2Model{border-radius:var(--dsw-radius-md);cursor:pointer;display:grid;grid-template-columns:auto auto minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:6px;min-width:0}@media (hover:hover){.ocv2Model:hover{background:var(--dsw-alias-interactive-bg-hover-solid)}}.ocv2ModelUnavailable{cursor:default;opacity:.6}.ocv2Name{min-width:0;display:flex;flex-direction:column;gap:0}.ocv2ModelName{color:var(--dsw-alias-label-primary);font-size:14px;line-height:22px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.ocv2Route{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.ocv2Badge{flex:0 0 auto;min-width:5.5em;text-align:center;font-size:11px;line-height:18px;padding:0 6px;border-radius:var(--dsw-radius-xs);border:.5px solid var(--dsw-alias-border-l3);color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ocv2BadgeUsable{border-color:var(--dsw-alias-state-success-primary);color:var(--dsw-alias-state-success-primary)}.ocv2BadgeNew{border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-state-business-primary)}.ocv2BadgeBad{color:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary)}.ocv2Plan{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:18px;min-width:3.5em;text-align:right}.ocv2Rank{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:18px;font-variant-numeric:tabular-nums;min-width:3em;text-align:right}.ocv2Notice{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;margin:0}.ocv2Error{color:var(--dsw-alias-state-error-primary);font-size:14px;line-height:22px;margin:0;display:flex;justify-content:space-between;align-items:center;gap:12px}.ocv2ErrorAction{color:var(--dsw-alias-link);cursor:pointer;background:0 0;border:0;padding:0;font:inherit}.ocv2PlanPanel{position:fixed;z-index:1000;bottom:64px;right:24px;width:280px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;background:var(--dsw-alias-settings-card-fill);border:.5px solid var(--dsw-alias-settings-card-stroke);border-radius:var(--dsw-radius-lg);box-shadow:0 8px 24px var(--dsw-alias-bg-mask-2)}.ocv2PlanHead{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;line-height:20px;font-weight:500;color:var(--dsw-alias-label-primary)}.ocv2PlanRefresh{appearance:none;background:0 0;border:0;padding:0;cursor:pointer;color:var(--dsw-alias-link);font:inherit;font-size:12px}.ocv2PlanBody{display:flex;flex-direction:column;gap:10px}.ocv2PlanRow{display:flex;flex-direction:column;gap:4px}.ocv2PlanRowTop{display:flex;justify-content:space-between;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}.ocv2PlanPct{font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-primary)}.ocv2PlanBar{height:6px;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-interactive-bg-hover-solid);overflow:hidden}.ocv2PlanFill{height:100%;background:var(--dsw-alias-state-business-primary);border-radius:inherit}.ocv2PlanFill[data-high]{background:var(--dsw-alias-state-error-primary)}.ocv2PlanReset{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}.ocv2PlanNote{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}.ocv2CostChip{box-sizing:border-box;display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:var(--dsw-radius-sm);background:0 0;border:0;cursor:pointer;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);line-height:19px;white-space:nowrap;font-variant-numeric:tabular-nums}.ocv2CostChip:hover{background:var(--dsw-alias-interactive-bg-hover-solid);color:var(--dsw-alias-label-secondary)}.ocv2PlanSection{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);text-transform:none}.ocv2PlanModel{display:flex;flex-direction:column;gap:1px;min-width:0}.ocv2PlanModelName{font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ocv2PlanModelMeta{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}.ocv2PlanDivider{height:.5px;background:var(--dsw-alias-border-l3);margin:2px 0}"
+    const CSS = ".ocv2Section{min-width:0;max-width:720px;padding:16px 0;display:flex;flex-direction:column;gap:12px;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary)}.ocv2Heading{color:var(--dsw-alias-label-primary);margin:0;font-size:16px;font-weight:500;line-height:24px}.ocv2Hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:14px;line-height:22px}.ocv2Card{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}.ocv2CardHead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-width:0}.ocv2CardTitle{color:var(--dsw-alias-label-primary);margin:0;font-size:14px;font-weight:500;line-height:22px}.ocv2Meta{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;text-align:right;min-width:0}.ocv2Segmented{display:inline-flex;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);overflow:hidden}.ocv2Segment{appearance:none;background:0 0;border:0;cursor:pointer;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;line-height:20px;padding:5px 14px}.ocv2Segment+.ocv2Segment{border-left:.5px solid var(--dsw-alias-border-l4)}.ocv2Segment[aria-pressed=true]{background:var(--dsw-alias-button-ghost-active-fill);color:var(--dsw-alias-label-primary);font-weight:500}.ocv2Segment:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-solid)}.ocv2Segment:disabled{cursor:default;opacity:.55}.ocv2Actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.ocv2Count{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;margin-left:auto}.ocv2Models{border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-lg);margin:0;padding:10px;display:flex;flex-direction:column;gap:2px;max-height:320px;overflow:auto}.ocv2Model{border-radius:var(--dsw-radius-md);cursor:pointer;display:grid;grid-template-columns:auto auto minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:6px;min-width:0}@media (hover:hover){.ocv2Model:hover{background:var(--dsw-alias-interactive-bg-hover-solid)}}.ocv2ModelUnavailable{cursor:default;opacity:.6}.ocv2Name{min-width:0;display:flex;flex-direction:column;gap:0}.ocv2ModelName{color:var(--dsw-alias-label-primary);font-size:14px;line-height:22px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.ocv2Route{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.ocv2Badge{flex:0 0 auto;min-width:5.5em;text-align:center;font-size:11px;line-height:18px;padding:0 6px;border-radius:var(--dsw-radius-xs);border:.5px solid var(--dsw-alias-border-l3);color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ocv2BadgeUsable{border-color:var(--dsw-alias-state-success-primary);color:var(--dsw-alias-state-success-primary)}.ocv2BadgeNew{border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-state-business-primary)}.ocv2BadgeBad{color:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary)}.ocv2Plan{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:18px;min-width:3.5em;text-align:right}.ocv2Rank{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:18px;font-variant-numeric:tabular-nums;min-width:3em;text-align:right}.ocv2Notice{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;margin:0}.ocv2Error{color:var(--dsw-alias-state-error-primary);font-size:14px;line-height:22px;margin:0;display:flex;justify-content:space-between;align-items:center;gap:12px}.ocv2ErrorAction{color:var(--dsw-alias-link);cursor:pointer;background:0 0;border:0;padding:0;font:inherit}.ocv2PlanPanel{position:fixed;z-index:1000;bottom:64px;right:24px;width:280px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;background:var(--dsw-alias-settings-card-fill);border:.5px solid var(--dsw-alias-settings-card-stroke);border-radius:var(--dsw-radius-lg);box-shadow:0 8px 24px var(--dsw-alias-bg-mask-2)}.ocv2PlanHead{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;line-height:20px;font-weight:500;color:var(--dsw-alias-label-primary)}.ocv2PlanRefresh{appearance:none;background:0 0;border:0;padding:0;cursor:pointer;color:var(--dsw-alias-link);font:inherit;font-size:12px}.ocv2PlanBody{display:flex;flex-direction:column;gap:10px}.ocv2PlanRow{display:flex;flex-direction:column;gap:4px}.ocv2PlanRowTop{display:flex;justify-content:space-between;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}.ocv2PlanPct{font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-primary)}.ocv2PlanBar{height:6px;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-interactive-bg-hover-solid);overflow:hidden}.ocv2PlanFill{height:100%;background:var(--dsw-alias-state-business-primary);border-radius:inherit}.ocv2PlanFill[data-high]{background:var(--dsw-alias-state-error-primary)}.ocv2PlanReset{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}.ocv2PlanNote{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}.ocv2Pill{appearance:none;background:0 0;border:0;display:inline-flex;align-items:center;gap:6px;padding:0 6px;cursor:pointer;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);white-space:nowrap}.ocv2Pill:hover{color:var(--dsw-alias-label-secondary)}.ocv2PillValue{color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}.ocv2PlanSection{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);text-transform:none}.ocv2PlanModel{display:flex;flex-direction:column;gap:1px;min-width:0}.ocv2PlanModelName{font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ocv2PlanModelMeta{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}.ocv2PlanDivider{height:.5px;background:var(--dsw-alias-border-l3);margin:2px 0}"
     const CSS_TAG_ID = '@nolit/dsh-opencode-v2/settings.css'
     if (typeof document !== 'undefined' && document.querySelector('style[data-plugin-css=' + JSON.stringify(CSS_TAG_ID) + ']') === null) {
       const tag = document.createElement('style')
@@ -64,12 +64,16 @@ window.__ModuleLoader__.load({
         count: '선택 {a} / 사용 가능 {b} / 이 플랜 {c}',
         otherPlan: '다른 플랜 {n}개는 목록에서 제외됩니다',
         costFree: '무료',
+        pillLabel: '비용',
         costPlan: '플랜',
         costTitle: '이 세션 요청 {n}건의 실제 비용과 플랜 소진액 — 클릭하면 플랜 사용량',
         planUsageTitle: 'Go 플랜 사용량',
         planUsageRefresh: '새로고침',
         planUsageError: '플랜 사용량을 가져오지 못했습니다',
         planUsageEmpty: '표시할 플랜 사용량이 없습니다',
+        windowRolling: '5시간',
+        windowWeekly: '주간',
+        windowMonthly: '월간',
         planResets: '{at} 초기화',
         costSessionTitle: '이 세션 {n}건 · 모델별',
         costAggregateOnly: '이 세션 {requests}건 · 모델별 내역은 재시작 후 표시됩니다',
@@ -112,12 +116,16 @@ window.__ModuleLoader__.load({
         count: '{a} selected / {b} usable / {c} on this plan',
         otherPlan: '{n} more on the other plan, not listed here',
         costFree: 'free',
+        pillLabel: 'Cost',
         costPlan: 'plan',
         costTitle: 'Actual cost and plan burn for this session\'s {n} request(s) — click for plan usage',
         planUsageTitle: 'Go plan usage',
         planUsageRefresh: 'Refresh',
         planUsageError: 'Could not read the plan usage',
         planUsageEmpty: 'No plan usage to show',
+        windowRolling: '5-hour',
+        windowWeekly: 'Weekly',
+        windowMonthly: 'Monthly',
         planResets: 'resets {at}',
         costSessionTitle: '{n} requests this session, by model',
         costAggregateOnly: '{requests} requests; the per-model split appears after a restart',
@@ -152,9 +160,12 @@ window.__ModuleLoader__.load({
         const active = localeReader?.()
         if (active) return String(active)
       } catch {
-        /* no locale service: fall through to the browser */
+        /* no locale service */
       }
-      return typeof navigator !== 'undefined' ? String(navigator.language ?? '') : ''
+      // English is the default. Korean renders ONLY while the DSH locale service's
+      // active language is ko; the browser locale is not a fallback (owner rule
+      // 2026-11-05).
+      return ''
     }
 
     function currentLang() {
@@ -524,7 +535,10 @@ window.__ModuleLoader__.load({
      * @returns {string} e.g. `$0.0701`, or the zero form when nothing is spent.
      */
     function costPillText(session) {
-      if (!session || typeof session !== 'object') return formatUsd(0)
+      // No ledger entry = this session has no request on our route yet. That is
+      // "nothing to show", not "$0": the chip must leave no seat until the first
+      // measured request (docs/UI-SLOT-ARCHITECTURE.md §4).
+      if (!session || typeof session !== 'object') return ''
       const cost = Number(session.costUsd ?? 0)
       const plan = Number(session.allowanceUsd ?? 0)
       // Go reports cost 0 on every request (usage inside the limit), so the plan
@@ -581,48 +595,6 @@ window.__ModuleLoader__.load({
       // model prefix showed the chip on every router that resells the same ids.
       const provider = node.getAttribute('data-provider-id') ?? ''
       return OWN_PROVIDER_IDS.includes(provider)
-    }
-
-    function paintCostPill(text, title) {
-      if (typeof document === 'undefined') return
-      const anchor = document.querySelector('[data-composer-stat]')
-      const row = anchor?.parentElement
-      const current = row?.querySelector('[data-ocv2-cost]') ?? document.querySelector('[data-ocv2-cost]')
-      // Another provider is selected: the figure would not describe this session.
-      if (!usingOwnRoute()) { if (current) current.remove(); return }
-      if (!row) return
-      if (text === '') { if (current) current.remove(); return }
-      if (current) {
-        const pill = current.querySelector('span') ?? current
-        const label = pill.querySelector('span') ?? pill
-        label.textContent = text
-        current.title = title
-        return
-      }
-      // Read the host's hashed class names off the live anchor. Use the first
-      // anchor that carries the full pill > label nesting: a bare anchor would
-      // give empty class names and the page font again.
-      let host = null
-      for (const candidate of row.querySelectorAll('[data-composer-stat]')) {
-        const p = candidate.querySelector('span')
-        const l = p?.querySelector('span')
-        if (candidate.className && p?.className && l?.className) { host = { anchor: candidate, pill: p, label: l }; break }
-      }
-      if (host === null) return
-      const wrapper = document.createElement('span')
-      wrapper.className = host.anchor.className
-      wrapper.setAttribute('data-ocv2-cost', '1')
-      wrapper.title = title
-      const pill = document.createElement('span')
-      pill.className = host.pill.className
-      const label = document.createElement('span')
-      label.className = host.label.className
-      label.textContent = text
-      pill.appendChild(label)
-      wrapper.appendChild(pill)
-      // Clicking opens the plan panel, as the Hermes chip does.
-      wrapper.addEventListener('click', (event) => { event.preventDefault(); togglePlanPanel() })
-      row.appendChild(wrapper)
     }
 
     /**
@@ -776,7 +748,10 @@ window.__ModuleLoader__.load({
         const top = document.createElement('div')
         top.className = 'ocv2PlanRowTop'
         const label = document.createElement('span')
-        label.textContent = entry.label
+        // The server sends a stable English label; the active locale owns display text.
+        label.textContent = t(
+          key === 'rolling' ? 'windowRolling' : key === 'weekly' ? 'windowWeekly' : 'windowMonthly',
+        )
         const pct = document.createElement('span')
         pct.className = 'ocv2PlanPct'
         pct.textContent = entry.percent + '%'
@@ -805,17 +780,6 @@ window.__ModuleLoader__.load({
       }
       return out
     }
-
-    /** Poll the session's cumulative cost while a session is open. */
-    /**
-     * Composer slot component for the cost chip.
-     *
-     * Registered at `conversation.input.activity`, which the composer toolbar
-     * renders from the first paint — so the chip is present before any turn,
-     * unlike the DOM-patch version that waited for the host's usage anchors.
-     * Clicking it opens the plan panel.
-     */
-
 
     /**
      * Watch the composer's model chip and report every change.
@@ -885,37 +849,24 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The pill as the composer's activity occupant.
+     * The composer chip: this plugin's spend for the current session.
      *
-     * The slot contract (`InputActivityOwnerProps`, measured in the installed
-     * `dsh-client-ui-conversation` types) gives an occupant `locked` and
-     * `onActiveChange`, and states: "a toolbar activity hides ordinary accessory
-     * controls while expanded; its occupant must release expansion on unmount."
+     * SEAT (owner instruction 2026-11-05): `conversation.input.right`, the additive
+     * LIST slot Antigravity's usage chip already occupies. OpenCode's chip used to
+     * sit in `conversation.input.activity` — a SINGLE slot already owned by the
+     * token-economizer ("tk"), which is a second registration and renders the chip
+     * to the right of the model selector. The instruction is to display it like
+     * Antigravity does now: same seat (left of the selector, beside the model
+     * serving), same label+value pill shape and the same DSH typography tokens.
      *
-     * This occupant never expands — the chip is a fixed-size inline button — so it
-     * reports `active: false` once on mount and again on unmount. Without that the
-     * composer could stay in the expanded state after the chip disappears (for
-     * example when the operator switches to another provider and the gate returns
-     * null), hiding the model selector and the other accessory controls.
-     *
-     * @param {object} [props] - slot props from the host.
-     * @param {(active: boolean) => void} [props.onActiveChange] - expansion report.
+     * GATE: rendered only while the composer is on a route this package registers.
+     * Ownership is decided by the PROVIDER id, never by a model id (the same catalog
+     * ids are resold by other routers; measured 2026-11-04). Off-route it returns
+     * null, so no empty node and no cost request for another provider's session.
      */
-    function CostPill(props) {
-      const onActiveChange = typeof props?.onActiveChange === 'function' ? props.onActiveChange : null
-      React.useEffect(() => {
-        if (onActiveChange === null) return undefined
-        onActiveChange(false)
-        return () => onActiveChange(false)
-      }, [])
+    function CostPill() {
       /**
        * Whether an OpenCode V2 model is selected RIGHT NOW.
-       *
-       * This component is rendered for every provider, so without the gate the
-       * chip appeared next to models this plugin does not serve — measured
-       * 2026-11-04 by the owner ("오픈코드 모델이 아닌 다른 api나 dsh 자체 모델에서는
-       * 아예 감춰져야 하는거 아닌가?"). `paintCostPill` (the old DOM path) already
-       * had the rule; the slot component that replaced it did not.
        *
        * The chip is a DOM fact (no client service), so the value is read from the
        * composer and RE-READ when it changes: `watchRoute` observes the chip's
@@ -923,9 +874,11 @@ window.__ModuleLoader__.load({
        * immediately and nothing runs while the selection is stable.
        */
       const [onRoute, setOnRoute] = React.useState(() => usingOwnRoute())
-      // Start at the zero label, not an empty string: an empty first render used
-      // to remove the chip until the first poll answered.
-      const [text, setText] = React.useState(() => t('costFree'))
+      // Empty first render: with no measured session spend there is no figure to
+      // show, and an invented "$0"/"무료" label was rejected by the owner. The chip
+      // appears with the first answer from `cost/session`, like Antigravity's chip
+      // appears with the first measured token.
+      const [text, setText] = React.useState('')
       const [title, setTitle] = React.useState('')
       React.useEffect(() => {
         const disconnect = watchRoute(() => setOnRoute(usingOwnRoute()))
@@ -947,7 +900,7 @@ window.__ModuleLoader__.load({
             const payload = await post('cost/session', { sessionId })
             if (!live) return
             // Until the server resolves the id, fall back to the aggregate so the
-            // chip shows a real running total instead of the zero label.
+            // chip shows a real running total instead of staying empty.
             const entry = payload.session ?? (payload.totals && payload.totals.requests > 0
               ? { requests: payload.totals.requests, costUsd: payload.totals.costUsd, allowanceUsd: payload.totals.allowanceUsd }
               : null)
@@ -978,81 +931,50 @@ window.__ModuleLoader__.load({
         }
       }, [onRoute])
       // A different provider is selected: occupy no seat at all. Returning null
-      // (not an empty chip) is what makes the figure disappear, and the slot
-      // collapses so the host toolbar keeps its own spacing.
+      // (not an empty chip) is what makes the figure disappear, and the list slot
+      // reflows without leaving a gap.
       if (!onRoute) return null
-      // On our route: never return null for a missing figure, or the meter
-      // disappears exactly while a turn is running.
+      // No measured spend yet: no seat either. `text` becomes non-empty as soon as
+      // the ledger has a request for this session.
+      if (text === '') return null
       return h(
         'button',
         {
           type: 'button',
-          className: 'ocv2CostChip',
+          className: 'ocv2Pill',
           title,
           'data-ocv2-cost': '1',
           onClick: (event) => { event.preventDefault(); togglePlanPanel() },
         },
-        text,
+        h('span', null, t('pillLabel')),
+        h('span', { className: 'ocv2PillValue' }, text),
       )
     }
 
-    function startCostPill(ctx) {
-      if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return
-      let text = ''
-      let title = ''
-      const paint = () => paintCostPill(text, title)
-      // The active session id is a DOM fact, not a client service: the chat host
-      // stamps it on the conversation root (measured live:
-      // `data-conversation-session="session-…"`). Reading it there needs no
-      // inject declaration and cannot go stale against an adapter API.
-      const sessionId = () =>
-        document.querySelector('[data-conversation-session]')?.getAttribute('data-conversation-session') ?? ''
-      const refresh = async () => {
-        try {
-          const payload = await post('cost/session', { sessionId: sessionId() })
-          text = costPillText(payload.session)
-          title = text === '' ? '' : t('costTitle', { n: payload.session?.requests ?? 0 })
-        } catch {
-          return
-        }
-        paint()
-      }
-      const observer = new MutationObserver(() => {
-        // Re-attach only when React replaced the row out from under us.
-        if (text !== '' && document.querySelector('[data-ocv2-cost]') === null) paint()
-      })
-      observer.observe(document.body, { childList: true, subtree: true })
-      ctx.effect(() => () => observer.disconnect(), 'opencode-v2: cost pill observer')
-      void refresh()
-      const timer = setInterval(() => void refresh(), COST_POLL_MS)
-      if (typeof timer?.unref === 'function') timer.unref()
-      ctx.effect(() => () => clearInterval(timer), 'opencode-v2: cost pill poll')
-    }
     // ===== STATUS PILL END =====
 
     const inject = ['slots', 'locale']
 
     function apply(ctx) {
       localeReader = () => String(ctx.locale?.getSnapshot?.()?.active ?? '')
-      // The cost pill is a COMPOSER SLOT, not a DOM patch. Measured 2026-11-04:
-      // the host's `[data-composer-stat]` anchors only exist once a session has
-      // token usage, so an injected node had nowhere to attach before the first
-      // turn — "대화가 시작해야지 출력된다". `conversation.input.activity` is a real
-      // slot rendered by the composer toolbar from the first paint.
-      // Seat: `conversation.input.activity` — the trailing group of the composer
-      // row, rendered immediately AFTER the model selector.
+      // The cost pill is a COMPOSER SLOT, not a DOM patch (measured 2026-11-04: the
+      // host's `[data-composer-stat]` anchors only exist once a session has token
+      // usage, so an injected node had nowhere to attach before the first turn).
+      //
+      // SEAT: `conversation.input.right` — the additive LIST slot Antigravity's usage
+      // chip occupies, rendered beside the model selector. Owner instruction
+      // 2026-11-05: "오픈코드 v2에서 모델서빙 오른쪽으로 표시되는거 지금 안티그래비티
+      // 처럼 표시되게". The previous seat, `conversation.input.activity`, is a SINGLE
+      // slot already registered by the token-economizer in the live profile, so this
+      // chip was a second registration in a seat that renders one occupant.
       //
       // DO NOT use `conversation.input.model.label`. Measured 2026-11-04: that slot
       // owns the model NAME itself, so a contribution there REPLACES the catalog
       // name — the chip rendered "· $0.1318Max" and the model name vanished from
       // the UI ("모델 리스트가 없어졌어"). Reverted immediately.
-      //
-      // The model serving position is fixed by instruction, so the figure stays
-      // out of the selector: `input.activity` is the closest seat that only
-      // ADDS UI.
-      ctx.slots.inject('conversation.input.activity', () =>
+      ctx.slots.inject('conversation.input.right', () =>
         ctx.slots.register(
-          { name: 'conversation.input.activity', id: 'opencode-v2-cost', order: 0 },
+          { name: 'conversation.input.right', id: 'opencode-v2-cost', order: 2 },
           CostPill,
         ),
       )
