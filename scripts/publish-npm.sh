@@ -7,7 +7,7 @@
 #    `npm publish` for those -- measured 2026-11-06: it exits with
 #    "You must specify a tag using --tag when publishing a prerelease version".
 #    It also never assigns the `latest` dist-tag to a prerelease, so a consumer
-#    running `npm i @nolit/dsh-notify-web` would get E404 even after publishing.
+#    running `npm i @nolit/dsh-notify` would get E404 even after publishing.
 #    This script therefore always passes an explicit --tag.
 #
 # 2. All three packages are SCOPED (@nolit/...). A scoped package publishes

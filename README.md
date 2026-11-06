@@ -106,7 +106,7 @@ npm run docs:moves     # pointer-stub gate: every Moved-out destination exists a
 | `dsh-tokeneconomizer/` | `@nolit/dsh-tokeneconomizer` TokenEconomizer bridge | Active — saving measurement lives in its own `docs/` |
 | `dsh-subagent-local/` | `@nolit/dsh-subagent-local` local delegation over agy / opencode / codex / claude | Active, linked into the `web` profile |
 | `archive/dsh-subrouter/` | `@nolit/dsh-subrouter` legacy router track | **Archived 2026-11-06** — superseded by `@nolit/dsh-opencode-v2/http`; removed from every profile |
-| `dsh-notify/` | `@nolit/dsh-notify-web` notification plugin | **Active** — in the `web` profile `dependencies`, `dsh.profile.bundles`, and composed rows (measured 2026-11-06) |
+| `dsh-notify/` | `@nolit/dsh-notify` notification plugin | **Active** — in the `web` profile `dependencies`, `dsh.profile.bundles`, and composed rows (measured 2026-11-06) |
 | `dsh-command-skill/` | `@nolit/dsh-command-skill` interrupt/command contract authority | **Spec track** — ships documents only; registers nothing, installed nowhere |
 | `dsh-custom-router/` | `@nolit/dsh-custom-router` model-serving router | **Spec track** — documents only, no runtime surface mounted |
 

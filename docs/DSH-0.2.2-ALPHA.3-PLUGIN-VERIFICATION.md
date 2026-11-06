@@ -99,7 +99,7 @@ Deferred (not mounted in this profile, 728 keys): `forgePanel` (253), `liveshare
 Before: inline pixel styles on a hand-rolled `div` card stack (`border: 1px`, `borderRadius: 12`,
 hardcoded fallback hexes) that ignored the settings section conventions.
 
-After: a single injected stylesheet (`@nolit/dsh-notify-web/notifications.css`, tagged
+After: a single injected stylesheet (`@nolit/dsh-notify/notifications.css`, tagged
 `data-plugin`), class-based, DSH tokens only — title + description rows with a right-aligned
 control, `.5px` separators, `--dsw-radius-*` corners, custom switch with `:focus-visible`, and
 five native cards (연결 상태 / 권한과 소리 / 알림 종류 / 소리 / 진단 정보).
@@ -167,7 +167,7 @@ Per this workspace's rule, a browser boot is the only valid mount proof.
 notify) driven with Chromium:
 
 - shell rendered, **0** "did not activate" strings, 0 page errors;
-- boot entries include `@nolit/dsh-korean-locale` and `@nolit/dsh-notify-web`;
+- boot entries include `@nolit/dsh-korean-locale` and `@nolit/dsh-notify`;
 - settings → **알림** renders the restyled section: `1` section, `5` cards, `11` rows,
   `7` switches, stylesheet tag present, heading `DSH 알림`;
 - switch labels: 턴 완료 / 도구 승인 필요 / 질문 대기 / 오류 / 서브에이전트 완료도 알림 /

@@ -24,7 +24,7 @@ while **none of the three packages existed on the registry**:
 
 | Package | `registry.npmjs.org` | Declared in market |
 | :--- | :--- | :--- |
-| `@nolit/dsh-notify-web` | **HTTP 404** | `type: npm` |
+| `@nolit/dsh-notify` | **HTTP 404** | `type: npm` |
 | `@nolit/dsh-korean-locale` | **HTTP 404** | `type: npm` |
 | `@nolit/dsh-sidebar-manager` | **HTTP 404** | `type: npm` |
 
@@ -53,9 +53,9 @@ Two consequences:
 
 1. **A tag is mandatory.** Use `--tag rc` (this workspace's convention for `0.0.1-rc.N`).
 2. **The version never becomes `latest`.** npm assigns `latest` only to stable versions, so
-   after publishing `0.0.1-rc.3` a consumer running `npm i @nolit/dsh-notify-web` still gets
+   after publishing `0.0.1-rc.3` a consumer running `npm i @nolit/dsh-notify` still gets
    E404. They must ask for `@rc` or the exact version:
-   `npm i @nolit/dsh-notify-web@0.0.1-rc.3`.
+   `npm i @nolit/dsh-notify@0.0.1-rc.3`.
 
 The market install is unaffected: DSH pins the exact version from `market/index.json`
 (spec §6.1 — *"produces install target `@nolit/dsh-korean-locale@0.2.2`"*), so a `latest`
@@ -148,8 +148,8 @@ Flags: `--tag <name>` (default `rc`), `--dry-run`, `--yes`.
 ### 4.1 Verify after publishing
 
 ```bash
-npm view @nolit/dsh-notify-web@0.0.1-rc.3 version   # exact version resolves
-npm view @nolit/dsh-notify-web dist-tags            # expect rc, not latest
+npm view @nolit/dsh-notify@0.0.1-rc.3 version   # exact version resolves
+npm view @nolit/dsh-notify dist-tags            # expect rc, not latest
 node scripts/check-npm-publishable.mjs dsh-notify   # market still agrees
 ```
 

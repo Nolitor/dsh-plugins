@@ -605,7 +605,7 @@ Related assets:
 | `@deepseek-ai/*` package scan | 330 packages; 319 at `0.2.2-alpha.2` |
 | Isolated boot | real `dsh web` under a workspace-local `DSH_HOME`, no writes to the live profile |
 | Served boot graph | 75 entries |
-| Nolit entries | `@nolit/dsh-korean-locale`, `@nolit/dsh-sidebar-manager`, `@nolit/dsh-notify-web` (notify linked only inside the isolated profile) |
+| Nolit entries | `@nolit/dsh-korean-locale`, `@nolit/dsh-sidebar-manager`, `@nolit/dsh-notify` (notify linked only inside the isolated profile) |
 | Browser locale | `<html lang="ko">`, Korean UI, no console/page errors |
 | Sidebar routes | 5/5 read-only routes returned HTTP 200; negative control 404 |
 | Korean coverage | 68 namespaces / 3,019 keys; enabled-surface missing = 0 |

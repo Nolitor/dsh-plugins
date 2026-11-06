@@ -61,7 +61,7 @@ DSH_HOME     /home/minami/.dsh (라이브, 읽기 전용 감사)
 실측은 라이브 `~/.dsh`를 변경하지 않기 위해 프로필 package/patch와 절대경로
 `node_modules` 링크만 복제한 격리 `DSH_HOME`에서 수행했다. 실제 바이너리는
 동일한 `dsh web --no-open --host 127.0.0.1 --port 3099`이며, 격리 프로필에만
-`@nolit/dsh-notify-web`을 추가했다.
+`@nolit/dsh-notify`을 추가했다.
 
 ### 1.1 라이브 프로필 번들 순서
 
@@ -180,12 +180,12 @@ UTM 변경의 대표 증거:
 `.runtime-measure/routes-utm-state.json`,
 `.runtime-measure/interact-utm-state.json`에 있다.
 
-### 2.4 `@nolit/dsh-notify-web` v0.1.1 (미설치 → 격리 실측 / 라이브 설치 차단)
+### 2.4 `@nolit/dsh-notify` v0.1.1 (미설치 → 격리 실측 / 라이브 설치 차단)
 
 | 검증 | 결과 |
 |---|---|
 | 격리 프로필 link + bundle | PASS |
-| boot graph 진입 | PASS (`@nolit/dsh-notify-web/client.js`) |
+| boot graph 진입 | PASS (`@nolit/dsh-notify/client.js`) |
 | 동의 오버레이 | `DSH 알림을 켜시겠습니까?` 렌더링 |
 | injected packages | `dsh-api-remotes`, `dsh-client-ui-session`, `dsh-client-ui-renderer` 모두 alpha.2에 존재 |
 | 콘솔/pageerror | 0건 |

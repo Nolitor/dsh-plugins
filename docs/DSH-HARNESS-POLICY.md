@@ -16,7 +16,7 @@ This workspace continuously manages these DSH web plugins:
 
 - `@nolit/dsh-korean-locale`
 - `@nolit/dsh-sidebar-manager`
-- `@nolit/dsh-notify-web`
+- `@nolit/dsh-notify`
 - `@nolit/dsh-opencode-v2` (wraps `@quonaro/dsh-plugin-opencode` as a dependency)
 
 The harness must keep runtime compatibility, release artifacts, policy decisions, and measured

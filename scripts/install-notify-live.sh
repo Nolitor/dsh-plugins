@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dsh-isolation: live-intentional (owner-run install; requires DSH_LIVE_INSTALL=1)
-# Install @nolit/dsh-notify-web into the live DSH web profile.
+# Install @nolit/dsh-notify into the live DSH web profile.
 # Run this OUTSIDE the read-only agent sandbox, as the DSH service user.
 set -euo pipefail
 
@@ -40,7 +40,7 @@ node - "$PROFILE_DIR/package.json" <<'NODE'
 const fs = require('fs')
 const file = process.argv[2]
 const pkg = JSON.parse(fs.readFileSync(file, 'utf8'))
-const name = '@nolit/dsh-notify-web'
+const name = '@nolit/dsh-notify'
 if (!pkg.dependencies?.[name]) throw new Error(`dependency not recorded: ${name}`)
 if (!pkg.dsh?.profile?.bundles?.includes(name)) throw new Error(`bundle not selected: ${name}`)
 console.log(`profile now includes ${name}`)
