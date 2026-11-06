@@ -155,7 +155,7 @@ echo
 
 echo
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "dry run finished clean. Re-run without --dry-run (and after \`npm login\`) to publish."
+  echo "dry run finished clean. Re-run without --dry-run to publish."
 else
   echo "published $EXPECTED@$VERSION (dist-tag: $TAG)"
   echo
