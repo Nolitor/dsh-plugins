@@ -1,10 +1,10 @@
 # DSH Plugins
 <!-- skeleton:
-version: 2.0
+version: 2.1
 kind: readme
 status: active
 updated: 2026-11-06
-summary: Workspace entry point: plugin track layout, per-subproject document homes, live profile wiring, agent boot chain.
+summary: Workspace entry point: plugin track layout by measured lifecycle (active / spec / verify-only), per-subproject document homes, live profile wiring, agent boot chain.
 -->
 
 
@@ -104,10 +104,11 @@ npm run docs:moves     # pointer-stub gate: every Moved-out destination exists a
 | `dsh-antigravity/` | `@nolit/dsh-antigravity` Antigravity vendor package | Active — stage plan lives in its own `docs/` |
 | `dsh-deepinfra/` | `@nolit/dsh-deepinfra` DeepInfra adapter | Active — build brief lives in its own `docs/` |
 | `dsh-tokeneconomizer/` | `@nolit/dsh-tokeneconomizer` TokenEconomizer bridge | Active — saving measurement lives in its own `docs/` |
-| `dsh-command-skill/` | `@nolit/dsh-command-skill` interrupt/command surfaces | Active — cross-project contract lives in its own `docs/` |
-| `dsh-subagent-local/`, `dsh-subrouter/` | local delegation / legacy router track | Active / experimental |
-| `dsh-notify/` | `@nolit/dsh-notify-web` notification plugin | Measured; **not** enabled in the live profile |
-| `dsh-custom-router/` | `@nolit/dsh-custom-router` model-serving router | Specification only — no runtime surface mounted |
+| `dsh-subagent-local/` | `@nolit/dsh-subagent-local` local delegation over agy / opencode / codex / claude | Active, linked into the `web` profile |
+| `dsh-subrouter/` | `@nolit/dsh-subrouter` legacy router track | **Verify-only** — installed in `verify-subrouter`, not in `web` |
+| `dsh-notify/` | `@nolit/dsh-notify-web` notification plugin | **Active** — in the `web` profile `dependencies`, `dsh.profile.bundles`, and composed rows (measured 2026-11-06) |
+| `dsh-command-skill/` | `@nolit/dsh-command-skill` interrupt/command contract authority | **Spec track** — ships documents only; registers nothing, installed nowhere |
+| `dsh-custom-router/` | `@nolit/dsh-custom-router` model-serving router | **Spec track** — documents only, no runtime surface mounted |
 
 ## Workspace registration
 
@@ -136,10 +137,11 @@ canonical path:
 "@nolit/dsh-korean-locale": "link:/home/minami/Workspace/projects/dsh-workspace/dsh-plugins/dsh-korean-locale"
 ```
 
-The `web` profile links both `@nolit/dsh-korean-locale` and
-`@nolit/dsh-sidebar-manager` from their canonical checkout paths and lists both
-in `dsh.profile.bundles`. `dsh-notify` remains intentionally uninstalled in the
-live profile; it was boot-verified in an isolated home only.
+The `web` profile links nine `@nolit` packages from their canonical checkout
+paths and lists them in `dsh.profile.bundles` — run `node scripts/check-disposal-safety.mjs`
+for the current measured set rather than trusting this sentence. `dsh-notify`
+**is** installed there (measured 2026-11-06); earlier revisions of this file
+said it was not, which was wrong.
 
 ## Provenance
 
@@ -149,13 +151,12 @@ DSH session logs (Windows-era project trees) — see each track's
 
 ## Prototypes vs. active plugins
 
-- **Active in the live `web` profile:** `dsh-korean-locale` and `dsh-sidebar-manager`
-  (bundle + link), plus the core DSH sidebar plugins (`ui-sidebar`,
-  `ui-sidebar-right`, `ui-sidebar-files`, …) that ship with the
-  `@deepseek-ai/dsh-web-app` bundle.
-- **Measured but intentionally not enabled live:** `dsh-notify`. It boots with a
-  linked isolated profile and renders its consent overlay, but the live profile
-  is left unchanged until the user explicitly promotes it.
+- **Active in the live `web` profile:** `dsh-korean-locale`, `dsh-sidebar-manager`,
+  `dsh-notify`, `dsh-tokeneconomizer`, `dsh-deepinfra`, `dsh-opencode-v2`,
+  `dsh-antigravity` and `dsh-subagent-local` (bundle + link), plus the core DSH
+  sidebar plugins (`ui-sidebar`, `ui-sidebar-right`, `ui-sidebar-files`, …) that
+  ship with the `@deepseek-ai/dsh-web-app` bundle. Measured with
+  `node scripts/check-disposal-safety.mjs --json`, not from this list.
 
 ## Verification
 
@@ -179,7 +180,10 @@ DSH session logs (Windows-era project trees) — see each track's
   and writes `VERIFICATION-REPORT.md`.
 - `verification/` — captured evidence (isolated real-DSH boot audit, offline audit).
 
-## Compatibility alias
+## Canonical path
 
-`/home/minami/Workspace/projects/dsh-plugins` is a symlink to this canonical directory,
-preserving the historical `dsh-notify -> dsh-plugins` rename spelling.
+The only path for this workspace is `/home/minami/Workspace/projects/dsh-workspace/dsh-plugins`.
+A compatibility symlink at `projects/dsh-plugins` existed from 2026-10-24 until 2026-11-06; it was
+removed because **nothing used it** — not the DSH registration (`workspace.json` names this path), not
+the session directories, not any script. A second spelling of one workspace is a defect, not a
+convenience.
