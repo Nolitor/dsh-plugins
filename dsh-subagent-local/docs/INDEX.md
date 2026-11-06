@@ -4,7 +4,7 @@
 version: 1.0
 kind: index
 status: active
-updated: 2026-11-06
+updated: 2026-11-07
 summary: Generated per-subproject index for @nolit/dsh-subagent-local: every document this track owns, one line each.
 -->
 
@@ -23,7 +23,7 @@ summary: Generated per-subproject index for @nolit/dsh-subagent-local: every doc
 | 1.0 | report | active | 2026-11-05 | [CHANGELOG.md](../CHANGELOG.md) | Engineering history for the experimental local-CLI delegation plugin: rc.1 surfaces, the Invalid-effect activation defect, the subagent_oar verdict, and custody of the CLI-worker contract doc. |
 | 1.0 | report | measured | 2026-11-05 | [COMPATIBILITY.md](../COMPATIBILITY.md) | Measured compatibility of @nolit/dsh-subagent-local with the rc.1 official delegation packages and @tianyicui's subagent_oar, with exact package/version evidence and an explicit UNVERIFIED label where a combined mount could not be exercised. |
 | 1.0 | spec | reference | 2026-10-30 | [CLI-WORKER-STANDARD.md](CLI-WORKER-STANDARD.md) | Shared and per-CLI worker contract for the OpenCode (/ocode) and Antigravity (/agy) delegation tools. |
-| 1.0 | index | active | 2026-11-06 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-subagent-local: every document this track owns, one line each. |
+| 1.0 | index | active | 2026-11-07 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-subagent-local: every document this track owns, one line each. |
 | 1.0 | readme | active | 2026-11-05 | [README.md](../README.md) | Operator manual for the experimental delegate_local tool (agy, opencode, codex, claude backends), its config, prompt transport, artifacts and collision-yield policy. |
 | 1.0 | measurement | measured | 2026-11-05 | [VERIFICATION.md](../VERIFICATION.md) | Measured verification for the experimental local-delegation plugin: unit suite, syntax checks, isolated DSH_HOME composition, real rc.1 boot, and browser checks. |
 
@@ -51,6 +51,6 @@ summary: Generated per-subproject index for @nolit/dsh-subagent-local: every doc
 
 ## index
 
-- **1.0** · active · 2026-11-06 · [INDEX.md](INDEX.md)
+- **1.0** · active · 2026-11-07 · [INDEX.md](INDEX.md)
   Generated per-subproject index for @nolit/dsh-subagent-local: every document this track owns, one line each.
 

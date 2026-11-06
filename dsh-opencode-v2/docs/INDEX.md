@@ -4,7 +4,7 @@
 version: 1.0
 kind: index
 status: active
-updated: 2026-11-06
+updated: 2026-11-07
 summary: Generated per-subproject index for @nolit/dsh-opencode-v2: every document this track owns, one line each.
 -->
 
@@ -23,7 +23,7 @@ summary: Generated per-subproject index for @nolit/dsh-opencode-v2: every docume
 | 1.0 | spec | active | 2026-11-04 | [ARCHITECTURE.md](../ARCHITECTURE.md) | Module map, control-plane vs serving boundary, credential resolution, slot contract and ledger ownership for @nolit/dsh-opencode-v2, aligned with the same host standards now documented in dsh-deepinfra/ARCHITECTURE.md. |
 | 1.3 | report | active | 2026-11-05 | [CHANGELOG.md](../CHANGELOG.md) | Engineering history for @nolit/dsh-opencode-v2, including the completed subagent merge, the 0.0.2-rc.2 cleanup, the rc.4 cost-chip seat migration, and the managed child-session delegation cutover. |
 | 2.0 | design | implemented | 2026-10-29 | [CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md) | The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin. |
-| 1.0 | index | active | 2026-11-06 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-opencode-v2: every document this track owns, one line each. |
+| 1.0 | index | active | 2026-11-07 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-opencode-v2: every document this track owns, one line each. |
 | 3.2 | report | active | 2026-11-01 | [OPENCODE-MODEL-SERVING-PLAN.md](OPENCODE-MODEL-SERVING-PLAN.md) | Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, the 0.6.0 client-half activation defect that killed the web shell, the 0.7.3 stream-cut/inline-tag defects with their measured fix, the 0.7.6 split-marker hold gap that still printed the notation on screen, and the 0.8.0 boundary pipeline that deletes the tag scanner and types every delta from its wire field. |
 | 1.1 | measurement | measured | 2026-10-30 | [OPENCODE-V2-HTTP-API-MEASUREMENT.md](OPENCODE-V2-HTTP-API-MEASUREMENT.md) | Measured the OpenCode v2.2.0 HTTP server (130 endpoints, SSE event stream) and later corrected the DSH adapter policy: session/prompt is an OpenCode agent harness, so pure model serving uses the OpenAI-compatible backend directly and the local server only for catalog/provider/credential control. |
 | 1.0 | design | active | 2026-11-04 | [OPENCODE-V2-STAGE-PLAN.md](OPENCODE-V2-STAGE-PLAN.md) | Stage plan for @nolit/dsh-opencode-v2 — what "stabilised" means as a measurable gate, then stage 2 (move the canonical recipe-derived protocol parser into this single package) and stage 3 (ship the conformance oracle in the test suite). Replaces the deleted beta package. Records the exact defects that block promotion, the acceptance thresholds taken from recorded traffic, the rollback route, and who is allowed to open a stage. |
@@ -87,6 +87,6 @@ summary: Generated per-subproject index for @nolit/dsh-opencode-v2: every docume
 
 ## index
 
-- **1.0** · active · 2026-11-06 · [INDEX.md](INDEX.md)
+- **1.0** · active · 2026-11-07 · [INDEX.md](INDEX.md)
   Generated per-subproject index for @nolit/dsh-opencode-v2: every document this track owns, one line each.
 

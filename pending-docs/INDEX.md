@@ -4,7 +4,7 @@
 version: 1.0
 kind: index
 status: active
-updated: 2026-11-06
+updated: 2026-11-07
 summary: Home for shared docs whose lifecycle is not "active track doc": unpromoted, unimplemented, deprecated, or undecided. One folder per state, one index.
 -->
 

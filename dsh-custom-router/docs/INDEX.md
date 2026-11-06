@@ -4,7 +4,7 @@
 version: 1.0
 kind: index
 status: active
-updated: 2026-11-06
+updated: 2026-11-07
 summary: Generated per-subproject index for @nolit/dsh-custom-router: every document this track owns, one line each.
 -->
 
@@ -25,7 +25,7 @@ summary: Generated per-subproject index for @nolit/dsh-custom-router: every docu
 | 0.0.1-rc.1 | spec | active | 2026-11-06 | [CUSTOM-ROUTER-PRESET-SURFACE.md](CUSTOM-ROUTER-PRESET-SURFACE.md) | Owner-approved plan B: a separate plugin-owned Settings-Models (Custom) surface, with per-service tool presets, credential interception vs separate input, install/web-auth checks, and OpenCode plan detection. |
 | 0.0.1-rc.1 | spec | active | 2026-11-06 | [CUSTOM-ROUTER-PROTOCOL-STANDARD.md](CUSTOM-ROUTER-PROTOCOL-STANDARD.md) | Standard-LLM-contract baseline and measured capability gaps first, then per-service wire/auth/catalog differences and the normative StreamChunk mapping. |
 | 0.0.1-rc.1 | spec | active | 2026-11-06 | [CUSTOM-ROUTER-SERVICE-SPEC.md](CUSTOM-ROUTER-SERVICE-SPEC.md) | Measured DSH standard serving/router first (incl. discount / new-model / usage gaps), then the real-mount coexistence verdict, then the tool-preset activation model. |
-| 1.0 | index | active | 2026-11-06 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-custom-router: every document this track owns, one line each. |
+| 1.0 | index | active | 2026-11-07 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-custom-router: every document this track owns, one line each. |
 | 0.0.1-rc.1 | spec | active | 2026-11-06 | [PLAN-AND-USAGE-SPEC.md](PLAN-AND-USAGE-SPEC.md) | Concrete measured logic for subscription-plan detection (OpenCode Go/Zen, DeepInfra), normalised usage/quota reporting across services, and how the custom surface covers what DSH standard misses. |
 | 0.0.1-rc.1 | spec | active | 2026-11-06 | [PRESET-SCHEMA-AND-EXTENSION.md](PRESET-SCHEMA-AND-EXTENSION.md) | Normative per-service preset schema, the standardisation boundary, how far preset extension can go, and the coverage ceiling for services added in the future. |
 | 0.0.1-rc.1 | spec | active | 2026-11-06 | [RETRY-POLICY.md](RETRY-POLICY.md) | Normative bounded retry policy for the custom router: only transport/socket failures and transient 502/503/504, no automatic model fallback, no circuit breaker, short exponential backoff, clean terminal error. |
@@ -63,6 +63,6 @@ summary: Generated per-subproject index for @nolit/dsh-custom-router: every docu
 
 ## index
 
-- **1.0** · active · 2026-11-06 · [INDEX.md](INDEX.md)
+- **1.0** · active · 2026-11-07 · [INDEX.md](INDEX.md)
   Generated per-subproject index for @nolit/dsh-custom-router: every document this track owns, one line each.
 
