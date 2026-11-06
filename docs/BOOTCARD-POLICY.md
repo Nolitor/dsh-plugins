@@ -4,7 +4,7 @@
 version: 2.0
 kind: policy
 status: active
-updated: 2026-10-29
+updated: 2026-11-06
 summary: Boot card generation and read rules; AGENTS.md stays a thin pointer to the newest card, rules live in docs/RULES.md.
 -->
 
@@ -52,6 +52,10 @@ The generator:
 
 - Every agent invocation: `~/.dsh/AGENTS.md` (auto) → `AGENTS.md` (auto) → `docs/RULES.md`
   → `docs/SKELETON.md` → only the linked latest boot card.
+- **A boot card is not a document home.** Since 2026-11-06 a per-package document belongs in
+  `dsh-<track>/docs/` and an undecided shared document belongs in `pending-docs/` (RULES §6.1b,
+  §6.2). A boot card records what is *pending in this session*; it never becomes the only copy of
+  a spec, a measurement, or a decision.
 - Compare with older cards only when investigating a policy/version delta.
 
 ## Content contract

@@ -9,7 +9,7 @@ summary: Every repo script/test that launches dsh or a TokenEconomizer engine mu
 -->
 
 > Status: **mandatory** · Measured 2026-11-05 · Applies to `scripts/`, `dsh-*/test/`, `dsh-*/scripts/`, and docs examples
-> Related: [RULES.md](RULES.md) §2 (live state) · [ORPHAN-SESSION-CLEANUP.md](ORPHAN-SESSION-CLEANUP.md) (the damage this prevents)
+> Related: [RULES.md](RULES.md) §2 (live state) · [pending-docs/unpromoted/ORPHAN-SESSION-CLEANUP.md](../pending-docs/unpromoted/ORPHAN-SESSION-CLEANUP.md) (the damage this prevents)
 
 ## 1. The rule
 
@@ -116,7 +116,7 @@ The sidebar's "그룹 없음" section is **session logs no workspace lists**, no
 directory per TokenEconomizer side call, because the call let DSH persist at the default root.
 Those were cleaned before this round; the live state at 2026-11-05 is **120 logs: 98 bound, 20
 linked child, 2 unregistered**, of which only **2** are true standalone `/tmp/te-*` orphans. See
-[ORPHAN-SESSION-CLEANUP.md](ORPHAN-SESSION-CLEANUP.md) for the current cleanup plan.
+[pending-docs/unpromoted/ORPHAN-SESSION-CLEANUP.md](../pending-docs/unpromoted/ORPHAN-SESSION-CLEANUP.md) for the current cleanup plan.
 
 The engine-side fix (the TokenEconomizer patch re-roots session persistence per side call) is
 necessary but not sufficient: a harness that runs the engine or the CLI directly can still create

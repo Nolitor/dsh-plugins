@@ -1,5 +1,14 @@
 # Phase 5 — HQ 승격 · 배치 트랜잭션 · 레거시 분류 · 하네스 다이어트
 
+<!-- skeleton:
+version: 1.0
+kind: report
+status: completed
+updated: 2026-10-29
+summary: Phase 5 record: HQ promotion, batched placement transactions, legacy classification, and harness reduction.
+-->
+
+
 > 상태: implemented · 2026-10-25 · 라이브 무접촉(사용자 수동 트리거 전까지)
 > 기준 문서: `docs/dsh-plugin-runtime-spec.md` §2.1 / §2.2 (내부 권위)
 

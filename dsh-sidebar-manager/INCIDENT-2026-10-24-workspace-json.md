@@ -1,5 +1,14 @@
 # INCIDENT — 테스트가 라이브 `workspace.json`을 덮어쓴 사건
 
+<!-- skeleton:
+version: 1.0
+kind: report
+status: historical
+updated: 2026-10-24
+summary: Incident record: a test overwrote the live workspace.json, the blast radius, and the guard that prevents a repeat.
+-->
+
+
 > 상태: resolved · 발생 2026-10-24 20:33:05 KST · 복구 20:35 KST · 심각도: **High**
 
 ## 1. 무슨 일이 있었나

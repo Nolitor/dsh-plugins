@@ -1,10 +1,10 @@
 # DSH Plugins
 <!-- skeleton:
-version: 1.0
+version: 2.0
 kind: readme
 status: active
-updated: 2026-10-29
-summary: Workspace entry point: plugin track layout, live profile wiring, agent boot chain.
+updated: 2026-11-06
+summary: Workspace entry point: plugin track layout, per-subproject document homes, live profile wiring, agent boot chain.
 -->
 
 
@@ -14,9 +14,9 @@ This directory is the physical workspace root registered in
 (id `14879f56-24e5-4b96-a1b5-0778356e8960`, formerly titled `DSH Notify`).
 
 Current verified runtime: **DSH `0.2.2-alpha.2`**, Cordis `4.0.6-alpha.1`, Node `v24.22.1`.
-See [DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](./DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md) and
-[FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md](./FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md)
-(UTM review: [UTM-REVIEW-FORGE-VS-SIDEBAR.md](./UTM-REVIEW-FORGE-VS-SIDEBAR.md)).
+See [DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](./docs/DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md) and
+[dsh-sidebar-manager/docs/FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md](./dsh-sidebar-manager/docs/FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md)
+(UTM review: [dsh-sidebar-manager/docs/UTM-REVIEW-FORGE-VS-SIDEBAR.md](./dsh-sidebar-manager/docs/UTM-REVIEW-FORGE-VS-SIDEBAR.md)).
 
 It sits under the standardized unified tree:
 
@@ -52,16 +52,62 @@ npm run bootcard -- "session note"  # new dated boot card
 
 ## Layout
 
-| Path | Track | Status |
-|---|---|---|
-| `dsh-korean-locale/` | Korean (ko) language pack `@nolit/dsh-korean-locale` (font stack + dictionaries) | Active, linked into the `web` profile |
-| `dsh-notify/` | `@nolit/dsh-notify-web` browser notification plugin + recovered Windows PowerShell prototype | Measured under an isolated `DSH_HOME`; not enabled in the live profile |
-| `dsh-sidebar-manager/` | `@nolit/dsh-sidebar-manager` right-sidebar workspace/session switcher extension | Active, linked into the `web` profile (v0.1.2) |
-| `docs/` | Shared runtime documentation: plugin runtime spec, boot card | Active reference |
+| Path | What it is |
+|---|---|
+| `dsh-<track>/` | one **active** plugin track: code, `CHANGELOG.md`, and its own documents under `docs/` |
+| `docs/` | workspace **rules and policy** plus the records that genuinely span tracks |
+| `pending-docs/` | shared documents whose lifecycle is 미승격 · 미구현 · 폐기 · 미정 |
+| `bootcards/` | dated session cards, one per session |
+| `archive/` | absorbed tracks, kept as evidence — nothing here is installed by any profile |
+| `scripts/` | workspace gates: doc index, link check, plugin history, live-state isolation |
 
-Each track keeps its own `package.json`, `cordis.patch.yml`, locale dictionaries,
-and `lib/client.js` browser bundle, per the plugin layout documented in
-`docs/plugin-boot-card.md`.
+### Documentation homes
+
+Every subproject owns its documentation. There is no single flat pile.
+
+```
+docs/                       workspace rules + policy + cross-track records
+  RULES.md                  the rules (this file's tier-2 authority)
+  SKELETON.md               generated index of the above
+dsh-<track>/
+  docs/
+    INDEX.md                generated index of THIS track's documents
+    <SPEC|DESIGN|MEASUREMENT>.md
+pending-docs/
+  INDEX.md                  generated index, one table per lifecycle
+  unpromoted/ unimplemented/ deprecated/ undecided/
+```
+
+- **A document about one package goes in that package's `docs/`.** Not in the workspace `docs/`.
+- **Each track gates itself:** `cd dsh-<track> && npm run docs:check`.
+- **An undecided shared document goes to `pending-docs/`**, with a mandatory `lifecycle:` header
+  field that must match its folder. Authority: [docs/RULES.md](docs/RULES.md) §6.2.
+- **A document about a parent harness lives in that harness**, not here. This workspace keeps a
+  pointer stub carrying the destination's SHA-256, and `scripts/check-doc-moves.mjs` fails if the
+  destination is missing or has diverged (§6.2a).
+
+```bash
+npm run docs:index     # regenerate every index (workspace + pending-docs + all tracks)
+npm run docs:check     # headers + indexes + every relative link
+npm run docs:check:all # docs:check + per-track CHANGELOG gate
+npm run docs:links     # relative-link gate alone
+npm run docs:moves     # pointer-stub gate: every Moved-out destination exists and matches
+```
+
+### Active tracks
+
+| Path | Package | Status |
+|---|---|---|
+| `dsh-korean-locale/` | `@nolit/dsh-korean-locale` (font stack + dictionaries) | Active, linked into the `web` profile — **git submodule**, owns its own docs |
+| `dsh-sidebar-manager/` | `@nolit/dsh-sidebar-manager` right-sidebar workspace/session switcher | Active, linked into the `web` profile |
+| `dsh-opencode-v2/` | `@nolit/dsh-opencode-v2` OpenCode vendor package | Active — stage plan lives in its own `docs/` |
+| `dsh-antigravity/` | `@nolit/dsh-antigravity` Antigravity vendor package | Active — stage plan lives in its own `docs/` |
+| `dsh-deepinfra/` | `@nolit/dsh-deepinfra` DeepInfra adapter | Active — build brief lives in its own `docs/` |
+| `dsh-tokeneconomizer/` | `@nolit/dsh-tokeneconomizer` TokenEconomizer bridge | Active — saving measurement lives in its own `docs/` |
+| `dsh-command-skill/` | `@nolit/dsh-command-skill` interrupt/command surfaces | Active — cross-project contract lives in its own `docs/` |
+| `dsh-subagent-local/`, `dsh-subrouter/` | local delegation / legacy router track | Active / experimental |
+| `dsh-notify/` | `@nolit/dsh-notify-web` notification plugin | Measured; **not** enabled in the live profile |
+| `dsh-custom-router/` | `@nolit/dsh-custom-router` model-serving router | Specification only — no runtime surface mounted |
 
 ## Workspace registration
 
@@ -76,8 +122,10 @@ and `lib/client.js` browser bundle, per the plugin layout documented in
 The eight historical sessions were physically re-homed into
 `~/.dsh/sessions/--home-minami-Workspace-projects-dsh-workspace-dsh-plugins--/`
 by rewriting the Frame 1 zstd header `cwd` and re-encoding the log as two
-Zstandard frames. See [MIGRATION.md](./MIGRATION.md) for the exact procedure,
-invariants, and rollback notes.
+Zstandard frames. The authoritative record moved to Core-00-System on 2026-11-06:
+`Core-00-System/docs/MIGRATION.md`. The stub here
+([pending-docs/undecided/MIGRATION.md](./pending-docs/undecided/MIGRATION.md)) names the destination
+and its digest.
 
 ## Active profile wiring
 

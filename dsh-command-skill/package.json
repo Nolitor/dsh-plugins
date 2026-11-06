@@ -9,6 +9,8 @@
     "node": ">=24.9"
   },
   "scripts": {
-    "check": "node --check scripts/verify-contract.mjs"
+    "check": "node --check scripts/verify-contract.mjs",
+    "docs:index": "node ../scripts/doc-index-track.mjs",
+    "docs:check": "node ../scripts/doc-index-track.mjs --check"
   }
 }

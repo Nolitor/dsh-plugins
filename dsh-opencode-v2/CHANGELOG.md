@@ -345,7 +345,7 @@ bundle's own `OWN_PROVIDER_IDS` declaration, asserts a foreign router serving an
 Owner instruction: plan the beta work properly and make stages 2 and 3 reachable **after
 stabilisation**, not instead of it.
 
-- [docs/OPENCODE-V2-STAGE-PLAN.md](../docs/OPENCODE-V2-STAGE-PLAN.md) defines stage 1 exit
+- [dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](./docs/OPENCODE-V2-STAGE-PLAN.md) defines stage 1 exit
   criteria S1–S7, the stage-2 acceptance gates S2-1…S2-5, the stage-3 gates S3-1…S3-4, the
   three adversarial inputs that must round-trip, and the rule that only an owner instruction
   opens a stage.

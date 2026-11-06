@@ -29,7 +29,8 @@
     "lib/",
     "cordis.patch.yml",
     "README.md",
-    "locale"
+    "locale",
+    "docs/"
   ],
   "dsh": {
     "manifestVersion": 1,
@@ -43,7 +44,9 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/adapter.js"
+    "check": "node --check lib/index.js && node --check lib/adapter.js",
+    "docs:index": "node ../scripts/doc-index-track.mjs",
+    "docs:check": "node ../scripts/doc-index-track.mjs --check"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-llm": "^0.2.2-alpha.2"

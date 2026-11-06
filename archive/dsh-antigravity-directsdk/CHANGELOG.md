@@ -1,5 +1,14 @@
 # Changelog — @nolit/dsh-antigravity-directsdk
 
+<!-- skeleton:
+version: 1.0
+kind: report
+status: archived
+updated: 2026-11-05
+summary: History of the archived DirectSDK track (absorbed into @nolit/dsh-antigravity).
+-->
+
+
 > ## ⚠️ ARCHIVED — superseded by `@nolit/dsh-antigravity`
 >
 > Absorbed 2026-11-05; moved to `archive/` on owner instruction the same day. The `antigravity`

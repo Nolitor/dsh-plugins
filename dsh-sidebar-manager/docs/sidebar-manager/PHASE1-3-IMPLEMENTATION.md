@@ -1,5 +1,14 @@
 # Phase 1–3 구현 보고 — 안전한 가상 그룹 도입
 
+<!-- skeleton:
+version: 1.0
+kind: report
+status: completed
+updated: 2026-10-29
+summary: Phase 1-3 implementation record: introducing safe virtual grouping without touching the real workspace registry.
+-->
+
+
 > 상태: implemented (Phase 1–3) · 2026-10-25 · 실제 디렉터리 이동/벌크 rename은 **미수행**
 > 근거: `../../docs/audit/` (00-SYNTHESIS, A-lifecycle, B-uiux, C-tokens)
 

@@ -41,7 +41,7 @@ result it came from.
   from `/api/model`'s `status`/`enabled`, which are uniformly active.
 - **Conflict handling is local.** A plugin may warn or yield its own namespace when a legacy
   provider is active; it must never unload or mutate a sibling plugin's registration.
-- Rationale and incident record: [OPENCODE-MODEL-SERVING-PLAN.md](../OPENCODE-MODEL-SERVING-PLAN.md).
+- Rationale and incident record: [dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md](../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md).
 
 ## 2. Version policy
 
@@ -57,13 +57,13 @@ result it came from.
 
 | Date | Runtime | Change | Action |
 |---|---|---|---|
-| 2026-10-31 | DSH `0.2.2-alpha.2` | Ranking refreshed daily and a brand-new route buried behind 40 ranked models (no usage rank yet) | `dsh-opencode-v2@0.7.2`: `rankingTtlMs` = **5 days**; `opencode-known-models.json` gives a first-seen stamp per route, so a route that appears later is served **first** in the settings list and in the prompt picker for `newModelDays` (7) — **plan gate unchanged**; see [plan](../OPENCODE-MODEL-SERVING-PLAN.md) §5.2.11 |
-| 2026-10-31 | DSH `0.2.2-alpha.2` | 0.6.0's client half killed the whole web UI after the 23:34 restart: `web boot: 1 entry did not activate` / `@nolit/dsh-opencode-v2: failed` — `lib/client.js` declared `const inject = ['slots']` and never exported it, so `ctx.slots` was undefined at activation | `dsh-opencode-v2@0.6.1` exports `inject`; contract test added; verification gate now requires a **browser boot**, not route probes; see [plan](../OPENCODE-MODEL-SERVING-PLAN.md) §5.2.8 |
+| 2026-10-31 | DSH `0.2.2-alpha.2` | Ranking refreshed daily and a brand-new route buried behind 40 ranked models (no usage rank yet) | `dsh-opencode-v2@0.7.2`: `rankingTtlMs` = **5 days**; `opencode-known-models.json` gives a first-seen stamp per route, so a route that appears later is served **first** in the settings list and in the prompt picker for `newModelDays` (7) — **plan gate unchanged**; see [plan](../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md) §5.2.11 |
+| 2026-10-31 | DSH `0.2.2-alpha.2` | 0.6.0's client half killed the whole web UI after the 23:34 restart: `web boot: 1 entry did not activate` / `@nolit/dsh-opencode-v2: failed` — `lib/client.js` declared `const inject = ['slots']` and never exported it, so `ctx.slots` was undefined at activation | `dsh-opencode-v2@0.6.1` exports `inject`; contract test added; verification gate now requires a **browser boot**, not route probes; see [plan](../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md) §5.2.8 |
 | 2026-10-31 | DSH `0.2.2-alpha.2` | The entitlement sweep spent **one real completion per catalog route** (49 requests/press) against a request-counted quota; no cheaper truthful surface exists (provider `/models` 404, `/api/model` uniform `active`, `opencode models` = static catalog, no OpenAPI availability route) | `dsh-opencode-v2@0.7.0` drops the sweep: availability is the plan (`opencode-go` subscription / `opencode` Zen) chosen in the tab, ordering uses the public `opencode.ai/data` ranking (one cached GET), and backend refusals are recorded free from real turns |
 | 2026-10-31 | DSH `0.2.2-alpha.2` | Settings-tab usability: 49 rows in catalog order after every open, sweep results lost on close, tab labelled `OpenCode v2`, and Notification's hardcoded Korean label leaked into an English UI | `dsh-opencode-v2@0.6.2` sorts usable → unchecked → rejected, puts the verdict beside the checkbox, persists the sweep to `opencode-model-verdicts.json` and only refreshes on the button; `dsh-notify-web@0.1.7` moves to order 50 (below 에이전트 프리셋) and localizes its label (`알림` / `Notifications`) |
 | 2026-10-30 | DSH `0.2.2-alpha.2` | `llm-pi-ai` deprecated; autonomous native router policy adopted; `@nolit/dsh-subrouter` decommissioned | `dsh-opencode-v2@0.4.0` mounts `@nolit/dsh-opencode-v2/http` natively; profile repointed to `opencode-http-agent` |
-| 2026-10-30 | DSH `0.2.2-alpha.2` | Live 400 `MissingSessionID` (no `x-opencode-session`) and 401 from a revoked `key` credential preferred over the web OAuth login | `dsh-opencode-v2@0.5.1` sends the session header and ranks oauth over key; see [plan](../OPENCODE-MODEL-SERVING-PLAN.md) §5.1 |
-| 2026-10-30 | DSH `0.2.2-alpha.2` | Prompt picker offered all 49 catalog routes; only 35 usable on this account | `dsh-opencode-v2@0.6.0` adds `enabledModels` (empty = unrestricted) plus an OpenCode v2 settings tab and an explicit entitlement sweep; see [plan](../OPENCODE-MODEL-SERVING-PLAN.md) §5.2 |
+| 2026-10-30 | DSH `0.2.2-alpha.2` | Live 400 `MissingSessionID` (no `x-opencode-session`) and 401 from a revoked `key` credential preferred over the web OAuth login | `dsh-opencode-v2@0.5.1` sends the session header and ranks oauth over key; see [plan](../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md) §5.1 |
+| 2026-10-30 | DSH `0.2.2-alpha.2` | Prompt picker offered all 49 catalog routes; only 35 usable on this account | `dsh-opencode-v2@0.6.0` adds `enabledModels` (empty = unrestricted) plus an OpenCode v2 settings tab and an explicit entitlement sweep; see [plan](../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md) §5.2 |
 | 2026-10-30 | DSH `0.2.2-alpha.2` | `dsh-opencode-v2@0.6.0` added to the live profile (in-place upgrade of the same rows) | artifact `251ef4f7…936`; mount verified on a clone; live restart pending |
 | 2026-10-29 | DSH `0.2.2-alpha.2` | Cordis `4.0.6-alpha.1`, Node `v24.22.1`; current engines/manifests still valid | Re-measured all three plugins; pinned engines to alpha.2 floor |
 | 2026-10-29 | DSH `0.2.2-alpha.2` | Built-in client dictionaries changed; Korean pack stale by 117 keys | Refreshed to 68 namespaces / 3,019 keys; en/zh parity 0 |
@@ -182,8 +182,8 @@ Current artifacts:
 - Required Forge/Worktree guardrails are non-blocking: preflight observation, warning,
   soft rejection, exception audit, cwd/handoff trace, worktree identity/lifecycle mapping,
   and `.agents/worktrees` contract observation.
-- See [UTM review](../UTM-REVIEW-FORGE-VS-SIDEBAR.md) and
-  [Forge runtime measurement](../FORGE-VS-SIDEBAR-UTM-RUNTIME-MEASUREMENT.md).
+- See [UTM review](../dsh-sidebar-manager/docs/UTM-REVIEW-FORGE-VS-SIDEBAR.md) and
+  [Forge runtime measurement](../dsh-sidebar-manager/docs/FORGE-VS-SIDEBAR-UTM-RUNTIME-MEASUREMENT.md).
 
 ## 7. Boot card policy
 

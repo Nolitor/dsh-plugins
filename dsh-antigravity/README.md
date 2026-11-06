@@ -1,5 +1,14 @@
 # Antigravity Agent for DeepSeek Harness
 
+<!-- skeleton:
+version: 1.0
+kind: readme
+status: active
+updated: 2026-11-05
+summary: Operator entry for @nolit/dsh-antigravity: the antigravity model route, /agy, agy_worker, and how to verify the mount.
+-->
+
+
 One plugin, every Antigravity surface, one account.
 
 | Surface | What it does | Switch |
@@ -176,7 +185,7 @@ silently dropping the image.
 
 The settings tab groups models by usage family and shows the account's **weekly + 5-hour** limits
 from `retrieveUserQuotaSummary`; it hides effort entirely. See
-[ANTIGRAVITY-STAGE-PLAN.md](../docs/ANTIGRAVITY-STAGE-PLAN.md) for the stage-1 gate.
+[dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](./docs/ANTIGRAVITY-STAGE-PLAN.md) for the stage-1 gate.
 
 ### `subagent_antigravity` — delegation
 

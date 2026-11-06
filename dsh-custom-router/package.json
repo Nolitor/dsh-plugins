@@ -1,0 +1,29 @@
+{
+  "name": "@nolit/dsh-custom-router",
+  "version": "0.0.1-rc.1",
+  "private": false,
+  "description": "Custom Router for DeepSeek Harness: a plugin-owned Settings-Models (Custom) surface plus the standardised per-service router/serving contract (plan detection, usage/quota normalisation, tool-preset activation). Specification stage; no runtime surface mounted yet.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "custom-router",
+    "model-serving",
+    "preset"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "docs/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=24.9",
+    "dsh": ">=0.2.2-alpha.2 <0.3.0"
+  },
+  "scripts": {
+    "docs:check": "node ../scripts/doc-index-track.mjs --check",
+    "docs:index": "node ../scripts/doc-index-track.mjs"
+  }
+}

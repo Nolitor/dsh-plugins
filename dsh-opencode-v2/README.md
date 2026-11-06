@@ -153,7 +153,7 @@ Rules:
 - A promoted change keeps the same package identity, so a rollback is a version change, not a
   profile rebuild.
 
-**Read before opening a stage:** [docs/OPENCODE-V2-STAGE-PLAN.md](../docs/OPENCODE-V2-STAGE-PLAN.md)
+**Read before opening a stage:** [dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](./docs/OPENCODE-V2-STAGE-PLAN.md)
 — the seven stage-1 exit criteria, the stage-2 acceptance gates, the three adversarial inputs
 that must round-trip, and the rollback route.
 

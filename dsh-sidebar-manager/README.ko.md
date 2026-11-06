@@ -1,5 +1,14 @@
 # Sidebar Manager (한국어)
 
+<!-- skeleton:
+version: 1.0
+kind: readme
+status: reference
+updated: 2026-11-05
+summary: Korean translation of the Sidebar Manager operator entry; kept for parity with README.md.
+-->
+
+
 > 상태: active (P3 panel UI) · 최종 갱신: 2026-10-23 · Repository: [linuxsung/dsh-sidebar-manager](https://github.com/linuxsung/dsh-sidebar-manager)
 
 ## 인덱스

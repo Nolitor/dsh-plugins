@@ -8,7 +8,7 @@ summary: Per-upstream-version comparison record for @nolit/dsh-opencode-v2 — t
 
 # Upstream compatibility record — @nolit/dsh-opencode-v2
 
-> Rule this file implements: [docs/RULES.md §6.2](../../docs/RULES.md) — acquire the **exact tag**,
+> Rule this file implements: [docs/RULES.md §6.2](../docs/RULES.md) — acquire the **exact tag**,
 > diff it, never read master, never read rendered HTML. Owner instruction 2026-11-04.
 
 ## Why this file exists

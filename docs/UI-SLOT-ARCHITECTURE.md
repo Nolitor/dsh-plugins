@@ -108,6 +108,6 @@ composer surface.
 ## 7. Related documents
 
 - [PLUGIN-STYLE-STANDARD.md](PLUGIN-STYLE-STANDARD.md) — typography tokens.
-- [ANTIGRAVITY-STAGE-PLAN.md](ANTIGRAVITY-STAGE-PLAN.md) — stage-1 gate for the first migrated chip.
-- [OPENCODE-V2-STAGE-PLAN.md](OPENCODE-V2-STAGE-PLAN.md) — stage 2/3 work; this slot rule applies to
+- [dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](../dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md) — stage-1 gate for the first migrated chip.
+- [dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md) — stage 2/3 work; this slot rule applies to
   the chip surface, not to the parser.

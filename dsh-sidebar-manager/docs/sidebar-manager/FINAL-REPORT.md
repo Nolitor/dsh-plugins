@@ -1,13 +1,22 @@
 # Sidebar Manager 최종 완료 보고서
 
-> 상태: completed · 최종 갱신: 2026-10-23 · git: main @ f277d50 · 상위: [dsh-workspace](../../AGENTS.md)
+<!-- skeleton:
+version: 1.0
+kind: report
+status: completed
+updated: 2026-10-29
+summary: Closing report for the Sidebar Manager programme: delivered surfaces, measured state, and the work left open.
+-->
+
+
+> 상태: completed · 최종 갱신: 2026-10-23 · git: main @ f277d50 · 상위: [dsh-workspace](../../../AGENTS.md)
 
 ## P3 후속 (2026-10-23)
 
 - Workspace Manager를 footer에서 **상단 3번째 `sidebar.panellist` + `main` 패널**로 승격.
 - 행별 인라인 이름 편집, 폴더 포함 체크, 인라인 새 디렉토리명, 이름 변경/보관 2버튼 구현.
 - 타이틀 전용은 Enter 즉시 저장, 실제 디렉토리 변경만 Confirmation Gate.
-- E2E **55/55 checks** 통과. 상세: [Sidebar Manager README](../../dsh-sidebar-manager/README.md)
+- E2E **55/55 checks** 통과. 상세: [Sidebar Manager README](../../README.md)
 
 ## 인덱스
 
@@ -69,7 +78,7 @@
 
 ## 실기동 검증
 
-Playwright 하네스: [tools/e2e/run-e2e.mjs](../../tools/e2e/run-e2e.mjs)
+Playwright 하네스: [tools/e2e/run-e2e.mjs](../../prototype-harness/e2e/run-e2e.mjs)
 
 - 격리 `DSH_HOME=%TEMP%\dsh-e2e-home`, 포트 **3099**
 - fixture workspace: E2E Alpha/Beta/Gamma/Delta

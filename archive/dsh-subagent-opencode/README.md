@@ -1,5 +1,14 @@
 # @nolit/dsh-subagent-opencode
 
+<!-- skeleton:
+version: 1.0
+kind: readme
+status: archived
+updated: 2026-11-05
+summary: @nolit/dsh-subagent-opencode absorbed into @nolit/dsh-opencode-v2.
+-->
+
+
 > ## ⚠️ ARCHIVED / SUPERSEDED — do not install this package
 >
 > This package was **absorbed into `@nolit/dsh-opencode-v2`** on 2026-11-05 and moved to

@@ -1,7 +1,16 @@
 # Phase 4 — 가상 그룹화 하네스 (HQ 트리 · 정렬 · 시스템 분리)
 
+<!-- skeleton:
+version: 1.0
+kind: report
+status: completed
+updated: 2026-10-29
+summary: Phase 4 record: the virtual grouping harness, HQ tree ordering, and separation of system entries.
+-->
+
+
 > 상태: implemented · 2026-10-25 · 네이티브 사이드바 무접촉
-> 선행: [Phase 1–3](PHASE1-3-IMPLEMENTATION.md), 감사 [A–F](../../../project-promotion-manager/docs/audit/)
+> 선행: [Phase 1–3](PHASE1-3-IMPLEMENTATION.md), 감사 A–F (`projects/project-promotion-manager/docs/audit/` — sibling repo, not in this workspace)
 
 ---
 

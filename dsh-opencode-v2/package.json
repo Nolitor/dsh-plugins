@@ -49,6 +49,7 @@
     "cordis.patch.yml",
     "README.md",
     "CHANGELOG.md",
+    "docs/",
     "locale/"
   ],
   "dsh": {
@@ -71,7 +72,9 @@
   },
   "scripts": {
     "test": "node --import ./test/setup-isolate.mjs --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/provider.js && node --check lib/http.js && node --check lib/conflicts.js && node --check lib/stream-parser.js && node --check lib/display-gate.js && node --check lib/arguments.js && node --check lib/trace.js && node --check lib/upstream-map.js && node --check lib/display-clean.js && node --check lib/shared.js && node --check lib/catalog-cache.js && node --check lib/workers/index.js && node --check lib/workers/run.js && node --check lib/workers/backends.js && node --check lib/workers/artifacts.js && node --check lib/plans.js && node --check lib/verdict-store.js && node --check lib/resilience.js && node --check lib/cost.js && node --check lib/cost-pill.js && node --check lib/request-guards.js && node --check lib/optional-service.js && node --check lib/client.js"
+    "check": "node --check lib/index.js && node --check lib/provider.js && node --check lib/http.js && node --check lib/conflicts.js && node --check lib/stream-parser.js && node --check lib/display-gate.js && node --check lib/arguments.js && node --check lib/trace.js && node --check lib/upstream-map.js && node --check lib/display-clean.js && node --check lib/shared.js && node --check lib/catalog-cache.js && node --check lib/workers/index.js && node --check lib/workers/run.js && node --check lib/workers/backends.js && node --check lib/workers/artifacts.js && node --check lib/plans.js && node --check lib/verdict-store.js && node --check lib/resilience.js && node --check lib/cost.js && node --check lib/cost-pill.js && node --check lib/request-guards.js && node --check lib/optional-service.js && node --check lib/client.js",
+    "docs:index": "node ../scripts/doc-index-track.mjs",
+    "docs:check": "node ../scripts/doc-index-track.mjs --check"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",

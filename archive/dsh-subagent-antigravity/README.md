@@ -1,5 +1,14 @@
 # @nolit/dsh-subagent-antigravity
 
+<!-- skeleton:
+version: 1.0
+kind: readme
+status: archived
+updated: 2026-11-05
+summary: @nolit/dsh-subagent-antigravity absorbed into @nolit/dsh-antigravity.
+-->
+
+
 > ## ⚠️ ARCHIVED / SUPERSEDED — do not install this package
 >
 > This package was **absorbed into `@nolit/dsh-antigravity`** on 2026-11-05 and moved to

@@ -36,6 +36,7 @@
     "README.md",
     "COMPATIBILITY.md",
     "CHANGELOG.md",
+    "docs/",
     "VERIFICATION.md"
   ],
   "dsh": {
@@ -49,7 +50,9 @@
     "dsh": ">=0.2.2-alpha.2 <0.3.0"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "docs:index": "node ../scripts/doc-index-track.mjs",
+    "docs:check": "node ../scripts/doc-index-track.mjs --check"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.1.0",

@@ -9,7 +9,7 @@ summary: Engineering history for @nolit/dsh-sidebar-manager. Seeded from git his
 -->
 
 > History lives here (owner instruction 2026-11-04). Boot cards and `AGENTS.md` are narrowed to
-> the owner's unfinished asks; they are not a changelog. See [docs/RULES.md](../../docs/RULES.md) §6.1.
+> the owner's unfinished asks; they are not a changelog. See [docs/RULES.md](../docs/RULES.md) §6.1.
 
 Current version: `0.0.1-rc.1`
 
@@ -33,7 +33,7 @@ reported all 22 as `unregistered` and the "disconnected" count included the chil
 
 No destructive behavior was added: the classifier stays read-only (`destructive:false`), and the
 owner-runnable quarantine plan lives in `scripts/cleanup-orphan-sessions.mjs`
-([docs/ORPHAN-SESSION-CLEANUP.md](../../docs/ORPHAN-SESSION-CLEANUP.md)).
+([pending-docs/unpromoted/ORPHAN-SESSION-CLEANUP.md](../pending-docs/unpromoted/ORPHAN-SESSION-CLEANUP.md)).
 
 
 

@@ -9,7 +9,7 @@ summary: Engineering history for @nolit/dsh-tokeneconomizer. Seeded from git his
 -->
 
 > History lives here (owner instruction 2026-11-04). Boot cards and `AGENTS.md` are narrowed to
-> the owner's unfinished asks; they are not a changelog. See [docs/RULES.md](../../docs/RULES.md) §6.1.
+> the owner's unfinished asks; they are not a changelog. See [docs/RULES.md](../docs/RULES.md) §6.1.
 
 Current version: `0.0.1-rc.1`
 
@@ -29,7 +29,7 @@ change closes the harness half.
 | Live state after the suite | — | `~/.dsh/sessions` count unchanged (**120**), no new files written under `~/.tokeneconomizer` by the tests |
 | Tests | 129 pass / 2 fail / 1 skipped | **131 pass / 0 fail / 1 skipped** |
 
-No plugin code changed. Policy and the guard: [docs/DSH-HOME-ISOLATION.md](../../docs/DSH-HOME-ISOLATION.md).
+No plugin code changed. Policy and the guard: [docs/DSH-HOME-ISOLATION.md](../docs/DSH-HOME-ISOLATION.md).
 
 ## Seeded history (from git, before this file existed)
 

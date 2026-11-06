@@ -7,8 +7,10 @@
  * artifacts, not lost user work.
  *
  * The promotion spec already states the rule (UTM-PROMOTION-GATE-SPEC §3.1-6:
- * "subagent 독립 승격 금지 — 부모 cube의 derived scope 유지"). This module turns
- * that invariant into an executable guard:
+ * "subagent 독립 승격 금지 — 부모 cube의 derived scope 유지"). That spec moved to
+ * project-promotion-manager/docs/contracts/ on 2026-11-06 (Core-01-UTM owns it);
+ * the dsh-plugins copy is a pointer stub. This module turns that invariant into
+ * an executable guard:
  *
  *   - a sub-agent log is NEVER promoted as an independent workspace;
  *   - it is attributed to its parent session's workspace instead;

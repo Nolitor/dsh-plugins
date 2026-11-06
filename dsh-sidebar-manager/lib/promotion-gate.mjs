@@ -9,6 +9,13 @@
  * absence". This module supplies the missing runtime so the documented contract
  * can actually be evaluated.
  *
+ * WHERE THE SPEC LIVES: since 2026-11-06 the authoritative copy is owned by the
+ * harness the document is about —
+ *   ~/Workspace/projects/project-promotion-manager/docs/contracts/UTM-PROMOTION-GATE-SPEC.md
+ * `dsh-plugins/pending-docs/deprecated/UTM-PROMOTION-GATE-SPEC.md` is a pointer
+ * stub kept only so old relative links resolve. Do not treat the stub as the
+ * contract.
+ *
  * Design rules taken from the spec:
  *  - preview is side-effect free; apply is atomic;
  *  - G2 (skeleton generation) is separate from G3 (integrity), and G4 runs after G2;

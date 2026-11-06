@@ -38,7 +38,8 @@
     "patch/",
     "cordis.patch.yml",
     "README.md",
-    "locale/"
+    "locale/",
+    "docs/"
   ],
   "dsh": {
     "manifestVersion": 1,
@@ -62,6 +63,8 @@
     "test": "node --test test/*.test.mjs",
     "check": "node --check lib/index.js && node --check lib/bridge.js && node --check lib/dedup.js && node --check lib/prefix.js && node --check lib/repokey.js && node --check lib/tiering.js && node --check lib/watchdog.js && node --check lib/devstats.js && node --check lib/devstats-server.js && node --check lib/client.js && node --check bin/te-dsh.mjs && node --check scripts/bootstrap.mjs",
     "bootstrap": "node scripts/bootstrap.mjs",
-    "cold-start": "node bin/te-dsh.mjs cold-start"
+    "cold-start": "node bin/te-dsh.mjs cold-start",
+    "docs:index": "node ../scripts/doc-index-track.mjs",
+    "docs:check": "node ../scripts/doc-index-track.mjs --check"
   }
 }

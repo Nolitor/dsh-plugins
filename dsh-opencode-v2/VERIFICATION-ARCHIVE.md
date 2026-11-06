@@ -1,6 +1,6 @@
 <!-- skeleton:
 version: 1.0
-kind: ver
+kind: report
 status: active
 updated: 2026-11-01
 summary: Historical verification rounds for the opencode-v2 plugin, v0.3.7 through v0.7.3. Current rounds live in VERIFICATION.md.

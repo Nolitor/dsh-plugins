@@ -57,6 +57,7 @@
     "cordis.patch.yml",
     "README.md",
     "CHANGELOG.md",
+    "docs/",
     "ARCHITECTURE.md",
     "CONTEXT.md",
     "UPSTREAM-COMPAT.md",
@@ -82,7 +83,9 @@
   },
   "scripts": {
     "test": "node --import ./test/setup-isolate.mjs --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/wire.js && node --check lib/catalog.js && node --check lib/map.js && node --check lib/usage.js && node --check lib/cost.js && node --check lib/settings.js && node --check lib/server.js && node --check lib/adapter.js && node --check lib/sse.js"
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/wire.js && node --check lib/catalog.js && node --check lib/map.js && node --check lib/usage.js && node --check lib/cost.js && node --check lib/settings.js && node --check lib/server.js && node --check lib/adapter.js && node --check lib/sse.js",
+    "docs:index": "node ../scripts/doc-index-track.mjs",
+    "docs:check": "node ../scripts/doc-index-track.mjs --check"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",

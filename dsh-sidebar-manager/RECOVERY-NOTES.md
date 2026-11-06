@@ -1,5 +1,14 @@
 # RECOVERY-NOTES — dsh-sidebar-manager
 
+<!-- skeleton:
+version: 1.0
+kind: reference
+status: reference
+updated: 2026-10-24
+summary: What was recovered into this track from historical session logs, how, and which pieces remain missing.
+-->
+
+
 Track: DSH Plugins workspace / **Sidebar Manager** (Right-sidebar workspace & session
 switcher plug-in + prototypes), recovered from historical session logs of the original
 Windows workspace `C:/Users/nolit/Workspace/projects/dsh-workspace/dsh-sidebar-manager`.

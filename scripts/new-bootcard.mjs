@@ -51,7 +51,7 @@ summary: Dated session card (tier 5). State, active task, and handoff for ${stam
 -->
 
 > Status: active · Generated: ${stamp} (KST) · Runtime: DSH \`${run('dsh', ['--version'])}\` · Node \`${run('node', ['--version'])}\`
-> Previous cards: [INDEX.md](./INDEX.md) · Rules: [../docs/RULES.md](../docs/RULES.md) · Doc index: [../docs/SKELETON.md](../docs/SKELETON.md)
+> Previous cards: [INDEX.md](./INDEX.md) · Rules: [../docs/RULES.md](../docs/RULES.md) · Doc index: [../docs/SKELETON.md](../docs/SKELETON.md) · Pending docs: [../pending-docs/INDEX.md](../pending-docs/INDEX.md)
 
 ## 0. Read this first
 
@@ -115,10 +115,12 @@ ${lines.join('\n')}
 - [Runtime spec](../docs/dsh-plugin-runtime-spec.md)
 - [Plugin boot card baseline](../docs/plugin-boot-card.md)
 - [DSH harness policy + version changelog](../docs/DSH-HARNESS-POLICY.md)
-- [Forge vs Sidebar/UTM comparison](../FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md)
-- [UTM review](../UTM-REVIEW-FORGE-VS-SIDEBAR.md)
-- [Runtime measurement](../FORGE-VS-SIDEBAR-UTM-RUNTIME-MEASUREMENT.md)
-- [Latest runtime report](../DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
+- [Forge vs Sidebar/UTM comparison](../dsh-sidebar-manager/docs/FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md)
+- [UTM review](../dsh-sidebar-manager/docs/UTM-REVIEW-FORGE-VS-SIDEBAR.md)
+- [Runtime measurement](../dsh-sidebar-manager/docs/FORGE-VS-SIDEBAR-UTM-RUNTIME-MEASUREMENT.md)
+- [Latest runtime report](../docs/DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
+- [Per-subproject document indexes](../docs/SKELETON.md#subprojects)
+- [Pending documents (미승격·미구현·폐기·미정)](../pending-docs/INDEX.md)
 
 ## 6. Verification commands
 

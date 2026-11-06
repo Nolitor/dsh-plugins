@@ -1,5 +1,14 @@
 # Pending Commits — Session 2026-10-25
 
+<!-- skeleton:
+version: 1.0
+kind: reference
+status: historical
+updated: 2026-10-25
+summary: Commits left pending at the end of the 2026-10-25 session: what was staged, what was withheld, and why.
+-->
+
+
 > **Status:** awaiting `git init` (no repository exists yet)
 > **Reason:** none of `dsh-sidebar-manager`, `dsh-plugins`, `dsh-workspace`,
 > `Core-00-System`, or `project-promotion-manager` is a git work tree, and no

@@ -70,12 +70,15 @@
     "locale/",
     "cordis.patch.yml",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/"
   ],
   "scripts": {
     "build": "node scripts/gen-locale.mjs && node scripts/build-client.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/cli-activation.js && node --check lib/worker.js && node --check lib/auth.js && node --check lib/wire.js && node --check lib/sse.js && node --check lib/map.js && node --check lib/usage.js && node --check lib/catalog.js && node --check lib/adapter.js && node --check lib/settings.js && node --check lib/backends.js && node --check lib/server.js && node --check lib/client.js"
+    "check": "node --check lib/index.js && node --check lib/cli-activation.js && node --check lib/worker.js && node --check lib/auth.js && node --check lib/wire.js && node --check lib/sse.js && node --check lib/map.js && node --check lib/usage.js && node --check lib/catalog.js && node --check lib/adapter.js && node --check lib/settings.js && node --check lib/backends.js && node --check lib/server.js && node --check lib/client.js",
+    "docs:index": "node ../scripts/doc-index-track.mjs",
+    "docs:check": "node ../scripts/doc-index-track.mjs --check"
   },
   "dsh": {
     "manifestVersion": 1,

@@ -5,13 +5,25 @@ version: 1.0
 kind: report
 status: active
 updated: 2026-11-05
-summary: Engineering history for the experimental local-CLI delegation plugin: rc.1 surfaces, the Invalid-effect activation defect found and fixed during the isolated boot, and the subagent_oar compatibility verdict.
+summary: Engineering history for the experimental local-CLI delegation plugin: rc.1 surfaces, the Invalid-effect activation defect, the subagent_oar verdict, and custody of the CLI-worker contract doc.
 -->
 
 Current version: `0.0.1-rc.1`
 
 Version policy: the owner normalized every `@nolit` track to `0.0.1-rc.N`; this is a new track, so
 it starts at `0.0.1-rc.1`. Versions are owner-owned; do not bump without instruction.
+
+## Unreleased — documentation split (owner instruction 2026-11-06)
+
+`docs/` created for this track and now indexed by `npm run docs:check` in the track.
+
+- **Adopted the CLI-worker contract document.** `CLI-WORKER-STANDARD.md` moved from the workspace
+  root to `docs/CLI-WORKER-STANDARD.md` here, because this track is the one that actually runs the
+  per-CLI worker contract (`delegate_local` over agy / opencode / codex / claude). It is the
+  superset of the two near-duplicate copies that existed; the shorter
+  `docs/cli-worker-standard.md` was removed rather than kept as a second source of truth.
+- `package.json#files` now includes `docs/`, so the published package ships the contract it is
+  governed by.
 
 ## 0.0.1-rc.1 — experimental local-CLI delegation + `subagent_oar` compatibility report — 2026-11-05
 

@@ -1,5 +1,14 @@
 # Phase 6 — v3 역할 메타데이터 + 선택적 정책 (Advisory / Soft Lint)
 
+<!-- skeleton:
+version: 1.0
+kind: report
+status: completed
+updated: 2026-10-29
+summary: Phase 6 record: v3 role metadata and the advisory/soft-lint policy that never hard-blocks a write.
+-->
+
+
 > 상태: implemented · 2026-10-25 · **비차단 원칙**
 > 선행: Phase 4–5, 감사 E/F, 기획자 정정(강제 차단 철회)
 
