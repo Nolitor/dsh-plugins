@@ -175,7 +175,7 @@ interface UsageReading {
 | U2 | **Never fabricate a zero.** `cost` absent → `null`; `/v1/request-costs` 404 → `unavailable`; quota RPC failure → stale value with `confidence:'estimated'` or `unavailable`, never `{}` shown as 0%. |
 | U3 | **Windows are not merged.** 5h / weekly / monthly are three separate rows; a per-request token figure is a fourth, never added into a plan percentage. |
 | U4 | **Check = freshness + limited flag.** A reading older than its TTL (OpenCode plan cache 60 s, Antigravity quota 60 s, DeepInfra catalog 30 min) is `stale` and must be re-fetched before being used to gate a turn. |
-| U5 | **Gate is advisory, not a hard block** (boot card rule 6, UTM advisory): `limited:true` or `remaining<0.1` shows a warning and offers another service; it does not abort the turn. |
+| U5 | **Gate is advisory, not a hard block** (boot card rule 6, UTM advisory): `limited:true` or `remaining<0.1` shows a warning; it does not abort the turn. **Owner 2026-11-06: no automatic model/provider fallback — the earlier "offers another service" wording is withdrawn.** See [RETRY-POLICY.md](RETRY-POLICY.md). |
 | U6 | **Source is always displayed.** Every chip/panel row names its endpoint or wire field, so a derived number is never mistaken for a billed one. |
 | U7 | **Standardisation is schema-level.** Three different units remain three different units; the custom surface renders them in one consistent *layout* (label + value + window + source + freshness), not one number. |
 

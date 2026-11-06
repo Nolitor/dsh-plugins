@@ -231,3 +231,7 @@ again on 2026-11-06: `dsh --profile web --dump-config` fails with `EROFS` becaus
 - [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../../dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md), [dsh-deepinfra/UPSTREAM-COMPAT.md](../../dsh-deepinfra/UPSTREAM-COMPAT.md)
 - [RULES.md](../../docs/RULES.md), [FAILURE-LEDGER.md](../../docs/FAILURE-LEDGER.md), [PLUGIN-CONSOLIDATION.md](../../docs/PLUGIN-CONSOLIDATION.md)
 - Installed `@deepseek-ai/dsh-llm@0.2.2-rc.1` `lib/types/index.d.ts` and `types.d.ts`
+
+## Cross-reference
+
+- [RETRY-POLICY.md](RETRY-POLICY.md) — bounded transport-level retry classification and budget; no automatic model fallback

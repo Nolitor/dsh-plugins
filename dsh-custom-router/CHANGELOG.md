@@ -55,5 +55,13 @@ standard**; lower pipeline and model serving share the `LlmAdapter`/`StreamChunk
 but are implemented per service; plan/usage/promotion alone stay in the custom surface. Rule R0:
 no second routing table.
 
+**Same-session addition (no `rc#` bump):** `docs/RETRY-POLICY.md` — owner 2026-11-06
+instruction: **no automatic model fallback**, harden retry only. Normative classification
+(T1-T5 transport/socket/502-503-504 retryable; P1-P5 401/403/quota/402/400/404/422 terminal),
+bounded 2-3 attempts at 500ms->1000->2000ms exponential jitter, clean terminal cause, **no
+circuit breaker**. Recorded three measured deltas against current code: 429 and 451/500 are
+currently retried, and backoff is 1000ms uncapped. Withdrew the PLAN-AND-USAGE U5 "offers another
+service" wording. Spec only; no code/config/version changed.
+
 **Not done:** no `settings.section` row, no client half, no real mount of the new surface,
 no real generation turn. Those require the owner's implementation approval.
