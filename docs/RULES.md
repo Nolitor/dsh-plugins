@@ -1,11 +1,11 @@
 # DSH Plugins — Detailed Rules
 
 <!-- skeleton:
-version: 2.1
+version: 2.2
 kind: rule
 status: active
 updated: 2026-11-06
-summary: Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement, per-subproject docs with own skeleton index, pending-docs lifecycle, ownership moves to parent harnesses with verified pointer stubs, absorbed-track archiving, reporting.
+summary: Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement, per-subproject docs with own skeleton index, pending-docs lifecycle, ownership moves to parent harnesses with verified pointer stubs, absorbed-track archiving, the measured disposal gate, reporting.
 -->
 
 > **Reading chain:** global rules (`~/.dsh/AGENTS.md`) → **this file** (project rules) →
@@ -257,6 +257,41 @@ A merge has **three** completion conditions, and all three land in the same roun
   affected `dsh-<track>/CHANGELOG.md` (what changed for that package). Both, not either.
 - Read [PLUGIN-CONSOLIDATION.md](PLUGIN-CONSOLIDATION.md) §2 **before** touching a vendor surface;
   not reading it is how the merge gets re-litigated (F-52).
+
+### 6.1a-1 The four disposal actions have one measured gate (owner instruction, 2026-11-06)
+
+The owner's question: *"플러그인 폐기 혹은 통합, 축소, 삭제 할때 문제가 없거나 보강할 수 있는 방법"*.
+
+The rules above were correct prose and were re-derived by hand every round, which is the shape of
+both F-50 and F-51. `node scripts/check-disposal-safety.mjs` now measures them. Run it **before**
+and **after** any of the four actions, and treat a failure as blocking:
+
+```bash
+node scripts/check-disposal-safety.mjs          # human summary
+node scripts/check-disposal-safety.mjs --json   # machine detail
+npm run test:disposal                           # the gate's own fail-case suite
+```
+
+| Action | What the gate asserts |
+| :--- | :--- |
+| **폐기 (retire)** | the retired track's README names its replacement; it is in no profile and no `node_modules` link |
+| **통합 (merge)** | the absorbed track satisfies all five `archive/README.md` bars; the absorbing track is installed and its link resolves |
+| **축소 (shrink)** | a track that loses its runtime entry point (`main`/`exports`/`lib/`) must leave every profile — a bundle row that mounts nothing claims liveness (F-48) |
+| **삭제 (delete)** | no active track imports it, no profile references it, no `@nolit` link dangles (F-51) |
+
+- **A track is `spec`, not `active`, when it ships documents only.** `dsh-command-skill` and
+  `dsh-custom-router` are spec tracks: no `main`, no `exports`, no `lib/`, installed nowhere. That is
+  a lifecycle, not an omission. The gate fails if a spec track becomes installed.
+- **The five-bar test is measured, not read.** Bars 1–4 are checked from `~/.dsh/profiles/*`
+  read-only; bar 5 is checked as far as it can be (the README must name a replacement) and the rest
+  stays a reviewer's judgement. A gate that claims more than it measures is worse than prose.
+- **Every broken `@nolit` link is reported**, whether or not a track claims it — that residue is
+  invisible in the UI and is exactly what F-51 left behind for days.
+- **The gate never writes and never launches `dsh`.** When `~/.dsh/profiles` is absent it reports
+  `profiles read: (none)` and skips the profile bars rather than passing them silently.
+- **Adding a lifecycle means adding a case to the test suite.** `npm run test:disposal` proves the
+  gate fails on each defect it exists to catch; a gate only ever run on green code proves nothing
+  (F-54).
 
 ### 6.1b Every subproject owns its `/docs` (owner instruction, 2026-11-06)
 

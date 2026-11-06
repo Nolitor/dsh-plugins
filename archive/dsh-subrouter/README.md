@@ -1,12 +1,31 @@
 # @nolit/dsh-subrouter
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: readme
-status: active
-updated: 2026-10-30
+status: archived
+updated: 2026-11-06
 summary: Implementation detail for @nolit/dsh-subrouter. Root record and open defects: ../OPENCODE-MODEL-SERVING-PLAN.md
 -->
+
+>
+> ## ⚠️ ARCHIVED / SUPERSEDED — do not install this package
+>
+> **Retired 2026-11-06** by owner instruction (*"dsh-subrouter는 폐기 처리"*). This package is
+> **superseded by `@nolit/dsh-opencode-v2/http`**, which is mounted in the live `web` profile
+> (`opencode-http-agent`) and serves the model-route surface this package registered through
+> `ctx.llm.registerAdapter()`. This package was already recorded as
+> *decommissioned* in [docs/DSH-HARNESS-POLICY.md](../../docs/DSH-HARNESS-POLICY.md) on
+> 2026-10-30 while the directory stayed in the active tree; that gap is F-50, and this move
+> closes it.
+>
+> Measured before the move (2026-11-06): installed in `verify-subrouter` only — not in `web`;
+> 0 active tracks imported it; its 12 tests passed; it was the only track in the tree that
+> implemented the `anthropic-messages` wire protocol, and the live profile does not use that
+> protocol (`agent-default-model` = `opencode-http-agent` / `opencode-go/deepseek-v4.1-flash`).
+>
+> The code is kept as history. `node scripts/check-disposal-safety.mjs` asserts it stays gone
+> from every profile and from every importer.
 
 
 Adds one or more OpenAI/Anthropic-compatible model routes to DSH without

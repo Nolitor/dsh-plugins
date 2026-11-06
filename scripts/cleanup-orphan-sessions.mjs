@@ -40,7 +40,7 @@
  * (header parentSession / origin "subagent" / delegationDepth > 0), and only a log
  * labelled `unregistered`/`legacy-orphan` can enter the removable class.
  *
- * See docs/ORPHAN-SESSION-CLEANUP.md for the measured plan and the approval command.
+ * See pending-docs/unpromoted/ORPHAN-SESSION-CLEANUP.md for the measured plan and the approval command.
  *
  * @module scripts/cleanup-orphan-sessions
  */

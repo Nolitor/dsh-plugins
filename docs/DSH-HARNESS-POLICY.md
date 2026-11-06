@@ -1,9 +1,9 @@
 # DSH Plugin Harness Policy & Version Changelog
 <!-- skeleton:
-version: 2.7
+version: 2.8
 kind: policy
 status: active
-updated: 2026-10-31
+updated: 2026-11-06
 summary: Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules, and the browser-boot verification gate.
 -->
 
@@ -57,6 +57,7 @@ result it came from.
 
 | Date | Runtime | Change | Action |
 |---|---|---|---|
+| 2026-11-06 | — | `@nolit/dsh-subrouter` **retired**: the directory was still in the active tree although 2026-10-30 already recorded it decommissioned (F-50) | moved to `archive/dsh-subrouter/`; removed from `verify-subrouter` (dependency, bundle row, `node_modules` link); `scripts/check-disposal-safety.mjs` now gates this |
 | 2026-10-31 | DSH `0.2.2-alpha.2` | Ranking refreshed daily and a brand-new route buried behind 40 ranked models (no usage rank yet) | `dsh-opencode-v2@0.7.2`: `rankingTtlMs` = **5 days**; `opencode-known-models.json` gives a first-seen stamp per route, so a route that appears later is served **first** in the settings list and in the prompt picker for `newModelDays` (7) — **plan gate unchanged**; see [plan](../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md) §5.2.11 |
 | 2026-10-31 | DSH `0.2.2-alpha.2` | 0.6.0's client half killed the whole web UI after the 23:34 restart: `web boot: 1 entry did not activate` / `@nolit/dsh-opencode-v2: failed` — `lib/client.js` declared `const inject = ['slots']` and never exported it, so `ctx.slots` was undefined at activation | `dsh-opencode-v2@0.6.1` exports `inject`; contract test added; verification gate now requires a **browser boot**, not route probes; see [plan](../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md) §5.2.8 |
 | 2026-10-31 | DSH `0.2.2-alpha.2` | The entitlement sweep spent **one real completion per catalog route** (49 requests/press) against a request-counted quota; no cheaper truthful surface exists (provider `/models` 404, `/api/model` uniform `active`, `opencode models` = static catalog, no OpenAPI availability route) | `dsh-opencode-v2@0.7.0` drops the sweep: availability is the plan (`opencode-go` subscription / `opencode` Zen) chosen in the tab, ordering uses the public `opencode.ai/data` ranking (one cached GET), and backend refusals are recorded free from real turns |

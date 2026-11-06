@@ -14,10 +14,16 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join, dirname, relative, posix } from 'node:path'
 
 const root = new URL('..', import.meta.url).pathname
+// Must stay identical to SKIP_DIRS in scripts/doc-index.mjs. When the two diverge, the link gate
+// checks documents the indexer never lists (measured 2026-11-06: 198 vs 195, the difference being
+// three untracked *.template.md files under dsh-sidebar-manager/lib/templates/), so a "green"
+// link gate says nothing about the documents the index claims to cover. One list, one answer.
 const SKIP_DIRS = new Set([
   'node_modules', '.git', '.runtime-measure', '.verify', 'prototype-windows', 'prototype-harness',
-  'artifacts', 'staging', 'verification', '.cache', 'dist', 'build',
+  'market', 'locale', 'test', 'lib', 'scripts', 'artifacts', 'staging', 'verification', 'dist', 'build', '.cache',
 ])
+// A submodule is a separate repository: this workspace does not own its documents (RULES §6.1b).
+const isSubmodule = (dir) => existsSync(join(dir, '.git'))
 // link targets that are legitimately not files in this repo
 const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/|#)/i
 
@@ -25,8 +31,11 @@ function walk(dir, out = []) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (e.name.startsWith('.')) continue
     const full = join(dir, e.name)
-    if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) walk(full, out) }
-    else if (e.name.endsWith('.md')) out.push(full)
+    if (e.isDirectory()) {
+      if (SKIP_DIRS.has(e.name)) continue
+      if (isSubmodule(full)) continue
+      walk(full, out)
+    } else if (e.name.endsWith('.md')) out.push(full)
   }
   return out
 }

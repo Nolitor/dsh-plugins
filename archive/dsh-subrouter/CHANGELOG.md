@@ -1,10 +1,10 @@
 # Changelog — @nolit/dsh-subrouter
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: report
 status: archived
-updated: 2026-11-04
+updated: 2026-11-06
 summary: Engineering history for @nolit/dsh-subrouter. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
 -->
 
@@ -26,6 +26,25 @@ summary: Engineering history for @nolit/dsh-subrouter. Seeded from git history o
 >
 > The code is kept as history. `node scripts/check-disposal-safety.mjs` asserts it stays gone
 > from every profile and from every importer.
+
+### 2026-11-06 — retired (폐기), moved to `archive/`
+
+Owner instruction: *"dsh-subrouter는 폐기 처리"*.
+
+- **Moved** `dsh-subrouter/` → `archive/dsh-subrouter/` with `git mv`; the CHANGELOG and README
+  keep an `ARCHIVED` banner naming `@nolit/dsh-opencode-v2/http` as the replacement.
+- **Removed from every profile** (F-51's three actions): the `verify-subrouter` dependency row,
+  its `dsh.profile.bundles` entry, and its `node_modules/@nolit/dsh-subrouter` link. The profile
+  was backed up first to `~/.dsh/quarantine-backups/subrouter-retire-20261106_205902/`; its
+  `agent-default-model` pointed at `subrouter-anthropic` and was removed with the routes.
+- **Measured before the move:** installed in `verify-subrouter` only (never in `web`); 0 active
+  tracks imported it; its 12 tests passed; the live `web` profile had already been served by
+  `opencode-http-agent` since 2026-10-30, when `docs/DSH-HARNESS-POLICY.md` first recorded this
+  package as decommissioned.
+- **Unique surface note:** this was the only track implementing the `anthropic-messages` wire
+  protocol. The live profile does not use that protocol. If it is ever needed again, the code is
+  here, and `docs/OPENCODE-V2-STAGE-PLAN.md` is where a replacement would be staged.
+
 
 > History lives here (owner instruction 2026-11-04). Boot cards and `AGENTS.md` are narrowed to
 > the owner's unfinished asks; they are not a changelog. See [docs/RULES.md](../../docs/RULES.md) §6.1.

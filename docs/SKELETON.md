@@ -27,7 +27,6 @@
 | `dsh-opencode-v2/` | [dsh-opencode-v2/docs/INDEX.md](../dsh-opencode-v2/docs/INDEX.md) |
 | `dsh-sidebar-manager/` | [dsh-sidebar-manager/docs/INDEX.md](../dsh-sidebar-manager/docs/INDEX.md) |
 | `dsh-subagent-local/` | [dsh-subagent-local/docs/INDEX.md](../dsh-subagent-local/docs/INDEX.md) |
-| `dsh-subrouter/` | [dsh-subrouter/docs/INDEX.md](../dsh-subrouter/docs/INDEX.md) |
 | `dsh-tokeneconomizer/` | [dsh-tokeneconomizer/docs/INDEX.md](../dsh-tokeneconomizer/docs/INDEX.md) |
 | `dsh-korean-locale/` (submodule) | separate repository — read `dsh-korean-locale/README.md` there |
 | `pending-docs/` | [pending-docs/INDEX.md](../pending-docs/INDEX.md) — 미승격 · 미구현 · 폐기 · 미정 |
@@ -36,8 +35,8 @@
 
 - **3.1** · active · 2026-11-06 · [docs/FAILURE-LEDGER.md](./FAILURE-LEDGER.md)
   Every defect and wrong turn this workspace actually made, including the 2026-11-06 documentation split, where a mass link rewrite broke 607 links until a gate caught it, including a literal marker whitelist that missed a new notation family, a stream recogniser tested only on whole payloads and a scrub keyed to one vendor token that missed the model's other pipe-wrapped tokens, and a synthetic A/B probe offered as evidence for a streaming defect that only appears in long output-heavy turns, a role map that sent DSH's leading system-role message to the model as `user` so every system instruction was lost, a body-call classifier that ran only on the content channel while calls written into `reasoning_content` were stripped and dropped, and an assistant-history serializer that re-sent the model its own protocol notation (rendered calls and `<thinking>` wrappers) while the scrub knew each notation's openers but not its bare closers, with the standing rule that keeps it from happening again, and a headless side-call profile that pointed at an account provider while the bundle had disabled the three services that provider needs, so the identical sign-in error came from two different missing dependencies. Read before changing a plugin, a doc, or a live service.
-- **2.1** · active · 2026-11-06 · [docs/RULES.md](./RULES.md)
-  Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement, per-subproject docs with own skeleton index, pending-docs lifecycle, ownership moves to parent harnesses with verified pointer stubs, absorbed-track archiving, reporting.
+- **2.2** · active · 2026-11-06 · [docs/RULES.md](./RULES.md)
+  Detailed project rules (tier 2): measurement, live-state gates, single-writer, plugin replacement, per-subproject docs with own skeleton index, pending-docs lifecycle, ownership moves to parent harnesses with verified pointer stubs, absorbed-track archiving, the measured disposal gate, reporting.
 - **1.0** · active · 2026-11-05 · [docs/DSH-HOME-ISOLATION.md](./DSH-HOME-ISOLATION.md)
   Every repo script/test that launches dsh or a TokenEconomizer engine must own a throwaway DSH_HOME (plus TOKENECONOMIZER_HOME when applicable), clean it up, and never write the live home; enforced by scripts/check-dsh-isolation.mjs and its tests.
 - **2.0** · active · 2026-11-05 · [docs/PLUGIN-STYLE-STANDARD.md](./PLUGIN-STYLE-STANDARD.md)
@@ -52,6 +51,8 @@
 
 ## report
 
+- **1.1** · archived · 2026-11-06 · [archive/dsh-subrouter/CHANGELOG.md](../archive/dsh-subrouter/CHANGELOG.md)
+  Engineering history for @nolit/dsh-subrouter. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
 - **1.0** · archived · 2026-11-05 · [archive/dsh-antigravity-directsdk/CHANGELOG.md](../archive/dsh-antigravity-directsdk/CHANGELOG.md)
   History of the archived DirectSDK track (absorbed into @nolit/dsh-antigravity).
 - **1.0** · measured · 2026-11-05 · [docs/DSH-RC1-PLUGIN-DELTA.md](./DSH-RC1-PLUGIN-DELTA.md)
@@ -73,7 +74,7 @@
 
 - **2.0** · active · 2026-11-06 · [docs/BOOTCARD-POLICY.md](./BOOTCARD-POLICY.md)
   Boot card generation and read rules; AGENTS.md stays a thin pointer to the newest card, rules live in docs/RULES.md.
-- **2.7** · active · 2026-10-31 · [docs/DSH-HARNESS-POLICY.md](./DSH-HARNESS-POLICY.md)
+- **2.8** · active · 2026-11-06 · [docs/DSH-HARNESS-POLICY.md](./DSH-HARNESS-POLICY.md)
   Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules, and the browser-boot verification gate.
 
 ## design
@@ -83,8 +84,10 @@
 
 ## readme
 
-- **2.0** · active · 2026-11-06 · [README.md](../README.md)
-  Workspace entry point: plugin track layout, per-subproject document homes, live profile wiring, agent boot chain.
+- **2.2** · active · 2026-11-06 · [README.md](../README.md)
+  Workspace entry point: plugin track layout by measured lifecycle (active / spec / verify-only), per-subproject document homes, live profile wiring, agent boot chain.
+- **1.1** · archived · 2026-11-06 · [archive/dsh-subrouter/README.md](../archive/dsh-subrouter/README.md)
+  Implementation detail for @nolit/dsh-subrouter. Root record and open defects: ../OPENCODE-MODEL-SERVING-PLAN.md
 - **1.0** · archived · 2026-11-05 · [archive/dsh-antigravity-cli/README.md](../archive/dsh-antigravity-cli/README.md)
   @nolit/dsh-antigravity-cli absorbed into @nolit/dsh-antigravity.
 - **1.0** · archived · 2026-11-05 · [archive/dsh-antigravity-directsdk/README.md](../archive/dsh-antigravity-directsdk/README.md)
@@ -93,15 +96,19 @@
   @nolit/dsh-subagent-antigravity absorbed into @nolit/dsh-antigravity.
 - **1.0** · archived · 2026-11-05 · [archive/dsh-subagent-opencode/README.md](../archive/dsh-subagent-opencode/README.md)
   @nolit/dsh-subagent-opencode absorbed into @nolit/dsh-opencode-v2.
+- **1.0** · active · 2026-10-30 · [archive/dsh-subrouter/bench/README.md](../archive/dsh-subrouter/bench/README.md)
+  Isolated per-route benchmark for DSH model routes; metrics, usage, and known limits.
 
 ## index
 
 - **4.0** · active · 2026-11-06 · [AGENTS.md](../AGENTS.md)
   Tier-1 auto-loaded entry. Points to the rules, the doc index, per-subproject doc homes, and the latest boot card. Keep it tiny.
-- **1.3** · active · 2026-11-06 · [HISTORY.md](../HISTORY.md)
-  The main plugin-history chain for this workspace — vendor merges, archived tracks, version ladders, live-state debt, the per-subproject document split, the harness-owned document transfer, and the host-wide docs tier.
-- **1.0** · reference · 2026-11-05 · [archive/README.md](../archive/README.md)
-  What lives under archive/ (four absorbed tracks: directsdk, antigravity-cli, subagent-antigravity, subagent-opencode), the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
+- **1.4** · active · 2026-11-06 · [HISTORY.md](../HISTORY.md)
+  The main plugin-history chain for this workspace — vendor merges, archived tracks, version ladders, live-state debt, the per-subproject document split, the harness-owned document transfer, the host-wide docs tier, and the measured disposal gate.
+- **1.1** · reference · 2026-11-06 · [archive/README.md](../archive/README.md)
+  What lives under archive/ (five absorbed tracks: directsdk, antigravity-cli, subagent-antigravity, subagent-opencode, subrouter), the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
+- **1.0** · active · 2026-11-06 · [archive/dsh-subrouter/docs/INDEX.md](../archive/dsh-subrouter/docs/INDEX.md)
+  Generated per-subproject index for @nolit/dsh-subrouter: every document this track owns, one line each.
 
 ## boot (newest 5 of 46)
 
@@ -118,4 +125,4 @@
 
 ---
 
-25 workspace docs (46 boot cards), 0 with problems, 10 subprojects.
+29 workspace docs (46 boot cards), 0 with problems, 9 subprojects.

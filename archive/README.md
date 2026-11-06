@@ -1,11 +1,11 @@
 # archive/ — absorbed plugin tracks, kept as history
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: index
 status: reference
-updated: 2026-11-05
-summary: What lives under archive/ (four absorbed tracks: directsdk, antigravity-cli, subagent-antigravity, subagent-opencode), the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
+updated: 2026-11-06
+summary: What lives under archive/ (five absorbed tracks: directsdk, antigravity-cli, subagent-antigravity, subagent-opencode, subrouter), the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
 -->
 
 **Nothing in this directory is installed, linked, packed, or imported by a shipped package.**
@@ -32,6 +32,7 @@ The chain of these moves is [HISTORY.md](../HISTORY.md) §2–§3.
 | `dsh-antigravity-cli` | `@nolit/dsh-antigravity` | 2026-11-05 | `/agy` command, `agy_worker` tool |
 | `dsh-subagent-antigravity` | `@nolit/dsh-antigravity` | 2026-11-05 | `antigravity` subagent provider + `subagent_antigravity` row |
 | `dsh-subagent-opencode` | `@nolit/dsh-opencode-v2` | 2026-11-05 | `opencode` subagent provider + `subagent_opencode` row |
+| `dsh-subrouter` | `@nolit/dsh-opencode-v2/http` | 2026-11-06 | the OpenAI/Anthropic-compatible model route (`ctx.llm.registerAdapter`), served as `opencode-http-agent` |
 
 Owner instruction for the subagent moves (2026-11-05): "이미 서브에이전트는 안티그래비티에 통합되어
 서비스 되고 있는데 … 서브에이전트도 아카이브에 들어가야 하는거 잖아". The earlier round archived only

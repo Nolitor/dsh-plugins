@@ -1,11 +1,11 @@
 # Plugin History — the main chain
 
 <!-- skeleton:
-version: 1.3
+version: 1.4
 kind: index
 status: active
 updated: 2026-11-06
-summary: The main plugin-history chain for this workspace — vendor merges, archived tracks, version ladders, live-state debt, the per-subproject document split, the harness-owned document transfer, and the host-wide docs tier.
+summary: The main plugin-history chain for this workspace — vendor merges, archived tracks, version ladders, live-state debt, the per-subproject document split, the harness-owned document transfer, the host-wide docs tier, and the measured disposal gate.
 -->
 
 > **This is the main history chain. Each plugin's own history stays in `dsh-<track>/CHANGELOG.md`.**
@@ -32,6 +32,70 @@ from the profile.** "Superseded but still in the active tree" is not a stable st
 state that produced the defects in §3.
 
 ## 2. Chronological chain
+
+### 2026-11-06 (5) — `@nolit/dsh-subrouter` retired (폐기)
+
+Owner instruction: *"dsh-subrouter는 폐기 처리"* — confirmed after the owner challenged the
+first attempt (*"실측된거 맞아?"*), which was right to challenge: the first move broke the
+`verify-subrouter` profile's `node_modules` link, and the "its surface is unused" claim was
+measured only against the live `web` profile.
+
+**The retirement itself was already decided on 2026-10-30.** `docs/DSH-HARNESS-POLICY.md` records
+it verbatim: *"`llm-pi-ai` deprecated; autonomous native router policy adopted; `@nolit/dsh-subrouter`
+decommissioned"*, with `dsh-opencode-v2@0.4.0` mounting `@nolit/dsh-opencode-v2/http` natively and
+the profile repointed to `opencode-http-agent`. The directory stayed in the active tree for a week
+anyway — that gap is F-50, and this round closes it.
+
+Measured before the move:
+
+| Probe | Result |
+| :--- | :--- |
+| `web` profile (dependency / bundle / composed row) | **0 / 0 / 0** — it was never in the live profile |
+| `cordis.patch.yml.bak.before-autonomous-router-20261030_204649` | 33 `subrouter` hits — the profile it *used* to own |
+| current `web/cordis.patch.yml` | 0 hits; `agent-default-model` = `opencode-http-agent` |
+| installed in | `verify-subrouter` **only** |
+| imported by an active track | **0** |
+| its own test suite | 12/12 passing |
+| unique surface | the `anthropic-messages` wire protocol — the only track in the tree that implemented it; the live profile does not use that protocol |
+
+**Done in this round:** `git mv dsh-subrouter archive/dsh-subrouter` (history preserved), an
+`ARCHIVED` banner naming the replacement, and the three profile-residue actions from F-51 —
+dependency row, bundle row, and the `node_modules` link — removed from `verify-subrouter` together,
+after backing the profile up to `~/.dsh/quarantine-backups/subrouter-retire-20261106_205902/`.
+`scripts/check-disposal-safety.mjs` now reports 10 active / 5 archived / 0 staged and passes.
+
+### 2026-11-06 (4) — the four disposal actions get one measured gate
+
+Owner question: *"플러그인 폐기 혹은 통합, 축소, 삭제 할때 문제가 없거나 보강할 수 있는 방법"*.
+
+폐기/통합/축소/삭제 were governed by three correct prose documents (`docs/RULES.md` §6.1a,
+`archive/README.md`'s five-bar test, `PLUGIN-CONSOLIDATION.md` §2) and re-derived by hand every
+round. That is the shape of F-50 (three absorbed tracks left in the active tree) and F-51 (broken
+`@nolit` links left in the live profile for days). The rules were not wrong; nothing measured them.
+
+**Added `scripts/check-disposal-safety.mjs`** — reads `~/.dsh/profiles/*` read-only and refuses to
+let a directory claim a lifecycle the live system contradicts:
+
+| Lifecycle | Asserted |
+| :--- | :--- |
+| active | a runtime track (`main`/`exports`/`lib/`) must be installed in some profile; a spec track (documents only) must be installed in none |
+| archive | all five bars of `archive/README.md`, bars 1–4 measured, bar 5 as far as it is measurable (README names the replacement) |
+| staging | installed nowhere, imported by no active track |
+| any | every broken `@nolit` link is reported, whether or not a track claims it (F-51) |
+
+`npm run test:disposal` proves it fails on each defect (10 cases, all red-first). Wired into
+`npm run docs:check:all`. Contract written into `docs/RULES.md` §6.1a-1.
+
+**Three defects fixed in the same round, each measured before the fix:**
+
+| Defect | Before | After |
+|---|---|---|
+| `check-doc-links.mjs` and `doc-index.mjs` walked different sets | links: 198 docs / 1228 links; index: 188 docs — the link gate silently checked 7 documents the index never lists and skipped the submodule guard | one `SKIP_DIRS`, same submodule guard: **191 / 1218**, both gates agree |
+| `cleanup-orphan-sessions.mjs:43` cited `docs/ORPHAN-SESSION-CLEANUP.md` | file does not exist (moved to `pending-docs/unpromoted/`) | correct path |
+| `README.md` said `dsh-notify` was "**not** enabled in the live profile" | it **is** — in `web` `dependencies`, `dsh.profile.bundles`, and the composed `cordis.patch.yml` rows (measured) | corrected, with the measurement command named instead of a static list |
+
+The README also listed `dsh-command-skill` as "Active" although it has no `main`, no `exports`, no
+`lib/`, and is installed nowhere — it is a **spec** track. The lifecycle table now says so.
 
 ### 2026-11-06 (3) — host-wide docs tier above the project tree; Lightpanda confirmed deployed
 
