@@ -76,6 +76,8 @@
   Boot card generation and read rules; AGENTS.md stays a thin pointer to the newest card, rules live in docs/RULES.md.
 - **2.8** · active · 2026-11-06 · [docs/DSH-HARNESS-POLICY.md](./DSH-HARNESS-POLICY.md)
   Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules, and the browser-boot verification gate.
+- **1.0** · active · 2026-11-06 · [docs/NPM-PUBLISHING.md](./NPM-PUBLISHING.md)
+  How to build, verify and publish the three @nolit DSH plugins to npm: the gates that must pass, the prerelease/dist-tag and scoped-access traps, and the commands.
 
 ## design
 
@@ -125,4 +127,4 @@
 
 ---
 
-29 workspace docs (46 boot cards), 0 with problems, 9 subprojects.
+30 workspace docs (46 boot cards), 0 with problems, 9 subprojects.

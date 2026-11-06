@@ -1,0 +1,192 @@
+# Publishing @nolit plugins to npm
+
+<!-- skeleton:
+version: 1.0
+kind: policy
+status: active
+updated: 2026-11-06
+summary: How to build, verify and publish the three @nolit DSH plugins to npm: the gates that must pass, the prerelease/dist-tag and scoped-access traps, and the commands.
+-->
+
+> Scope: every track that ships a `market/index.json` with `"source": { "type": "npm" }`
+> — `dsh-notify`, `dsh-korean-locale`, `dsh-sidebar-manager`.
+> Enforced by `scripts/check-npm-publishable.mjs`; driven by `scripts/publish-npm.sh`.
+
+## 1. The defect this document exists for
+
+Measured 2026-11-06: all three market feeds declared
+
+```json
+"source": { "type": "npm" }
+```
+
+while **none of the three packages existed on the registry**:
+
+| Package | `registry.npmjs.org` | Declared in market |
+| :--- | :--- | :--- |
+| `@nolit/dsh-notify-web` | **HTTP 404** | `type: npm` |
+| `@nolit/dsh-korean-locale` | **HTTP 404** | `type: npm` |
+| `@nolit/dsh-sidebar-manager` | **HTTP 404** | `type: npm` |
+
+`docs/dsh-plugin-runtime-spec.md` §6.1 already warned about exactly this — *"a market entry
+with `type: npm` that is not published will fail the Discover install"* — but a warning in
+prose is not a measurement, and it did not stop three feeds from shipping a false claim.
+
+**The rule that follows:** a market entry may say `type: npm` **only** when
+`npm view <name>@<version> version` returns that version. Until then the entry is a lie and
+the gate below fails.
+
+## 2. The three traps
+
+Each one was measured here, not assumed.
+
+### 2.1 Every package is a prerelease — a bare `npm publish` fails
+
+All three versions are `0.0.1-rc.N`. npm refuses them without an explicit tag:
+
+```
+$ npm publish --dry-run
+npm error You must specify a tag using --tag when publishing a prerelease version.
+```
+
+Two consequences:
+
+1. **A tag is mandatory.** Use `--tag rc` (this workspace's convention for `0.0.1-rc.N`).
+2. **The version never becomes `latest`.** npm assigns `latest` only to stable versions, so
+   after publishing `0.0.1-rc.3` a consumer running `npm i @nolit/dsh-notify-web` still gets
+   E404. They must ask for `@rc` or the exact version:
+   `npm i @nolit/dsh-notify-web@0.0.1-rc.3`.
+
+The market install is unaffected: DSH pins the exact version from `market/index.json`
+(spec §6.1 — *"produces install target `@nolit/dsh-korean-locale@0.2.2`"*), so a `latest`
+tag is not required for Discover to work.
+
+### 2.2 Scoped packages publish *restricted* by default
+
+`@nolit/...` is a scope. Without `publishConfig.access: "public"` npm publishes a private
+package, which the market cannot resolve — a silent failure, because the publish itself
+succeeds. Measured before this round: `dsh-notify` and `dsh-sidebar-manager` had **no**
+`publishConfig` at all; only `dsh-korean-locale` was correct.
+
+### 2.3 The tarball is what consumers get — not the source tree
+
+`dsh-sidebar-manager` shipped a tarball missing `lib/promotion-gate.mjs` and
+`lib/subagent-guard.mjs`, both of which `lib/transaction.mjs` imports. Every source-tree
+test passed (145/145) while the published package crashed on import:
+
+```
+$ node -e "import('./lib/index.js')"
+CRASH: ERR_MODULE_NOT_FOUND
+```
+
+The cause was `files[]` listing `lib/*.mjs` by name and drifting behind the real import
+graph. **A green test suite in the source tree proves nothing about the tarball.**
+
+## 3. The gates
+
+```bash
+# 1. packaging gate — packs for real, unpacks, and proves the tarball works
+node scripts/check-npm-publishable.mjs            # all market tracks
+node scripts/check-npm-publishable.mjs dsh-notify # one track
+node scripts/check-npm-publishable.mjs --json     # machine detail
+```
+
+| # | Check | Fails when |
+| :-: | :--- | :--- |
+| 1 | metadata | invalid name; `private: true`; scoped without `access: public` |
+| 2 | `files[]` | an entry does not exist; a tracked file is neither shipped nor an excused track-only doc |
+| 3 | import graph | a shipped file imports something absent from the tarball |
+| 4 | host entry | `import()` of `package.json#main` from the tarball throws |
+| 5 | links | a relative markdown link does not resolve **inside** the tarball |
+| 6 | market | `market/index.json` version ≠ `package.json`, or `source.type` ≠ `npm` |
+
+Checks 3–5 are the ones that catch defects the source tree hides. They are the reason this
+gate exists; a gate that only ever runs on green code proves nothing.
+
+### 3.1 Documents that link outside the package
+
+A link to a file outside the package must be **plain text or an `https://` URL**, never a
+relative link — the same rule as `docs/RULES.md` §6.0c, now enforced against the tarball
+rather than the repo. Rewrite:
+
+```markdown
+See [docs/RULES.md](../docs/RULES.md) §6.1.      <!-- breaks in the tarball -->
+See `docs/RULES.md` §6.1 in the `dsh-plugins` workspace.   <!-- ships correctly -->
+```
+
+### 3.2 Generated indexes are excluded with `.npmignore`
+
+`docs/INDEX.md` is generated by `scripts/doc-index.mjs` and links to workspace-level files.
+It must not be hand-edited, and it cannot resolve inside a tarball. Exclude it per track
+with `docs/.npmignore`:
+
+```
+INDEX.md
+```
+
+Do **not** use `"!docs/INDEX.md"` in `files[]`: npm honours the negation, but the tracks'
+own `manifest.test.mjs` asserts every `files[]` entry exists on disk, so the negation
+breaks a test that is otherwise correct (measured: `dsh-sidebar-manager` 144/145).
+
+## 4. Publishing
+
+```bash
+npm login                                  # once per machine; check with: npm whoami
+scripts/publish-npm.sh dsh-notify --dry-run # rehearse: runs every gate, uploads nothing
+scripts/publish-npm.sh dsh-notify           # real publish (asks you to retype the version)
+```
+
+The script refuses to publish when:
+
+- the packaging gate fails (a broken tarball would reach every consumer);
+- `publishConfig.access` is not `public`;
+- the version is a prerelease and no `--tag` was given;
+- you are not logged in (it falls back to `--dry-run` and says so).
+
+Flags: `--tag <name>` (default `rc`), `--dry-run`, `--yes`.
+
+### 4.1 Verify after publishing
+
+```bash
+npm view @nolit/dsh-notify-web@0.0.1-rc.3 version   # exact version resolves
+npm view @nolit/dsh-notify-web dist-tags            # expect rc, not latest
+node scripts/check-npm-publishable.mjs dsh-notify   # market still agrees
+```
+
+A publish is not done until `npm view` returns the version. Exit code 0 from
+`npm publish` means npm accepted the upload; it does not mean the registry serves it yet
+and it does not mean the tarball works.
+
+## 5. Build and pack state (measured 2026-11-06)
+
+| Track | Version | Files | Packed | Unpacked | `access` |
+| :--- | :--- | :-: | ---: | ---: | :--- |
+| `dsh-notify` | `0.0.1-rc.3` | 39 | 175.5 kB | 548.6 kB | public |
+| `dsh-korean-locale` | `0.0.1-rc.1` | 21 | 149.0 kB | 580.6 kB | public |
+| `dsh-sidebar-manager` | `0.0.1-rc.1` | 50 | 112.1 kB | 435.3 kB | public |
+
+All three build with no runtime dependencies and no `node_modules`:
+
+| Track | Build | Test |
+| :--- | :--- | :--- |
+| `dsh-notify` | `npm run build` (gen-locale → build-client) | 69/69 |
+| `dsh-korean-locale` | `npm run build` (via `prepublishOnly`) | verify: 74 ns / 3,843 keys |
+| `dsh-sidebar-manager` | none needed (sources are hand-written) | 145/145 |
+
+`dsh-korean-locale` runs `build` + `verify` in `prepublishOnly`, so a stale artifact cannot
+be published. `dsh-notify` has **no** `prepublishOnly`: its committed `lib/client.js` is
+what ships, and `npm publish` does not rebuild it. Run `npm run build` and commit the result
+before publishing, or the tarball carries whatever was last built.
+
+## 6. Outstanding
+
+- **Nothing is published yet.** All three are ready and gated, but `npm login` has not been
+  run on this machine (`npm whoami` → `ENEEDAUTH`), so the market entries are still false
+  claims until someone publishes.
+- `dsh-korean-locale/release.manifest.json` declares a `$schema` that does not resolve
+  (one level too shallow *and* an empty target). Left alone because the published sibling
+  `Nolitor/dsh-sidebar-manager` uses the identical path — a workspace-wide convention
+  decision, not a per-track defect.
+- Track-level scripts `docs:index` / `docs:check` call `../scripts/doc-index-track.mjs`,
+  which only resolves inside this workspace. They are dev-only and are not shipped, but a
+  consumer who unpacks the tarball and runs them gets a missing-module error.

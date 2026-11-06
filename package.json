@@ -11,11 +11,13 @@
     "dsh:isolation": "node scripts/check-dsh-isolation.mjs",
     "test:isolation": "node --test scripts/check-dsh-isolation.test.mjs scripts/cleanup-orphan-sessions.test.mjs",
     "cleanup:orphans": "node scripts/cleanup-orphan-sessions.mjs",
-    "docs:check:all": "npm run docs:check && node scripts/check-plugin-history.mjs && node scripts/check-disposal-safety.mjs && npm run test:docs",
+    "docs:check:all": "npm run docs:check && node scripts/check-plugin-history.mjs && node scripts/check-disposal-safety.mjs && npm run test:docs && npm run check:publish",
     "docs:links": "node scripts/check-doc-links.mjs",
     "test:docs": "node --test scripts/check-doc-links.test.mjs",
     "docs:moves": "node scripts/check-doc-moves.mjs",
     "test:disposal": "node --test scripts/check-disposal-safety.test.mjs",
-    "check:disposal": "node scripts/check-disposal-safety.mjs"
+    "check:disposal": "node scripts/check-disposal-safety.mjs",
+    "check:publish": "node scripts/check-npm-publishable.mjs",
+    "publish:dry": "scripts/publish-npm.sh --dry-run"
   }
 }

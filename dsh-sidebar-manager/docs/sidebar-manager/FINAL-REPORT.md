@@ -9,7 +9,7 @@ summary: Closing report for the Sidebar Manager programme: delivered surfaces, m
 -->
 
 
-> 상태: completed · 최종 갱신: 2026-10-23 · git: main @ f277d50 · 상위: [dsh-workspace](../../../AGENTS.md)
+> 상태: completed · 최종 갱신: 2026-10-23 · git: main @ f277d50 · 상위: `dsh-workspace` (`AGENTS.md` in the `dsh-plugins` workspace)
 
 ## P3 후속 (2026-10-23)
 
@@ -78,7 +78,7 @@ summary: Closing report for the Sidebar Manager programme: delivered surfaces, m
 
 ## 실기동 검증
 
-Playwright 하네스: [tools/e2e/run-e2e.mjs](../../prototype-harness/e2e/run-e2e.mjs)
+Playwright 하네스: `prototype-harness/e2e/run-e2e.mjs` in the `dsh-plugins` workspace
 
 - 격리 `DSH_HOME=%TEMP%\dsh-e2e-home`, 포트 **3099**
 - fixture workspace: E2E Alpha/Beta/Gamma/Delta

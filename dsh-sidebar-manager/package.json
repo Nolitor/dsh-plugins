@@ -67,7 +67,12 @@
     "lib/contract-advisory.mjs",
     "lib/workspace-lifecycle.mjs",
     "test/advisory-v3.test.mjs",
-    "docs/"
+    "docs/",
+    "lib/promotion-gate.mjs",
+    "lib/subagent-guard.mjs",
+    "test/core02-utm-harness.test.mjs",
+    "test/panel-presentation.test.mjs",
+    "test/typography-contract.test.mjs"
   ],
   "engines": {
     "node": ">=24.9",
@@ -109,5 +114,8 @@
     "test": "node --test test/manifest.test.mjs test/promotion.test.mjs test/safety.test.mjs test/rollback.test.mjs test/groups-v2.test.mjs test/hq-tree.test.mjs test/phase5.test.mjs test/advisory-v3.test.mjs test/panel-presentation.test.mjs test/typography-contract.test.mjs && node test/core02-utm-harness.test.mjs",
     "docs:index": "node ../scripts/doc-index-track.mjs",
     "docs:check": "node ../scripts/doc-index-track.mjs --check"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
