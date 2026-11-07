@@ -126,19 +126,19 @@
 - **1.0** · active · 2026-11-06 · [archive/dsh-subrouter/docs/INDEX.md](../archive/dsh-subrouter/docs/INDEX.md)
   Generated per-subproject index for @nolit/dsh-subrouter: every document this track owns, one line each.
 
-## boot (newest 5 of 48)
+## boot (newest 5 of 49)
 
 - **active** · INDEX.md · [card](../bootcards/INDEX.md)
   Newest-first list of dated boot cards.
+- **active** · 2026-11-08T0105+0900.md · [card](../bootcards/2026-11-08T0105+0900.md)
+  Session card (tier 5): the custom router mounted for real — isolated E2E parity, live web-profile wiring, hardened apply seam, daemon bridge fixes. Backend done; the client surface is the open work (M10 UI sprint).
 - **active** · 2026-11-07T2332+0900.md · [card](../bootcards/2026-11-07T2332+0900.md)
   Session card (tier 5): custom-router preset data model, 3-layer catalog/pricing, routing + probe executor, plan/usage layers, three vendor bridges and the apply seam. Next session starts with the isolated E2E mount verification.
 - **active** · 2026-11-07T0531+0900.md · [card](../bootcards/2026-11-07T0531+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-07T0531+0900, including the OpenCodex bridge ownership move to dsh-custom-router.
 - **active** · 2026-11-06T1837+0900.md · [card](../bootcards/2026-11-06T1837+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-06T1837+0900. Older cards are historical.
-- **active** · 2026-11-05T1527+0900.md · [card](../bootcards/2026-11-05T1527+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-11-05T1527+0900. Older cards are historical.
 
 ---
 
-36 workspace docs (48 boot cards), 0 with problems, 8 subprojects.
+36 workspace docs (49 boot cards), 0 with problems, 8 subprojects.
