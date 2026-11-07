@@ -64,13 +64,14 @@ window.__ModuleLoader__.load({
     const CSS_TAG = '@nolit/dsh-custom-router'
 
     const CSS = [
-      '.crSection{min-width:0;display:flex;flex-direction:column;gap:16px;font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.crSection{min-width:0;display:flex;flex-direction:column;gap:12px;font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
       // The dashboard is a PAGE inside the main slot, not a full-bleed surface:
       // it centres itself and stops growing past a readable width instead of
       // stretching across the window.
       '.crPage{width:100%;max-width:1180px;margin:0 auto;padding:16px 20px;box-sizing:border-box}',
+      '.crPage.crPageScroll{height:100%;max-height:100%;min-height:0;overflow-y:auto;padding:12px 16px;overflow-x:hidden}',
       '.crPageNarrow{max-width:920px}',
-      '.crHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;min-width:0}',
+      '.crHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;min-width:0}',
       '.crTitleBlock{display:flex;flex-direction:column;gap:2px;min-width:0}',
       '.crHeaderText{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}',
       '.crTitle{margin:0;font-family:inherit;font-size:calc(var(--dsh-content-font-size,14px) + 4px);font-weight:500;line-height:28px;color:var(--dsw-alias-label-primary)}',
@@ -84,14 +85,14 @@ window.__ModuleLoader__.load({
       '.crTab{appearance:none;background:0 0;border:0;border-bottom:2px solid transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));padding:8px 10px;margin-bottom:-.5px;white-space:nowrap}',
       '.crTab[aria-selected=true]{color:var(--dsw-alias-label-primary);font-weight:500;border-bottom-color:var(--dsw-alias-state-business-primary)}',
       '.crKpiGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:stretch}',
-      '.crKpiCard{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}',
+      '.crKpiCard{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);padding:10px 12px;display:flex;flex-direction:column;gap:4px;min-width:0}',
       '.crKpiLabelRow{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}',
       '.crKpiLabel{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.crJump{appearance:none;background:0 0;border:0;padding:0;cursor:pointer;color:var(--dsw-alias-link);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:nowrap}',
       '.crKpiValue{font-family:inherit;font-size:calc(var(--dsh-content-font-size,14px) + 8px);font-weight:500;line-height:32px;color:var(--dsw-alias-label-primary);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.crKpiMeta{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.crVendorGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}',
-      '.crVendorCard{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}',
+      '.crVendorCard{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}',
       '.crVendorHead{display:flex;align-items:center;gap:12px;min-width:0}',
       '.crAvatar{width:40px;height:40px;border-radius:12px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--dsw-alias-interactive-bg-hover-solid);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:500;line-height:1}',
       '.crIdentity{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}',
@@ -200,8 +201,8 @@ window.__ModuleLoader__.load({
       '.crBadgeMeta[data-tone=muted]{color:var(--dsw-alias-label-tertiary)}',
       '.crEmpty{padding:16px 14px;margin:0;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
       '.crFooterBar{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:.5px solid var(--dsw-alias-border-l3);min-width:0;flex-wrap:wrap}',
-      '@media (max-width:1180px){.crKpiGrid,.crVendorGrid,.crBillingGrid,.crLayerGrid,.crPickerGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}',
-      '@media (max-width:720px){.crKpiGrid,.crVendorGrid,.crBillingGrid,.crLayerGrid,.crPickerGrid{grid-template-columns:minmax(0,1fr)}}',
+      '@media (max-width:960px){.crKpiGrid,.crVendorGrid,.crBillingGrid,.crLayerGrid,.crPickerGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}',
+      '@media (max-width:640px){.crKpiGrid,.crVendorGrid,.crBillingGrid,.crLayerGrid,.crPickerGrid{grid-template-columns:minmax(0,1fr)}}',
     ].join('')
 
     /** Inject the stylesheet once, keyed so a reload replaces it. */
@@ -2066,7 +2067,7 @@ window.__ModuleLoader__.load({
 
       // ONE container: the dashboard is a page in the main slot, so it centres
       // and stops at a readable width instead of stretching across the window.
-      return h('div', { className: 'crSection crPage', 'data-router-namespace': NAMESPACE },
+      return h('div', { className: 'crSection crPage crPageScroll', 'data-router-namespace': NAMESPACE },
         h('header', { className: 'crHeader' },
           h('div', { className: 'crHeaderText' },
             h('h3', { className: 'crTitle' }, t('metaTitle')),
