@@ -70,10 +70,21 @@ test('the client registers exactly one settings section and no vendor tab', () =
     },
   }
   exports.apply(ctx)
-  assert.equal(registrations.length, 1)
-  assert.equal(registrations[0].name, 'settings.section')
-  assert.equal(registrations[0].id, 'custom-router')
-  assert.equal(registrations[0].label(), 'Custom Router')
+  const sections = registrations.filter((entry) => entry.name === 'settings.section')
+  const panels = registrations.filter((entry) => entry.name === 'sidebar.panellist')
+  const pages = registrations.filter((entry) => entry.name === 'main')
+  assert.equal(sections.length, 1)
+  assert.equal(sections[0].id, 'custom-router')
+  assert.equal(sections[0].label(), 'Custom Router')
+  // One sidebar page, keyed to the same id the panel row selects.
+  assert.equal(panels.length, 1)
+  assert.equal(panels[0].id, 'custom-router')
+  assert.equal(pages.length, 1)
+  assert.equal(pages[0].key, 'custom-router')
+  for (const entry of registrations) {
+    const id = entry.id ?? entry.key
+    assert.equal(id, 'custom-router', 'no vendor tab may be registered: ' + id)
+  }
 })
 
 test('the client writes only the rows and switch names lib/presets.js declares', () => {

@@ -35,7 +35,7 @@
  * dashboard.
  *
  * COMPONENT SHAPE: every component below is a PURE function of its props (no
- * hooks). Only `CustomRouterSection` holds state. That keeps the view model
+ * hooks). Only the container components hold state. That keeps the view model
  * testable without a browser and keeps the re-render boundary obvious.
  */
 window.__ModuleLoader__.load({
@@ -138,7 +138,32 @@ window.__ModuleLoader__.load({
     "pickerUnsupported": "Not supported yet",
     "customJson": "Custom JSON",
     "switchOn": "On",
-    "switchOff": "Off"
+    "switchOff": "Off",
+    "panelLabel": "Custom Router",
+    "modelsTitle": "Model serving",
+    "modelsHint": "Pick the models each preset offers to the prompt picker, then save. Prices and promotions are the provider's current catalog.",
+    "modelsCount": "{enabled} / {total} selected",
+    "modelsSearch": "Filter models",
+    "modelsSelectAll": "Select all",
+    "modelsClear": "Clear",
+    "modelsEmpty": "No model matches this filter.",
+    "modelsLoadFailed": "Could not load this provider's model list.",
+    "modelsDirty": "Unsaved changes",
+    "modelsSaved": "Saved",
+    "modelsSaving": "Saving…",
+    "modelsSave": "Save selection",
+    "modelsSavedHint": "Saving applies to the running router: the prompt model picker shows the selected models.",
+    "modelRate": "in ${input} · out ${output} / 1M",
+    "priceUnavailable": "price unavailable",
+    "promoOff": "{percent}% off",
+    "modelContext": "{n} ctx",
+    "modelThinking": "thinking",
+    "modelVision": "vision",
+    "modelUnavailable": "unavailable",
+    "planGo": "Go subscription",
+    "planZen": "Zen pay-as-you-go",
+    "planOpenCode": "OpenCode plan",
+    "priceIncluded": "included in plan"
   },
   "ko": {
     "meta": {
@@ -228,7 +253,32 @@ window.__ModuleLoader__.load({
     "pickerUnsupported": "아직 지원되지 않음",
     "customJson": "커스텀 JSON",
     "switchOn": "사용",
-    "switchOff": "미사용"
+    "switchOff": "미사용",
+    "panelLabel": "커스텀 라우터",
+    "modelsTitle": "모델 서빙",
+    "modelsHint": "프리셋별로 프롬프트 모델 선택기에 노출할 모델을 고르고 저장하세요. 가격·할인은 프로바이더의 현재 카탈로그 값입니다.",
+    "modelsCount": "{enabled} / {total} 선택",
+    "modelsSearch": "모델 검색",
+    "modelsSelectAll": "모두 선택",
+    "modelsClear": "선택 해제",
+    "modelsEmpty": "이 필터에 맞는 모델이 없습니다.",
+    "modelsLoadFailed": "이 프로바이더의 모델 목록을 불러오지 못했습니다.",
+    "modelsDirty": "저장되지 않은 변경",
+    "modelsSaved": "저장됨",
+    "modelsSaving": "저장 중…",
+    "modelsSave": "선택 저장",
+    "modelsSavedHint": "저장하면 실행 중인 라우터에 반영되어, 프롬프트 모델 선택기에 선택한 모델이 표시됩니다.",
+    "modelRate": "입력 ${input} · 출력 ${output} / 1M",
+    "priceUnavailable": "가격 미제공",
+    "promoOff": "{percent}% 할인",
+    "modelContext": "{n} 컨텍스트",
+    "modelThinking": "추론",
+    "modelVision": "비전",
+    "modelUnavailable": "사용 불가",
+    "planGo": "Go 구독",
+    "planZen": "Zen 종량제",
+    "planOpenCode": "OpenCode 요금제",
+    "priceIncluded": "구독 포함"
   },
   "zh": {
     "meta": {
@@ -318,7 +368,32 @@ window.__ModuleLoader__.load({
     "pickerUnsupported": "暂不支持",
     "customJson": "自定义 JSON",
     "switchOn": "开启",
-    "switchOff": "关闭"
+    "switchOff": "关闭",
+    "panelLabel": "自定义路由",
+    "modelsTitle": "模型服务",
+    "modelsHint": "为每个预设选择要提供给提示模型选择器的模型并保存。价格与优惠来自提供方当前目录。",
+    "modelsCount": "已选 {enabled} / {total}",
+    "modelsSearch": "筛选模型",
+    "modelsSelectAll": "全选",
+    "modelsClear": "清除",
+    "modelsEmpty": "没有匹配此筛选的模型。",
+    "modelsLoadFailed": "无法加载该提供方的模型列表。",
+    "modelsDirty": "未保存的更改",
+    "modelsSaved": "已保存",
+    "modelsSaving": "保存中…",
+    "modelsSave": "保存选择",
+    "modelsSavedHint": "保存后即应用到运行中的路由器，提示模型选择器会显示所选模型。",
+    "modelRate": "输入 ${input} · 输出 ${output} / 1M",
+    "priceUnavailable": "未提供价格",
+    "promoOff": "{percent}% 优惠",
+    "modelContext": "{n} 上下文",
+    "modelThinking": "推理",
+    "modelVision": "视觉",
+    "modelUnavailable": "不可用",
+    "planGo": "Go 订阅",
+    "planZen": "Zen 按量计费",
+    "planOpenCode": "OpenCode 套餐",
+    "priceIncluded": "套餐已含"
   }
 }
 
@@ -430,6 +505,28 @@ window.__ModuleLoader__.load({
       '.crPickerDesc{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);margin:0;min-width:0}',
       '.crPickerAuth{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);margin:0}',
       '.crPickerActions{display:flex;align-items:center;gap:8px;margin-top:auto;min-width:0}',
+      '.crModels{display:flex;flex-direction:column;gap:16px;min-width:0}',
+      '.crCategory{display:flex;flex-direction:column;min-width:0;border-radius:var(--dsw-radius-xl);background:var(--dsw-alias-settings-card-fill);border:0.5px solid var(--dsw-alias-settings-card-stroke)}',
+      '.crCategoryHead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0;padding:14px 16px;border-bottom:0.5px solid var(--dsw-alias-border-l2)}',
+      '.crCategoryTitle{display:flex;flex-direction:column;min-width:0;flex:1;gap:2px}',
+      '.crCategoryName{font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:600;color:var(--dsw-alias-label-primary)}',
+      '.crCategoryPlan{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-secondary)}',
+      '.crCategoryCount{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
+      '.crModelFilter{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:0.5px solid var(--dsw-alias-border-l2);min-width:0}',
+      '.crModelSearch{flex:1;min-width:0;height:28px;box-sizing:border-box;border:0.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;padding:0 8px}',
+      '.crModelList{display:flex;flex-direction:column;max-height:420px;overflow:auto}',
+      '.crModelRow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 16px;min-width:0;cursor:pointer}',
+      '.crModelRow:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.crModelCheck{width:14px;height:14px;accent-color:var(--dsw-alias-state-business-primary);margin:0}',
+      '.crModelText{display:flex;flex-direction:column;min-width:0;gap:2px}',
+      '.crModelName{font-family:inherit;font-size:var(--dsh-content-font-size,14px);color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.crModelMeta{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-tertiary);display:flex;gap:6px;flex-wrap:wrap}',
+      '.crModelPrice{display:flex;flex-direction:column;align-items:flex-end;gap:2px;white-space:nowrap}',
+      '.crModelRate{font-family:var(--ds-font-family-code,monospace);font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-primary)}',
+      '.crModelRateList{font-family:var(--ds-font-family-code,monospace);font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-tertiary);text-decoration:line-through}',
+      '.crPromoBadge{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-state-business-primary-alpha,transparent);border-radius:var(--dsw-radius-sm);padding:0 4px}',
+      '.crModelEmpty{padding:16px;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px)}',
+      '.crCategoryFoot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:0.5px solid var(--dsw-alias-border-l2);min-width:0}',
       '@media (max-width:1180px){.crKpiGrid,.crVendorGrid,.crBillingGrid,.crLayerGrid,.crPickerGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}',
       '@media (max-width:720px){.crKpiGrid,.crVendorGrid,.crBillingGrid,.crLayerGrid,.crPickerGrid{grid-template-columns:minmax(0,1fr)}}',
     ].join('')
@@ -1487,6 +1584,332 @@ window.__ModuleLoader__.load({
         }, props.enabled[item.presetId] === true ? t('pickerAdded') : item.presetId === null ? t('pickerUnsupported') : t('pickerAdd'))))))
     }
 
+    // ------------------------------------------------------- model catalogs
+
+    /**
+     * Model-serving catalogs the settings page manages, one per preset.
+     *
+     * `row` is the loader row whose `enabledModels` carries the selection (the
+     * same field the vendor's own panel writes) and `route` is the measured
+     * local panel route that lists the models. The write goes through the
+     * router namespace; the router's reconcile remounts that child, so the
+     * prompt model picker reflects the selection without a restart.
+     */
+    const MODEL_SOURCES = Object.freeze([
+      Object.freeze({ id: 'antigravity', row: 'dsh-antigravity', route: '/api/local/dsh-antigravity/models', planKey: 'planSubscription', normalize: normalizeAntigravityModels }),
+      Object.freeze({ id: 'opencode', row: 'dsh-opencode-v2-http', route: '/api/local/opencode-v2/model-settings', planKey: 'planOpenCode', normalize: normalizeOpencodeModels }),
+      Object.freeze({ id: 'deepinfra', row: 'dsh-deepinfra', route: '/api/local/deepinfra/models', planKey: 'planPayAsYouGo', normalize: normalizeDeepinfraModels }),
+    ])
+
+    /**
+     * Format a context window for a model meta chip.
+     * @param {unknown} value - token count.
+     * @returns {string} the localized chip, or an empty string.
+     */
+    function formatContext(value) {
+      const number = Number(value)
+      if (!Number.isFinite(number) || number <= 0) return ''
+      const text = number >= 1e6
+        ? (number / 1e6).toFixed(Number.isInteger(number / 1e6) ? 0 : 1) + 'M'
+        : Math.round(number / 1e3) + 'K'
+      return t('modelContext', { n: text })
+    }
+
+    /**
+     * Format a per-1M token rate without rounding it to cents.
+     * @param {unknown} value - USD per 1M tokens.
+     * @returns {string} the amount, or an em dash.
+     */
+    function formatRate(value) {
+      const number = Number(value)
+      if (!Number.isFinite(number)) return '—'
+      const digits = number < 0.01 ? 4 : number < 1 ? 3 : 2
+      return number.toFixed(digits)
+    }
+
+    /**
+     * Normalize the Antigravity model list (subscription: quota, no per-token price).
+     * @param {object} payload - `/models` answer.
+     * @returns {object[]} normalized models.
+     */
+    function normalizeAntigravityModels(payload) {
+      const models = Array.isArray(payload?.models) ? payload.models : []
+      return models.map((entry) => ({
+        id: String(entry?.id ?? ''),
+        name: String(entry?.name ?? entry?.id ?? ''),
+        meta: [formatContext(entry?.contextWindow), entry?.supportsThinking === true ? t('modelThinking') : ''].filter(Boolean),
+        price: null,
+        promotion: null,
+        enabled: entry?.enabled === true,
+      })).filter((model) => model.id !== '')
+    }
+
+    /**
+     * Normalize the OpenCode route list (plan subscription; no per-token price).
+     * @param {object} payload - `/model-settings` answer.
+     * @returns {object[]} normalized models.
+     */
+    function normalizeOpencodeModels(payload) {
+      const enabled = Array.isArray(payload?.enabled) ? payload.enabled : []
+      const models = Array.isArray(payload?.models) ? payload.models : []
+      return models.map((entry) => {
+        const id = String(entry?.route ?? '')
+        return {
+          id,
+          name: String(entry?.name ?? id),
+          meta: [entry?.plan === 'zen' ? t('planZen') : t('planGo'), entry?.available === false ? t('modelUnavailable') : ''].filter(Boolean),
+          price: null,
+          promotion: null,
+          enabled: enabled.includes(id),
+        }
+      }).filter((model) => model.id !== '')
+    }
+
+    /**
+     * Normalize the DeepInfra catalog (pay-per-token: price and promotion per model).
+     * @param {object} payload - `/models` answer.
+     * @returns {object[]} normalized models.
+     */
+    function normalizeDeepinfraModels(payload) {
+      const models = Array.isArray(payload?.models) ? payload.models : []
+      return models.map((entry) => ({
+        id: String(entry?.id ?? ''),
+        name: String(entry?.id ?? ''),
+        meta: [formatContext(entry?.contextWindow), entry?.vision === true ? t('modelVision') : '', entry?.reasoning === true ? t('modelThinking') : ''].filter(Boolean),
+        price: entry?.price !== null && typeof entry?.price === 'object' ? entry.price : null,
+        promotion: entry?.promotion !== null && typeof entry?.promotion === 'object' ? entry.promotion : null,
+        enabled: entry?.enabled === true,
+      })).filter((model) => model.id !== '')
+    }
+
+    /**
+     * Whether a model list carries per-token prices.
+     * @param {object[]} models - normalized models.
+     * @returns {boolean} true when at least one model has a rate.
+     */
+    function hasRates(models) {
+      return Array.isArray(models) && models.some((model) => model.price !== null && typeof model.price === 'object')
+    }
+
+    /**
+     * One model row: checkbox, name/meta and the price block.
+     * @param {object} props - component props.
+     * @returns {object} the element.
+     */
+    function ModelRow(props) {
+      const model = props.model
+      const selected = props.selected === true
+      // A subscription plan has no per-token rate: say it is included rather
+      // than claiming the provider failed to answer.
+      const noRateNote = props.priceNote ?? t('priceUnavailable')
+      const price = model.price !== null && typeof model.price === 'object' ? model.price : null
+      const promotion = model.promotion !== null && typeof model.promotion === 'object' ? model.promotion : null
+      const promoPercent = promotion !== null && Number.isFinite(Number(promotion.percentOff)) ? Number(promotion.percentOff) : null
+      return h('label', { className: 'crModelRow', 'data-model': model.id },
+        h('input', {
+          type: 'checkbox',
+          className: 'crModelCheck',
+          checked: selected,
+          'aria-label': model.name,
+          onChange: (event) => props.onToggle(model.id, event.target.checked),
+        }),
+        h('span', { className: 'crModelText' },
+          h('span', { className: 'crModelName', title: model.id }, model.name),
+          model.meta.length > 0 ? h('span', { className: 'crModelMeta' }, model.meta.join(' · ')) : null),
+        h('span', { className: 'crModelPrice' },
+          price !== null
+            ? h('span', { className: 'crModelRate' }, t('modelRate', { input: formatRate(price.input), output: formatRate(price.output) }))
+            : h('span', { className: 'crModelRate' }, noRateNote),
+          price !== null && promoPercent !== null
+            ? h('span', { className: 'crModelRateList' }, t('modelRate', { input: formatRate(price.listInput), output: formatRate(price.listOutput) }))
+            : null,
+          promoPercent !== null
+            ? h('span', { className: 'crPromoBadge' }, t('promoOff', { percent: promoPercent }))
+            : null))
+    }
+
+    /**
+     * Whether two id sets hold the same members.
+     * @param {Set<string>|undefined} left - one set.
+     * @param {Set<string>|undefined} right - another set.
+     * @returns {boolean} true when equal.
+     */
+    function sameSelection(left, right) {
+      if (left === undefined || right === undefined) return left === right
+      if (left.size !== right.size) return false
+      for (const id of left) if (!right.has(id)) return false
+      return true
+    }
+
+    /**
+     * The settings section: one category per preset with its model-serving list.
+     *
+     * The user picks the models the prompt picker should offer and saves; the
+     * write lands in `vendorConfig.<row>.enabledModels`, the field each vendor
+     * already filters its catalog with, and the router reconcile applies it to
+     * the running child.
+     * @returns {object} the element.
+     */
+    function CustomRouterModels() {
+      ensureStyle()
+      const [catalogs, setCatalogs] = React.useState({})
+      const [selected, setSelected] = React.useState({})
+      const [saved, setSaved] = React.useState({})
+      const [status, setStatus] = React.useState({})
+      const [queries, setQueries] = React.useState({})
+      const [saving, setSaving] = React.useState({})
+      const [errors, setErrors] = React.useState({})
+
+      React.useEffect(() => {
+        let alive = true
+        for (const source of MODEL_SOURCES) {
+          // The initial state is already 'loading'; resetting it here would
+          // overwrite an answered catalog on every re-render.
+          postUsageRoute(globalThis.fetch, source.route)
+            .then((payload) => {
+              if (!alive) return
+              const models = source.normalize(payload)
+              const enabled = new Set(models.filter((model) => model.enabled).map((model) => model.id))
+              setCatalogs((previous) => ({ ...previous, [source.id]: models }))
+              setSelected((previous) => ({ ...previous, [source.id]: enabled }))
+              setSaved((previous) => ({ ...previous, [source.id]: new Set(enabled) }))
+              setStatus((previous) => ({ ...previous, [source.id]: 'ready' }))
+            })
+            .catch(() => {
+              if (alive) setStatus((previous) => ({ ...previous, [source.id]: 'error' }))
+            })
+        }
+        return () => { alive = false }
+      }, [])
+
+      /**
+       * Toggle one model's selection in a category.
+       * @param {string} sourceId - preset id.
+       * @param {string} modelId - model id or route.
+       * @param {boolean} next - requested state.
+       * @returns {void}
+       */
+      const toggle = (sourceId, modelId, next) => {
+        setSelected((previous) => {
+          const set = new Set(previous[sourceId] ?? [])
+          if (next) set.add(modelId)
+          else set.delete(modelId)
+          return { ...previous, [sourceId]: set }
+        })
+      }
+
+      /**
+       * Select every model of a category, or clear it.
+       * @param {object} source - model source.
+       * @param {boolean} all - true selects all, false clears.
+       * @returns {void}
+       */
+      const setAll = (source, all) => {
+        const models = catalogs[source.id] ?? []
+        setSelected((previous) => ({ ...previous, [source.id]: all ? new Set(models.map((model) => model.id)) : new Set() }))
+      }
+
+      /**
+       * Persist one category's selection through the router namespace.
+       * @param {object} source - model source.
+       * @returns {void}
+       */
+      const save = (source) => {
+        const form = hostCtx && hostCtx.configForms ? hostCtx.configForms.get(NAMESPACE) : null
+        if (!form || saving[source.id] === true) return
+        const models = catalogs[source.id] ?? []
+        const chosen = selected[source.id] ?? new Set()
+        const value = models.map((model) => model.id).filter((id) => chosen.has(id))
+        setSaving((previous) => ({ ...previous, [source.id]: true }))
+        form.mutate([{ op: 'set', path: ['vendorConfig', source.row, 'enabledModels'], value }])
+          .then((accepted) => {
+            setSaving((previous) => ({ ...previous, [source.id]: false }))
+            if (accepted) {
+              setSaved((previous) => ({ ...previous, [source.id]: new Set(chosen) }))
+              setErrors((previous) => ({ ...previous, [source.id]: '' }))
+            } else {
+              setErrors((previous) => ({ ...previous, [source.id]: 'refused' }))
+            }
+          })
+          .catch((failure) => {
+            setSaving((previous) => ({ ...previous, [source.id]: false }))
+            setErrors((previous) => ({ ...previous, [source.id]: failure instanceof Error ? failure.message : String(failure) }))
+          })
+      }
+
+      return h('div', { className: 'crSection crModels' },
+        h('div', { className: 'crHeader' },
+          h('div', { className: 'crTitleBlock' },
+            h('h2', { className: 'crTitle' }, t('modelsTitle')),
+            h('p', { className: 'crSubtitle' }, t('modelsHint')))),
+        MODEL_SOURCES.map((source) => {
+          const provider = ROUTER_PROVIDERS.find((entry) => entry.id === source.id)
+          const models = catalogs[source.id] ?? []
+          const chosen = selected[source.id] ?? new Set()
+          const initial = saved[source.id]
+          const dirty = initial === undefined ? false : !sameSelection(chosen, initial)
+          const query = String(queries[source.id] ?? '').trim().toLowerCase()
+          const visible = query === ''
+            ? models
+            : models.filter((model) => model.name.toLowerCase().includes(query) || model.id.toLowerCase().includes(query))
+          const state = status[source.id] ?? 'loading'
+          return h('section', { className: 'crCategory', 'data-category': source.id, key: source.id },
+            h('div', { className: 'crCategoryHead' },
+              h(ProviderAvatar, { name: t(provider?.nameKey ?? 'vendorAntigravity') }),
+              h('div', { className: 'crCategoryTitle' },
+                h('span', { className: 'crCategoryName' }, t(provider?.nameKey ?? 'vendorAntigravity')),
+                h('span', { className: 'crCategoryPlan' }, t(source.planKey))),
+              h('span', { className: 'crCategoryCount' }, t('modelsCount', { enabled: chosen.size, total: models.length }))),
+            h('div', { className: 'crModelFilter' },
+              h('input', {
+                className: 'crModelSearch',
+                type: 'search',
+                placeholder: t('modelsSearch'),
+                'aria-label': t('modelsSearch'),
+                value: queries[source.id] ?? '',
+                onChange: (event) => setQueries((previous) => ({ ...previous, [source.id]: event.target.value })),
+              }),
+              h('button', { type: 'button', className: 'crButton', onClick: () => setAll(source, true) }, t('modelsSelectAll')),
+              h('button', { type: 'button', className: 'crButton crButtonGhost', onClick: () => setAll(source, false) }, t('modelsClear'))),
+            state === 'error'
+              ? h('p', { className: 'crModelEmpty' }, t('modelsLoadFailed'))
+              : state === 'loading'
+                ? h('p', { className: 'crModelEmpty' }, t('loading'))
+                : visible.length === 0
+                  ? h('p', { className: 'crModelEmpty' }, t('modelsEmpty'))
+                  : h('div', { className: 'crModelList' }, visible.map((model) => h(ModelRow, {
+                    key: model.id,
+                    model,
+                    selected: chosen.has(model.id),
+                    priceNote: t(source.planKey === 'planPayAsYouGo' ? 'priceUnavailable' : 'priceIncluded'),
+                    onToggle: (id, next) => toggle(source.id, id, next),
+                  }))),
+            h('div', { className: 'crCategoryFoot' },
+              errors[source.id] ? h('span', { className: 'crState', 'data-state': 'error' }, t('saveError')) : null,
+              dirty ? h('span', { className: 'crState' }, t('modelsDirty')) : h('span', { className: 'crState', 'data-saved': 'true' }, t('modelsSaved')),
+              h('button', {
+                type: 'button',
+                className: 'crButton crButtonPrimary',
+                disabled: !dirty || saving[source.id] === true,
+                onClick: () => save(source),
+              }, saving[source.id] === true ? t('modelsSaving') : t('modelsSave'))))
+        }),
+        h('p', { className: 'crHint' }, t('modelsSavedHint')))
+    }
+
+    /**
+     * Sidebar glyph for the dashboard panel (16/18 px, inherits currentColor).
+     * @param {object} props - `{size, active}` from the sidebar.
+     * @returns {object} the element.
+     */
+    function RouterPanelGlyph(props) {
+      const size = Number(props?.size) || 16
+      return h('svg', { width: size, height: size, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true', focusable: 'false' },
+        h('rect', { x: 1.5, y: 3, width: 4.5, height: 4, rx: 1, stroke: 'currentColor', 'stroke-width': 1.3 }),
+        h('rect', { x: 10, y: 9, width: 4.5, height: 4, rx: 1, stroke: 'currentColor', 'stroke-width': 1.3 }),
+        h('path', { d: 'M6 5h2.5a1.5 1.5 0 0 1 1.5 1.5V9', stroke: 'currentColor', 'stroke-width': 1.3, 'stroke-linecap': 'round' }))
+    }
+
     // ------------------------------------------------------------- container
 
     /** The context the host injected, set by apply(). */
@@ -1496,7 +1919,7 @@ window.__ModuleLoader__.load({
      * The settings section.
      * @returns {object} the element.
      */
-    function CustomRouterSection() {
+    function CustomRouterDashboard() {
       ensureStyle()
       const [tab, setTab] = React.useState('usage')
       const [openCards, setOpenCards] = React.useState({})
@@ -1842,6 +2265,7 @@ window.__ModuleLoader__.load({
       hostCtx = ctx
       localeReader = () => String(ctx && ctx.locale && ctx.locale.getSnapshot ? ctx.locale.getSnapshot().active ?? '' : '')
       const releases = []
+      // 1. Settings section: per-preset model serving lists and selection.
       releases.push(ctx.slots.inject('settings.section', () =>
         ctx.slots.register(
           {
@@ -1850,7 +2274,28 @@ window.__ModuleLoader__.load({
             order: SECTION_ORDER,
             label: () => t('sectionTitle'),
           },
-          CustomRouterSection,
+          CustomRouterModels,
+        )))
+      // 2. Sidebar panel: the usage/billing/switches dashboard, opened from the
+      //    sidebar's panel list (the `더 보기` menu lists every panel). The
+      //    sidebar row renders this glyph; `main` keys the page content to it.
+      releases.push(ctx.slots.inject('sidebar.panellist', () =>
+        ctx.slots.register(
+          {
+            name: 'sidebar.panellist',
+            id: SECTION_ID,
+            order: 40,
+            label: () => t('panelLabel'),
+          },
+          RouterPanelGlyph,
+        )))
+      releases.push(ctx.slots.inject('main', () =>
+        ctx.slots.register(
+          {
+            name: 'main',
+            key: SECTION_ID,
+          },
+          CustomRouterDashboard,
         )))
       return () => {
         for (const release of releases.reverse()) {
@@ -1875,7 +2320,13 @@ window.__ModuleLoader__.load({
     exports.fetchUsageFeeds = fetchUsageFeeds
     exports.readSecretSet = readSecretSet
     exports.readSwitch = readSwitch
-    exports.CustomRouterSection = CustomRouterSection
+    exports.CustomRouterDashboard = CustomRouterDashboard
+    exports.CustomRouterModels = CustomRouterModels
+    exports.RouterPanelGlyph = RouterPanelGlyph
+    exports.MODEL_SOURCES = MODEL_SOURCES
+    exports.normalizeAntigravityModels = normalizeAntigravityModels
+    exports.normalizeOpencodeModels = normalizeOpencodeModels
+    exports.normalizeDeepinfraModels = normalizeDeepinfraModels
     exports.VendorCard = VendorCard
     exports.KpiCard = KpiCard
     exports.UsageWindow = UsageWindow

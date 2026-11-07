@@ -69,6 +69,24 @@ The owner restarted the service at 02:01. Measured in the running GUI:
 - Client-modules HMR picked up the rebuilt bundle without a second restart (graph rev moved
   `a4f2bc963d71 → 56b13872db32`), so the fixes were verified on the live process.
 
+**M10 UI sprint, second pass (2026-11-08).** Two surfaces now, split by job:
+
+- **Sidebar panel `커스텀 라우터`** (registered into `sidebar.panellist` + the `main` page slot
+  keyed `custom-router`): the usage / billing / switch dashboard, reachable from the sidebar
+  instead of only from Settings.
+- **Settings section `커스텀 라우터`** is now the model-serving manager: one category per preset
+  (Antigravity / OpenCode / DeepInfra) listing that vendor's models with a checkbox, a search
+  filter and select-all/clear. The selection is saved to `vendorConfig.<row>.enabledModels`
+  (the field each vendor already filters its catalog with); the router's `config-reload`
+  reconcile remounts that row, so the prompt model picker shows the chosen models without a
+  restart. DeepInfra rows carry the provider's per-1M input/output rate and its promotion badge
+  (`75% 할인`, list price struck through); subscription plans say `구독 포함` instead of a
+  fabricated price.
+- Measured live (02:21–02:24): sidebar row opens the dashboard (KPI 3, 5 progress bars);
+  settings shows 3 categories with 19/32/92 models, selections 6/19, 3/32, 4/92, and DeepInfra
+  rates/promotions. Tests 265/265; no selection was saved against the live profile during
+  verification (the write path is covered by unit tests).
+
 **Known gaps (measured, not claimed as done).**
 - The `Custom JSON` picker entry remains disabled until the backend has a declaration-preset
   row to enable; the three measured vendor presets are wired.

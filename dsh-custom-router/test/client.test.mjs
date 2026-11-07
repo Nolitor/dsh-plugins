@@ -286,13 +286,21 @@ test('the client registers exactly one settings section, id custom-router', () =
 
 test('the client registers no vendor settings section', () => {
   const { registrations, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  assert.equal(registrations.length, 1, 'the client registers exactly one contribution')
+  // Three contributions: the settings section, the sidebar panel row and its
+  // `main` page. None of them may be a vendor tab.
+  assert.equal(registrations.length, 3, 'settings section + sidebar panel + main page')
+  const byName = (name) => registrations.filter((entry) => entry.options.name === name)
+  assert.equal(byName('settings.section').length, 1)
+  assert.equal(byName('sidebar.panellist').length, 1)
+  assert.equal(byName('main').length, 1)
   for (const entry of registrations) {
-    assert.equal(entry.options.id, 'custom-router')
-    assert.equal(['antigravity', 'opencode', 'deepinfra', 'dsh-antigravity', 'dsh-opencode-v2'].includes(entry.options.id), false)
-    const label = entry.options.label()
-    assert.equal(['Antigravity', 'OpenCode', 'DeepInfra'].includes(label), false)
+    if (entry.options.name === 'main') assert.equal(entry.options.key, 'custom-router')
+    else assert.equal(entry.options.id, 'custom-router')
   }
+  const label = byName('settings.section')[0].options.label()
+  assert.equal(label, 'Custom Router')
+  const panelLabel = byName('sidebar.panellist')[0].options.label()
+  assert.equal(panelLabel, 'Custom Router')
   dispose()
 })
 
@@ -304,7 +312,7 @@ test('the client injects exactly slots, locale and configForms', () => {
 
 test('the rendered dashboard has a KPI grid of three cards, a provider grid of three cards and two tabs', () => {
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
 
   const kpiGrid = byClass(tree, 'crKpiGrid')
   assert.equal(kpiGrid.length, 1)
@@ -330,7 +338,7 @@ test('the rendered dashboard has a KPI grid of three cards, a provider grid of t
 
 test('usage windows render real progress bars with aria values', () => {
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
 
   const bars = findAll(tree, (node) => node.props?.role === 'progressbar')
   assert.equal(bars.length, 3)
@@ -370,9 +378,9 @@ test('live vendor usage routes feed the dashboard when the namespace carries non
   })
   // First render runs the effect that starts the fetches; the state lands on a
   // microtask, so a second render is what proves the readings reach the view.
-  renderRoot(exports.CustomRouterSection, {})
+  renderRoot(exports.CustomRouterDashboard, {})
   await new Promise((resolve) => setTimeout(resolve, 20))
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const bars = findAll(tree, (node) => node.props?.role === 'progressbar')
   assert.ok(bars.length >= 2, `expected live windows to render bars, got ${bars.length}`)
   const texts = findAll(tree, (node) => node.type === '#text').map((node) => node.text).join(' ')
@@ -394,10 +402,90 @@ test('the next-reset KPI reads epoch-millisecond reset times', () => {
   assert.match(view.nextReset.window, /^(Weekly|주간)$/)
 })
 
+test('the settings section shows one category per preset with prices and promotions', async () => {
+  const routeAnswers = {
+    '/api/local/dsh-antigravity/models': {
+      models: [{ id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash (High)', contextWindow: 1048576, supportsThinking: true, enabled: true }],
+    },
+    '/api/local/opencode-v2/model-settings': {
+      enabled: ['opencode-go/minimax-m3.1-flash'],
+      models: [{ route: 'opencode-go/minimax-m3.1-flash', name: 'MiniMax M3.1 Flash', plan: 'go', available: true }],
+    },
+    '/api/local/deepinfra/models': {
+      models: [{
+        id: 'inclusionAI/Ling-3.1-flash',
+        contextWindow: 262144,
+        vision: false,
+        reasoning: true,
+        promotion: { percentOff: 75 },
+        price: { input: 0.075, output: 0.225, listInput: 0.3, listOutput: 0.9 },
+        enabled: true,
+      }],
+    },
+  }
+  const fetchStub = async (path) => {
+    if (!(path in routeAnswers)) throw new Error('unexpected route: ' + path)
+    return { ok: true, status: 200, json: async () => routeAnswers[path] }
+  }
+  const { exports, renderRoot, dispose } = loadClient({
+    namespace: { presets: { antigravity: true, opencode: true, deepinfra: true }, vendorConfig: {} },
+    fetch: fetchStub,
+  })
+  renderRoot(exports.CustomRouterModels, {})
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  const tree = renderRoot(exports.CustomRouterModels, {})
+
+  const categories = findAll(tree, (node) => node.props?.className === 'crCategory')
+  assert.equal(categories.length, 3)
+  assert.deepEqual(categories.map((card) => card.props['data-category']), ['antigravity', 'opencode', 'deepinfra'])
+  const texts = findAll(tree, (node) => node.type === '#text').map((node) => node.text).join(' ')
+  assert.match(texts, /in \$0\.075 · out \$0\.225/, 'DeepInfra rates must render per 1M tokens')
+  assert.match(texts, /75% off/, 'the promotion badge must render')
+  assert.match(texts, /included in plan/, 'subscription models must say the rate is included, never 0')
+  dispose()
+})
+
+test('saving a category writes the enabledModels list for that preset row', async () => {
+  const routeAnswers = {
+    '/api/local/dsh-antigravity/models': { models: [{ id: 'a', name: 'A', enabled: true }] },
+    '/api/local/opencode-v2/model-settings': { enabled: [], models: [{ route: 'r/one', name: 'One', plan: 'go', available: true }] },
+    '/api/local/deepinfra/models': {
+      models: [
+        { id: 'm/one', price: { input: 1, output: 2, listInput: 1, listOutput: 2 }, enabled: true },
+        { id: 'm/two', price: { input: 1, output: 2, listInput: 1, listOutput: 2 }, enabled: false },
+      ],
+    },
+  }
+  const fetchStub = async (path) => ({ ok: true, status: 200, json: async () => routeAnswers[path] })
+  const { exports, renderRoot, writes, dispose } = loadClient({
+    namespace: { presets: { antigravity: true, opencode: true, deepinfra: true }, vendorConfig: {} },
+    fetch: fetchStub,
+  })
+  renderRoot(exports.CustomRouterModels, {})
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  let tree = renderRoot(exports.CustomRouterModels, {})
+
+  const category = findAll(tree, (node) => node.props?.['data-category'] === 'deepinfra')[0]
+  const checkboxes = findAll(category, (node) => node.props?.type === 'checkbox')
+  assert.equal(checkboxes.length, 2)
+  // Uncheck the enabled model and enable the other one: the write carries the
+  // resulting selection, not the original list.
+  checkboxes[0].props.onChange({ target: { checked: false } })
+  checkboxes[1].props.onChange({ target: { checked: true } })
+  tree = renderRoot(exports.CustomRouterModels, {})
+  const deepinfraCategory = findAll(tree, (node) => node.props?.['data-category'] === 'deepinfra')[0]
+  const saveButton = findAll(deepinfraCategory, (node) => node.props?.className === 'crButton crButtonPrimary')[0]
+  assert.ok(saveButton, 'the category must offer a save button')
+  saveButton.props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  assertOps(writes.at(-1), [{ op: 'set', path: ['vendorConfig', 'dsh-deepinfra', 'enabledModels'], value: ['m/two'] }])
+  dispose()
+})
+
 test('no block characters are used for progress', () => {
   assert.equal(/[█▓▒░]/u.test(clientSource), false)
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const texts = findAll(tree, (node) => node.type === '#text').map((node) => node.text).join('')
   assert.equal(/[█▓▒░]/u.test(texts), false)
   dispose()
@@ -405,7 +493,7 @@ test('no block characters are used for progress', () => {
 
 test('the DeepInfra card renders the pay-per-token billing body, never an unsupported notice', () => {
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const cards = byClass(tree, 'crVendorCard')
   const deepinfra = cards.find((card) => card.props['data-preset'] === 'deepinfra')
   assert.ok(deepinfra)
@@ -419,7 +507,7 @@ test('the DeepInfra card renders the pay-per-token billing body, never an unsupp
 
 test('an unknown balance is reported as unavailable, never as zero', () => {
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const cards = byClass(tree, 'crVendorCard')
   const deepinfra = cards.find((card) => card.props['data-preset'] === 'deepinfra')
   const texts = findAll(deepinfra, (node) => node.type === '#text').map((node) => node.text).join(' ')
@@ -430,7 +518,7 @@ test('an unknown balance is reported as unavailable, never as zero', () => {
 
 test('each card carries its own settings panel and gear trigger', () => {
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const cards = byClass(tree, 'crVendorCard')
   for (const card of cards) {
     const gears = findAll(card, (node) => node.props?.className === 'crGear')
@@ -446,13 +534,13 @@ test('each card carries its own settings panel and gear trigger', () => {
 
 test('the gear toggles one card only', () => {
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const cards = byClass(tree, 'crVendorCard')
   const antigravity = cards.find((card) => card.props['data-preset'] === 'antigravity')
   const gear = findAll(antigravity, (node) => node.props?.className === 'crGear')[0]
   assert.equal(gear.props['aria-expanded'], 'false')
   gear.props.onClick()
-  const after = renderRoot(exports.CustomRouterSection, {})
+  const after = renderRoot(exports.CustomRouterDashboard, {})
   const cardsAfter = byClass(after, 'crVendorCard')
   const opened = cardsAfter.filter((card) => findAll(card, (node) => node.props?.className === 'crGear')[0].props['aria-expanded'] === 'true')
   assert.equal(opened.length >= 1, true)
@@ -461,7 +549,7 @@ test('the gear toggles one card only', () => {
 
 test('the DeepInfra layer grid marks subagent and CLI worker as unsupported capabilities', () => {
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const cards = byClass(tree, 'crVendorCard')
   const deepinfra = cards.find((card) => card.props['data-preset'] === 'deepinfra')
   const cells = byClass(deepinfra, 'crLayerCell')
@@ -473,7 +561,7 @@ test('the DeepInfra layer grid marks subagent and CLI worker as unsupported capa
 
 test('the model serving switch writes the frozen vendorConfig path', () => {
   const { exports, React, renderRoot, writes, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const cards = byClass(tree, 'crVendorCard')
   const antigravity = cards.find((card) => card.props['data-preset'] === 'antigravity')
   const cell = byClass(antigravity, 'crLayerCell').find((entry) => entry.props['data-layer'] === 'modelServing')
@@ -485,7 +573,7 @@ test('the model serving switch writes the frozen vendorConfig path', () => {
 
 test('the CLI worker switch writes the atomic pair in one mutation', () => {
   const { exports, React, renderRoot, writes, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const cards = byClass(tree, 'crVendorCard')
   const antigravity = cards.find((card) => card.props['data-preset'] === 'antigravity')
   const cell = byClass(antigravity, 'crLayerCell').find((entry) => entry.props['data-layer'] === 'cliWorker')
@@ -500,7 +588,7 @@ test('the CLI worker switch writes the atomic pair in one mutation', () => {
 
 test('the OpenCode switches write their own row paths', () => {
   const { exports, React, renderRoot, writes, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const cards = byClass(tree, 'crVendorCard')
   const opencode = cards.find((card) => card.props['data-preset'] === 'opencode')
   const serving = byClass(opencode, 'crLayerCell').find((entry) => entry.props['data-layer'] === 'modelServing')
@@ -522,7 +610,7 @@ test('the OpenCode switches write their own row paths', () => {
 
 test('the master switch writes the preset path', () => {
   const { exports, React, renderRoot, writes, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const cards = byClass(tree, 'crVendorCard')
   const deepinfra = cards.find((card) => card.props['data-preset'] === 'deepinfra')
   const master = byClass(deepinfra, 'crMaster')[0]
@@ -539,7 +627,7 @@ test('no secret value ever reaches the DOM', () => {
   }
   const secrets = [{ path: ['vendorConfig', 'dsh-deepinfra', 'apiKey'], set: true }]
   const { exports, React, renderRoot, dispose } = loadClient({ namespace, secrets })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const cards = byClass(tree, 'crVendorCard')
   const deepinfra = cards.find((card) => card.props['data-preset'] === 'deepinfra')
   const inputs = findAll(deepinfra, (node) => node.props?.type === 'password')
@@ -564,7 +652,7 @@ test('the credential state comes from the redacted sidecar, not from a value', (
     { path: ['vendorConfig', 'dsh-deepinfra', 'password'], set: false },
   ]
   const { exports, React, renderRoot, dispose } = loadClient({ namespace, secrets })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const cards = byClass(tree, 'crVendorCard')
   const deepinfra = cards.find((card) => card.props['data-preset'] === 'deepinfra')
   const states = findAll(deepinfra, (node) => node.props?.className === 'crState')
@@ -575,7 +663,7 @@ test('the credential state comes from the redacted sidecar, not from a value', (
 
 test('the add-provider tab panel lists four equal cards', () => {
   const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const panel = findAll(tree, (node) => node.props?.id === 'cr-panel-add')[0]
   const grid = byClass(panel, 'crPickerGrid')
   assert.equal(grid.length, 1)
@@ -592,7 +680,7 @@ test('the add-provider tab panel lists four equal cards', () => {
 
 test('adding a provider enables its preset, returns to the usage tab and opens its settings', () => {
   const { exports, renderRoot, writes, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterSection, {})
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
   const panel = findAll(tree, (node) => node.props?.id === 'cr-panel-add')[0]
   const card = byClass(panel, 'crPickerCard').find((entry) => entry.props['data-picker'] === 'deepinfra')
   const button = findAll(card, (node) => node.props?.className === 'crButton')[0]
@@ -600,7 +688,7 @@ test('adding a provider enables its preset, returns to the usage tab and opens i
 
   assertOps(writes.at(-1), [{ op: 'set', path: ['presets', 'deepinfra'], value: true }])
 
-  const after = renderRoot(exports.CustomRouterSection, {})
+  const after = renderRoot(exports.CustomRouterDashboard, {})
   const usagePanel = findAll(after, (node) => node.props?.id === 'cr-panel-usage')[0]
   assert.notEqual(usagePanel.props.hidden, true)
   const cards = byClass(after, 'crVendorCard')
