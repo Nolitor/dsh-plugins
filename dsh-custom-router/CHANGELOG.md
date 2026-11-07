@@ -84,8 +84,12 @@ The owner restarted the service at 02:01. Measured in the running GUI:
   fabricated price.
 - Measured live (02:21–02:24): sidebar row opens the dashboard (KPI 3, 5 progress bars);
   settings shows 3 categories with 19/32/92 models, selections 6/19, 3/32, 4/92, and DeepInfra
-  rates/promotions. Tests 265/265; no selection was saved against the live profile during
-  verification (the write path is covered by unit tests).
+  rates/promotions. Tests 265/265.
+- The save path was measured end-to-end in an **isolated** boot (never against the live
+  profile): writing `vendorConfig.dsh-deepinfra.enabledModels = ["deepseek-ai/DeepSeek-V4-Flash-Vision-Exp"]`
+  through `settings.write` took the DeepInfra provider from 4 advertised models to exactly 1,
+  and restoring the list brought all 4 back — the reconcile remounts the child and the prompt
+  picker follows the saved selection.
 
 **Known gaps (measured, not claimed as done).**
 - The `Custom JSON` picker entry remains disabled until the backend has a declaration-preset
