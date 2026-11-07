@@ -89,6 +89,10 @@
   "switchOff": "关闭",
   "panelLabel": "自定义路由",
   "modelsTitle": "模型服务",
+  "groupGemini": "Gemini 模型",
+  "groupClaudeGpt": "Claude 与 GPT 模型",
+  "groupArgon": "Gemini 4 Argon",
+  "groupOther": "其他模型",
   "modelsHint": "为每个预设选择要提供给提示模型选择器的模型并保存。价格与优惠来自提供方当前目录。",
   "modelsCount": "已选 {enabled} / {total}",
   "modelsSearch": "筛选模型",
@@ -112,5 +116,9 @@
   "planZen": "Zen 按量计费",
   "planOpenCode": "OpenCode 套餐",
   "priceIncluded": "套餐已含",
-  "modelsNeedOne": "至少选择一个模型（空列表在提供方会被视为全部）。"
+  "modelsNeedOne": "至少选择一个模型（空列表在提供方会被视为全部）。",
+  "planOther": "其他套餐",
+  "quotaLeft": "剩余 {pct}%",
+  "promoCount": "{n} 项优惠",
+  "modelsSelectedTotal": "已选 {enabled} / {total} 个模型"
 }

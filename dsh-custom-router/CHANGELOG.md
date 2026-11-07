@@ -1,12 +1,68 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.4
+version: 0.0.1-rc.5
 kind: report
 status: active
 updated: 2026-11-08
 summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the single-owner OpenCodex bridge library, the preset declarations, and the first real multi-row mount, extended 2026-11-08 with the settings schema and the single browser dashboard (M10 UI sprint).
 -->
+
+## 0.0.1-rc.5 — 2026-11-08 (width container, one tab panel, tabbed model picker)
+
+**Scope:** the two surfaces the owner rejected in the rc.4 build. No backend row, switch, schema
+field or write path changed; the writes are the same ones rc.4 measured end-to-end.
+
+| Complaint | Measured before (rc.4) | Now |
+| :--- | :--- | :--- |
+| Sidebar dashboard stretched across the whole window | `lib/client.js` rendered a bare `section.crSection` (`max-width:1100px`, no horizontal padding); the host main slot made it full-bleed | `div.crSection.crPage` — `width:100%;max-width:1180px;margin:0 auto;padding:16px 20px;box-sizing:border-box` |
+| Both tab panels rendered at once | Both `role="tabpanel"` nodes were in the DOM and `hidden` lost to `.crPanel{display:flex}`, so "프로바이더 추가" content showed under the dashboard | Only the active panel is RENDERED (conditional). `aria-controls` exists only on the active tab, `tabIndex` follows selection, no `hidden` attribute survives |
+| Settings model list ignored the DSH row style and stacked three long categories | `MODEL_SOURCES.map(...)` rendered three `crCategory` sections at once | Tabs `안티그래비티 / 오픈코드 / 딥인프라` (`cr-models-tab-<id>`), one active `role="tabpanel"` (`cr-models-panel-<id>`, `data-category`), and ONE shared toolbar/group/row/footer layout |
+
+**Antigravity reasoning-effort collapse.** The `/models` route already returns the base rows and
+their variants (`groups[].models[] = {id,name,variants,enabled}`), and rc.4 threw that away by
+rendering the flat `models[]`, so Gemini 3.8 Flash appeared three times. The tab now renders one
+row per base model, shows the family's remaining quota in the group header
+(`limits[].remainingFraction` → `주간 4% 잔여`), and a checkbox toggles EVERY variant id of its row.
+The save value is the flattened variant list, in row order:
+
+```
+mutate([{ op: 'set', path: ['vendorConfig', 'dsh-antigravity', 'enabledModels'],
+          value: ['gemini-3.8-flash-high', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-low',
+                  'gemini-3.5-flash-lite', 'claude-sonnet-4.5'] }])
+```
+
+**Class names.** Shared layout: `crPage` / `crPageNarrow`, `crToolbar` / `crSearchInput`,
+`crButtonGhost` / `crButtonPrimary`, `crCards`, `crGroup` / `crGroupHead` / `crGroupTitle` /
+`crGroupMeta` / `crGroupSide` / `crGroupBody`, `crList`, `crRow` / `crRowCheck` / `crRowMain` /
+`crRowName` / `crRowId` / `crRowMeta`, `crPrice` / `crPriceRate` / `crPriceList` / `crPriceNote`,
+`crBadgeMeta[data-tone]` (`promo`, `positive`, `muted`), `crEmpty`, `crFooterBar`, `crPanelBody`.
+`crCategory*`, `crModelRow*`, `crModelPrice`, `crPromoBadge` and `crModelEmpty` are gone.
+
+**Normalized shapes.** `normalizeAntigravityModels` / `normalizeOpencodeModels` /
+`normalizeDeepinfraModels` now return **groups** (`{id,labelKey,label,quota,quotaTitle,rows[]}`)
+instead of a flat row list; OpenCode groups by plan (`go` / `zen`), DeepInfra is one price card.
+A flat Antigravity `models[]` payload (no `groups`) still renders as one `기타 모델` card.
+
+**Locale.** 8 new keys in `en` / `ko` / `zh` (parity enforced by `gen-locale`): `groupGemini`,
+`groupClaudeGpt`, `groupArgon`, `groupOther`, `planOther`, `quotaLeft`, `promoCount`,
+`modelsSelectedTotal`. 119 keys × 3 locales.
+
+**Tests:** 275/275 (`npm test`). New/rewritten: the width container, conditional panels + aria
+wiring, the three model tabs, the shared row layout across all three vendors, the Antigravity
+family grouping + variant toggle + exact save payload, DeepInfra rate/promo/struck-through list
+price, OpenCode plan grouping with no dollar figure, the empty-selection guard, the per-tab search
+filter, and "no `crCategory` vendor sections". `npm run check` and `npm run docs:check` green.
+
+**Live verification (Chromium against the running 3080, 2026-11-08 03:12).** The worker's
+vm-based evidence was re-checked in the real GUI after the HMR rev moved: the dashboard
+section measures exactly **1180 px** at a 1600 px viewport and now mounts **one** tabpanel
+(the add-provider panel is absent from the DOM); the settings dialog shows three tabs
+(안티그래비티 / 오픈코드 / 딥인프라) with one mounted panel; Antigravity renders family group
+cards (`Gemini 모델` with `주간 96% 잔여 · 5시간 100% 잔여`, `Claude 및 GPT 모델`, `Gemini 4 Argon`)
+and one row per base model (`Gemini 3.8 Flash` instead of High/Medium/Low), subscription rows
+`구독 포함`; DeepInfra renders `입력 $0.075 · 출력 $0.225 / 1M` with the struck-through list price
+and `75% 할인`. No config was written during verification.
 
 ## 0.0.1-rc.4 — 2026-11-08 (settings schema + single dashboard — M10 UI sprint)
 

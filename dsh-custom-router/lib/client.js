@@ -141,6 +141,10 @@ window.__ModuleLoader__.load({
     "switchOff": "Off",
     "panelLabel": "Custom Router",
     "modelsTitle": "Model serving",
+    "groupGemini": "Gemini models",
+    "groupClaudeGpt": "Claude and GPT models",
+    "groupArgon": "Gemini 4 Argon",
+    "groupOther": "Other models",
     "modelsHint": "Pick the models each preset offers to the prompt picker, then save. Prices and promotions are the provider's current catalog.",
     "modelsCount": "{enabled} / {total} selected",
     "modelsSearch": "Filter models",
@@ -164,7 +168,11 @@ window.__ModuleLoader__.load({
     "planZen": "Zen pay-as-you-go",
     "planOpenCode": "OpenCode plan",
     "priceIncluded": "included in plan",
-    "modelsNeedOne": "Select at least one model (an empty list means ALL to the vendors)."
+    "modelsNeedOne": "Select at least one model (an empty list means ALL to the vendors).",
+    "planOther": "Other plan",
+    "quotaLeft": "{pct}% left",
+    "promoCount": "{n} on promotion",
+    "modelsSelectedTotal": "{enabled} of {total} models selected"
   },
   "ko": {
     "meta": {
@@ -257,6 +265,10 @@ window.__ModuleLoader__.load({
     "switchOff": "미사용",
     "panelLabel": "커스텀 라우터",
     "modelsTitle": "모델 서빙",
+    "groupGemini": "Gemini 모델",
+    "groupClaudeGpt": "Claude 및 GPT 모델",
+    "groupArgon": "Gemini 4 Argon",
+    "groupOther": "기타 모델",
     "modelsHint": "프리셋별로 프롬프트 모델 선택기에 노출할 모델을 고르고 저장하세요. 가격·할인은 프로바이더의 현재 카탈로그 값입니다.",
     "modelsCount": "{enabled} / {total} 선택",
     "modelsSearch": "모델 검색",
@@ -280,7 +292,11 @@ window.__ModuleLoader__.load({
     "planZen": "Zen 종량제",
     "planOpenCode": "OpenCode 요금제",
     "priceIncluded": "구독 포함",
-    "modelsNeedOne": "최소 1개 이상 선택해야 합니다 (빈 목록은 벤더에서 전체로 해석됩니다)."
+    "modelsNeedOne": "최소 1개 이상 선택해야 합니다 (빈 목록은 벤더에서 전체로 해석됩니다).",
+    "planOther": "기타 요금제",
+    "quotaLeft": "{pct}% 잔여",
+    "promoCount": "할인 {n}건",
+    "modelsSelectedTotal": "모델 {total}개 중 {enabled}개 선택"
   },
   "zh": {
     "meta": {
@@ -373,6 +389,10 @@ window.__ModuleLoader__.load({
     "switchOff": "关闭",
     "panelLabel": "自定义路由",
     "modelsTitle": "模型服务",
+    "groupGemini": "Gemini 模型",
+    "groupClaudeGpt": "Claude 与 GPT 模型",
+    "groupArgon": "Gemini 4 Argon",
+    "groupOther": "其他模型",
     "modelsHint": "为每个预设选择要提供给提示模型选择器的模型并保存。价格与优惠来自提供方当前目录。",
     "modelsCount": "已选 {enabled} / {total}",
     "modelsSearch": "筛选模型",
@@ -396,7 +416,11 @@ window.__ModuleLoader__.load({
     "planZen": "Zen 按量计费",
     "planOpenCode": "OpenCode 套餐",
     "priceIncluded": "套餐已含",
-    "modelsNeedOne": "至少选择一个模型（空列表在提供方会被视为全部）。"
+    "modelsNeedOne": "至少选择一个模型（空列表在提供方会被视为全部）。",
+    "planOther": "其他套餐",
+    "quotaLeft": "剩余 {pct}%",
+    "promoCount": "{n} 项优惠",
+    "modelsSelectedTotal": "已选 {enabled} / {total} 个模型"
   }
 }
 
@@ -413,8 +437,14 @@ window.__ModuleLoader__.load({
     const CSS_TAG = '@nolit/dsh-custom-router'
 
     const CSS = [
-      '.crSection{min-width:0;max-width:1100px;padding:16px 0;display:flex;flex-direction:column;gap:16px;font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.crSection{min-width:0;display:flex;flex-direction:column;gap:16px;font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      // The dashboard is a PAGE inside the main slot, not a full-bleed surface:
+      // it centres itself and stops growing past a readable width instead of
+      // stretching across the window.
+      '.crPage{width:100%;max-width:1180px;margin:0 auto;padding:16px 20px;box-sizing:border-box}',
+      '.crPageNarrow{max-width:920px}',
       '.crHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;min-width:0}',
+      '.crTitleBlock{display:flex;flex-direction:column;gap:2px;min-width:0}',
       '.crHeaderText{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}',
       '.crTitle{margin:0;font-family:inherit;font-size:calc(var(--dsh-content-font-size,14px) + 4px);font-weight:500;line-height:28px;color:var(--dsw-alias-label-primary)}',
       '.crSubtitle{margin:0;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary)}',
@@ -508,28 +538,41 @@ window.__ModuleLoader__.load({
       '.crPickerDesc{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);margin:0;min-width:0}',
       '.crPickerAuth{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);margin:0}',
       '.crPickerActions{display:flex;align-items:center;gap:8px;margin-top:auto;min-width:0}',
-      '.crModels{display:flex;flex-direction:column;gap:16px;min-width:0}',
-      '.crCategory{display:flex;flex-direction:column;min-width:0;border-radius:var(--dsw-radius-xl);background:var(--dsw-alias-settings-card-fill);border:0.5px solid var(--dsw-alias-settings-card-stroke)}',
-      '.crCategoryHead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0;padding:14px 16px;border-bottom:0.5px solid var(--dsw-alias-border-l2)}',
-      '.crCategoryTitle{display:flex;flex-direction:column;min-width:0;flex:1;gap:2px}',
-      '.crCategoryName{font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:600;color:var(--dsw-alias-label-primary)}',
-      '.crCategoryPlan{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-secondary)}',
-      '.crCategoryCount{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
-      '.crModelFilter{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:0.5px solid var(--dsw-alias-border-l2);min-width:0}',
-      '.crModelSearch{flex:1;min-width:0;height:28px;box-sizing:border-box;border:0.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;padding:0 8px}',
-      '.crModelList{display:flex;flex-direction:column;max-height:420px;overflow:auto}',
-      '.crModelRow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 16px;min-width:0;cursor:pointer}',
-      '.crModelRow:hover{background:var(--dsw-alias-interactive-bg-hover)}',
-      '.crModelCheck{width:14px;height:14px;accent-color:var(--dsw-alias-state-business-primary);margin:0}',
-      '.crModelText{display:flex;flex-direction:column;min-width:0;gap:2px}',
-      '.crModelName{font-family:inherit;font-size:var(--dsh-content-font-size,14px);color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.crModelMeta{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-tertiary);display:flex;gap:6px;flex-wrap:wrap}',
-      '.crModelPrice{display:flex;flex-direction:column;align-items:flex-end;gap:2px;white-space:nowrap}',
-      '.crModelRate{font-family:var(--ds-font-family-code,monospace);font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-primary)}',
-      '.crModelRateList{font-family:var(--ds-font-family-code,monospace);font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-tertiary);text-decoration:line-through}',
-      '.crPromoBadge{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-state-business-primary-alpha,transparent);border-radius:var(--dsw-radius-sm);padding:0 4px}',
-      '.crModelEmpty{padding:16px;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px)}',
-      '.crCategoryFoot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:0.5px solid var(--dsw-alias-border-l2);min-width:0}',
+      '.crModels{display:flex;flex-direction:column;gap:12px;min-width:0}',
+      // One toolbar / card / row layout shared by every preset: the vendor data
+      // differs, the list geometry does not.
+      '.crToolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
+      '.crSearchInput{flex:1 1 180px;min-width:120px;height:28px;box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:20px;padding:0 8px}',
+      '.crButtonGhost{border-color:transparent;color:var(--dsw-alias-label-secondary)}',
+      '.crButtonPrimary{border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-state-business-primary)}',
+      '.crCards{display:flex;flex-direction:column;gap:12px;min-width:0}',
+      '.crGroup{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);display:flex;flex-direction:column;min-width:0;overflow:hidden}',
+      '.crGroupHead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:.5px solid var(--dsw-alias-border-l3);min-width:0}',
+      '.crGroupTitle{margin:0;font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:500;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.crGroupMeta{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}',
+      '.crGroupSide{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;min-width:0}',
+      // The panel body carries the tabpanel role; it is the ONLY panel rendered,
+      // so no `display:flex` rule can resurrect a hidden sibling tab.
+      '.crPanelBody{display:flex;flex-direction:column;gap:12px;min-width:0}',
+      '.crGroupBody{display:flex;flex-direction:column;min-width:0}',
+      '.crList{margin:0;padding:6px;list-style:none;display:flex;flex-direction:column;gap:2px;max-height:420px;overflow:auto;min-width:0}',
+      '.crRow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:6px 8px;border-radius:var(--dsw-radius-md);min-width:0;cursor:pointer}',
+      '@media (hover:hover){.crRow:hover{background:var(--dsw-alias-interactive-bg-hover-solid)}}',
+      '.crRowCheck{width:14px;height:14px;accent-color:var(--dsw-alias-state-business-primary);margin:0;flex:0 0 auto}',
+      '.crRowMain{display:flex;flex-direction:column;gap:1px;min-width:0}',
+      '.crRowName{font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}',
+      '.crRowId{font-family:var(--ds-font-family-code,monospace);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}',
+      '.crRowMeta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));font-variant-numeric:tabular-nums;min-width:0}',
+      '.crPrice{display:flex;flex-direction:column;align-items:flex-end;gap:1px;min-width:0;text-align:right}',
+      '.crPriceRate{font-family:var(--ds-font-family-code,monospace);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-primary);font-variant-numeric:tabular-nums;white-space:nowrap}',
+      '.crPriceList{font-family:var(--ds-font-family-code,monospace);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;text-decoration:line-through;white-space:nowrap}',
+      '.crPriceNote{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
+      '.crBadgeMeta{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));padding:0 6px;border-radius:var(--dsw-radius-xs);border:.5px solid var(--dsw-alias-border-l3);color:var(--dsw-alias-label-secondary);white-space:nowrap}',
+      '.crBadgeMeta[data-tone=promo]{border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-state-business-primary)}',
+      '.crBadgeMeta[data-tone=positive]{border-color:var(--dsw-alias-state-success-primary);color:var(--dsw-alias-state-success-primary)}',
+      '.crBadgeMeta[data-tone=muted]{color:var(--dsw-alias-label-tertiary)}',
+      '.crEmpty{padding:16px 14px;margin:0;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
+      '.crFooterBar{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:.5px solid var(--dsw-alias-border-l3);min-width:0;flex-wrap:wrap}',
       '@media (max-width:1180px){.crKpiGrid,.crVendorGrid,.crBillingGrid,.crLayerGrid,.crPickerGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}',
       '@media (max-width:720px){.crKpiGrid,.crVendorGrid,.crBillingGrid,.crLayerGrid,.crPickerGrid{grid-template-columns:minmax(0,1fr)}}',
     ].join('')
@@ -1630,105 +1673,290 @@ window.__ModuleLoader__.load({
       return number.toFixed(digits)
     }
 
-    /**
-     * Normalize the Antigravity model list (subscription: quota, no per-token price).
-     * @param {object} payload - `/models` answer.
-     * @returns {object[]} normalized models.
-     */
-    function normalizeAntigravityModels(payload) {
-      const models = Array.isArray(payload?.models) ? payload.models : []
-      return models.map((entry) => ({
-        id: String(entry?.id ?? ''),
-        name: String(entry?.name ?? entry?.id ?? ''),
-        meta: [formatContext(entry?.contextWindow), entry?.supportsThinking === true ? t('modelThinking') : ''].filter(Boolean),
-        price: null,
-        promotion: null,
-        enabled: entry?.enabled === true,
-      })).filter((model) => model.id !== '')
+    /** Antigravity family labels, keyed by the route's `groups[].kind`. */
+    const FAMILY_LABELS = Object.freeze({
+      gemini: 'groupGemini',
+      'claude-gpt': 'groupClaudeGpt',
+      argon: 'groupArgon',
+      other: 'groupOther',
+    })
+
+    /** The label key for a normalized usage-window id. */
+    function windowLabelKey(id) {
+      if (id === 'weekly') return 'windowWeekly'
+      if (id === '5h') return 'window5h'
+      if (id === 'monthly') return 'windowMonthly'
+      return 'windowWeekly'
     }
 
     /**
-     * Normalize the OpenCode route list (plan subscription; no per-token price).
+     * The remaining quota of one Antigravity family, as "<window> <pct>% left".
+     *
+     * The route reports `limits[].remainingFraction` (1 = full). A group with no
+     * limits falls back to `quotaRemaining`; a group with neither reports an
+     * empty string rather than a fabricated 100%.
+     * @param {object} group - one normalized group.
+     * @returns {string} the quota text, or an empty string.
+     */
+    function groupQuotaText(group) {
+      const parts = []
+      for (const limit of Array.isArray(group?.limits) ? group.limits : []) {
+        const remaining = Number(limit?.remainingFraction)
+        if (!Number.isFinite(remaining)) continue
+        const percent = Math.round(Math.max(0, Math.min(1, remaining)) * 100)
+        parts.push(t(windowLabelKey(usageWindowId(limit?.window))) + ' ' + t('quotaLeft', { pct: percent }))
+      }
+      if (parts.length > 0) return parts.join(' · ')
+      const fallback = Number(group?.quotaRemaining)
+      if (!Number.isFinite(fallback)) return ''
+      return t('quotaLeft', { pct: Math.round(Math.max(0, Math.min(1, fallback)) * 100) })
+    }
+
+    /**
+     * Build one model row of the shared list layout.
+     * @param {object} fields - row fields.
+     * @returns {object} the normalized row.
+     */
+    function modelRow(fields) {
+      return {
+        id: fields.id,
+        name: fields.name ?? fields.id,
+        variants: Array.isArray(fields.variants) && fields.variants.length > 0 ? fields.variants : [fields.id],
+        enabled: fields.enabled === true,
+        meta: Array.isArray(fields.meta) ? fields.meta : [],
+        price: fields.price !== null && typeof fields.price === 'object' ? fields.price : null,
+        promotion: fields.promotion !== null && typeof fields.promotion === 'object' ? fields.promotion : null,
+      }
+    }
+
+    /**
+     * Normalize the Antigravity model list into FAMILY groups.
+     *
+     * The route collapses the reasoning-effort ids into one BASE row per model
+     * (`groups[].models[]` with `variants`), which is exactly the shape this
+     * settings list renders: one checkbox owns every variant id, and the saved
+     * value is the flattened variant list. A payload without `groups` still
+     * renders: the flat `models` list becomes one "other" card of single-id rows.
+     * @param {object} payload - `/models` answer.
+     * @returns {object[]} normalized groups.
+     */
+    function normalizeAntigravityModels(payload) {
+      const groups = Array.isArray(payload?.groups) ? payload.groups : []
+      if (groups.length > 0) {
+        return groups.map((group, index) => {
+          const rows = (Array.isArray(group?.models) ? group.models : []).map((entry) => modelRow({
+            id: String(entry?.id ?? ''),
+            name: String(entry?.name ?? entry?.id ?? ''),
+            variants: Array.isArray(entry?.variants) ? entry.variants.map((id) => String(id)) : [],
+            enabled: entry?.enabled === true,
+            meta: entry?.supportsThinking === true ? [{ label: t('modelThinking'), tone: 'muted' }] : [],
+          })).filter((row) => row.id !== '')
+          return {
+            id: String(group?.kind ?? 'group-' + index),
+            labelKey: FAMILY_LABELS[group?.kind] ?? 'groupOther',
+            label: typeof group?.label === 'string' ? group.label : '',
+            quota: groupQuotaText(group),
+            quotaTitle: (Array.isArray(group?.limits) ? group.limits : []).map((limit) => limit?.description).filter(Boolean).join(' / '),
+            rows,
+          }
+        }).filter((group) => group.rows.length > 0)
+      }
+      const models = Array.isArray(payload?.models) ? payload.models : []
+      const rows = models.map((entry) => modelRow({
+        id: String(entry?.id ?? ''),
+        name: String(entry?.name ?? entry?.id ?? ''),
+        enabled: entry?.enabled === true,
+        meta: [
+          ...(formatContext(entry?.contextWindow) ? [{ label: formatContext(entry?.contextWindow), tone: 'muted' }] : []),
+          ...(entry?.supportsThinking === true ? [{ label: t('modelThinking'), tone: 'muted' }] : []),
+        ],
+      })).filter((row) => row.id !== '')
+      return rows.length === 0 ? [] : [{ id: 'other', labelKey: 'groupOther', label: '', quota: '', quotaTitle: '', rows }]
+    }
+
+    /**
+     * Normalize the OpenCode route list into PLAN groups.
+     *
+     * A subscription route has no per-token rate, so the row carries a plan badge
+     * and no price: the price block says the model is included in the plan.
      * @param {object} payload - `/model-settings` answer.
-     * @returns {object[]} normalized models.
+     * @returns {object[]} normalized groups.
      */
     function normalizeOpencodeModels(payload) {
       const enabled = Array.isArray(payload?.enabled) ? payload.enabled : []
       const models = Array.isArray(payload?.models) ? payload.models : []
-      return models.map((entry) => {
+      const groups = new Map()
+      for (const entry of models) {
         const id = String(entry?.route ?? '')
-        return {
+        if (id === '') continue
+        const plan = String(entry?.plan ?? '')
+        const key = plan === 'go' || plan === 'zen' ? plan : 'other'
+        if (!groups.has(key)) {
+          groups.set(key, {
+            id: key,
+            labelKey: key === 'go' ? 'planGo' : key === 'zen' ? 'planZen' : 'planOther',
+            label: plan,
+            quota: '',
+            quotaTitle: '',
+            rows: [],
+          })
+        }
+        groups.get(key).rows.push(modelRow({
           id,
           name: String(entry?.name ?? id),
-          meta: [entry?.plan === 'zen' ? t('planZen') : t('planGo'), entry?.available === false ? t('modelUnavailable') : ''].filter(Boolean),
-          price: null,
-          promotion: null,
           enabled: enabled.includes(id),
-        }
-      }).filter((model) => model.id !== '')
+          meta: [
+            ...(formatContext(entry?.contextWindow) ? [{ label: formatContext(entry?.contextWindow), tone: 'muted' }] : []),
+            ...(entry?.available === false ? [{ label: t('modelUnavailable'), tone: 'muted' }] : []),
+          ],
+        }))
+      }
+      return Array.from(groups.values())
     }
 
     /**
-     * Normalize the DeepInfra catalog (pay-per-token: price and promotion per model).
+     * Normalize the DeepInfra catalog into ONE card (pay-per-token).
+     *
+     * These rows are the only ones that carry a rate and a promotion, so the
+     * price block renders "in $x · out $y / 1M" beside the struck-through list
+     * price and the promotion badge.
      * @param {object} payload - `/models` answer.
-     * @returns {object[]} normalized models.
+     * @returns {object[]} normalized groups.
      */
     function normalizeDeepinfraModels(payload) {
       const models = Array.isArray(payload?.models) ? payload.models : []
-      return models.map((entry) => ({
+      const rows = models.map((entry) => modelRow({
         id: String(entry?.id ?? ''),
         name: String(entry?.id ?? ''),
-        meta: [formatContext(entry?.contextWindow), entry?.vision === true ? t('modelVision') : '', entry?.reasoning === true ? t('modelThinking') : ''].filter(Boolean),
-        price: entry?.price !== null && typeof entry?.price === 'object' ? entry.price : null,
-        promotion: entry?.promotion !== null && typeof entry?.promotion === 'object' ? entry.promotion : null,
         enabled: entry?.enabled === true,
-      })).filter((model) => model.id !== '')
+        meta: [
+          ...(formatContext(entry?.contextWindow) ? [{ label: formatContext(entry?.contextWindow), tone: 'muted' }] : []),
+          ...(entry?.vision === true ? [{ label: t('modelVision'), tone: 'positive' }] : []),
+          ...(entry?.reasoning === true ? [{ label: t('modelThinking'), tone: 'muted' }] : []),
+        ],
+        price: entry?.price,
+        promotion: entry?.promotion,
+      })).filter((row) => row.id !== '')
+      return rows.length === 0 ? [] : [{
+        id: 'deepinfra',
+        labelKey: 'vendorDeepInfra',
+        label: '',
+        quota: '',
+        quotaTitle: '',
+        rows,
+      }]
+    }
+
+    /** The translation key of a source's vendor name. */
+    function sourceNameKey(source) {
+      const provider = ROUTER_PROVIDERS.find((entry) => entry.id === source.id)
+      return provider ? provider.nameKey : 'vendorAntigravity'
     }
 
     /**
-     * Whether a model list carries per-token prices.
-     * @param {object[]} models - normalized models.
-     * @returns {boolean} true when at least one model has a rate.
+     * Whether a model row is selected: EVERY variant id of the row is chosen.
+     *
+     * Antigravity rows own the reasoning-effort variants, so a row is only
+     * "on" when the whole variant set is written; a partial set would leave the
+     * prompt picker offering a subset of one base model.
+     * @param {object} row - the row.
+     * @param {Set<string>} chosen - the selected id set.
+     * @returns {boolean} true when the row is fully selected.
      */
-    function hasRates(models) {
-      return Array.isArray(models) && models.some((model) => model.price !== null && typeof model.price === 'object')
+    function rowSelected(row, chosen) {
+      return row.variants.every((id) => chosen.has(id))
     }
 
     /**
-     * One model row: checkbox, name/meta and the price block.
+     * The saved value of a selection: the flattened id list, in row order.
+     * @param {object[]} groups - normalized groups.
+     * @param {Set<string>} chosen - the selected id set.
+     * @returns {string[]} the ids to write to `enabledModels`.
+     */
+    function flattenSelected(groups, chosen) {
+      const value = []
+      for (const group of groups) {
+        for (const row of group.rows) {
+          for (const id of row.variants) if (chosen.has(id)) value.push(id)
+        }
+      }
+      return value
+    }
+
+    /**
+     * Every id a full selection of these groups would carry.
+     * @param {object[]} groups - normalized groups.
+     * @returns {string[]} the ids.
+     */
+    function allIds(groups) {
+      const value = []
+      for (const group of groups) for (const row of group.rows) value.push(...row.variants)
+      return value
+    }
+
+    /**
+     * One model row: checkbox, name/id, meta badges and the price block.
      * @param {object} props - component props.
      * @returns {object} the element.
      */
     function ModelRow(props) {
-      const model = props.model
-      const selected = props.selected === true
-      // A subscription plan has no per-token rate: say it is included rather
-      // than claiming the provider failed to answer.
-      const noRateNote = props.priceNote ?? t('priceUnavailable')
-      const price = model.price !== null && typeof model.price === 'object' ? model.price : null
-      const promotion = model.promotion !== null && typeof model.promotion === 'object' ? model.promotion : null
+      const row = props.row
+      const price = row.price
+      const promotion = row.promotion
       const promoPercent = promotion !== null && Number.isFinite(Number(promotion.percentOff)) ? Number(promotion.percentOff) : null
-      return h('label', { className: 'crModelRow', 'data-model': model.id },
+      const hasListPrice = price !== null && Number.isFinite(Number(price.listInput)) && Number.isFinite(Number(price.listOutput))
+      return h('label', { className: 'crRow', 'data-model': row.id },
         h('input', {
           type: 'checkbox',
-          className: 'crModelCheck',
-          checked: selected,
-          'aria-label': model.name,
-          onChange: (event) => props.onToggle(model.id, event.target.checked),
+          className: 'crRowCheck',
+          checked: props.selected === true,
+          'aria-label': row.name,
+          onChange: (event) => props.onToggle(row.id, event.target.checked),
         }),
-        h('span', { className: 'crModelText' },
-          h('span', { className: 'crModelName', title: model.id }, model.name),
-          model.meta.length > 0 ? h('span', { className: 'crModelMeta' }, model.meta.join(' · ')) : null),
-        h('span', { className: 'crModelPrice' },
+        h('span', { className: 'crRowMain' },
+          h('span', { className: 'crRowName', title: row.id }, row.name),
+          row.name !== row.id ? h('span', { className: 'crRowId', title: row.id }, row.id) : null,
+          row.meta.length > 0
+            ? h('span', { className: 'crRowMeta' }, row.meta.map((entry, index) => h('span', {
+              className: 'crBadgeMeta',
+              'data-tone': entry.tone,
+              key: entry.label + ':' + index,
+            }, entry.label)))
+            : null),
+        h('span', { className: 'crPrice' },
           price !== null
-            ? h('span', { className: 'crModelRate' }, t('modelRate', { input: formatRate(price.input), output: formatRate(price.output) }))
-            : h('span', { className: 'crModelRate' }, noRateNote),
-          price !== null && promoPercent !== null
-            ? h('span', { className: 'crModelRateList' }, t('modelRate', { input: formatRate(price.listInput), output: formatRate(price.listOutput) }))
+            ? h('span', { className: 'crPriceRate' }, t('modelRate', { input: formatRate(price.input), output: formatRate(price.output) }))
+            : h('span', { className: 'crPriceNote' }, props.priceNote),
+          price !== null && promoPercent !== null && hasListPrice
+            ? h('span', { className: 'crPriceList' }, t('modelRate', { input: formatRate(price.listInput), output: formatRate(price.listOutput) }))
             : null,
           promoPercent !== null
-            ? h('span', { className: 'crPromoBadge' }, t('promoOff', { percent: promoPercent }))
+            ? h('span', { className: 'crBadgeMeta', 'data-tone': 'promo' }, t('promoOff', { percent: promoPercent }))
             : null))
+    }
+
+    /**
+     * One group card: title, optional remaining quota, row count and the rows.
+     * @param {object} props - component props.
+     * @returns {object} the element.
+     */
+    function ModelGroup(props) {
+      const group = props.group
+      return h('section', { className: 'crGroup', 'data-group': group.id, key: props.groupId },
+        h('div', { className: 'crGroupHead' },
+          h('h4', { className: 'crGroupTitle' }, t(group.labelKey)),
+          h('div', { className: 'crGroupSide' },
+            group.quota !== ''
+              ? h('span', { className: 'crBadgeMeta', 'data-tone': 'muted', title: group.quotaTitle || undefined }, group.quota)
+              : null,
+            h('span', { className: 'crGroupMeta' }, t('modelsSelectedTotal', { enabled: props.selectedCount, total: group.rows.length })))),
+        h('div', { className: 'crGroupBody' }, h('div', { className: 'crList' }, group.rows.map((row) => h(ModelRow, {
+          key: row.id,
+          row,
+          selected: rowSelected(row, props.chosen),
+          priceNote: t(props.priceIncluded === true ? 'priceIncluded' : 'priceUnavailable'),
+          onToggle: props.onToggle,
+        })))))
     }
 
     /**
@@ -1745,16 +1973,18 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The settings section: one category per preset with its model-serving list.
+     * The settings section: ONE tab per preset, only the active tab renders.
      *
      * The user picks the models the prompt picker should offer and saves; the
      * write lands in `vendorConfig.<row>.enabledModels`, the field each vendor
      * already filters its catalog with, and the router reconcile applies it to
-     * the running child.
+     * the running child. An empty value means ALL to every vendor, so an empty
+     * selection is refused rather than silently inverted.
      * @returns {object} the element.
      */
     function CustomRouterModels() {
       ensureStyle()
+      const [tab, setTab] = React.useState(MODEL_SOURCES[0].id)
       const [catalogs, setCatalogs] = React.useState({})
       const [selected, setSelected] = React.useState({})
       const [saved, setSaved] = React.useState({})
@@ -1771,9 +2001,12 @@ window.__ModuleLoader__.load({
           postUsageRoute(globalThis.fetch, source.route)
             .then((payload) => {
               if (!alive) return
-              const models = source.normalize(payload)
-              const enabled = new Set(models.filter((model) => model.enabled).map((model) => model.id))
-              setCatalogs((previous) => ({ ...previous, [source.id]: models }))
+              const groups = source.normalize(payload)
+              const enabled = new Set()
+              for (const group of groups) {
+                for (const row of group.rows) if (row.enabled) for (const id of row.variants) enabled.add(id)
+              }
+              setCatalogs((previous) => ({ ...previous, [source.id]: groups }))
               setSelected((previous) => ({ ...previous, [source.id]: enabled }))
               setSaved((previous) => ({ ...previous, [source.id]: new Set(enabled) }))
               setStatus((previous) => ({ ...previous, [source.id]: 'ready' }))
@@ -1786,43 +2019,46 @@ window.__ModuleLoader__.load({
       }, [])
 
       /**
-       * Toggle one model's selection in a category.
+       * Toggle one row: every variant id of the row moves together.
        * @param {string} sourceId - preset id.
-       * @param {string} modelId - model id or route.
+       * @param {string[]} variants - the row's variant ids.
        * @param {boolean} next - requested state.
        * @returns {void}
        */
-      const toggle = (sourceId, modelId, next) => {
+      const toggle = (sourceId, variants, next) => {
         setSelected((previous) => {
           const set = new Set(previous[sourceId] ?? [])
-          if (next) set.add(modelId)
-          else set.delete(modelId)
+          for (const id of variants) {
+            if (next) set.add(id)
+            else set.delete(id)
+          }
           return { ...previous, [sourceId]: set }
         })
       }
 
       /**
-       * Select every model of a category, or clear it.
-       * @param {object} source - model source.
+       * Select every id of a preset, or clear it.
+       * @param {string} sourceId - preset id.
        * @param {boolean} all - true selects all, false clears.
        * @returns {void}
        */
-      const setAll = (source, all) => {
-        const models = catalogs[source.id] ?? []
-        setSelected((previous) => ({ ...previous, [source.id]: all ? new Set(models.map((model) => model.id)) : new Set() }))
+      const setAll = (sourceId, all) => {
+        const ids = all ? allIds(catalogs[sourceId] ?? []) : []
+        setSelected((previous) => ({ ...previous, [sourceId]: new Set(ids) }))
       }
 
       /**
-       * Persist one category's selection through the router namespace.
+       * Persist one preset's selection through the router namespace.
        * @param {object} source - model source.
        * @returns {void}
        */
       const save = (source) => {
         const form = hostCtx && hostCtx.configForms ? hostCtx.configForms.get(NAMESPACE) : null
         if (!form || saving[source.id] === true) return
-        const models = catalogs[source.id] ?? []
+        const groups = catalogs[source.id] ?? []
         const chosen = selected[source.id] ?? new Set()
-        const value = models.map((model) => model.id).filter((id) => chosen.has(id))
+        const value = flattenSelected(groups, chosen)
+        if (value.length === 0) return
         setSaving((previous) => ({ ...previous, [source.id]: true }))
         form.mutate([{ op: 'set', path: ['vendorConfig', source.row, 'enabledModels'], value }])
           .then((accepted) => {
@@ -1840,70 +2076,106 @@ window.__ModuleLoader__.load({
           })
       }
 
-      return h('div', { className: 'crSection crModels' },
+      const active = MODEL_SOURCES.find((source) => source.id === tab) ?? MODEL_SOURCES[0]
+      const groups = catalogs[active.id] ?? []
+      const chosen = selected[active.id] ?? new Set()
+      const initial = saved[active.id]
+      const dirty = initial === undefined ? false : !sameSelection(chosen, initial)
+      const query = String(queries[active.id] ?? '').trim().toLowerCase()
+      const priceIncluded = active.planKey !== 'planPayAsYouGo'
+      const visibleGroups = query === ''
+        ? groups
+        : groups
+          .map((group) => ({
+            ...group,
+            rows: group.rows.filter((row) => row.id.toLowerCase().includes(query) || row.name.toLowerCase().includes(query)),
+          }))
+          .filter((group) => group.rows.length > 0)
+      const state = status[active.id] ?? 'loading'
+      const total = allIds(groups).length
+      const selectedRows = groups.reduce((sum, group) => sum + group.rows.filter((row) => rowSelected(row, chosen)).length, 0)
+      const promoCount = groups.reduce((sum, group) => sum + group.rows.filter((row) => row.promotion !== null && Number.isFinite(Number(row.promotion.percentOff))).length, 0)
+
+      return h('div', { className: 'crSection crPage crPageNarrow crModels', 'data-models-tab': active.id },
         h('div', { className: 'crHeader' },
           h('div', { className: 'crTitleBlock' },
             h('h2', { className: 'crTitle' }, t('modelsTitle')),
             h('p', { className: 'crSubtitle' }, t('modelsHint')))),
-        MODEL_SOURCES.map((source) => {
-          const provider = ROUTER_PROVIDERS.find((entry) => entry.id === source.id)
-          const models = catalogs[source.id] ?? []
-          const chosen = selected[source.id] ?? new Set()
-          const initial = saved[source.id]
-          const dirty = initial === undefined ? false : !sameSelection(chosen, initial)
-          const query = String(queries[source.id] ?? '').trim().toLowerCase()
-          const visible = query === ''
-            ? models
-            : models.filter((model) => model.name.toLowerCase().includes(query) || model.id.toLowerCase().includes(query))
-          const state = status[source.id] ?? 'loading'
-          return h('section', { className: 'crCategory', 'data-category': source.id, key: source.id },
-            h('div', { className: 'crCategoryHead' },
-              h(ProviderAvatar, { name: t(provider?.nameKey ?? 'vendorAntigravity') }),
-              h('div', { className: 'crCategoryTitle' },
-                h('span', { className: 'crCategoryName' }, t(provider?.nameKey ?? 'vendorAntigravity')),
-                h('span', { className: 'crCategoryPlan' }, t(source.planKey))),
-              h('span', { className: 'crCategoryCount' }, t('modelsCount', { enabled: chosen.size, total: models.length }))),
-            h('div', { className: 'crModelFilter' },
-              h('input', {
-                className: 'crModelSearch',
-                type: 'search',
-                placeholder: t('modelsSearch'),
-                'aria-label': t('modelsSearch'),
-                value: queries[source.id] ?? '',
-                onChange: (event) => setQueries((previous) => ({ ...previous, [source.id]: event.target.value })),
-              }),
-              h('button', { type: 'button', className: 'crButton', onClick: () => setAll(source, true) }, t('modelsSelectAll')),
-              h('button', { type: 'button', className: 'crButton crButtonGhost', onClick: () => setAll(source, false) }, t('modelsClear'))),
-            state === 'error'
-              ? h('p', { className: 'crModelEmpty' }, t('modelsLoadFailed'))
-              : state === 'loading'
-                ? h('p', { className: 'crModelEmpty' }, t('loading'))
-                : visible.length === 0
-                  ? h('p', { className: 'crModelEmpty' }, t('modelsEmpty'))
-                  : h('div', { className: 'crModelList' }, visible.map((model) => h(ModelRow, {
-                    key: model.id,
-                    model,
-                    selected: chosen.has(model.id),
-                    priceNote: t(source.planKey === 'planPayAsYouGo' ? 'priceUnavailable' : 'priceIncluded'),
-                    onToggle: (id, next) => toggle(source.id, id, next),
-                  }))),
-            h('div', { className: 'crCategoryFoot' },
-              errors[source.id] ? h('span', { className: 'crState', 'data-state': 'error' }, t('saveError')) : null,
-              chosen.size === 0
-                ? h('span', { className: 'crState', 'data-state': 'empty' }, t('modelsNeedOne'))
-                : dirty
-                  ? h('span', { className: 'crState' }, t('modelsDirty'))
-                  : h('span', { className: 'crState', 'data-saved': 'true' }, t('modelsSaved')),
-              h('button', {
-                type: 'button',
-                className: 'crButton crButtonPrimary',
-                // An empty `enabledModels` means ALL to every vendor, so an
-                // empty selection cannot be expressed: refuse it instead of
-                // silently turning "clear" into "select everything".
-                disabled: !dirty || chosen.size === 0 || saving[source.id] === true,
-                onClick: () => save(source),
-              }, saving[source.id] === true ? t('modelsSaving') : t('modelsSave'))))
-        }),
+        h('div', { className: 'crTabs', role: 'tablist' },
+          MODEL_SOURCES.map((source) => h('button', {
+            key: source.id,
+            type: 'button',
+            className: 'crTab',
+            role: 'tab',
+            id: 'cr-models-tab-' + source.id,
+            // Only the active panel exists, so only the active tab points at it:
+            // an aria-controls on an unmounted id would be a dangling IDREF.
+            'aria-controls': active.id === source.id ? 'cr-models-panel-' + source.id : undefined,
+            'aria-selected': active.id === source.id ? 'true' : 'false',
+            tabIndex: active.id === source.id ? 0 : -1,
+            onClick: () => setTab(source.id),
+          }, t(sourceNameKey(source))))),
+        // Only the active panel is rendered: the host layout must never show two
+        // tabs' content at once, and an unmounted panel cannot be un-hidden.
+        h('div', {
+          className: 'crPanelBody',
+          role: 'tabpanel',
+          id: 'cr-models-panel-' + active.id,
+          'aria-labelledby': 'cr-models-tab-' + active.id,
+          tabIndex: 0,
+          'data-category': active.id,
+        },
+        h('div', { className: 'crToolbar' },
+          h('input', {
+            className: 'crSearchInput',
+            type: 'search',
+            placeholder: t('modelsSearch'),
+            'aria-label': t('modelsSearch'),
+            value: queries[active.id] ?? '',
+            onChange: (event) => setQueries((previous) => ({ ...previous, [active.id]: event.target.value })),
+          }),
+          h('button', { type: 'button', className: 'crButton', onClick: () => setAll(active.id, true) }, t('modelsSelectAll')),
+          h('button', { type: 'button', className: 'crButton crButtonGhost', onClick: () => setAll(active.id, false) }, t('modelsClear'))),
+        state === 'error'
+          ? h('p', { className: 'crEmpty' }, t('modelsLoadFailed'))
+          : state === 'loading'
+            ? h('p', { className: 'crEmpty' }, t('loading'))
+            : groups.length === 0
+              ? h('p', { className: 'crEmpty' }, t('modelsEmpty'))
+              : visibleGroups.length === 0
+                ? h('p', { className: 'crEmpty' }, t('modelsEmpty'))
+                : h('div', { className: 'crCards' }, visibleGroups.map((group) => h(ModelGroup, {
+                  key: active.id + ':' + group.id,
+                  groupId: active.id + ':' + group.id,
+                  group,
+                  chosen,
+                  selectedCount: group.rows.filter((row) => rowSelected(row, chosen)).length,
+                  priceIncluded,
+                  onToggle: (id, next) => {
+                    const row = group.rows.find((entry) => entry.id === id)
+                    if (row) toggle(active.id, row.variants, next)
+                  },
+                }))),
+        h('div', { className: 'crFooterBar' },
+          h('span', { className: 'crState' }, t('modelsSelectedTotal', { enabled: selectedRows, total: groups.reduce((sum, group) => sum + group.rows.length, 0) })),
+          active.planKey === 'planPayAsYouGo' && promoCount > 0
+            ? h('span', { className: 'crBadgeMeta', 'data-tone': 'promo' }, t('promoCount', { n: promoCount }))
+            : null,
+          errors[active.id] ? h('span', { className: 'crState', 'data-state': 'error' }, t('saveError')) : null,
+          chosen.size === 0
+            ? h('span', { className: 'crState', 'data-state': 'empty' }, t('modelsNeedOne'))
+            : dirty
+              ? h('span', { className: 'crState' }, t('modelsDirty'))
+              : h('span', { className: 'crState', 'data-state': 'set', 'data-saved': 'true' }, t('modelsSaved')),
+          h('button', {
+            type: 'button',
+            className: 'crButton crButtonPrimary',
+            // An empty `enabledModels` means ALL to every vendor, so an
+            // empty selection cannot be expressed: refuse it instead of
+            // silently turning "clear" into "select everything".
+            disabled: !dirty || chosen.size === 0 || saving[active.id] === true,
+            onClick: () => save(active),
+          }, saving[active.id] === true ? t('modelsSaving') : t('modelsSave')))),
         h('p', { className: 'crHint' }, t('modelsSavedHint')))
     }
 
@@ -2165,7 +2437,9 @@ window.__ModuleLoader__.load({
         return { saving, applied, error: failure }
       }
 
-      return h('section', { className: 'crSection', 'data-router-namespace': NAMESPACE },
+      // ONE container: the dashboard is a page in the main slot, so it centres
+      // and stops at a readable width instead of stretching across the window.
+      return h('div', { className: 'crSection crPage', 'data-router-namespace': NAMESPACE },
         h('header', { className: 'crHeader' },
           h('div', { className: 'crHeaderText' },
             h('h3', { className: 'crTitle' }, t('metaTitle')),
@@ -2187,8 +2461,10 @@ window.__ModuleLoader__.load({
             className: 'crTab',
             role: 'tab',
             id: 'cr-tab-usage',
-            'aria-controls': 'cr-panel-usage',
+            // Only the active panel is mounted, so only the active tab names it.
+            'aria-controls': tab === 'usage' ? 'cr-panel-usage' : undefined,
             'aria-selected': tab === 'usage' ? 'true' : 'false',
+            tabIndex: tab === 'usage' ? 0 : -1,
             onClick: () => setTab('usage'),
           }, t('tabUsage')),
           h('button', {
@@ -2196,63 +2472,69 @@ window.__ModuleLoader__.load({
             className: 'crTab',
             role: 'tab',
             id: 'cr-tab-add',
-            'aria-controls': 'cr-panel-add',
+            'aria-controls': tab === 'add' ? 'cr-panel-add' : undefined,
             'aria-selected': tab === 'add' ? 'true' : 'false',
+            tabIndex: tab === 'add' ? 0 : -1,
             onClick: () => setTab('add'),
           }, t('tabAddProvider'))),
-        h('div', {
-          className: 'crPanel',
-          role: 'tabpanel',
-          id: 'cr-panel-usage',
-          'aria-labelledby': 'cr-tab-usage',
-          hidden: tab !== 'usage',
-        },
-        error
-          ? h('p', { className: 'crFooterNote', 'data-state': 'error' }, t('loadError') + ': ' + error)
-          : null,
-        h('div', { className: 'crKpiGrid' },
-          h(KpiCard, {
-            label: t('kpiProviders'),
-            value: view.enabledCount + ' / ' + view.totalCount,
-            meta: t('kpiProvidersMeta', { enabled: view.enabledCount, total: view.totalCount }),
-          }),
-          h(KpiCard, {
-            label: t('kpiTightest'),
-            value: view.tightest ? Math.round(view.tightest.percent) + '%' : t('kpiUnavailable'),
-            meta: view.tightest ? t('kpiTightestMeta', { provider: view.tightest.provider, window: view.tightest.window }) : t('usageUnavailable'),
-            jumpHref: view.tightest ? '#cr-vendor-' + view.tightest.providerId : undefined,
-          }),
-          h(KpiCard, {
-            label: t('kpiNextReset'),
-            value: view.nextReset ? view.nextReset.clock : t('kpiUnavailable'),
-            meta: view.nextReset ? t('kpiNextResetMeta', { provider: view.nextReset.provider, window: view.nextReset.window }) + (view.nextReset.relative ? ' · ' + view.nextReset.relative : '') : t('usageUnavailable'),
-            jumpHref: view.nextReset ? '#cr-vendor-' + view.nextReset.providerId : undefined,
-          })),
-        h('div', { className: 'crVendorGrid' },
-          view.providers.map((provider) => h(VendorCard, {
-            key: provider.id,
-            provider,
-            open: openCards[provider.id] === true,
-            status: providerStatus(provider.id),
-            drafts,
-            onToggle,
-            onMaster,
-            onLayer,
-            onDraft,
-            onCredential,
-            onClearCredential,
-            onApplyDrafts,
-          })))),
-        h('div', {
-          className: 'crPanel',
-          role: 'tabpanel',
-          id: 'cr-panel-add',
-          'aria-labelledby': 'cr-tab-add',
-          hidden: tab !== 'add',
-        },
-        h('h4', { className: 'crSettingsTitle' }, t('addProviderTitle')),
-        h('p', { className: 'crHint' }, t('addProviderHint')),
-        h(ProviderPickerGrid, { items: PICKER_ITEMS, enabled: pickerEnabled, onAdd })))
+        // ONLY the active panel is rendered. Previously both panels were in the
+        // DOM and the `hidden` attribute was overridden by `.crPanel{display:flex}`,
+        // so the add-provider content rendered underneath the dashboard
+        // (measured 2026-11-08). A conditional render cannot be un-hidden by CSS.
+        tab === 'usage'
+          ? h('div', {
+            className: 'crPanel',
+            role: 'tabpanel',
+            id: 'cr-panel-usage',
+            'aria-labelledby': 'cr-tab-usage',
+            tabIndex: 0,
+          },
+          error
+            ? h('p', { className: 'crFooterNote', 'data-state': 'error' }, t('loadError') + ': ' + error)
+            : null,
+          h('div', { className: 'crKpiGrid' },
+            h(KpiCard, {
+              label: t('kpiProviders'),
+              value: view.enabledCount + ' / ' + view.totalCount,
+              meta: t('kpiProvidersMeta', { enabled: view.enabledCount, total: view.totalCount }),
+            }),
+            h(KpiCard, {
+              label: t('kpiTightest'),
+              value: view.tightest ? Math.round(view.tightest.percent) + '%' : t('kpiUnavailable'),
+              meta: view.tightest ? t('kpiTightestMeta', { provider: view.tightest.provider, window: view.tightest.window }) : t('usageUnavailable'),
+              jumpHref: view.tightest ? '#cr-vendor-' + view.tightest.providerId : undefined,
+            }),
+            h(KpiCard, {
+              label: t('kpiNextReset'),
+              value: view.nextReset ? view.nextReset.clock : t('kpiUnavailable'),
+              meta: view.nextReset ? t('kpiNextResetMeta', { provider: view.nextReset.provider, window: view.nextReset.window }) + (view.nextReset.relative ? ' · ' + view.nextReset.relative : '') : t('usageUnavailable'),
+              jumpHref: view.nextReset ? '#cr-vendor-' + view.nextReset.providerId : undefined,
+            })),
+          h('div', { className: 'crVendorGrid' },
+            view.providers.map((provider) => h(VendorCard, {
+              key: provider.id,
+              provider,
+              open: openCards[provider.id] === true,
+              status: providerStatus(provider.id),
+              drafts,
+              onToggle,
+              onMaster,
+              onLayer,
+              onDraft,
+              onCredential,
+              onClearCredential,
+              onApplyDrafts,
+            }))))
+          : h('div', {
+            className: 'crPanel',
+            role: 'tabpanel',
+            id: 'cr-panel-add',
+            'aria-labelledby': 'cr-tab-add',
+            tabIndex: 0,
+          },
+          h('h4', { className: 'crSettingsTitle' }, t('addProviderTitle')),
+          h('p', { className: 'crHint' }, t('addProviderHint')),
+          h(ProviderPickerGrid, { items: PICKER_ITEMS, enabled: pickerEnabled, onAdd })))
     }
 
     // ----------------------------------------------------------------- wiring

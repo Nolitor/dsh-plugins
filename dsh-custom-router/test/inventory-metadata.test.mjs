@@ -140,3 +140,56 @@ test('the picker offers the three presets and the custom JSON declaration', () =
   assert.equal(JSON.stringify(ids), JSON.stringify(['antigravity', 'opencode', 'deepinfra', 'custom-json']))
   assert.equal(exports.PICKER_ITEMS[3].presetId, null, 'a JSON declaration mounts no preset row')
 })
+
+test('the model-serving tabs map onto the three presets and their declared rows', () => {
+  const exports = loadExports()
+  const presets = new Map(PRESETS.map((preset) => [preset.id, preset]))
+  const rows = new Set()
+  for (const preset of PRESETS) for (const entry of preset.entries) rows.add(entry.row)
+
+  assert.equal(JSON.stringify(exports.MODEL_SOURCES.map((source) => source.id)), JSON.stringify(['antigravity', 'opencode', 'deepinfra']))
+  for (const source of exports.MODEL_SOURCES) {
+    assert.ok(presets.has(source.id), 'unknown preset behind a model tab: ' + source.id)
+    // The saved value lands in this row's config, so the row MUST be one the
+    // preset declares; a typo would write a vendor row nobody mounts.
+    assert.ok(rows.has(source.row), 'unknown vendor row behind a model tab: ' + source.row)
+    assert.equal(source.route.startsWith('/api/local/'), true, 'every catalog route is a local panel route')
+    assert.equal(typeof source.normalize, 'function')
+  }
+  // The OpenCode tab writes the HTTP row, the one that carries `enabledModels`.
+  assert.equal(exports.MODEL_SOURCES.find((source) => source.id === 'opencode').row, 'dsh-opencode-v2-http')
+})
+
+test('the grouped normalizers return groups, never a flat vendor list', () => {
+  const exports = loadExports()
+  const antigravity = exports.normalizeAntigravityModels({
+    groups: [
+      { kind: 'gemini', limits: [], models: [{ id: 'gemini-3.8-flash', variants: ['gemini-3.8-flash-high', 'gemini-3.8-flash-low'], enabled: true }] },
+      { kind: 'other', limits: [], models: [] },
+    ],
+  })
+  assert.equal(antigravity.length, 1, 'an empty family is dropped instead of rendering a bare header')
+  assert.equal(antigravity[0].labelKey, 'groupGemini')
+  assert.equal(JSON.stringify(antigravity[0].rows[0].variants), JSON.stringify(['gemini-3.8-flash-high', 'gemini-3.8-flash-low']))
+
+  // A flat payload still renders as one fallback card (no groups key).
+  const flat = exports.normalizeAntigravityModels({ models: [{ id: 'a', enabled: false }] })
+  assert.equal(flat.length, 1)
+  assert.equal(flat[0].labelKey, 'groupOther')
+  assert.equal(JSON.stringify(flat[0].rows[0].variants), JSON.stringify(['a']))
+
+  const opencode = exports.normalizeOpencodeModels({
+    enabled: ['r/one'],
+    models: [{ route: 'r/one', plan: 'go' }, { route: 'r/two', plan: 'zen' }],
+  })
+  assert.equal(JSON.stringify(opencode.map((group) => group.id)), JSON.stringify(['go', 'zen']))
+  assert.equal(opencode[0].rows[0].enabled, true)
+  assert.equal(opencode[1].rows[0].enabled, false)
+
+  const deepinfra = exports.normalizeDeepinfraModels({
+    models: [{ id: 'm/one', price: { input: 1, output: 2, listInput: 3, listOutput: 4 }, promotion: { percentOff: 50 }, enabled: true }],
+  })
+  assert.equal(deepinfra.length, 1, 'DeepInfra is one price card, not one card per model')
+  assert.equal(deepinfra[0].rows[0].price.input, 1)
+  assert.equal(deepinfra[0].rows[0].promotion.percentOff, 50)
+})

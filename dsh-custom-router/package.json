@@ -1,6 +1,6 @@
 {
   "name": "@nolit/dsh-custom-router",
-  "version": "0.0.1-rc.4",
+  "version": "0.0.1-rc.5",
   "private": false,
   "description": "Custom Router: one owner for the provider presets a profile mounts. Each preset declares the loader rows it owns (entries) and the router mounts each row's own plugin with that row's own config — multi-row presets included (the two OpenCode rows, the shared subagent rows). Ships the bundle row, the shared library (routing, probe, catalog, cost, plan, usage) and its specifications.",
   "keywords": [

@@ -310,8 +310,20 @@ test('the client injects exactly slots, locale and configForms', () => {
   dispose()
 })
 
-test('the rendered dashboard has a KPI grid of three cards, a provider grid of three cards and two tabs', () => {
-  const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+test('the dashboard renders inside one centred width container, not full-bleed', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
+  const sections = byClass(tree, 'crSection')
+  assert.equal(sections.length, 1)
+  // The page container is what constrains the width; the section alone does not.
+  assert.ok(sections[0].props.className.split(' ').includes('crPage'), 'the dashboard must carry the crPage container')
+  const css = exports.CSS
+  assert.match(css, /\.crPage\{width:100%;max-width:1180px;margin:0 auto;padding:16px 20px;box-sizing:border-box\}/)
+  dispose()
+})
+
+test('the rendered dashboard has a KPI grid of three cards and a provider grid of three cards', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
 
   const kpiGrid = byClass(tree, 'crKpiGrid')
@@ -327,12 +339,43 @@ test('the rendered dashboard has a KPI grid of three cards, a provider grid of t
   const vendorGrid = byClass(tree, 'crVendorGrid')
   assert.equal(vendorGrid.length, 1)
   assert.equal(byClass(vendorGrid[0], 'crVendorCard').length, 3)
+  dispose()
+})
 
+test('only the active dashboard tab panel is rendered, with role and aria wiring', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  let tree = renderRoot(exports.CustomRouterDashboard, {})
+
+  const tablist = findAll(tree, (node) => node.props?.role === 'tablist')
+  assert.equal(tablist.length, 1)
   const tabs = findAll(tree, (node) => node.props?.role === 'tab')
-  assert.equal(tabs.length, 2)
-  const panels = findAll(tree, (node) => node.props?.role === 'tabpanel')
-  assert.equal(panels.length, 2)
-  assert.deepEqual(panels.map((panel) => panel.props.id).sort(), ['cr-panel-add', 'cr-panel-usage'])
+  assert.deepEqual(tabs.map((tab) => tab.props.id), ['cr-tab-usage', 'cr-tab-add'])
+  assert.deepEqual(tabs.map((tab) => tab.props['aria-selected']), ['true', 'false'])
+  assert.equal(tabs[0].props['aria-controls'], 'cr-panel-usage')
+  // The inactive tab must not point at an element that is not in the DOM.
+  assert.equal(tabs[1].props['aria-controls'], undefined)
+
+  // ONE panel renders at a time: the old layout kept both and the add-provider
+  // content showed under the dashboard because `hidden` lost to display:flex.
+  let panels = findAll(tree, (node) => node.props?.role === 'tabpanel')
+  assert.deepEqual(panels.map((panel) => panel.props.id), ['cr-panel-usage'])
+  assert.equal(panels[0].props['aria-labelledby'], 'cr-tab-usage')
+  assert.equal(byClass(tree, 'crPickerGrid').length, 0, 'the add-provider grid must not render while the usage tab is active')
+
+  tabs[1].props.onClick()
+  tree = renderRoot(exports.CustomRouterDashboard, {})
+  panels = findAll(tree, (node) => node.props?.role === 'tabpanel')
+  assert.deepEqual(panels.map((panel) => panel.props.id), ['cr-panel-add'])
+  assert.equal(panels[0].props['aria-labelledby'], 'cr-tab-add')
+  assert.equal(byClass(tree, 'crKpiGrid').length, 0, 'the dashboard grid must not render while the add tab is active')
+  assert.equal(byClass(tree, 'crPickerGrid').length, 1)
+
+  const addTabs = findAll(tree, (node) => node.props?.role === 'tab')
+  assert.deepEqual(addTabs.map((tab) => tab.props['aria-selected']), ['false', 'true'])
+  // No panel may carry a `hidden` attribute any more: absence is the mechanism.
+  for (const panel of findAll(tree, (node) => node.props?.role === 'tabpanel')) {
+    assert.equal(panel.props.hidden, undefined)
+  }
   dispose()
 })
 
@@ -402,51 +445,269 @@ test('the next-reset KPI reads epoch-millisecond reset times', () => {
   assert.match(view.nextReset.window, /^(Weekly|주간)$/)
 })
 
-test('the settings section shows one category per preset with prices and promotions', async () => {
-  const routeAnswers = {
-    '/api/local/dsh-antigravity/models': {
-      models: [{ id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash (High)', contextWindow: 1048576, supportsThinking: true, enabled: true }],
-    },
-    '/api/local/opencode-v2/model-settings': {
-      enabled: ['opencode-go/minimax-m3.1-flash'],
-      models: [{ route: 'opencode-go/minimax-m3.1-flash', name: 'MiniMax M3.1 Flash', plan: 'go', available: true }],
-    },
-    '/api/local/deepinfra/models': {
-      models: [{
-        id: 'inclusionAI/Ling-3.1-flash',
-        contextWindow: 262144,
-        vision: false,
-        reasoning: true,
-        promotion: { percentOff: 75 },
-        price: { input: 0.075, output: 0.225, listInput: 0.3, listOutput: 0.9 },
-        enabled: true,
-      }],
-    },
-  }
-  const fetchStub = async (path) => {
-    if (!(path in routeAnswers)) throw new Error('unexpected route: ' + path)
-    return { ok: true, status: 200, json: async () => routeAnswers[path] }
-  }
-  const { exports, renderRoot, dispose } = loadClient({
-    namespace: { presets: { antigravity: true, opencode: true, deepinfra: true }, vendorConfig: {} },
-    fetch: fetchStub,
-  })
-  renderRoot(exports.CustomRouterModels, {})
-  await new Promise((resolve) => setTimeout(resolve, 20))
-  const tree = renderRoot(exports.CustomRouterModels, {})
+/** Route answers for the three model catalogs the settings section reads. */
+const MODEL_ROUTE_ANSWERS = {
+  '/api/local/dsh-antigravity/models': {
+    total: 4,
+    groups: [
+      {
+        kind: 'gemini',
+        label: 'Gemini Models',
+        quotaRemaining: 0.04,
+        quotaReset: '2026-11-09T00:00:00.000Z',
+        limits: [{ window: 'weekly', remainingFraction: 0.04, resetTime: '2026-11-09T00:00:00.000Z', description: 'weekly bucket' }],
+        models: [
+          // One BASE row per model: the three effort ids are its variants.
+          { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', variants: ['gemini-3.8-flash-high', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-low'], enabled: true },
+          { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite', variants: ['gemini-3.5-flash-lite'], enabled: false },
+        ],
+      },
+      {
+        kind: 'claude-gpt',
+        label: 'Claude and GPT models',
+        limits: [{ window: '5h', remainingFraction: 0.5 }],
+        models: [{ id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', variants: ['claude-sonnet-4.5'], enabled: true }],
+      },
+    ],
+  },
+  '/api/local/opencode-v2/model-settings': {
+    enabled: ['opencode-go/minimax-m3.1-flash'],
+    models: [
+      { route: 'opencode-go/minimax-m3.1-flash', name: 'MiniMax M3.1 Flash', plan: 'go', available: true, contextWindow: 200000 },
+      { route: 'opencode-zen/qwen3-coder', name: 'Qwen3 Coder', plan: 'zen', available: true },
+    ],
+  },
+  '/api/local/deepinfra/models': {
+    models: [{
+      id: 'inclusionAI/Ling-3.1-flash',
+      contextWindow: 262144,
+      vision: false,
+      reasoning: true,
+      promotion: { percentOff: 75 },
+      price: { input: 0.075, output: 0.225, listInput: 0.3, listOutput: 0.9 },
+      enabled: true,
+    }],
+  },
+}
 
-  const categories = findAll(tree, (node) => node.props?.className === 'crCategory')
-  assert.equal(categories.length, 3)
-  assert.deepEqual(categories.map((card) => card.props['data-category']), ['antigravity', 'opencode', 'deepinfra'])
-  const texts = findAll(tree, (node) => node.type === '#text').map((node) => node.text).join(' ')
-  assert.match(texts, /in \$0\.075 · out \$0\.225/, 'DeepInfra rates must render per 1M tokens')
-  assert.match(texts, /75% off/, 'the promotion badge must render')
-  assert.match(texts, /included in plan/, 'subscription models must say the rate is included, never 0')
-  dispose()
+/** Build the models section with every catalog answered, then settle. */
+async function loadModels(options = {}) {
+  const answers = options.answers ?? MODEL_ROUTE_ANSWERS
+  const fetchStub = async (path) => {
+    if (!(path in answers)) throw new Error('unexpected route: ' + path)
+    return { ok: true, status: 200, json: async () => answers[path] }
+  }
+  const loaded = loadClient({
+    namespace: { presets: { antigravity: true, opencode: true, deepinfra: true }, vendorConfig: {} },
+    fetch: options.fetch ?? fetchStub,
+    secrets: options.secrets,
+  })
+  loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  return loaded
+}
+
+/** The active models tab panel of a rendered tree. */
+function activeModelsPanel(tree) {
+  return findAll(tree, (node) => node.props?.role === 'tabpanel')[0]
+}
+
+/** Switch to one models tab and re-render. */
+function selectModelsTab(loaded, id) {
+  const tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  const tab = findAll(tree, (node) => node.props?.role === 'tab').find((entry) => entry.props.id === 'cr-models-tab-' + id)
+  assert.ok(tab, 'missing models tab: ' + id)
+  tab.props.onClick()
+  return loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+}
+
+test('the models section is tabbed by preset and renders only the active tab', async () => {
+  const loaded = await loadModels()
+  let tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+
+  const tablist = findAll(tree, (node) => node.props?.role === 'tablist')
+  assert.equal(tablist.length, 1)
+  const tabs = findAll(tree, (node) => node.props?.role === 'tab')
+  assert.deepEqual(tabs.map((entry) => entry.props.id), [
+    'cr-models-tab-antigravity',
+    'cr-models-tab-opencode',
+    'cr-models-tab-deepinfra',
+  ])
+  assert.deepEqual(tabs.map((entry) => entry.props['aria-selected']), ['true', 'false', 'false'])
+
+  // ONE panel, and no vendor section: the three long categories are gone.
+  let panels = findAll(tree, (node) => node.props?.role === 'tabpanel')
+  assert.equal(panels.length, 1)
+  assert.equal(panels[0].props['data-category'], 'antigravity')
+  assert.equal(panels[0].props['aria-labelledby'], 'cr-models-tab-antigravity')
+  assert.equal(tabs[0].props['aria-controls'], 'cr-models-panel-antigravity')
+  assert.equal(tabs[1].props['aria-controls'], undefined, 'an unmounted panel must not be referenced')
+  assert.equal(findAll(tree, (node) => typeof node.props?.className === 'string' && node.props.className.includes('crCategory')).length, 0)
+
+  // Switching renders only the other vendor, with its own groups.
+  tree = selectModelsTab(loaded, 'deepinfra')
+  panels = findAll(tree, (node) => node.props?.role === 'tabpanel')
+  assert.equal(panels.length, 1)
+  assert.equal(panels[0].props['data-category'], 'deepinfra')
+  assert.deepEqual(byClass(tree, 'crGroup').map((group) => group.props['data-group']), ['deepinfra'])
+  assert.equal(byClass(tree, 'crGroup').length, 1, 'DeepInfra is one price card')
+
+  tree = selectModelsTab(loaded, 'opencode')
+  assert.deepEqual(byClass(tree, 'crGroup').map((group) => group.props['data-group']), ['go', 'zen'])
+  loaded.dispose()
 })
 
-test('saving a category writes the enabledModels list for that preset row', async () => {
-  const routeAnswers = {
+test('every tab shares one toolbar, group card, row and footer layout', async () => {
+  const loaded = await loadModels()
+  const shapes = []
+  for (const id of ['antigravity', 'opencode', 'deepinfra']) {
+    const tree = selectModelsTab(loaded, id)
+    const panel = activeModelsPanel(tree)
+    assert.equal(byClass(panel, 'crToolbar').length, 1, id + ' must carry the shared toolbar')
+    assert.equal(findAll(panel, (node) => node.props?.type === 'search').length, 1, id + ' must carry the search input')
+    assert.equal(byClass(panel, 'crFooterBar').length, 1, id + ' must carry the shared footer')
+    assert.equal(byClass(panel, 'crGroup').length >= 1, true)
+    for (const group of byClass(panel, 'crGroup')) {
+      assert.equal(byClass(group, 'crGroupHead').length, 1)
+      assert.equal(byClass(group, 'crGroupTitle').length, 1)
+      assert.equal(byClass(group, 'crList').length, 1)
+      for (const row of byClass(group, 'crRow')) {
+        assert.equal(findAll(row, (node) => node.props?.type === 'checkbox').length, 1)
+        assert.equal(byClass(row, 'crRowMain').length, 1)
+        assert.equal(byClass(row, 'crRowName').length, 1)
+        assert.equal(byClass(row, 'crPrice').length, 1)
+      }
+    }
+    shapes.push({
+      toolbar: byClass(panel, 'crToolbar').length,
+      footer: byClass(panel, 'crFooterBar').length,
+      headClass: byClass(panel, 'crGroupHead')[0].props.className,
+    })
+  }
+  // The geometry is identical across vendors: the data differs, not the layout.
+  assert.deepEqual(shapes.map((entry) => [entry.toolbar, entry.footer, entry.headClass]), [
+    [1, 1, 'crGroupHead'],
+    [1, 1, 'crGroupHead'],
+    [1, 1, 'crGroupHead'],
+  ])
+  loaded.dispose()
+})
+
+test('the Antigravity tab groups by family, one row per base model, with the group quota in the header', async () => {
+  const loaded = await loadModels()
+  const tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  const panel = activeModelsPanel(tree)
+
+  const groups = byClass(panel, 'crGroup')
+  assert.deepEqual(groups.map((group) => group.props['data-group']), ['gemini', 'claude-gpt'])
+
+  // The reasoning-effort variants collapse into ONE row per base model.
+  const geminiCard = groups[0]
+  const geminiRows = byClass(geminiCard, 'crRow')
+  assert.deepEqual(geminiRows.map((row) => row.props['data-model']), ['gemini-3.8-flash', 'gemini-3.5-flash-lite'])
+  assert.equal(geminiRows.some((row) => String(row.props['data-model']).endsWith('-high')), false)
+
+  // The group's remaining quota (limits[].remainingFraction) rides the header.
+  const geminiHead = byClass(geminiCard, 'crGroupHead')[0]
+  const geminiHeadText = findAll(geminiHead, (node) => node.type === '#text').map((node) => node.text).join(' ')
+  assert.match(geminiHeadText, /Weekly 4% left/)
+  assert.match(geminiHeadText, /1 of 2 models selected/)
+
+  const claudeHead = byClass(groups[1], 'crGroupHead')[0]
+  const claudeHeadText = findAll(claudeHead, (node) => node.type === '#text').map((node) => node.text).join(' ')
+  assert.match(claudeHeadText, /5 hours 50% left/)
+
+  // Initial selection comes from each base row's `enabled` flag.
+  const checkboxes = findAll(panel, (node) => node.props?.type === 'checkbox')
+  assert.deepEqual(checkboxes.map((box) => [box.props['aria-label'], box.props.checked]), [
+    ['Gemini 3.8 Flash', true],
+    ['Gemini 3.5 Flash Lite', false],
+    ['Claude Sonnet 4.5', true],
+  ])
+
+  // A subscription row never carries a fabricated price.
+  const texts = findAll(panel, (node) => node.type === '#text').map((node) => node.text).join(' ')
+  assert.match(texts, /included in plan/)
+  assert.equal(/\$0\.00/.test(texts), false)
+  loaded.dispose()
+})
+
+test('selecting one Antigravity row saves every reasoning-effort variant id', async () => {
+  const loaded = await loadModels()
+  let tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  const panel = activeModelsPanel(tree)
+
+  // Enable the single-variant row so the saved set differs from the initial one.
+  findAll(panel, (node) => node.props?.type === 'checkbox')[1].props.onChange({ target: { checked: true } })
+  tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  const saveButton = findAll(activeModelsPanel(tree), (node) => node.props?.className === 'crButton crButtonPrimary')[0]
+  assert.equal(saveButton.props.disabled, false)
+  saveButton.props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 10))
+
+  // The write is the FLATTENED variant list of the selected base rows.
+  assertOps(loaded.writes.at(-1), [{
+    op: 'set',
+    path: ['vendorConfig', 'dsh-antigravity', 'enabledModels'],
+    value: [
+      'gemini-3.8-flash-high',
+      'gemini-3.8-flash-medium',
+      'gemini-3.8-flash-low',
+      'gemini-3.5-flash-lite',
+      'claude-sonnet-4.5',
+    ],
+  }])
+  loaded.dispose()
+})
+
+test('toggling an Antigravity base row moves all of its variants together', async () => {
+  const loaded = await loadModels()
+  let tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  const panel = activeModelsPanel(tree)
+  // Uncheck the enabled Gemini 3.8 Flash row, then re-check it.
+  findAll(panel, (node) => node.props?.type === 'checkbox')[0].props.onChange({ target: { checked: false } })
+  tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  let boxes = findAll(activeModelsPanel(tree), (node) => node.props?.type === 'checkbox')
+  assert.deepEqual(boxes.map((box) => [box.props['aria-label'], box.props.checked]), [
+    ['Gemini 3.8 Flash', false],
+    ['Gemini 3.5 Flash Lite', false],
+    ['Claude Sonnet 4.5', true],
+  ])
+  findAll(activeModelsPanel(tree), (node) => node.props?.type === 'checkbox')[0].props.onChange({ target: { checked: true } })
+  tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  boxes = findAll(activeModelsPanel(tree), (node) => node.props?.type === 'checkbox')
+  assert.equal(boxes[0].props.checked, true)
+  loaded.dispose()
+})
+
+test('the DeepInfra tab renders per-1M rates, the promotion badge and the struck-through list price', async () => {
+  const loaded = await loadModels()
+  const tree = selectModelsTab(loaded, 'deepinfra')
+  const panel = activeModelsPanel(tree)
+  const texts = findAll(panel, (node) => node.type === '#text').map((node) => node.text).join(' ')
+  assert.match(texts, /in \$0\.075 · out \$0\.225 \/ 1M/, 'current rate renders per 1M tokens')
+  assert.match(texts, /in \$0\.300 · out \$0\.900 \/ 1M/, 'list price renders beside it')
+  assert.match(texts, /75% off/, 'the promotion badge must render')
+  assert.match(texts, /262K ctx/)
+  assert.equal(byClass(panel, 'crPriceList').length, 1, 'the list price is struck through')
+  assert.equal(byClass(panel, 'crBadgeMeta').filter((badge) => badge.props['data-tone'] === 'promo').length >= 1, true)
+  loaded.dispose()
+})
+
+test('the OpenCode tab groups by plan and never fabricates a price', async () => {
+  const loaded = await loadModels()
+  const tree = selectModelsTab(loaded, 'opencode')
+  const panel = activeModelsPanel(tree)
+  assert.deepEqual(byClass(panel, 'crGroup').map((group) => group.props['data-group']), ['go', 'zen'])
+  const texts = findAll(panel, (node) => node.type === '#text').map((node) => node.text).join(' ')
+  assert.match(texts, /included in plan/)
+  assert.equal(/\$/.test(texts), false, 'a subscription route carries no dollar figure')
+  assert.equal(byClass(panel, 'crPriceList').length, 0)
+  loaded.dispose()
+})
+
+test('saving a preset writes the enabledModels list for that preset row', async () => {
+  const answers = {
     '/api/local/dsh-antigravity/models': { models: [{ id: 'a', name: 'A', enabled: true }] },
     '/api/local/opencode-v2/model-settings': { enabled: [], models: [{ route: 'r/one', name: 'One', plan: 'go', available: true }] },
     '/api/local/deepinfra/models': {
@@ -456,57 +717,51 @@ test('saving a category writes the enabledModels list for that preset row', asyn
       ],
     },
   }
-  const fetchStub = async (path) => ({ ok: true, status: 200, json: async () => routeAnswers[path] })
-  const { exports, renderRoot, writes, dispose } = loadClient({
-    namespace: { presets: { antigravity: true, opencode: true, deepinfra: true }, vendorConfig: {} },
-    fetch: fetchStub,
-  })
-  renderRoot(exports.CustomRouterModels, {})
-  await new Promise((resolve) => setTimeout(resolve, 20))
-  let tree = renderRoot(exports.CustomRouterModels, {})
-
-  const category = findAll(tree, (node) => node.props?.['data-category'] === 'deepinfra')[0]
-  const checkboxes = findAll(category, (node) => node.props?.type === 'checkbox')
-  assert.equal(checkboxes.length, 2)
-  // Uncheck the enabled model and enable the other one: the write carries the
-  // resulting selection, not the original list.
-  checkboxes[0].props.onChange({ target: { checked: false } })
-  checkboxes[1].props.onChange({ target: { checked: true } })
-  tree = renderRoot(exports.CustomRouterModels, {})
-  const deepinfraCategory = findAll(tree, (node) => node.props?.['data-category'] === 'deepinfra')[0]
-  const saveButton = findAll(deepinfraCategory, (node) => node.props?.className === 'crButton crButtonPrimary')[0]
-  assert.ok(saveButton, 'the category must offer a save button')
+  const loaded = await loadModels({ answers })
+  let tree = selectModelsTab(loaded, 'deepinfra')
+  // The flat Antigravity payload still renders one card of single-id rows.
+  const boxes = findAll(activeModelsPanel(tree), (node) => node.props?.type === 'checkbox')
+  assert.equal(boxes.length, 2)
+  boxes[0].props.onChange({ target: { checked: false } })
+  boxes[1].props.onChange({ target: { checked: true } })
+  tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  const saveButton = findAll(activeModelsPanel(tree), (node) => node.props?.className === 'crButton crButtonPrimary')[0]
+  assert.ok(saveButton, 'the footer must offer a save button')
   saveButton.props.onClick()
   await new Promise((resolve) => setTimeout(resolve, 10))
-  assertOps(writes.at(-1), [{ op: 'set', path: ['vendorConfig', 'dsh-deepinfra', 'enabledModels'], value: ['m/two'] }])
-  dispose()
+  assertOps(loaded.writes.at(-1), [{ op: 'set', path: ['vendorConfig', 'dsh-deepinfra', 'enabledModels'], value: ['m/two'] }])
+  loaded.dispose()
 })
 
 test('an empty model selection cannot be saved (vendors read empty as all)', async () => {
-  const routeAnswers = {
-    '/api/local/dsh-antigravity/models': { models: [{ id: 'a', name: 'A', enabled: true }] },
-    '/api/local/opencode-v2/model-settings': { enabled: [], models: [{ route: 'r/one', name: 'One', plan: 'go', available: true }] },
-    '/api/local/deepinfra/models': { models: [{ id: 'm/one', price: { input: 1, output: 2, listInput: 1, listOutput: 2 }, enabled: true }] },
-  }
-  const fetchStub = async (path) => ({ ok: true, status: 200, json: async () => routeAnswers[path] })
-  const { exports, renderRoot, writes, dispose } = loadClient({
-    namespace: { presets: { antigravity: true, opencode: true, deepinfra: true }, vendorConfig: {} },
-    fetch: fetchStub,
-  })
-  renderRoot(exports.CustomRouterModels, {})
-  await new Promise((resolve) => setTimeout(resolve, 20))
-  let tree = renderRoot(exports.CustomRouterModels, {})
-  const category = findAll(tree, (node) => node.props?.['data-category'] === 'deepinfra')[0]
-  const clear = findAll(category, (node) => node.props?.className?.includes('crButtonGhost'))[0]
+  const loaded = await loadModels()
+  let tree = selectModelsTab(loaded, 'deepinfra')
+  const clear = findAll(activeModelsPanel(tree), (node) => node.props?.className?.includes('crButtonGhost'))[0]
   clear.props.onClick()
-  tree = renderRoot(exports.CustomRouterModels, {})
-  const deepinfraCategory = findAll(tree, (node) => node.props?.['data-category'] === 'deepinfra')[0]
-  const saveButton = findAll(deepinfraCategory, (node) => node.props?.className === 'crButton crButtonPrimary')[0]
+  tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  const panel = activeModelsPanel(tree)
+  const saveButton = findAll(panel, (node) => node.props?.className === 'crButton crButtonPrimary')[0]
   assert.equal(saveButton.props.disabled, true, 'save must be disabled with zero models selected')
-  const texts = findAll(deepinfraCategory, (node) => node.type === '#text').map((node) => node.text).join(' ')
+  const texts = findAll(panel, (node) => node.type === '#text').map((node) => node.text).join(' ')
   assert.match(texts, /Select at least one model/)
-  assert.equal(writes.length, 0)
-  dispose()
+  assert.equal(loaded.writes.length, 0)
+  loaded.dispose()
+})
+
+test('the search box filters the active tab only', async () => {
+  const loaded = await loadModels()
+  let tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  let search = findAll(activeModelsPanel(tree), (node) => node.props?.type === 'search')[0]
+  search.props.onChange({ target: { value: 'flash-lite' } })
+  tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  let rows = byClass(activeModelsPanel(tree), 'crRow')
+  assert.deepEqual(rows.map((row) => row.props['data-model']), ['gemini-3.5-flash-lite'])
+
+  // The other tabs keep their own query (empty here) and full lists.
+  tree = selectModelsTab(loaded, 'opencode')
+  rows = byClass(activeModelsPanel(tree), 'crRow')
+  assert.equal(rows.length, 2)
+  loaded.dispose()
 })
 
 test('no block characters are used for progress', () => {
@@ -688,10 +943,20 @@ test('the credential state comes from the redacted sidecar, not from a value', (
   dispose()
 })
 
+/** The add-provider grid of a rendered dashboard, after switching to its tab. */
+function openAddTab(loaded) {
+  let tree = loaded.renderRoot(loaded.exports.CustomRouterDashboard, {})
+  const tab = findAll(tree, (node) => node.props?.role === 'tab').find((entry) => entry.props.id === 'cr-tab-add')
+  tab.props.onClick()
+  tree = loaded.renderRoot(loaded.exports.CustomRouterDashboard, {})
+  return tree
+}
+
 test('the add-provider tab panel lists four equal cards', () => {
-  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterDashboard, {})
+  const loaded = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = openAddTab(loaded)
   const panel = findAll(tree, (node) => node.props?.id === 'cr-panel-add')[0]
+  assert.ok(panel, 'the add-provider panel must exist once its tab is active')
   const grid = byClass(panel, 'crPickerGrid')
   assert.equal(grid.length, 1)
   const cards = byClass(grid[0], 'crPickerCard')
@@ -702,27 +967,28 @@ test('the add-provider tab panel lists four equal cards', () => {
     assert.equal(byClass(card, 'crPickerAuth').length, 1)
     assert.equal(byClass(card, 'crPickerActions').length, 1)
   }
-  dispose()
+  loaded.dispose()
 })
 
 test('adding a provider enables its preset, returns to the usage tab and opens its settings', () => {
-  const { exports, renderRoot, writes, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  const tree = renderRoot(exports.CustomRouterDashboard, {})
+  const loaded = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = openAddTab(loaded)
   const panel = findAll(tree, (node) => node.props?.id === 'cr-panel-add')[0]
   const card = byClass(panel, 'crPickerCard').find((entry) => entry.props['data-picker'] === 'deepinfra')
   const button = findAll(card, (node) => node.props?.className === 'crButton')[0]
   button.props.onClick()
 
-  assertOps(writes.at(-1), [{ op: 'set', path: ['presets', 'deepinfra'], value: true }])
+  assertOps(loaded.writes.at(-1), [{ op: 'set', path: ['presets', 'deepinfra'], value: true }])
 
-  const after = renderRoot(exports.CustomRouterDashboard, {})
-  const usagePanel = findAll(after, (node) => node.props?.id === 'cr-panel-usage')[0]
-  assert.notEqual(usagePanel.props.hidden, true)
+  const after = loaded.renderRoot(loaded.exports.CustomRouterDashboard, {})
+  // The usage tab is active again and it is the ONLY panel in the tree.
+  const usagePanels = findAll(after, (node) => node.props?.role === 'tabpanel')
+  assert.deepEqual(usagePanels.map((entry) => entry.props.id), ['cr-panel-usage'])
   const cards = byClass(after, 'crVendorCard')
   const deepinfra = cards.find((entry) => entry.props['data-preset'] === 'deepinfra')
   const gear = findAll(deepinfra, (node) => node.props?.className === 'crGear')[0]
   assert.equal(gear.props['aria-expanded'], 'true')
-  dispose()
+  loaded.dispose()
 })
 
 test('the stylesheet uses the token grid and never a bare element selector', () => {
@@ -735,6 +1001,13 @@ test('the stylesheet uses the token grid and never a bare element selector', () 
   assert.match(css, /\.crReveal\{display:grid;grid-template-rows:0fr/)
   assert.match(css, /\.crReveal\[data-open=true\]\{grid-template-rows:1fr\}/)
   assert.match(css, /\.crRevealInner\{min-height:0;overflow:hidden/)
+  // The width container and the shared model-list geometry are pinned here.
+  assert.match(css, /\.crPage\{width:100%;max-width:1180px;margin:0 auto;padding:16px 20px;box-sizing:border-box\}/)
+  assert.match(css, /\.crToolbar\{display:flex/)
+  assert.match(css, /\.crGroup\{border:\.[0-9]px solid var\(--dsw-alias-settings-card-stroke\)/)
+  assert.match(css, /\.crRow\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto/)
+  assert.match(css, /\.crPriceList\{[^}]*text-decoration:line-through/)
+  assert.match(css, /\.crFooterBar\{display:flex/)
   // No rule may target a bare element selector: only the .cr* classes.
   const selectors = css.replace(/@media[^{]+\{/g, '').split('}').map((rule) => rule.split('{')[0]).filter((selector) => selector !== '')
   for (const selector of selectors) {

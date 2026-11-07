@@ -1,7 +1,7 @@
 # @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.4
+version: 0.0.1-rc.5
 kind: readme
 status: active
 updated: 2026-11-08
@@ -11,7 +11,7 @@ summary: Custom Router track: the single-owner OpenCodex bridge library, the mul
 | | |
 | :--- | :--- |
 | Package | `@nolit/dsh-custom-router` |
-| Version | `0.0.1-rc.4` (numeric part owner-gated; `rc#` is the agent history marker) |
+| Version | `0.0.1-rc.5` (numeric part owner-gated; `rc#` is the agent history marker) |
 | Status | **implemented bundle + browser dashboard.** `lib/index.js` mounts the enabled preset rows; one `settings.section` (`custom-router`) owns usage/billing, per-layer switches and write-only credentials |
 | Docs | [`docs/`](./docs) — measured specs plus the bridge contract and runbook; document skeleton versions follow the `rc.#` history scheme (separate from the plugin version) |
 | History | [`CHANGELOG.md`](./CHANGELOG.md) |
@@ -20,10 +20,25 @@ summary: Custom Router track: the single-owner OpenCodex bridge library, the mul
 ## Browser dashboard (M10, 2026-11-08)
 
 `package.json` now declares `dsh.client` and `lib/client.js` registers exactly one
-`settings.section` named `custom-router`. The surface is a CSS-grid dashboard: three KPI cards,
-three equal-width vendor cards, real DOM progress bars, card-local settings reveals, and a
+`settings.section` named `custom-router`. The dashboard is a **sidebar panel** (`sidebar.panellist`
+plus the `main` page keyed `custom-router`) inside a single centred width container
+(`.crPage`: `width:100%; max-width:1180px; margin:0 auto; padding:16px 20px`). It renders three KPI
+cards, three equal-width vendor cards, real DOM progress bars, card-local settings reveals, and a
 DeepInfra pay-per-token billing variant. Provider usage is read from the same local routes the
 vendor panels use; a missing reading stays unavailable instead of becoming zero.
+
+Only the ACTIVE tab panel is rendered — the tabs are not `hidden`, they do not exist — so a
+`display:flex` rule can never resurrect a second panel underneath the first. Each tab carries
+`role="tab"`, `aria-selected`, and `aria-controls` pointing at the one mounted `role="tabpanel"`.
+
+The same section is the **model-serving manager**: one tab per preset
+(`안티그래비티 / 오픈코드 / 딥인프라`), one shared toolbar + group card + row + footer layout across
+all three. The Antigravity tab groups by family (Gemini / Claude & GPT / Argon / 기타), shows the
+family's remaining quota in the group header, and renders ONE row per base model — a checkbox
+toggles every reasoning-effort variant of that row and the save value is the flattened variant
+list. DeepInfra rows carry the per-1M input/output rate, the promotion badge and the struck-through
+list price; subscription rows say `구독 포함` and never a fabricated price. An empty selection
+cannot be saved, because every vendor reads `[]` as ALL.
 
 Switch writes are path-scoped and atomic for compound controls. `lib/index.js` reconciles mounted
 child rows on `app-boot/config-reload`, so a volatile settings write remounts only the affected

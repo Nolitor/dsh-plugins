@@ -95,6 +95,10 @@ export const I18N = {
     "switchOff": "Off",
     "panelLabel": "Custom Router",
     "modelsTitle": "Model serving",
+    "groupGemini": "Gemini models",
+    "groupClaudeGpt": "Claude and GPT models",
+    "groupArgon": "Gemini 4 Argon",
+    "groupOther": "Other models",
     "modelsHint": "Pick the models each preset offers to the prompt picker, then save. Prices and promotions are the provider's current catalog.",
     "modelsCount": "{enabled} / {total} selected",
     "modelsSearch": "Filter models",
@@ -118,7 +122,11 @@ export const I18N = {
     "planZen": "Zen pay-as-you-go",
     "planOpenCode": "OpenCode plan",
     "priceIncluded": "included in plan",
-    "modelsNeedOne": "Select at least one model (an empty list means ALL to the vendors)."
+    "modelsNeedOne": "Select at least one model (an empty list means ALL to the vendors).",
+    "planOther": "Other plan",
+    "quotaLeft": "{pct}% left",
+    "promoCount": "{n} on promotion",
+    "modelsSelectedTotal": "{enabled} of {total} models selected"
   },
   "ko": {
     "meta": {
@@ -211,6 +219,10 @@ export const I18N = {
     "switchOff": "미사용",
     "panelLabel": "커스텀 라우터",
     "modelsTitle": "모델 서빙",
+    "groupGemini": "Gemini 모델",
+    "groupClaudeGpt": "Claude 및 GPT 모델",
+    "groupArgon": "Gemini 4 Argon",
+    "groupOther": "기타 모델",
     "modelsHint": "프리셋별로 프롬프트 모델 선택기에 노출할 모델을 고르고 저장하세요. 가격·할인은 프로바이더의 현재 카탈로그 값입니다.",
     "modelsCount": "{enabled} / {total} 선택",
     "modelsSearch": "모델 검색",
@@ -234,7 +246,11 @@ export const I18N = {
     "planZen": "Zen 종량제",
     "planOpenCode": "OpenCode 요금제",
     "priceIncluded": "구독 포함",
-    "modelsNeedOne": "최소 1개 이상 선택해야 합니다 (빈 목록은 벤더에서 전체로 해석됩니다)."
+    "modelsNeedOne": "최소 1개 이상 선택해야 합니다 (빈 목록은 벤더에서 전체로 해석됩니다).",
+    "planOther": "기타 요금제",
+    "quotaLeft": "{pct}% 잔여",
+    "promoCount": "할인 {n}건",
+    "modelsSelectedTotal": "모델 {total}개 중 {enabled}개 선택"
   },
   "zh": {
     "meta": {
@@ -327,6 +343,10 @@ export const I18N = {
     "switchOff": "关闭",
     "panelLabel": "自定义路由",
     "modelsTitle": "模型服务",
+    "groupGemini": "Gemini 模型",
+    "groupClaudeGpt": "Claude 与 GPT 模型",
+    "groupArgon": "Gemini 4 Argon",
+    "groupOther": "其他模型",
     "modelsHint": "为每个预设选择要提供给提示模型选择器的模型并保存。价格与优惠来自提供方当前目录。",
     "modelsCount": "已选 {enabled} / {total}",
     "modelsSearch": "筛选模型",
@@ -350,6 +370,10 @@ export const I18N = {
     "planZen": "Zen 按量计费",
     "planOpenCode": "OpenCode 套餐",
     "priceIncluded": "套餐已含",
-    "modelsNeedOne": "至少选择一个模型（空列表在提供方会被视为全部）。"
+    "modelsNeedOne": "至少选择一个模型（空列表在提供方会被视为全部）。",
+    "planOther": "其他套餐",
+    "quotaLeft": "剩余 {pct}%",
+    "promoCount": "{n} 项优惠",
+    "modelsSelectedTotal": "已选 {enabled} / {total} 个模型"
   }
 }

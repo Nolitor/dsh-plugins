@@ -89,6 +89,10 @@
   "switchOff": "미사용",
   "panelLabel": "커스텀 라우터",
   "modelsTitle": "모델 서빙",
+  "groupGemini": "Gemini 모델",
+  "groupClaudeGpt": "Claude 및 GPT 모델",
+  "groupArgon": "Gemini 4 Argon",
+  "groupOther": "기타 모델",
   "modelsHint": "프리셋별로 프롬프트 모델 선택기에 노출할 모델을 고르고 저장하세요. 가격·할인은 프로바이더의 현재 카탈로그 값입니다.",
   "modelsCount": "{enabled} / {total} 선택",
   "modelsSearch": "모델 검색",
@@ -112,5 +116,9 @@
   "planZen": "Zen 종량제",
   "planOpenCode": "OpenCode 요금제",
   "priceIncluded": "구독 포함",
-  "modelsNeedOne": "최소 1개 이상 선택해야 합니다 (빈 목록은 벤더에서 전체로 해석됩니다)."
+  "modelsNeedOne": "최소 1개 이상 선택해야 합니다 (빈 목록은 벤더에서 전체로 해석됩니다).",
+  "planOther": "기타 요금제",
+  "quotaLeft": "{pct}% 잔여",
+  "promoCount": "할인 {n}건",
+  "modelsSelectedTotal": "모델 {total}개 중 {enabled}개 선택"
 }

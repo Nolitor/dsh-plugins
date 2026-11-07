@@ -89,6 +89,10 @@
   "switchOff": "Off",
   "panelLabel": "Custom Router",
   "modelsTitle": "Model serving",
+  "groupGemini": "Gemini models",
+  "groupClaudeGpt": "Claude and GPT models",
+  "groupArgon": "Gemini 4 Argon",
+  "groupOther": "Other models",
   "modelsHint": "Pick the models each preset offers to the prompt picker, then save. Prices and promotions are the provider's current catalog.",
   "modelsCount": "{enabled} / {total} selected",
   "modelsSearch": "Filter models",
@@ -112,5 +116,9 @@
   "planZen": "Zen pay-as-you-go",
   "planOpenCode": "OpenCode plan",
   "priceIncluded": "included in plan",
-  "modelsNeedOne": "Select at least one model (an empty list means ALL to the vendors)."
+  "modelsNeedOne": "Select at least one model (an empty list means ALL to the vendors).",
+  "planOther": "Other plan",
+  "quotaLeft": "{pct}% left",
+  "promoCount": "{n} on promotion",
+  "modelsSelectedTotal": "{enabled} of {total} models selected"
 }
