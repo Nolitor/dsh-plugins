@@ -81,6 +81,9 @@ test('P0-1: every host import is declared as a peerDependency', () => {
     '@deepseek-ai/dsh-subprocess': '^0.2.2-alpha.2',
     '@deepseek-ai/dsh-tools': '^0.2.2-alpha.2',
     '@deepseek-ai/schemastery': '~3.18.4',
+    // Workspace-owned shared bridge: the host resolves linked workspace packages
+    // through the same peer route, so it must be declared here as well.
+    '@nolit/dsh-custom-router': '0.0.1-rc.2',
   })
 })
 
@@ -95,7 +98,7 @@ test('P0-1: schemastery is a peer (runtime value), never a bare dependency', () 
 test('P0-1: no source file imports a bare package that is not a peer', () => {
   const peers = new Set(Object.keys(pkg.peerDependencies ?? {}))
   const declared = new Set([...peers, ...Object.keys(pkg.dependencies ?? {})])
-  const files = ['lib/index.js', 'lib/provider.js', 'lib/shared.js']
+  const files = ['lib/index.js', 'lib/provider.js', 'lib/shared.js', 'lib/http.js', 'lib/opencodex-models.js']
   for (const file of files) {
     const text = readFileSync(new URL(file, root), 'utf8')
     for (const match of text.matchAll(/(?:import[^'"]*from|import\s*\(|require\s*\()\s*['"]([^'"]+)['"]/g)) {

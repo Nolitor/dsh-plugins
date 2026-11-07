@@ -77,16 +77,17 @@ adapter's cache/inflight lock, and (c) break the measured "refresh once on 401" 
 | Layer | Standardised? | Owner | Measured ground |
 | :--- | :--- | :--- | :--- |
 | **Upper pipeline** (mount, readiness, read-only key reference, row insertion) | **YES — one shared spec** | `ServicePreset` / the new custom surface | `AgentPreset.Config`, `settings.section` list, `credentials.resolve`, S1-S9 in [PRESET-SCHEMA](./PRESET-SCHEMA-AND-EXTENSION.md) |
-| **Lower pipeline** (per-request credential resolution, refresh, 401 retry, SSE->StreamChunk, usage/cost record) | **Contract YES, implementation per service** | shared `LlmAdapter`/`StreamChunk` contract; each service's adapter implements it | `prepareCall` `adapterStream` `types.d.ts`; `auth.js` / `http.js:1806` / `cost.js` |
+| **Lower pipeline — upstream half** (per-request credential resolution, refresh, 401 retry) | **Contract YES, implementation per service** | shared `LlmAdapter` contract; each service's adapter implements it | `prepareCall` `adapterStream` `types.d.ts`; `auth.js` / `http.js:1806` |
+| **Lower pipeline — downstream half** (SSE decode, wire→`StreamChunk`, usage, finish, failure, cut/empty) | **ONE shared implementation with hooks** (owner ruling 2026-11-07) | `@nolit/dsh-custom-router/stream` | [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md); drift table in [PROTOCOL §2.1](./CUSTOM-ROUTER-PROTOCOL-STANDARD.md) |
 | **Model serving** (wire family, endpoint, catalog, reasoning mapping) | **Contract YES, implementation per service** | `LlmAdapter` + `StreamChunk` + M1-M12 | [PROTOCOL §2](./CUSTOM-ROUTER-PROTOCOL-STANDARD.md), [ARCHITECTURE §3](./CUSTOM-ROUTER-ARCHITECTURE.md) |
 | **Tool standardisation** | **YES — already standard in DSH** | `@deepseek-ai/dsh-tools` | `ToolDefinition` (`output.schema` + `output.render` + `execute(args, exec)`), `defineTool`, `register(def, {when})`, `tools/execute` pipeline |
 | **Router engine logic** (provider registry, dispatch, duplicate guard, atomic replacement, terminal failure, projections) | **YES — entirely standard, do NOT re-implement** | `@deepseek-ai/dsh-llm LlmRuntime` | `registerAdapter` 1842, `prepareRoutes` 1867, `commitRoutes` 1895, `registration` 2267, `adapterStream` 2314, `llm/stream` waterfall |
 | **Subscription plan / usage / promotion / quota** | **NO — custom surface only** | this track | [PLAN-AND-USAGE-SPEC.md](./PLAN-AND-USAGE-SPEC.md); standard zeroes cost, freezes catalog |
 
 **One-line answer:** 상단 파이프라인·도구 규격·라우터 엔진은 **표준 규격이 가능하고 이미 표준이 있다**
-(우리가 만드는 건 그 위의 얇은 편성 레이어뿐). 하단 파이프라인·모델서빙은 **계약은 표준, 구현은
-서비스별**이다. 그리고 플랜/사용량/할인만 **프리셋(커스텀 surface)이 단독 소유**한다.
-"그냥 각 서비스 프리셋에서 관리"는 **마지막 한 줄에만** 해당한다.
+(우리가 만드는 건 그 위의 얇은 편성 레이어뿐). 하단 파이프라인 중 **인증·요청 생성·카탈로그·추론 제어**는
+계약만 표준이고 구현은 서비스별이며, **SSE→StreamChunk 파서·스트림 파이프는 공통 모듈 1개**가 소유한다
+(오버라이드 훅으로 프로바이더 예외를 흡수). 플랜/사용량/할인은 **프리셋(커스텀 surface)이 단독 소유**한다.
 
 ## 4. Why the router engine must NOT be re-standardised here
 
@@ -140,7 +141,8 @@ standardisation** is likewise not re-invented: each service's `/ocode`, `/agy` `
 | Owner noun | Standard spec possible? | Managed by preset? |
 | :--- | :--- | :--- |
 | 상단 파이프라인 | YES shared `ServicePreset` | YES (declares it) |
-| 하단 파이프라인 | YES shared `LlmAdapter`/`StreamChunk` contract | NO (adapter implements) |
+| 하단 파이프라인 — 인증/요청/카탈로그 | YES shared `LlmAdapter` contract | NO (adapter implements) |
+| 하단 파이프라인 — SSE/StreamChunk/usage/finish | **YES — one shared module** | NO (shared owner: this track) |
 | 모델서빙 | YES shared M1-M12 contract | NO (adapter implements) |
 | 도구 규격화 | YES already `ToolDefinition` standard | YES (selects which tools) |
 | 라우터 엔진 로직 | YES entirely `LlmRuntime` | **NO (never — R0)** |

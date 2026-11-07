@@ -104,7 +104,7 @@ npm run docs:moves     # pointer-stub gate: every Moved-out destination exists a
 | `dsh-antigravity/` | `@nolit/dsh-antigravity` Antigravity vendor package | Active — stage plan lives in its own `docs/` |
 | `dsh-deepinfra/` | `@nolit/dsh-deepinfra` DeepInfra adapter | Active — build brief lives in its own `docs/` |
 | `dsh-tokeneconomizer/` | `@nolit/dsh-tokeneconomizer` TokenEconomizer bridge | Active — saving measurement lives in its own `docs/` |
-| `dsh-subagent-local/` | `@nolit/dsh-subagent-local` local delegation over agy / opencode / codex / claude | Active, linked into the `web` profile |
+| `archive/dsh-subagent-local/` | `@nolit/dsh-subagent-local` local delegation over agy / opencode / codex / claude | **Archived 2026-11-07** — folded into `dsh-antigravity` (`agy_cli`) and `dsh-opencode-v2` (`cli_worker`) |
 | `archive/dsh-subrouter/` | `@nolit/dsh-subrouter` legacy router track | **Archived 2026-11-06** — superseded by `@nolit/dsh-opencode-v2/http`; removed from every profile |
 | `dsh-notify/` | `@nolit/dsh-notify` notification plugin | **Active** — in the `web` profile `dependencies`, `dsh.profile.bundles`, and composed rows (measured 2026-11-06) |
 | `dsh-command-skill/` | `@nolit/dsh-command-skill` interrupt/command contract authority | **Spec track** — ships documents only; registers nothing, installed nowhere |
@@ -152,8 +152,8 @@ DSH session logs (Windows-era project trees) — see each track's
 ## Prototypes vs. active plugins
 
 - **Active in the live `web` profile:** `dsh-korean-locale`, `dsh-sidebar-manager`,
-  `dsh-notify`, `dsh-tokeneconomizer`, `dsh-deepinfra`, `dsh-opencode-v2`,
-  `dsh-antigravity` and `dsh-subagent-local` (bundle + link), plus the core DSH
+  `dsh-notify`, `dsh-tokeneconomizer`, `dsh-deepinfra`, `dsh-opencode-v2`
+  and `dsh-antigravity` (bundle + link), plus the core DSH
   sidebar plugins (`ui-sidebar`, `ui-sidebar-right`, `ui-sidebar-files`, …) that
   ship with the `@deepseek-ai/dsh-web-app` bundle. Measured with
   `node scripts/check-disposal-safety.mjs --json`, not from this list.

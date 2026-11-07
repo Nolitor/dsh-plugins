@@ -308,3 +308,37 @@ test('the ledger path follows DSH_HOME, never the working directory', () => {
   // A relative cwd must never leak in.
   assert.equal(resolveLedgerPath({}).startsWith('/'), true)
 })
+
+test('model selection mirrors to OpenCodex after the DSH settings write', async () => {
+  const { server, ctx } = harness()
+  const mirrored = []
+  // Inject the same optional boundary the plugin apply uses.
+  const { createServer: createServerWithMirror } = await import('../lib/server.js')
+  const withMirror = createServerWithMirror({
+    ctx,
+    config: { enabledModels: { get: () => ['a', 'b'] } },
+    catalog: { entries: async () => [{ id: 'a', metadata: { tags: ['chat'] } }, { id: 'b', metadata: { tags: ['chat'] } }] },
+    profileDir: mkdtempSync(join(tmpdir(), 'dif-mirror-')),
+    onModelsApplied: async (enabled) => { mirrored.push(enabled) },
+  })
+  const reply = await call(withMirror, 'models/apply', { enabled: ['a', 'b'] })
+  assert.equal(reply.status, 200)
+  assert.deepEqual(ctx.settingsWrites.at(-1).patch, { enabledModels: ['a', 'b'] })
+  assert.deepEqual(mirrored, [['a', 'b']])
+})
+
+test('an OpenCodex refusal is explicit after the DSH selection is saved', async () => {
+  const { ctx } = harness()
+  const { createServer: createServerWithMirror } = await import('../lib/server.js')
+  const withMirror = createServerWithMirror({
+    ctx,
+    config: { enabledModels: { get: () => ['a'] } },
+    catalog: { entries: async () => [{ id: 'a', metadata: { tags: ['chat'] } }] },
+    profileDir: mkdtempSync(join(tmpdir(), 'dif-mirror-fail-')),
+    onModelsApplied: async () => { throw new Error('OpenCodex unavailable') },
+  })
+  const reply = await call(withMirror, 'models/apply', { enabled: ['a'] })
+  assert.equal(reply.status, 502)
+  assert.equal(reply.body.ok, false)
+  assert.match(reply.body.error, /OpenCodex unavailable/)
+})

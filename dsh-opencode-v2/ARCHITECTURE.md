@@ -16,11 +16,15 @@ summary: Module map, control-plane vs serving boundary, credential resolution, s
 Unlike `dsh-deepinfra` (one route, two slots), this package deliberately ships several surfaces
 because OpenCode exposes several planes.
 
-| Surface | Module | Registers |
-|---|---|---|
-| `opencode-http-agent` route | `lib/http.js` | `ctx.llm.registerAdapter` |
-| `opencode` tool + `/opencode` command + `cli_worker` | `lib/index.js`, `lib/provider.js` | tools, commands, worker |
-| Settings panel + cost chip | `lib/client.js` | `settings.section`, `conversation.input.right` |
+| # | Surface | Module | Registers | Switch |
+|---|---|---|---|---|
+| 1 | Model serving / router — `opencode-http-agent` | `lib/http.js` | `ctx.llm.registerAdapter` | `modelServing: false` (or the row's `disabled`) |
+| 2 | Subagent — `opencode` provider + `subagent_opencode` row | `lib/subagent.js` | `ctx.subagents.registerProvider` | `subagent: false` |
+| 3 | CLI — `opencode` tool, `/ocode` command, `cli_worker` tool | `lib/index.js`, `lib/provider.js` | tools, commands, worker | `cli: false` removes the tool + `/ocode` + `cli_worker`; `workerEnabled: false` narrows to `cli_worker` |
+| — | Auxiliary UI — settings panel + cost chip | `lib/client.js` | `settings.section`, `conversation.input.right` | `usagePill` / client gate |
+
+The three numbered rows are the activation surfaces. The UI row is auxiliary and is not counted as
+one: it observes the routes rather than serving one.
 
 ## 2. Control plane vs serving plane
 

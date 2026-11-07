@@ -98,6 +98,20 @@ standard router is incapable — §1 shows it registers these routes fine. The b
 standardised is `LlmAdapter` / `StreamChunk`, which is exactly what the standard router already
 exposes and what these three services implement.
 
+### 2.1 Allowed vs forbidden sharing (owner ruling 2026-11-07)
+
+| Sharing | Verdict | Reason |
+| :--- | :--- | :--- |
+| One **adapter instance** across providers | **FORBIDDEN** | auth, catalog, plan and cost would become conditional ([DEEPINFRA-ADAPTER-BRIEF §6](../../dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md)) |
+| A second **routing table / engine** | **FORBIDDEN** (R0) | duplicates `LlmRuntime` registry, dispatch, retry, projections |
+| Shared **request builder / credential chain / catalog** | **FORBIDDEN** | genuinely different upstream halves — measured in §2 |
+| Shared **downstream stream pipe** (`readSseEvents`, block emitter, usage writer, finish table, failure shape, terminal policy) | **REQUIRED — one implementation** | measured drift: 3 finish tables, 3 `totalTokens` rules, 2 empty-response policies, 1 of 3 cut-preservation, `LlmFailure.code` missing in one track |
+| Provider-specific behaviour inside that pipe | **HOOKS + descriptor**, never a fork | see [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md) §3–§5 |
+
+The earlier reading — "contract is one, implementations are per-service for M2/M3 as a whole" —
+is **superseded** where M2/M3 means the downstream half. Keeping that half separate is what
+produced the drift table above; it is not a boundary, it is a missing module.
+
 ## 3. Normative invariants (MUST)
 
 Every Custom Router service, regardless of protocol:
@@ -182,16 +196,27 @@ tool-preset entry (agent | API key)          [parent spec §4]
   -> descriptor resolves: baseURL, credential, catalog, effort mapping
   -> prepareCall(provider, model, signal)     [N6, N7]
   -> GenerateOptions -> service wire request  [wire.family, attributionHeaders N8]
-  -> SSE deltas -> StreamChunk                [N3, N4, N5, N11]
+  -> SSE decode                              [SHARED: readSseEvents]
+  -> readEvent(payload)   HOOK, per provider [normalized parts / usage / finish / defect]
+  -> StreamChunk emission                    [SHARED: block lifecycle, N3, N4]
        text-delta / reasoning-delta / tool-call-delta(argumentsDelta)
+  -> usage writer                            [SHARED: disjoint buckets, N11, totalTokens rule]
+  -> finish table + terminal policy          [SHARED: finish, empty, cut, abort, N5]
   -> usage (buffered if trailing) -> finish
   -> disposer released on tool removal        [N1, N12]
 ```
 
+Everything between the wire request and the terminal `finish` is **one implementation owned by
+this track**: [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md). Providers differ only
+through the descriptor fields (§4.1, plus the stream descriptor in that spec §6) and the
+`readEvent` hook. The pipeline emits inside each adapter's own `stream()` — it registers no
+adapter, owns no provider table, and contains no retry loop, so R0 is untouched.
+
 Two services may share `wire.family = 'openai-chat'` yet **must not share an adapter instance**:
 their descriptors differ in `auth`, `catalog`, `reasoning`, `usage` and `cost`. Sharing is the
 "extend the OpenCode adapter with a second vendor" mistake rejected in
-[DEEPINFRA-ADAPTER-BRIEF.md §6](../../dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md).
+[DEEPINFRA-ADAPTER-BRIEF.md §6](../../dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md). Sharing the
+downstream pipe is the opposite case: those facts are upstream of it.
 
 ## 6. Conformance gates for a new service
 
@@ -215,6 +240,21 @@ again on 2026-11-06: `dsh --profile web --dump-config` fails with `EROFS` becaus
 
 ## 7. Known deltas this standard does not resolve
 
+Measured 2026-11-07 against the three tracks at HEAD. These are the defects the shared pipe
+exists to close; each stays a `dsh-<track>/CHANGELOG.md` entry until its migration step lands
+([SHARED-STREAM-PIPE-SPEC.md §7](./SHARED-STREAM-PIPE-SPEC.md)).
+
+| # | Track | Delta | Contract |
+| :--- | :--- | :--- | :--- |
+| D1 | opencode-v2 | `class OpencodeHttpAdapter` does **not** extend `LlmAdapter`; M2 in [ARCHITECTURE §3](./CUSTOM-ROUTER-ARCHITECTURE.md) said "measured in all 3" | M2 / N1 |
+| D2 | antigravity | **withdrawn — not a defect.** Re-measured against the provider's own documents: `README.md` "Google policy" and `ANTIGRAVITY-DIRECTSDK-MEASUREMENT.md` §"Digital fingerprint" record that the endpoint answers **403** `You do not have a valid license of this product` unless the request carries the CLI identity `antigravity/cli/1.5.0 (...)`. `attributionHeaders()` emits only `deepseek-harness/<version>`, a different product string. N8 and the provider identity therefore collide, and this track resolves it in favour of the provider gate. The earlier reading ("`attributionHeaders()` is never called") was a real observation with a wrong conclusion; the correct requirement is **declare** the conflict, not "call attributionHeaders and lose the license". The shared pipe does not touch request headers, so this stays a per-provider decision | N8 vs provider identity |
+| D3 | antigravity | `finishReasonFor('SAFETY'\|'RECITATION'\|'BLOCKLIST'\|'PROHIBITED_CONTENT'\|'SPII'\|'OTHER')` returns `{kind:'error', failure:{kind:'provider', message}}` — no `code`, and an extra `kind` key | N5 / `LlmFailure` |
+| D4 | antigravity, deepinfra | `content_filter` / `SAFETY`-class finishes are reported as a clean `stop` | finish policy |
+| D5 | opencode-v2 | `usageFromOpenAi` publishes `totalTokens = input + output + cacheRead`, a subset rather than the call total; `addUsage` in the same file sums a different set of buckets | N11 |
+| D6 | antigravity, deepinfra | no `streamCutPreserve` equivalent: a cut stream either throws or closes normally without the original cause | RETRY-POLICY §6 |
+| D7 | opencode-v2 | fixed block indexes `TEXT_INDEX=0 / REASONING_INDEX=1 / TOOL_INDEX_BASE=2`; antigravity and deepinfra allocate first-seen | N4 |
+| D8 | antigravity, deepinfra | empty completion → throw (AG) vs in-band `finish{kind:'error'}` (DI); no single policy | N5 |
+
 - `dsh-deepinfra` declares `engines.dsh >=0.2.2-alpha.3 <0.3.0` while the other two declare
   `>=0.2.2-alpha.2 <0.3.0`; runtime `0.2.2-rc.1` satisfies both. Harmonisation is a version-owner
   decision, not a spec change.
@@ -227,6 +267,7 @@ again on 2026-11-06: `dsh --profile web --dump-config` fails with `EROFS` becaus
 ## 8. References
 
 - [CUSTOM-ROUTER-SERVICE-SPEC.md](./CUSTOM-ROUTER-SERVICE-SPEC.md)
+- [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md) — the one downstream parser/emitter module and its hooks
 - [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md) — composition diagrams + normative per-service module contract
 - [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../../dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md), [dsh-deepinfra/UPSTREAM-COMPAT.md](../../dsh-deepinfra/UPSTREAM-COMPAT.md)
 - [RULES.md](../../docs/RULES.md), [FAILURE-LEDGER.md](../../docs/FAILURE-LEDGER.md), [PLUGIN-CONSOLIDATION.md](../../docs/PLUGIN-CONSOLIDATION.md)

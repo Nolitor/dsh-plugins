@@ -23,6 +23,7 @@ import {
   toResolvedModelInfo,
 } from './catalog.js'
 import { createServer } from './server.js'
+import { syncDeepInfraSelection } from './opencodex-models.js'
 import { configValue } from './settings.js'
 import { DEFAULT_BASE_URL, DEFAULT_CONTEXT_WINDOW, DEFAULT_TURN_MAX_TOKENS } from './wire.js'
 
@@ -204,6 +205,9 @@ export function apply(ctx, config) {
         await catalogReader()
         return chatRoutes(cache?.entries ?? [])
       },
+    },
+    onModelsApplied: async (enabled) => {
+      await syncDeepInfraSelection(enabled)
     },
     profileDir: typeof optional(ctx, 'profileDir') === 'string' ? optional(ctx, 'profileDir') : undefined,
     log,

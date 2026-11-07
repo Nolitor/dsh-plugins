@@ -1,19 +1,91 @@
 {
   "name": "@nolit/dsh-custom-router",
-  "version": "0.0.1-rc.1",
+  "version": "0.0.1-rc.2",
   "private": false,
-  "description": "Custom Router for DeepSeek Harness: a plugin-owned Settings-Models (Custom) surface plus the standardised per-service router/serving contract (plan detection, usage/quota normalisation, tool-preset activation). Specification stage; no runtime surface mounted yet.",
+  "description": "Custom Router shared library and specifications: one owner for OpenCodex model-selection mirroring, the extensible shared downstream stream pipe (with a standalone dispatch verifier), credential scope aggregation, and the future plugin-owned Settings-Models (Custom) surface. No standalone runtime surface is mounted yet.",
   "keywords": [
     "dsh",
     "deepseek-harness",
     "dsh-plugin",
     "custom-router",
     "model-serving",
+    "opencodex",
     "preset"
   ],
   "license": "MIT",
   "type": "module",
+  "exports": {
+    "./opencodex": {
+      "default": "./lib/selection-sync.js"
+    },
+    "./opencodex-client": {
+      "default": "./lib/opencodex-client.js"
+    },
+    "./selection-projector": {
+      "default": "./lib/selection-projector.js"
+    },
+    "./scope-aggregator": {
+      "default": "./lib/scope-aggregator.js"
+    },
+    "./config": {
+      "default": "./lib/config.js"
+    },
+    "./management-token": {
+      "default": "./lib/management-token.js"
+    },
+    "./vendor-bridge": {
+      "default": "./lib/vendor-bridge.js"
+    },
+    "./package.json": "./package.json",
+    "./stream": {
+      "default": "./lib/stream/index.js"
+    },
+    "./stream/sse": {
+      "default": "./lib/stream/sse.js"
+    },
+    "./presets": {
+      "default": "./lib/presets.js"
+    },
+    "./plugin": {
+      "default": "./lib/index.js"
+    },
+    "./catalog": {
+      "default": "./lib/catalog.js"
+    },
+    "./cost": {
+      "default": "./lib/cost.js"
+    },
+    "./routing": {
+      "default": "./lib/routing.js"
+    },
+    "./probe": {
+      "default": "./lib/probe.js"
+    },
+    "./plan": {
+      "default": "./lib/plan.js"
+    },
+    "./usage": {
+      "default": "./lib/usage.js"
+    },
+    "./bridges/antigravity": {
+      "default": "./lib/bridges/antigravity.js"
+    },
+    "./bridges": {
+      "default": "./lib/bridges/index.js"
+    },
+    "./bridges/opencode": {
+      "default": "./lib/bridges/opencode.js"
+    },
+    "./bridges/deepinfra": {
+      "default": "./lib/bridges/deepinfra.js"
+    },
+    "./vendor-modules": {
+      "default": "./lib/vendor-modules.js"
+    }
+  },
   "files": [
+    "lib/",
+    "scripts/",
     "docs/",
     "README.md",
     "CHANGELOG.md"
@@ -23,7 +95,13 @@
     "dsh": ">=0.2.2-alpha.2 <0.3.0"
   },
   "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check lib/config.js && node --check lib/opencodex-client.js && node --check lib/management-token.js && node --check lib/selection-projector.js && node --check lib/scope-aggregator.js && node --check lib/selection-sync.js && node --check lib/vendor-bridge.js && node --check lib/stream/index.js && node --check lib/stream/sse.js && node --check lib/stream/usage.js && node --check lib/stream/wire.js && node --check lib/stream/failure.js",
     "docs:check": "node ../scripts/doc-index-track.mjs --check",
-    "docs:index": "node ../scripts/doc-index-track.mjs"
+    "docs:index": "node ../scripts/doc-index-track.mjs",
+    "verify:stream": "node scripts/verify-stream.mjs",
+    "verify:stream:json": "node scripts/verify-stream.mjs --json",
+    "verify": "npm run check && npm test && npm run verify:stream",
+    "verify:presets": "node scripts/verify-presets.mjs"
   }
 }

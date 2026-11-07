@@ -33,7 +33,8 @@ each task in its own child process.
 
 Integration point: `lib/index.js` `apply()` calls `registerCliWorker(ctx, config)`
 after registering the `opencode` tool. One profile row (`dsh-opencode-v2`) enables
-the delegation tool, the `/opencode` command, `cli_worker`, and `/worker` together.
+the delegation tool, the `/ocode` command and `cli_worker` together. There is no
+`/worker` command: `workerEnabled` gates the `cli_worker` tool alone.
 
 ## 3. Module layout
 
@@ -42,7 +43,7 @@ the delegation tool, the `/opencode` command, `cli_worker`, and `/worker` togeth
 | `lib/workers/backends.js` | backend table: executable, `argv(options)`, `parse(stdout)` |
 | `lib/workers/artifacts.js` | glob → RegExp, bounded walk, sha256, `limit`/`missing` reporting |
 | `lib/workers/run.js` | cwd validation, env allow-list, spawn, stdin delivery, timeout, result |
-| `lib/workers/index.js` | parameter map, output schema, renderer, tool/command registration |
+| `lib/workers/index.js` | parameter map, output schema, renderer, tool registration |
 
 Each backend is data, not a class, so `argv`/`parse` are unit-testable without the
 real binary.

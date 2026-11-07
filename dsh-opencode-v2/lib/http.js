@@ -59,6 +59,7 @@ import { stripThinkingTags } from './display-clean.js'
 import { mapChatDelta } from './upstream-map.js'
 import { createCostLedger, createCostStore, describeCost, parseCost, pickSession } from './cost.js'
 import { installResilience } from './resilience.js'
+import { syncOpenCodeSelection } from './opencodex-models.js'
 import {
   INVALID_REQUEST,
   RequestShapeError,
@@ -121,6 +122,12 @@ const VERSION = '0.0.1-rc.1'
 export const DEFAULT_HTTP_RETRY_STATUSES = Object.freeze([429, 451, 502, 503, 504])
 
 export const Config = Schema.object({
+  /**
+   * Model-serving switch (unified with dsh-antigravity): off releases the
+   * `opencode-http-agent` adapter so the route disappears from the picker. The
+   * control-plane server and the CLI/delegation surfaces are unaffected.
+   */
+  modelServing: Schema.boolean().default(true).volatile(),
   /** Explicit local OpenCode server URL; empty attaches to the daemon or spawns one. */
   baseUrl: Schema.string().default('').volatile(),
   /**
@@ -2436,6 +2443,22 @@ export function apply(ctx, config) {
 
   const reconcile = () => {
     if (released || busy) return
+    const serving = (() => {
+      const entry = config?.modelServing
+      if (entry !== null && typeof entry === 'object' && typeof entry.get === 'function') return entry.get() !== false
+      return entry === undefined ? true : entry !== false
+    })()
+    if (!serving) {
+      if (registration) {
+        const release = registration
+        registration = null
+        adapter.standDown = true
+        try { release() } catch { /* the host may have released it first */ }
+      } else {
+        adapter.standDown = true
+      }
+      return
+    }
     const decision = decideRouterConflict(detectRouterConflicts(ctx?.llm, providerId), policy())
     if (decision.code !== lastCode) {
       lastCode = decision.code
@@ -2477,7 +2500,11 @@ export function apply(ctx, config) {
   if (typeof ctx.effect === 'function') {
     ctx.effect(() => () => dispose(), 'dsh-opencode-v2-http: dispose adapter and owned server')
   }
-  registerModelSettingsRoutes(ctx, adapter, config, log)
+  registerModelSettingsRoutes(ctx, adapter, config, log, {
+    onModelsApplied: async (enabled) => {
+      return syncOpenCodeSelection(enabled, { activePlan: config.activePlan?.get?.() ?? 'go' })
+    },
+  })
   return dispose
 }
 
@@ -2517,7 +2544,7 @@ export function settingsNs(config) {
  * @param log - warning sink.
  * @returns true when the routes were registered.
  */
-export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}) {
+export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}, options = {}) {
   const register = ctx?.connection?.fetch?.register
   if (typeof register !== 'function') return false
   const respond = (body, status = 200) =>
@@ -2704,6 +2731,9 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
         patch.activePlan = payload.activePlan
       }
       await settings.update(settingsNs(config), patch)
+      if (wantsEnabled && typeof options.onModelsApplied === 'function') {
+        await options.onModelsApplied(patch.enabledModels)
+      }
       const state = await describeModels()
       return respond({
         activePlan: config.activePlan?.get?.() ?? 'go',

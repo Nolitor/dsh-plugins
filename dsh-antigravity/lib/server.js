@@ -175,7 +175,7 @@ export function attachQuota(groups, summary) {
 }
 
 /** Route suffix -> handler. Prefixed with `/api/local/<plugin>/`. */
-function createRoutes({ config, catalog, endpointOf, ledger, settings, installed, invalidate, quota }) {
+function createRoutes({ config, catalog, endpointOf, ledger, settings, installed, invalidate, quota, onModelsApplied }) {
   return {
     /** Panel bootstrap: switches, account, catalog and quota in one call. */
     info: async () => {
@@ -246,6 +246,15 @@ function createRoutes({ config, catalog, endpointOf, ledger, settings, installed
         return json({ error: 'this host exposes no settings service; edit the profile patch instead' }, 409)
       }
       invalidate?.()
+      // DSH has already persisted the allow-list. Mirror that exact list to the
+      // optional OpenCodex serving surface; never copy credentials here.
+      if (typeof onModelsApplied === 'function') {
+        try {
+          await onModelsApplied(next)
+        } catch (error) {
+          return json({ ok: false, enabled: next, error: error instanceof Error ? error.message : String(error) }, 502)
+        }
+      }
       return json({ ok: true, enabled: next })
     },
 
@@ -283,7 +292,7 @@ export function registerRoutes(ctx, deps, scoped) {
   }
 
   const ledger = deps.ledger ?? createLedger()
-  const routes = createRoutes({ ...deps, ledger, settings })
+  const routes = createRoutes({ ...deps, ledger, settings, onModelsApplied: deps.onModelsApplied })
   const releases = []
   for (const [suffix, handler] of Object.entries(routes)) {
     try {

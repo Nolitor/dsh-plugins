@@ -55,7 +55,7 @@ export function resolveLedgerPath({ explicit, dshHome, profileDir, homeDir } = {
  * @param {object} [options.log] - `{ warn }`.
  * @returns {{ ledger: object, routes: object, recordCost: Function, dispose: Function }}
  */
-export function createServer({ ctx, config, catalog, profileDir, log = { warn() {} } }) {
+export function createServer({ ctx, config, catalog, profileDir, log = { warn() {} }, onModelsApplied }) {
   /**
    * Services handed by the deferred sub-context, when the plugin mounted its
    * panel through `ctx.inject([...])`. Reading the ROOT ctx in that case returns
@@ -235,9 +235,15 @@ export function createServer({ ctx, config, catalog, profileDir, log = { warn() 
       if (typeof settings?.update !== 'function') {
         return json({ error: 'this host exposes no settings service; edit the profile patch instead', ...(await describeModels()) }, 409)
       }
-      await settings.update('dsh-deepinfra', {
-        enabledModels: body.enabled.filter((id) => typeof id === 'string' && id.length > 0),
-      })
+      const enabledModels = body.enabled.filter((id) => typeof id === 'string' && id.length > 0)
+      await settings.update('dsh-deepinfra', { enabledModels })
+      if (typeof onModelsApplied === 'function') {
+        try {
+          await onModelsApplied(enabledModels)
+        } catch (error) {
+          return json({ ok: false, enabled: enabledModels, error: error instanceof Error ? error.message : String(error) }, 502)
+        }
+      }
       return json(await describeModels())
     },
     'cost/session': async (request) => {

@@ -1,12 +1,306 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.1
+version: 0.0.1-rc.2
 kind: report
 status: active
-updated: 2026-11-06
-summary: Engineering history for the Custom Router track; created 2026-11-06 as a specification-only track with four measured specs migrated out of the shared docs tree.
+updated: 2026-11-07
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the single-owner OpenCodex bridge library.
 -->
+
+## 0.0.1-rc.2 — 2026-11-07 (preset declarations as data, S4)
+
+**Scope:** `lib/presets.js` — the M13–M16 surface contract as frozen data plus a pure validator.
+The module **registers nothing** (no `apply`, no `ctx`, no imports): a future mounted surface (M10)
+reads the declarations instead of hard-coding per-vendor knowledge.
+
+**Measured declarations (from the vendor tracks at HEAD):** `antigravity` (Google SSE wire, route
+`own`, async `agy_worker` + sync `agy_cli`, `subagent_antigravity`, `/agy`), `opencode`
+(`openai-completions`, route `own` pending the PiAiAdapter migration, sync `cli_worker` +
+`/ocode`/`/worker`, `subagent_opencode`), `deepinfra` (`openai-completions`, model route only,
+plan `unavailable`).
+
+**Validator rules:** a `pi-ai` route requires a protocol the host implements
+(`openai-completions` / `openai-responses` / `anthropic-messages`); subagent rows must use the host's
+shared `@deepseek-ai/dsh-tool-subagent` row and a `subagent_<provider>` tool name; a CLI tool must be
+listed in `surfaces.tools` and differ from the batch tool; a skill must carry `modelInvocable` and
+`userInvocable`; tool/command names are unique across presets (the host registries are global).
+
+**Measured:** 80/80 tests (9 new in `test/presets.test.mjs`). A preset-only isolated profile (the
+three vendor bundles removed, `@nolit/dsh-custom-router` still linked) boots with `deepseek-account`
+as the only provider and no activation failure.
+
+## Preset drift gate — 2026-11-07 (same `rc.2`)
+
+Owner decision 2b: presets are verified against the **runtime**, not copied by hand. Added:
+
+- `presets[].switches` — the master/surface switches each preset owns, with the module (`index` or
+  `http`) that declares them;
+- `presets[].package` / `presets[].row` — identity used by the gate;
+- `scripts/verify-presets.mjs` (`npm run verify:presets`) — boots an isolated `DSH_HOME`, reads
+  `llm.listProviders()`, `tools.definitions()` and `commands.list()`, imports each vendor `Config.dict`
+  and diffs everything. Exit 1 on drift, 2 when the harness cannot run.
+
+Negative test: adding `/worker` to the opencode preset made the gate report
+`opencode: command "/worker" is declared but not registered` and exit 1. Clean run: OK.
+
+## Preset application body — 2026-11-07 (same `rc.2`)
+
+`lib/index.js` (exported as `@nolit/dsh-custom-router/plugin`) is the first runtime body. It applies
+presets the only way that keeps R0: it mounts each active preset's **own package plugin** as a child
+with `ctx.plugin` and disposes exactly that child on deactivation. It never calls
+`ctx.llm.registerAdapter` and mounts nothing unless a preset is explicitly enabled
+(`presets: { <id>: true }`).
+
+- `planApplications(config)` — pure planning: validates the declarations, rejects unknown ids,
+  resolves the module (with a `packages` override) and the per-preset vendor config.
+- `apply(ctx, config)` — mounts the plan, isolates per-preset failures, returns the disposer.
+- `strict` (default true) throws before mounting when a declaration is invalid.
+
+Measured: 9 new tests (plan, override, unknown id, mount/dispose, strict rejection, failure
+isolation, and a source scan proving the body owns no adapter call). No bundle row yet: the package
+still ships no `cordis.patch.yml`, so linked profiles keep mounting the vendor plugins directly.
+
+## Preset common data model — 2026-11-07 (same `rc.2`)
+
+Owner requirement: a new provider must fill one standard shape that answers **delivery** (JSON
+declaration vs NPM package), **authentication** (API key vs web auth vs local socket) and
+**endpoint** (protocol + transport), not a package name tag.
+
+Added `lib/preset-schema.js` (`@nolit/dsh-custom-router/preset-schema`):
+
+- `kind`: `package` (code-backed) | `declaration` (JSON only, no package, static catalog);
+- `auth`: `api-key` | `web-auth` | `local-socket` | `none`, with ordered
+  `secret-field` / `env` / `credential-ref` / `token-file` / `daemon-endpoint` sources;
+- `endpoint`: `http` | `local-http` | `daemon`, protocol (`openai-completions`,
+  `openai-responses`, `anthropic-messages`, `google-generative-sse`), route (`pi-ai` | `own`),
+  transport (`sse`, `websocket`, `websocket-cached`, `auto`), base URL, chat path;
+- measured instances: antigravity (web-auth, Google SSE), opencode (web-auth/daemon, OpenAI),
+  deepinfra (api-key, OpenAI); plus `DECLARATION_EXAMPLE` for a loopback JSON preset;
+- `PRESET_JSON_SCHEMA` mirrors the validator for external tools.
+
+Measured: 96/96 tests (5 new data-model cases), drift gate still OK.
+
+## Catalog & price 3-layer synchronization — 2026-11-07 (same `rc.2`)
+
+Owner decision: catalog and price sync are three ordered layers, merged with 3 > 2 > 1 precedence.
+
+- **`catalog.layers`** in `preset-schema`: `upstream` (pi-ai static snapshot, default fallback),
+  `probe` (API/web-auth endpoint list), `override` (preset/local models and prices). Validator enforces
+  order, uniqueness, probe endpoint shape, and partial price overlays.
+- **`lib/catalog.js`** (`@nolit/dsh-custom-router/catalog`): `mergeCatalog()` merges field by field,
+  keeps provenance (`source`, `layers`), lets a later layer create a model, and supports pricing-only
+  patches (single rate fields; `tiers` replaces when supplied).
+- **`lib/cost.js`** (`@nolit/dsh-custom-router/cost`): mirrors upstream pi-ai `calculateCost()` —
+  per-1M rates, tier selection by input+cache tokens, 1h cache write at 2× input — because the DSH
+  wrapper drops `usage.cost` (measured 2026-11-07).
+
+Measured upstream coverage: 42 providers / 1,712 models / **1,712 priced** / 261 tiered, snapshot
+generated 2026-11-02. Tests: 108/108 (12 new catalog/cost cases), drift gate unchanged and green.
+
+## Routing and probe executor — 2026-11-07 (same `rc.2`)
+
+- **`lib/routing.js`** (`@nolit/dsh-custom-router/routing`): `resolvePreset()` / `resolveRoute()` —
+  explicit preset → provider id → `modelPrefixes`; an ambiguous prefix is refused, never guessed.
+  Presets gained measured `modelPrefixes` (antigravity, opencode-http-agent/opencode-go/opencode,
+  deepinfra, local-hub).
+- **`lib/probe.js`** (`@nolit/dsh-custom-router/probe`): layer-2 executor with injected fetch.
+  `openai` and `anthropic` listings normalize into catalog entries (Bearer vs `x-api-key` +
+  `anthropic-version`, one Anthropic page); `shape: 'vendor'` endpoints (`/api/model`,
+  `fetchAvailableModels`) are refused with `VENDOR_OWNED` because the owning plugin parses them.
+  `probePreset()` skips vendor layers and returns `{models, measuredAt, errors}`.
+
+Measured: 124/124 tests (16 new routing/probe cases); drift gate green.
+
+## Plan (subscription/flat) layer — 2026-11-07 (same `rc.2`)
+
+`usage.billing.mode` + `lib/plan.js` (`@nolit/dsh-custom-router/plan`):
+
+- `subscription` (antigravity), `flat` (opencode-v2), `pay-per-token` (deepinfra), `none` (loopback);
+- `judgePlan()` builds the §1.4 `PlanVerdict` from L1 declared / L2 account / L3 probe, with
+  `throttled`, `mismatch`, `match`, `unknown` and `no-plan-service`;
+- `billingOutcome()` returns `{billed, covered, confidence, reason}`: plan-covered → `0`, per-token →
+  the catalog estimate, and **`unknown` → `null`, never a fabricated zero**.
+
+Measured: 136/136 tests (12 new plan cases); drift gate green.
+
+## Usage binding, quota display, vendor-probe connection — 2026-11-07 (same `rc.2`)
+
+- **Vendor probe connection** (`probeVendor`): explicit `vendorProbes[preset.id]` → host
+  `ctx.llm.discoverModels(namespace)` → `VENDOR_OWNED`. Measured: the three vendor plugins register
+  **no** discovery (0 hits) and keep it in `lib/provider.js`; OpenCode's namespace is
+  `dsh-opencode-v2-http`.
+- **Usage binding** (`lib/usage.js`, `@nolit/dsh-custom-router/usage`): `bindUsage()` returns
+  `{usage, cost, billing, readings}` — token buckets, catalog cost, plan billing outcome, and
+  `UsageReading[]`.
+- **Quota display** (`windowReadings`): provider windows (`rolling`/`7d`/`30d` aliased) become
+  `percent-consumed` / `fraction-remaining` readings with `limited`, `resetsAt`, locale `en`/`ko`.
+- Invariant preserved: an unmeasurable reading is `confidence: 'unavailable'` with a reason; an
+  `unknown` plan appends that gap instead of claiming `$0`.
+
+Measured: 147/147 tests (11 new usage/vendor cases); drift gate green.
+
+## Antigravity vendor-probe bridge — 2026-11-07 (same `rc.2`)
+
+`lib/bridges/antigravity.js` (`@nolit/dsh-custom-router/bridges/antigravity`) connects antigravity to
+layer 2 without touching the vendor:
+
+- reuses `./auth` `TokenProvider`, `./settings` `resolveEndpoint`, `./catalog` `parseCatalog`;
+- keeps the **digital fingerprint** (measured `antigravity/cli/…` UA; without it the endpoint answers
+  403 and `loadCodeAssist` reports `UNSUPPORTED_CLIENT`);
+- flexible slots in `vendorConfig[presetId]`: `tokenPath`, `refreshToken`, `userAgent`, `extraHeaders`,
+  `project`, `baseUrl`, `controlBaseUrl` — overrides win, nothing is invented;
+- `probeVendor` now scopes `vendorConfig` per preset, so one profile can carry several providers.
+
+Measured: 153/153 tests (6 bridge cases); drift gate green.
+
+## Three vendor bridges, module resolution, apply seam — 2026-11-07 (same `rc.2`)
+
+- **`opencode` bridge** (`lib/bridges/opencode.js`): daemon `GET /api/model` with
+  `Basic opencode:<password>`; reuses `./http` `authHeader`/`serviceStateCandidates` and
+  `lib/shared.js` `modelsFromApiPayload` (file URL — the export map does not expose it).
+  Slots: `baseUrl`, `password`, `serviceFile`, `extraHeaders`.
+- **`deepinfra` bridge** (`lib/bridges/deepinfra.js`): thin wrapper over `probeCatalog` with
+  `apiKey`/`DEEPINFRA_API_KEY` and `baseUrl`/`extraHeaders` slots.
+- **Registry** (`lib/bridges/index.js`): `createVendorBridges({modules})` → three handlers.
+- **Module resolution** (`lib/vendor-modules.js`): `loadVendorModules({profileDir})` resolves every
+  vendor entry through the profile `package.json` and returns the module set plus preset package URLs.
+- **Apply seam:** `apply()` loads modules/bridges, resolves preset packages for `ctx.plugin`, and
+  provides `customRouter` `{presets, vendorProbes, route, probe, merge}`.
+
+Measured: 169/169 tests (16 new); drift gate green.
+
+## 0.0.1-rc.1 — 2026-11-07 (shared downstream stream pipe specified)
+
+**Owner instruction:** do not standardise only on paper and leave three implementations; extract
+the DSH-facing parser and stream pipe into **one common module** with overridable hooks so a
+provider-specific API or web-auth exception can still be absorbed.
+
+**Before (measured, 3 tracks at HEAD):** the downstream half was implemented three times and had
+already drifted.
+
+| Concern | Drift measured |
+| :--- | :--- |
+| finish table | `content_filter`/`SAFETY`-class → `stop` in antigravity and deepinfra, `error` in opencode-v2 |
+| `totalTokens` | three different rules; `usageFromOpenAi` publishes a subset, `addUsage` sums a different set in the same file |
+| `LlmFailure.code` | missing in antigravity's `SAFETY` branch |
+| empty completion | throw (AG) vs in-band `finish{kind:'error'}` (DI) |
+| cut preservation | present only in opencode-v2 |
+| block index | fixed constants (OC) vs first-seen (AG, DI) |
+| SSE malformed record | skip (AG), fail (DI), null (OC) |
+
+**After (specification, no code yet):**
+`docs/SHARED-STREAM-PIPE-SPEC.md` defines one module — `readSseEvents`, `normalizeStream`,
+`fail`, `emptyCompletion`, `cutCompletion` — owned by this track and exported as
+`@nolit/dsh-custom-router/stream`. Providers differ only through a stream descriptor and hooks
+(`readEvent` mandatory; `classifyText`, `mapFinish`, `usageFrom`, `closeBlock`, `onMalformed`,
+`onCut`, `onEmpty` optional). The pipe registers no adapter and holds no retry loop, so R0
+(no second routing table) still holds.
+
+**Rollout corrected (same day, owner instruction):** the first draft put `dsh-opencode-v2` as
+the P2 migration target. That is withdrawn. The order is now **P1 core (no consumer) → P2
+`dsh-antigravity` (primary testbed: low live use, and the only measured web-auth upper
+pipeline) → P3 `dsh-deepinfra` (pure API parity) → P4 `dsh-opencode-v2` (last, highest traffic,
+owns the optional `classifyText` hook)**. The rationale is recorded in
+`docs/SHARED-STREAM-PIPE-SPEC.md` §1 and §7. No migration has started.
+
+**Documents corrected, not just appended:**
+`CUSTOM-ROUTER-ARCHITECTURE.md` §3.1 and M3, `CUSTOM-ROUTER-PROTOCOL-STANDARD.md` §2.1/§5/§7,
+`CUSTOM-ROUTER-SERVICE-SPEC.md` B2, `WEB-AUTH-PIPELINE-ENGINE.md` verdict rows,
+`README-OWNERSHIP.md`, `PLAN-AND-USAGE-SPEC.md` coverage matrix,
+`dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md` §4.1 (recipe parser = `classifyText` hook).
+
+**Known deltas registered (not fixed):** D1–D8 in `CUSTOM-ROUTER-PROTOCOL-STANDARD.md` §7.
+
+**Verification surface built (same day, before P3):** the owner asked whether this package has a
+callable CLI. Measured answer: **no `bin`, no mount** — it is a library, and its only executables
+were `npm test` and `npm run check`. A unit suite cannot prove the property that matters for a
+shared component (that it dispatches with **none of the vendor plugins loadable**), so
+`scripts/verify-stream.mjs` was added with `npm run verify:stream` /
+`verify:stream:json` / `verify` (check + test + verifier). Measured: **7/7 dispatch cases,
+0 vendor module loads**, and a negative control confirms the resolver really blocks a vendor
+import. The same `npm run verify` was then run from a **copied sandbox with no sibling tracks and
+no `node_modules`** and still passed 71 tests + 7/7 dispatch, which is the standalone proof.
+`dsh-antigravity` was exercised with its profile switches off (`enabled`, `modelServing`,
+`cliWorker`, `usagePill` all `false`, verified in the composed `--dump-config`); the pipe still
+produced a correct terminal `finish` in that state. No `bin`, no mount, no version change.
+
+**P2 completed (same day):** `@nolit/dsh-antigravity` is the first consumer of
+`@nolit/dsh-custom-router/stream`. Its local SSE reader, usage writer, finish table and block
+emitter were replaced by the shared pipe; the package now contributes only
+`lib/stream-contract.js` (descriptor + `readEvent` + `usageFrom` projection). Measured:
+antigravity **144/144** (was 118), shared core 71/71, deepinfra and opencode-v2 still import
+nothing from the pipe (158 + 7 skip, 453). The shared reader gained `emitDone` and `Response`
+acceptance to keep the published legacy contract, and `normalizeStream` gained an `onUsage`
+sink so a ledger records usage before the host stops iterating. D3/D4/D6/D8 closed for this
+track. D2 was **withdrawn as a defect**: the provider 403s without its CLI `user-agent`, so the
+host attribution string and the provider identity genuinely collide — recorded as a declared
+conflict, not a missing call.
+
+**P1 implemented (same day, owner-approved sequence):** `lib/stream/` now exists with
+`normalizeStream`, `readSseEvents`, `usageFrom`/`usageFromProjection`, `finishReasonFor`, and the
+failure factories, exported as `@nolit/dsh-custom-router/stream`. Measured: **71 tests pass**
+(14 SSE framing, 12 usage, 11 finish/failure, 20 pipeline, 14 pre-existing bridge tests);
+`npm run check` passes over 12 files; **zero vendor consumers** (`grep` finds no import in any
+`dsh-*` track); the three vendor suites are unchanged — antigravity 118, deepinfra 158 + 7 skip,
+opencode-v2 453. The module imports no `dsh-llm`, registers no adapter, and contains no retry
+loop, so R0 holds. P2 (`dsh-antigravity`) is next and is not started.
+
+**Verification:** `npm run docs:check` (root) OK — 9 subproject indexes current, 1,332 links
+checked. No code, profile, service, or version changed.
+
+## 0.0.1-rc.1 — 2026-11-07 (OpenCodex bridge becomes runtime code)
+
+**Owner instruction:** the OpenCodex bridge must not be duplicated across vendor plugins, and
+the Custom Router track must document it so a future service does not re-derive it.
+
+**Before (measured):** `dsh-opencode-v2`, `dsh-antigravity` and `dsh-deepinfra` each carried a
+private `lib/opencodex-models.js`. Three consequences were measured:
+
+1. each copy read its own server URL and key id, so the bridge had no single configuration;
+2. the shared DSH client key was scoped per provider, so **the last plugin to save overwrote
+   the other providers' scope** — a real silent revocation;
+3. the same id-projection bugs had to be fixed three times.
+
+**After:** `lib/` in this track is the only implementation.
+
+| Module | Responsibility |
+| :--- | :--- |
+| `config.js` | `OPENCODEX_BRIDGE_URL`, `OPENCODEX_BRIDGE_KEY_ID`, management token |
+| `opencodex-client.js` | `GET/PUT /api/selected-models`, `PATCH /api/keys` |
+| `selection-projector.js` | DSH route → OpenCodex id, incl. Antigravity family aliases |
+| `scope-aggregator.js` | union across providers, and the refusal to guess |
+| `selection-sync.js` | ordering, re-read, failure propagation |
+| `vendor-bridge.js` | the only import vendor plugins use |
+
+Vendor plugins keep a one-function seam and their own checklist UI. The three vendor
+`opencodexModelsUrl` / `opencodexClientKeyId` settings were removed: a per-vendor copy of shared
+state is the defect, not the fix.
+
+**Measured behavior split recorded in `docs/OPENCODEX-BRIDGE.md`:** `selectedModels` and
+`disabledModels` are catalog visibility only; a direct call to an unselected, blocklisted model
+still returned HTTP 200. Authorization exists only on a configured key, and only on a
+non-loopback bind. The bridge therefore writes both, and skips the key write with a reason when
+any provider is unrestricted rather than silently denying it.
+
+**Measured (2026-11-07):**
+
+| Check | Result |
+| :--- | :--- |
+| this track `npm test` | 14/14 pass |
+| `dsh-opencode-v2` | 453/453 pass |
+| `dsh-deepinfra` | 158 pass, 7 skip, 0 fail |
+| `dsh-antigravity` | 118/118 pass |
+| isolated real DSH boot with the bridge linked | **0** `did not activate` |
+| live DSH service | not restarted; profile not edited |
+
+**Added:** `scripts/link-custom-router.mjs` at the workspace root. A linked plugin is loaded
+from its real path and DSH resolves a bare import through the profile's `node_modules` only for
+declared peers, so the peer declaration alone is not enough; the script writes only the
+gitignored workspace-root link.
+
+**Not done:** no Settings-Models (Custom) surface, no client half, no real mount of that surface,
+no scoped key issued, and no `rc#` bump beyond the existing `0.0.1-rc.1`.
 
 ## 0.0.1-rc.1 — 2026-11-06 (specification only)
 

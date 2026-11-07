@@ -200,7 +200,7 @@ proves the shape.
 | :--- | :--- | :--- | :--- |
 | M1 | entry `apply(ctx, config)` | registers exactly one provider id with `ctx.llm.registerAdapter([id], adapter)`; holds the disposer | all 3 `lib/index.js` / `http.js:2408` |
 | M2 | `LlmAdapter` subclass | `providerInfo`, `listModels`, `resolveModel`, `prepareCall`, `stream(): AsyncIterable<StreamChunk>`; `attributionHeaders()` | `adapter.js` in all 3 |
-| M3 | wire + SSE mapper | maps provider deltas into `text-delta / reasoning-delta / tool-call-delta(argumentsDelta) / usage / finish`; `usage` before `finish`, nothing after | `wire.js`+`sse.js`+`map.js` |
+| M3 | wire + SSE mapper | maps provider deltas into `text-delta / reasoning-delta / tool-call-delta(argumentsDelta) / usage / finish`; `usage` before `finish`, nothing after. **One shared implementation with hooks** — [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md) | `dsh-custom-router/lib/stream` (target); today `wire.js`+`sse.js`+`map.js`+`adapter.js` per service |
 | M4 | credential resolver | explicit precedence chain, `role('secret')` for typed keys, no ad-hoc key files where a settings field exists | `settings.js` / `auth.js` / `http.js:1180` |
 | M5 | catalog source | live or TTL-cached, provider-owned; publishes model ids, context, reasoning, capabilities | `catalog.js` / `catalog-cache.js` |
 | M6 | service-specific facts | plan / quota / promotion / cost — the three gaps the standard does not serve | `plans.js`, `quotaSummary()`, `promotionOf()`, `cost.js` |

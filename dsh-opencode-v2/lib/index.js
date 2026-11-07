@@ -66,6 +66,10 @@ export const DEFAULT_MODEL = 'opencode-go/minimax-m3.1-flash#low'
 
 /** Schemastery schema: defaults live here; cordis.yml and GUI edits are validated against it. */
 export const Config = Schema.object({
+  /** Master switch: off removes the delegation tool, `/ocode`, `cli_worker` and the subagent provider. */
+  enabled: Schema.boolean().default(true).volatile(),
+  /** CLI switch: off removes the `opencode` tool, `/ocode` and `cli_worker`; the subagent surface stays. */
+  cli: Schema.boolean().default(true).volatile(),
   opencodePath: Schema.string().default('opencode').volatile(),
   auto: Schema.boolean().default(true).volatile(),
   model: Schema.string().default(DEFAULT_MODEL).volatile(),
@@ -91,6 +95,22 @@ export const Config = Schema.object({
   workerTimeoutMs: Schema.number().default(900000).volatile(),
   workerMaxOutputBytes: Schema.number().default(262144).volatile(),
   workerArtifactLimit: Schema.number().default(100).volatile(),
+  /** Backends this profile disables for the CLI worker (chat route unaffected). */
+  workerDisabledBackends: Schema.array(Schema.union(WORKER_BACKENDS)).default([]).volatile(),
+  /** Per-backend executable override (falls back to `opencodePath` / the backend name). */
+  workerBackendPaths: Schema.dict(Schema.string()).default({}).volatile(),
+  /** Per-backend default model id. */
+  workerBackendModels: Schema.dict(Schema.string()).default({}).volatile(),
+  /** Per-backend default reasoning effort. */
+  workerBackendEfforts: Schema.dict(Schema.string()).default({}).volatile(),
+  /** Per-backend default execution mode. */
+  workerBackendModes: Schema.dict(Schema.string()).default({}).volatile(),
+  /**
+   * backend -> already-mounted subagent provider name. When that provider is
+   * registered the worker reports `provider-mounted` and spawns nothing. Empty
+   * by default: the batch shape stays available while the provider is mounted.
+   */
+  yieldToProviders: Schema.dict(Schema.string()).default({}).volatile(),
   // ---- subagent surface (merged from @nolit/dsh-subagent-opencode) --------
   /** Delegation provider. false leaves the chat route and CLI worker intact. */
   subagent: Schema.boolean().default(true).volatile(),
@@ -445,6 +465,21 @@ export async function apply(ctx, config) {
   // child session and the explicit refusal — never an untracked spawn.
   let subagents = null
 
+  // Surface gates (2026-11-07, unified with dsh-antigravity): `enabled` is the
+  // master, `cli` gates the delegation tool + `/ocode` + `cli_worker`, and
+  // `subagent` keeps owning only the delegation provider. Registration happens
+  // once at load, so a settings change applies on the next plugin load.
+  const cfg = (key, fallback) => {
+    const entry = config?.[key]
+    if (entry !== null && typeof entry === 'object' && typeof entry.get === 'function') {
+      const value = entry.get()
+      return value === undefined ? fallback : value
+    }
+    return entry === undefined ? fallback : entry
+  }
+  const masterOn = cfg('enabled', true) !== false
+  const cliOn = masterOn && cfg('cli', true) !== false
+
   // Resolved lazily so the module stays importable (and unit-testable)
   // without the host toolchain installed; the host always provides it.
   const { defineTool } = await import('@deepseek-ai/dsh-tools')
@@ -515,8 +550,10 @@ export async function apply(ctx, config) {
   // already own the `opencode` tool name. The host throws on duplicate tool
   // registration, which would abort the whole plugin row; yield the tool and
   // keep the commands/worker half usable instead.
-  const existing = typeof ctx?.tools?.get === 'function' ? ctx.tools.get('opencode') : undefined
-  if (existing) {
+  const existing = cliOn && typeof ctx?.tools?.get === 'function' ? ctx.tools.get('opencode') : undefined
+  if (!cliOn) {
+    // CLI surface switched off by `enabled`/`cli`: the tool and `/ocode` are absent.
+  } else if (existing) {
     ctx?.logger?.warn?.(
       'dsh-opencode-v2: tool "opencode" is already registered by another plugin; '
       + 'skipping tool registration (commands and cli_worker still load).',
@@ -532,6 +569,7 @@ export async function apply(ctx, config) {
   }
 
   ctx.inject(['commands'], (commandCtx) => {
+    if (!cliOn) return
     commandCtx.commands.register({
       name: 'ocode',
       input: { hint: '<task>   (/ocode models lists the catalog)' },
@@ -604,9 +642,9 @@ export async function apply(ctx, config) {
     })
   })
 
-  // The isolated batch worker ships with the same plugin: one install enables
-  // the chat route, the `opencode` delegation tool, and `cli_worker` together.
-  await registerCliWorker(ctx, config)
+  // The isolated batch worker ships with the same plugin. It belongs to the CLI
+  // surface, so `enabled`/`cli` gate it alongside the tool and `/ocode`.
+  if (cliOn) await registerCliWorker(ctx, config)
 
   // Subagent delegation provider, merged from @nolit/dsh-subagent-opencode
   // (2026-11-05) so one package owns every OpenCode surface. Gated on its own
@@ -623,7 +661,7 @@ export async function apply(ctx, config) {
     const clear = () => {
       if (subagents === service) subagents = null
     }
-    if (config.subagent.get() === false) return clear
+    if (!masterOn || config.subagent.get() === false) return clear
     const providerName = config.subagentProviderName.get() || 'opencode'
     // A profile that still carries the superseded package must not lose a
     // provider silently: yield with a warning so the operator removes the old

@@ -1,11 +1,11 @@
 # @nolit/dsh-opencode-v2
 
 <!-- skeleton:
-version: 4.1
+version: 4.2
 kind: readme
 status: active
-updated: 2026-11-04
-summary: Operator manual for @nolit/dsh-opencode-v2 — a native DSH LLM adapter that streams from OpenAI-compatible backends (OpenCode Go) while the DSH agent loop keeps ownership of tools, history and workspace. Covers the three provided surfaces (opencode-http-agent route, opencode tool + /opencode command, cli_worker), Tier A request guards derived from deepseek-recipe, the legacy-provider collision guard, verified prerequisites (CLI version, web auth and token store, PATH resolution), the release ladder, and installation. Engineering history lives in CHANGELOG.md.
+updated: 2026-11-07
+summary: Operator manual for @nolit/dsh-opencode-v2 — a native DSH LLM adapter that streams from OpenAI-compatible backends (OpenCode Go) while the DSH agent loop keeps ownership of tools, history and workspace. Covers the three switchable surfaces (model serving/router via opencode-http-agent, subagent provider, CLI: opencode tool + /ocode + cli_worker), their on/off switches, Tier A request guards derived from deepseek-recipe, the legacy-provider collision guard, verified prerequisites (CLI version, web auth and token store, PATH resolution), the release ladder, installation, and the measured OpenCode 2.2.6 compatibility boundary. Engineering history lives in CHANGELOG.md.
 -->
 
 OpenCode models inside DeepSeek Harness, served **natively** through the DSH model
@@ -14,7 +14,7 @@ registry.
 | | |
 |---|---|
 | Package | `@nolit/dsh-opencode-v2` |
-| Version | `0.0.1-rc.1` |
+| Version | `0.0.1-rc.2` |
 | Host | DSH `>=0.2.2-alpha.2 <0.3.0` |
 | History | [CHANGELOG.md](CHANGELOG.md) |
 | Release line | `0.0.1-rc.N` (owner normalization 2026-11-05); the retired `0.0.2` name was the pre-normalization line |
@@ -70,13 +70,23 @@ DSH agent loop ──► opencode-http-agent ──► {baseURL}/chat/completion
                                /api/model · /api/provider · /api/credential
 ```
 
-## Provided capabilities
+## Surfaces and switches
 
-| Surface | Row | What it does |
-|---|---|---|
-| **`opencode-http-agent`** | `dsh-opencode-v2-http` | The streaming model route. Appears in the prompt model picker. Recommended path. |
-| **`opencode` tool** + **`/opencode`** | `dsh-opencode-v2` | Delegates one task to `opencode run` in a child process and returns its final text. |
-| **`cli_worker`** + **`/worker`** | `dsh-opencode-v2` | One-shot isolated batch runs of `opencode` / `codex` / `claude` with artifact collection. |
+Three surfaces, each independently switchable.
+
+| # | Surface | What it serves | On/off | Default |
+|---|---|---|---|---|
+| 1 | **Model serving / router** | the `dsh-opencode-v2-http` row (`opencode-http-agent`): the streaming conversation route, the normalised pipe and the live catalog | `modelServing: false` (on the `…-http` row); the row's `disabled` also works | on |
+| 2 | **Subagent** | the `opencode` subagent provider + the `subagent_opencode` row (`@deepseek-ai/dsh-tool-subagent`) | `subagent: false` | on |
+| 3 | **CLI** | the `opencode` tool (delegation), the `/ocode` command and the `cli_worker` tool | `cli: false` removes all three; `workerEnabled: false` narrows it to `cli_worker` only | on |
+
+`enabled` is the master switch for the `dsh-opencode-v2` row: off removes the CLI surface and the
+subagent provider (the `…-http` row has its own `modelServing` switch). Switch changes apply on the
+next plugin load.
+
+Auxiliary, not surfaces of their own: `yieldToProviders`, the per-backend worker gates
+(`workerDisabledBackends`, `workerBackendPaths`, `workerBackendModels`, `workerBackendEfforts`,
+`workerBackendModes`) and `/ocode models`.
 
 The route is what you want for normal work: it streams, it carries reasoning, and DSH
 owns the loop. The two tools are for delegating a self-contained job to an external CLI.
@@ -203,6 +213,31 @@ package. A second copy of the same package in one profile is a mount error the h
 itself (duplicate tool registration), which is the honest place for it.
 
 
+## OpenCode 2.2.6 measurement (2026-11-07)
+
+The host is **not** upgraded: the canonical `~/.bun/bin/opencode` and the running
+`opencode serve --service` process both report **v2.2.0**. npm's `latest` tag reports
+**2.2.6**. The legacy 0.0.55 tree and stale OpenCode caches were cleaned on 2026-11-07;
+`~/.opencode` is now absent and `~/.bun/bin/opencode` is the only OpenCode launcher on
+`PATH`.
+
+A 2.2.6 release binary was measured in throwaway `/tmp` and isolated `DSH_HOME`
+sandboxes. It passed the plugin's control-plane mapping (53-route catalog shape, provider
+metadata, credential shape), the real `run --format json` parser path, a real DSH mount,
+and a browser boot with zero activation warnings. A successful adapter data-plane
+generation was **not** measured: the free route returned HTTP 429 `FreeUsageLimitError`.
+`session export`, tool use, background-job waiting, and SIGTERM cancellation were also not
+exercised.
+
+Read the full boundary and cleanup gate before changing live state:
+
+- [OpenCode 2.2.0 → 2.2.6 delta](docs/OPENCODE-220-TO-226-DELTA.md)
+- [2.2.6 job/session integration roadmap](docs/OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md)
+- [Protocol flexibility gap (OpenAI-only vs 2.2.x)](docs/OPENCODE-PROTOCOL-FLEXIBILITY-GAP.md)
+- [OpenCode 2.2.6 compatibility measurement](docs/OPENCODE-226-COMPATIBILITY-MEASUREMENT.md)
+- [Executed cleanup log](docs/OPENCODE-INSTALL-CLEANUP-LOG-20261107.md)
+- [2.2.6 upgrade runbook (not yet executed)](docs/OPENCODE-INSTALL-CLEANUP-RUNBOOK.md)
+
 ## Reference — measured OpenCode v2.2.0 facts
 
 | Fact (measured) | Consequence in this plugin |
@@ -243,9 +278,9 @@ Both halves are plain hand-written ESM — there is **no build step**.
 **`lib/index.js` → `@nolit/dsh-opencode-v2`** (row id `dsh-opencode-v2`)
 - the **`opencode` tool** — delegates a task to `opencode run`, bounded capture,
   then over-fetches `session export` to fill real token counts;
-- the **`/opencode` command** — registered when a `commands` service is composed;
+- the **`/ocode` command** — registered when a `commands` service is composed;
 - the **`cli_worker` tool** — one-shot isolated `opencode`/`codex`/`claude` batch
-  runs with artifact collection (§2f), plus `/worker`.
+  runs with artifact collection (§2f). There is no `/worker` command.
 
 Parameters: `prompt` (required), `cwd`, `model`, `agent`, `session`,
 `continueLast`, `auto`, **`thinking`**, **`title`**, **`files`**, `timeoutMs`.
@@ -449,8 +484,14 @@ when `workerEnabled` is true (default):
 It never registers an LLM route and never appears in the model picker. Config:
 `workerEnabled`, `workerBackend` (default `opencode`), `workerTimeoutMs`
 (default 900000), `workerMaxOutputBytes` (default 262144), `workerArtifactLimit`
-(default 100). A `/worker <task>` command runs the configured backend in the
-host's working directory.
+(default 100). Per-backend gates: `workerDisabledBackends`, `workerBackendPaths`,
+`workerBackendModels`, `workerBackendEfforts`, `workerBackendModes`. The tool has no slash-command
+companion: `workerEnabled` gates `cli_worker` alone.
+
+Set `yieldToProviders` (backend → provider name) when another plugin already serves that CLI: the
+worker then reports `errorKind: 'provider-mounted'` with the provider name and spawns nothing, so the
+same CLI never runs twice for one request. Empty by default, because the batch shape is usable while
+the provider is mounted.
 
 
 ## Bundle layer
@@ -461,7 +502,7 @@ the settings namespace from the id):
 
 | row id | name | role |
 |---|---|---|
-| `dsh-opencode-v2` | `@nolit/dsh-opencode-v2` | `opencode` tool, `/opencode`, `cli_worker`, `/worker` |
+| `dsh-opencode-v2` | `@nolit/dsh-opencode-v2` | `opencode` tool, `/ocode`, `cli_worker` |
 | `dsh-opencode-v2-http` | `@nolit/dsh-opencode-v2/http` | **autonomous model router** (`opencode-http-agent`) |
 
 `./provider` is exported for the batch-worker backend but has **no `apply`** and
@@ -570,9 +611,10 @@ is copied from upstream documentation.
 
 | Requirement | Measured on this host | Verified with |
 |---|---|---|
-| Binary | `opencode v2.2.0` | `/home/minami/.bun/bin/opencode --version` |
+| Binary | `opencode v2.2.0` (npm `latest` is 2.2.6; not installed on this host) | `/home/minami/.bun/bin/opencode --version` |
 | Install shape | bun shim -> `@opencode/cli/bin/opencode.exe` | `ls -la /home/minami/.bun/bin/opencode` |
 | Minimum for this plugin | v2.2.0 | `GET /api/info` reports `version`; the plugin refuses v1 flags |
+| 2.2.6 status | isolated compatibility measured; live upgrade not performed | [2.2.6 measurement](docs/OPENCODE-226-COMPATIBILITY-MEASUREMENT.md) |
 
 ```bash
 bun install -g @opencode/cli        # measured install on this host
@@ -631,7 +673,7 @@ test -x /home/minami/.bun/bin/opencode && echo ok
 
 # 3. the control plane answers
 /home/minami/.bun/bin/opencode serve --port 4096 &
-curl -s http://127.0.0.1:4096/api/info          # {"version":"2.2.0",...}
+curl -s http://127.0.0.1:4096/api/info          # {"version":"2.2.0",...} (2.2.6 after an approved upgrade)
 
 # 4. a credential is present AND active
 curl -s http://127.0.0.1:4096/api/credential    # look for active:true + oauth/key

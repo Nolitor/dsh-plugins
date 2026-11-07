@@ -160,3 +160,85 @@ test('a closed reasoning block carries the accumulated reasoning text', async ()
   assert.ok(reasoningEnd, 'the reasoning block must be closed')
   assert.equal(reasoningEnd.block.text, 'thinking…')
 })
+
+// ---- P2: the adapter now emits through the shared downstream pipe ----------
+
+test('a filtered finish is a terminal error with a code, not a clean stop', async () => {
+  const { adapter } = makeAdapter([
+    textSse([{ response: { candidates: [{ content: { parts: [{ text: 'partial' }] }, finishReason: 'SAFETY' }] } }]),
+  ])
+  const chunks = []
+  for await (const chunk of adapter.stream(requestOptions())) chunks.push(chunk)
+  const finish = chunks.at(-1)
+  assert.equal(finish.type, 'finish')
+  assert.equal(finish.reason.kind, 'error')
+  assert.equal(finish.reason.failure.code, 'CONTENT_FILTERED')
+  assert.equal(typeof finish.reason.failure.message, 'string')
+})
+
+test('an empty completion is an in-band terminal error, not a throw', async () => {
+  const { adapter } = makeAdapter([textSse([{ response: { candidates: [{ content: { parts: [] }, finishReason: 'STOP' }] } }])])
+  const chunks = []
+  for await (const chunk of adapter.stream(requestOptions())) chunks.push(chunk)
+  assert.equal(chunks.at(-1).reason.kind, 'error')
+  assert.equal(chunks.at(-1).reason.failure.code, 'EMPTY_RESPONSE')
+})
+
+test('a cut after partial text keeps the partial block and the original cause', async () => {
+  // A real socket cut delivers the bytes already in flight, then fails the read.
+  // `controller.error()` in `start()` would discard the queued chunk instead, so
+  // the failure is raised on the pull AFTER the first frame was handed over.
+  const encoder = new TextEncoder()
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(frame({ response: { candidates: [{ content: { parts: [{ text: 'so far' }] } }] } })))
+    },
+    pull(controller) {
+      controller.error(Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }))
+    },
+  })
+  const { adapter } = makeAdapter([new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } })])
+  const chunks = []
+  for await (const chunk of adapter.stream(requestOptions())) chunks.push(chunk)
+  const textEnd = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block.type === 'text')
+  assert.ok(textEnd, 'the partial text block must still be closed')
+  assert.equal(textEnd.block.text, 'so far')
+  assert.equal(chunks.at(-1).reason.kind, 'error')
+  assert.equal(chunks.at(-1).reason.failure.code, 'ECONNRESET')
+})
+
+test('a complete functionCall produces one delta and a closed block', async () => {
+  const { adapter } = makeAdapter([
+    textSse([{ response: { candidates: [{ content: { parts: [{ functionCall: { name: 'read_file', args: { path: '/tmp/x' }, id: 'g1' } }] }, finishReason: 'STOP' }] } }]),
+  ])
+  const chunks = []
+  for await (const chunk of adapter.stream(requestOptions())) chunks.push(chunk)
+  const delta = chunks.find((chunk) => chunk.type === 'tool-call-delta')
+  assert.equal(delta.id, 'g1')
+  assert.equal(delta.name, 'read_file')
+  assert.equal(delta.argumentsDelta, '{"path":"/tmp/x"}')
+  const end = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+  assert.deepEqual(end.block, { type: 'tool-call', id: 'g1', name: 'read_file', arguments: '{"path":"/tmp/x"}' })
+  assert.deepEqual(chunks.at(-1).reason, { kind: 'tool-calls' })
+})
+
+test('usage arrives before finish and nothing follows the finish', async () => {
+  const { adapter } = makeAdapter([
+    textSse([{ response: { candidates: [{ content: { parts: [{ text: 'x' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 1 } } }]),
+  ])
+  const chunks = []
+  for await (const chunk of adapter.stream(requestOptions())) chunks.push(chunk)
+  const types = chunks.map((chunk) => chunk.type)
+  assert.equal(types.at(-1), 'finish')
+  assert.equal(types.indexOf('usage'), types.length - 2)
+})
+
+test('indexes are allocated in first-seen order, not from fixed constants', async () => {
+  const { adapter } = makeAdapter([
+    textSse([{ response: { candidates: [{ content: { parts: [{ text: 'think', thought: true }, { text: 'answer' }] }, finishReason: 'STOP' }] } }]),
+  ])
+  const chunks = []
+  for await (const chunk of adapter.stream(requestOptions())) chunks.push(chunk)
+  const starts = chunks.filter((chunk) => chunk.type === 'block-start').map((chunk) => [chunk.index, chunk.blockType])
+  assert.deepEqual(starts, [[0, 'reasoning'], [1, 'text']])
+})

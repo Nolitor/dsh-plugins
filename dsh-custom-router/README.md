@@ -4,18 +4,117 @@
 version: 0.0.1-rc.1
 kind: readme
 status: active
-updated: 2026-11-06
-summary: Specification-only track for the Custom Router service: a plugin-owned Settings-Models (Custom) surface and the standardised per-service model-serving contract.
+updated: 2026-11-07
+summary: Custom Router track: the single-owner OpenCodex bridge library, plus the specification for a plugin-owned Settings-Models (Custom) surface and the standardised per-service model-serving contract.
 -->
 
 | | |
 | :--- | :--- |
 | Package | `@nolit/dsh-custom-router` |
-| Version | `0.0.1-rc.1` (owner scheme: plugin versions start here; `rc#` moves only by owner instruction) |
-| Status | **specification only** — nothing is mounted, no `cordis.patch.yml`, no runtime code |
-| Docs | [`docs/`](./docs) — seven measured specs; document skeleton versions follow the `rc.#` history scheme (separate from the plugin version) |
+| Version | `0.0.1-rc.2` (numeric part owner-gated; `rc#` is the agent history marker) |
+| Status | **shared library + specifications.** The OpenCodex bridge in `lib/` is implemented and tested; the Settings-Models (Custom) surface is still spec-only and mounts nothing |
+| Docs | [`docs/`](./docs) — measured specs plus the bridge contract and runbook; document skeleton versions follow the `rc.#` history scheme (separate from the plugin version) |
 | History | [`CHANGELOG.md`](./CHANGELOG.md) |
 | Parent workspace | [`docs/RULES.md`](../docs/RULES.md) |
+
+## Shared downstream stream pipe (P1, 2026-11-07)
+
+`lib/stream/` is the workspace's **one implementation** of everything between a decoded
+provider payload and the host's last `StreamChunk`: SSE framing, block lifecycle, first-seen
+index allocation, the six-way finish table, the disjoint usage writer, the mandatory
+`{message, code}` failure shape, and the empty/cut/abort terminal policy. Providers differ only
+through a descriptor plus hooks, so a vendor quirk never edits the core.
+
+Exported as `@nolit/dsh-custom-router/stream`. It registers no adapter, holds no provider table,
+contains no retry loop, and imports no `dsh-llm` — the router engine stays entirely the host's.
+
+## Provider preset declarations (S4, 2026-11-07)
+
+`lib/presets.js` (exported as `@nolit/dsh-custom-router/presets`) holds the M13–M16 surface contract
+as **frozen data** plus `validatePreset` / `validatePresets`: the model route, subagent provider, CLI
+worker (async or sync), tool/command names, optional skill, the protocol lane, and the usage/plan
+record for each provider. It registers nothing and touches no context — the mounted preset surface
+(M10) will read these declarations.
+
+**Drift gate:** `npm run verify:presets` (owner decision 2026-11-07) boots an isolated `DSH_HOME`,
+reads the runtime registries (providers, tools, commands) and each vendor's `Config.dict`, then
+compares them with the declarations. It fails on a phantom command, a missing tool, or a switch that
+does not exist in the module the preset names. Nothing registers during the check — the gate only
+reads.
+
+**Catalog & price layers:** `lib/catalog.js` merges the three sources field by field
+(`upstream` pi-ai snapshot → `probe` API/web-auth list → `override` preset/local data, 3 > 2 > 1),
+and `lib/cost.js` computes spend with the upstream formula (per-1M rates, tiers, 1h cache write 2×)
+because DSH drops `usage.cost`.
+
+**Vendor bridges:** three handlers — antigravity (OAuth + fingerprint RPC), opencode (daemon
+`/api/model` Basic auth), deepinfra (standard OpenAI listing). Modules resolve through the profile
+(`lib/vendor-modules.js`); `apply({profileDir})` builds the bridges and provides the `customRouter`
+seam `{route, probe, merge}`.
+
+**Antigravity bridge:** `lib/bridges/antigravity.js` reuses the vendor's TokenProvider /
+resolveEndpoint / parseCatalog exports, keeps the measured `antigravity/cli/…` User-Agent (a 403
+otherwise), and exposes `tokenPath` / `userAgent` / `extraHeaders` overrides through
+`vendorConfig.antigravity`.
+
+**Usage & quota:** `lib/usage.js` binds adapter usage to cost + billing and turns plan windows into
+readings (`percent-consumed` / `fraction-remaining`, en/ko); vendor probes connect through an explicit
+handler or the host discovery seam.
+
+**Plan & billing:** `lib/plan.js` judges subscription/flat/pay-per-token plans from the preset's
+`usage.billing.mode` and keeps `unknown` visible (`billingOutcome()` returns `null`, never `0`).
+
+**Routing & probe:** `lib/routing.js` resolves a model id to a preset (explicit → provider →
+`modelPrefixes`, ambiguity refused); `lib/probe.js` executes layer-2 endpoint probes for the
+OpenAI/Anthropic shapes and refuses vendor-owned RPCs.
+
+**Plugin body:** `lib/index.js` (`@nolit/dsh-custom-router/plugin`) applies presets by mounting each
+active preset's own package plugin as a child (`ctx.plugin`) and disposing exactly that child when
+the preset is turned off. It registers no adapter itself and mounts nothing by default; a profile
+must opt in per preset (`presets: { antigravity: true }`). The package still ships **no
+`cordis.patch.yml` / bundle row**, so linked profiles keep mounting the vendor plugins directly until
+the migration step lands.
+
+### Commands
+
+| Command | What it proves |
+| :--- | :--- |
+| `npm test` | pipe behaviour per module — **71 tests** |
+| `npm run check` | every shipped module parses — 12 files |
+| `npm run verify:stream` | the real pipe dispatches two independent provider hook sets while **all three vendor plugins are blocked at module resolution** — **7 cases, 0 vendor loads** |
+| `npm run verify:stream:json` | the same, machine-readable |
+| `npm run verify` | `check` + `test` + `verify:stream` |
+
+There is **no `bin`** and no profile mount by design: this package is a library plus
+specifications, and mounting it would register no provider while making the ownership map
+wrong.
+
+### Adoption state
+
+| Track | Consumer of the pipe | Verified |
+| :--- | :--- | :--- |
+| `dsh-antigravity` | **yes** — `lib/stream-contract.js` is its only binding | 144/144 |
+| `dsh-deepinfra` | no | 158 pass + 7 skip, unchanged |
+| `dsh-opencode-v2` | no | 453/453, unchanged |
+
+## Runtime code (added 2026-11-07)
+
+`lib/` is the **single owner of the OpenCodex bridge**. Three vendor plugins previously each
+carried a private copy of this client; the duplicate copies produced a real defect — the last
+plugin to save overwrote the other providers' shared-key scope.
+
+| Module | Responsibility |
+| :--- | :--- |
+| `lib/config.js` | bridge URL, shared key id, management token |
+| `lib/opencodex-client.js` | management HTTP calls |
+| `lib/selection-projector.js` | DSH id → OpenCodex id |
+| `lib/scope-aggregator.js` | shared-key scope union and skip reasons |
+| `lib/selection-sync.js` | write ordering and failure policy |
+| `lib/vendor-bridge.js` | the only entry point vendor plugins import |
+
+Contract: [docs/OPENCODEX-BRIDGE.md](./docs/OPENCODEX-BRIDGE.md) ·
+Runbook: [docs/OPENCODEX-OPERATIONS.md](./docs/OPENCODEX-OPERATIONS.md) ·
+Ownership: [docs/README-OWNERSHIP.md](./docs/README-OWNERSHIP.md)
 
 ## What this track owns
 

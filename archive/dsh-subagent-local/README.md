@@ -8,6 +8,13 @@ updated: 2026-11-05
 summary: Operator manual for the experimental delegate_local tool (agy, opencode, codex, claude backends), its config, prompt transport, artifacts and collision-yield policy.
 -->
 
+> ## ⚠️ ARCHIVED / SUPERSEDED — do not install this package
+>
+> Absorbed into `@nolit/dsh-antigravity` (synchronous `agy_cli` batch tool, `cliBatch`) and
+> `@nolit/dsh-opencode-v2` (the `cli_worker` per-backend gates and measured run facts), per owner
+> decision 1(a) 2026-11-07. Archived 2026-11-07; removed from the live `web` profile.
+
+
 Experimental DeepSeek Harness tool plugin. It runs **one self-contained task to completion in one
 isolated local coding CLI** and returns the answer text plus exit, usage and artifact metadata:
 a CLI-worker the model can call when no integrated provider is mounted for a backend.

@@ -35,10 +35,12 @@ import { DEFAULT_EFFORT, DEFAULT_MODE, DEFAULT_MODEL, EFFORTS, MODES } from './b
 import { parseAccount, parseCatalog, splitEffort } from './catalog.js'
 import { configValue, resolveEndpoint } from './settings.js'
 import { listAgyModels } from './worker.js'
+import { BATCH_TOOL_NAME, batchToolDefinition } from './cli-batch.js'
 import { startCliChild } from './cli-activation.js'
 import { AntigravitySubagentProvider } from './subagent.js'
 import { bootBeacon } from './beacon.js'
 import { createLedger, registerRoutes } from './server.js'
+import { syncAntigravitySelection } from './opencodex-models.js'
 
 /** Provider route owned by the model surface. */
 export const PROVIDER_ID = 'antigravity'
@@ -156,6 +158,19 @@ export const Config = Schema.object({
   extraArgs: Schema.array(Schema.string()).default([]).volatile(),
   artifactLimit: Schema.number().default(100).volatile(),
   workerEnabled: Schema.boolean().default(true).volatile(),
+  /**
+   * Enable the synchronous one-shot batch tool (`agy_cli`). Off by default:
+   * the tracked-child shape is the owner's default (2026-11-05), and this
+   * switch is the explicit opt-in for the bare-process batch shape ported
+   * from `@nolit/dsh-subagent-local` (2026-11-07).
+   */
+  cliBatch: Schema.boolean().default(false).volatile(),
+  /**
+   * Optional subagent provider name this plugin's backend is served by. When it
+   * is mounted, `agy_cli` reports `provider-mounted` and spawns nothing. Empty
+   * by default: the batch shape stays available while the provider is mounted.
+   */
+  batchYieldToProvider: Schema.string().default('').volatile(),
 })
 
 /**
@@ -570,6 +585,31 @@ export function apply(ctx, config) {
     }
   }
 
+  /**
+   * Reconcile the synchronous batch tool (`agy_cli`). Separate from `syncCli`
+   * because it is an explicit opt-in: the tracked-child shape stays the default
+   * and the two never share a tool name.
+   */
+  const syncBatch = () => {
+    if (!gate('cliWorker') || configValue(config, 'cliBatch') !== true || !services.subprocess) {
+      release('cli-batch')
+      return
+    }
+    const { tools } = services
+    if (!tools || parts.has('cli-batch')) return
+    const existing = typeof tools.get === 'function' ? tools.get(BATCH_TOOL_NAME) : undefined
+    if (existing) {
+      warnOnce('batch-tool', `antigravity: tool "${BATCH_TOOL_NAME}" is already registered; skipping the batch tool`)
+      return
+    }
+    try {
+      const registration = tools.register(batchToolDefinition({ services, config }))
+      parts.set('cli-batch', typeof registration === 'function' ? registration : () => {})
+    } catch (error) {
+      warn(`antigravity: batch tool registration failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   // ---- subagent surface --------------------------------------------------
   const syncSubagent = () => {
     if (!gate('subagent') || !services.subagents) {
@@ -631,6 +671,9 @@ export function apply(ctx, config) {
         endpointOf,
         ledger,
         invalidate: () => catalog.invalidate(),
+        onModelsApplied: async (enabled) => {
+          return syncAntigravitySelection(enabled)
+        },
         quota: () => catalog.quotaSummary(),
         pluginName: name,
         installed: () => ({
@@ -658,6 +701,7 @@ export function apply(ctx, config) {
     }
     syncModel()
     syncCli()
+    syncBatch()
     syncSubagent()
     syncPanel()
   }
@@ -676,7 +720,10 @@ export function apply(ctx, config) {
             // Drop only the surfaces that owned these services. Re-running
             // syncAll here would re-register a surface during plugin disposal.
             for (const dep of deps) services[dep] = undefined
-            if (deps.includes('tools') || deps.includes('subprocess')) release('cli-tool')
+            if (deps.includes('tools') || deps.includes('subprocess')) {
+              release('cli-tool')
+              release('cli-batch')
+            }
             if (deps.includes('commands')) release('cli-command')
             if (deps.includes('subagents')) release('subagent')
             if (deps.includes('connection')) release('panel')

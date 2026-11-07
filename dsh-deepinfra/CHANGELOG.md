@@ -11,7 +11,31 @@ summary: Every change to this track with measured before/after: the 0.0.1-rc.1 a
 > History for this plugin only (RULES §6.1). Measurements that outlive one plugin belong in
 > root `docs/`. Every entry states what was measured, not what was intended.
 
-Current version: `0.0.1-rc.8`
+Current version: `0.0.1-rc.9`
+
+## Peer pin follows the router rc.2 — 2026-11-07
+
+`@nolit/dsh-custom-router` moved to `0.0.1-rc.2` when its preset-declaration module landed, so this
+package's exact peer pin moved with it (`0.0.1-rc.1` → `0.0.1-rc.2`). No runtime behaviour changed;
+the pin exists because the three vendor tracks are meant to version alongside the router. Measured:
+158/158 tests pass.
+
+## OpenCodex model-selection mirror — 2026-11-07
+
+Owner instruction: synchronize the DSH DeepInfra model checklist with OpenCodex,
+including slash-bearing model ids and an optional existing scoped client key.
+
+The settings `models/apply` route now persists `enabledModels` first, then mirrors
+that exact list through `@nolit/dsh-custom-router/vendor-bridge`, which owns the
+server URL, management token, id projection and shared-key scope. This package
+exposes no bridge settings of its own: a per-vendor copy of shared state is how one
+provider's save used to narrow another provider's key scope. Synchronization
+failures return HTTP 502 rather than a false success response. An empty DSH list
+retains OpenCodex's "all models" semantics; the bridge skips the scope write in that
+state instead of converting it into a block-everything scope.
+
+Verification: `npm run check`; **158 pass, 7 skipped, 0 failed**, including the real
+mounted route. No DSH restart or live-profile edit.
 
 ## 0.0.1-rc.8 — DeepInfra chip reaches the composer; version ladder + rc.1 pass — 2026-11-05
 

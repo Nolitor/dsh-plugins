@@ -4,11 +4,30 @@
 version: 1.0
 kind: report
 status: active
-updated: 2026-11-05
+updated: 2026-11-07
 summary: Engineering history for @nolit/dsh-antigravity, including the rc.6 fix for empty stored answers and the route-gated usage chip. Created 2026-11-05 by merging the CLI worker surface of @nolit/dsh-antigravity-cli with the HTTP model route proven in @nolit/dsh-antigravity-directsdk, plus a settings section, a usage chip and per-surface switches.
 -->
 
-Current version: `0.0.1-rc.7`
+Current version: `0.0.1-rc.8`
+
+### 2026-11-07 — synchronous batch tool `agy_cli` (port of `dsh-subagent-local`)
+
+Owner decision 1(a): fold the synchronous one-shot worker into the provider plugins before the
+separate package is retired. `agy_cli` is the batch shape — one call = one `agy` process = the answer
+in the result — carrying exit facts, disjoint usage buckets, the measured `argv` prompt transport,
+hashed artifacts and per-call `model` / `effort` / `mode` / `timeoutMs` / `collect` overrides. It is
+**off by default** (`cliBatch: false`): the tracked child of `agy_worker` remains the owner's default
+(2026-11-05), and enabling the switch is the explicit opt-in.
+
+Measured: 150/150 tests pass (6 new in `test/cli-batch.test.mjs`); an isolated `DSH_HOME` boot with
+`cliBatch: true` keeps the four providers and adds no activation failure.
+
+**Peer pin:** `@nolit/dsh-custom-router` moved to `0.0.1-rc.2` when its preset module landed; this package's peer pin follows.
+
+**S2 (same session, same `rc.8`):** `batchYieldToProvider` makes `agy_cli` report
+`errorKind: 'provider-mounted'` with the provider name and spawn nothing when that subagent provider is
+mounted. Empty by default, so the batch shape stays available. The result schema gained `errorKind`
+and `yieldedProvider`. Measured: 151/151 tests pass.
 
 
 ### 2026-11-05 — absorbed tracks moved to `archive/` (this package now owns their surfaces)
@@ -35,6 +54,83 @@ Version unchanged (`0.0.1-rc.7`): no code in this package changed. Process recor
 [HISTORY.md H-1/H-2](../HISTORY.md), [docs/FAILURE-LEDGER.md F-50/F-51](../docs/FAILURE-LEDGER.md).
 Absorbed tracks leaving the active tree is now a standing rule
 ([docs/PLUGIN-CONSOLIDATION.md §2.1](../docs/PLUGIN-CONSOLIDATION.md)).
+
+## P2 — shared downstream pipe adopted (first testbed) — 2026-11-07
+
+Owner instruction: the DSH-facing parser and stream pipe must be **one shared module** with
+overridable hooks, and this track is the **first** migration target because it is rarely used
+live and it is the only measured **web-auth** upper pipeline.
+
+**Before (measured):** this package owned its own copy of the whole downstream half —
+`lib/sse.js` (85 L reader), `lib/usage.js` (56 L writer), a finish table inside `lib/map.js`, and
+~90 lines of block/index/close/terminal logic inside `lib/adapter.js`. Consequences that were
+measured workspace-wide: `SAFETY`/`RECITATION`/`BLOCKLIST`/`PROHIBITED_CONTENT`/`SPII`/`OTHER`
+returned `{kind:'error', failure:{kind:'provider', message}}` — **no `code`**, plus a
+non-contract `kind` key; an empty completion threw instead of ending in-band; a cut had no
+preserved partial.
+
+**After:** the downstream half is `@nolit/dsh-custom-router/stream`. This package contributes
+only `lib/stream-contract.js` (166 L): the descriptor (`toolCallShape: 'complete'`,
+`usage.totalFormula: 'prompt+output+reasoning'`, `malformedRecord: 'fail'`), `readEvent`
+mapping Gemini parts onto the pipe vocabulary, and the `usageFrom` projection over
+`usageMetadata`. `lib/sse.js`, `lib/map.js` and `lib/usage.js` became thin re-exports so the
+published `./sse` / `./map` / `./usage` exports keep working.
+
+| Defect | Before | After |
+| :--- | :--- | :--- |
+| D3 filtered finish had no failure code | `{kind:'error', failure:{kind:'provider', message}}` | `{kind:'error', failure:{code:'CONTENT_FILTERED', message}}` |
+| D4 filtered finish reported as clean stop (deepinfra side) | n/a here; same table now shared | closed by the shared table |
+| D6 no cut preservation | throw, no partial | partial blocks closed, original cause preserved |
+| D8 empty completion threw | `throw LlmError(EMPTY_RESPONSE)` | in-band `finish{kind:'error', failure:{code:'EMPTY_RESPONSE'}}` |
+
+**Two findings only the integration could produce:**
+
+1. **The web-auth edge is a request-header collision, not a token flow.** The provider returns
+   HTTP 403 `You do not have a valid license of this product` without the CLI identity
+   `antigravity/cli/1.5.0 (...)`. The host's `attributionHeaders()` emits
+   `deepseek-harness/<version>`, which is a different product string and cannot also be the
+   `user-agent`. This package keeps the provider identity; the conflict is now declared in
+   `dsh-custom-router/docs/CUSTOM-ROUTER-PROTOCOL-STANDARD.md` §7 as D2, **withdrawn as a defect**
+   (the earlier "never calls `attributionHeaders()`" reading was a real observation with a wrong
+   conclusion). The shared pipe never touches request headers, so nothing about N8 leaks into it.
+2. **Legacy `[DONE]` contract.** This provider's reader yielded a `{done:true}` sentinel. The
+   shared reader ends iteration, so it gained `emitDone` (and now accepts a `Response`, not just
+   its body) rather than the package forking a parser.
+
+**Verification (measured):**
+
+| Check | Result |
+| :--- | :--- |
+| `npm run check` | pass |
+| `npm test` in this track | **144 pass / 0 fail** (was 118; +20 contract tests, +6 adapter integration tests) |
+| `npm test` in `dsh-custom-router` | 71 pass / 0 fail |
+| no duplicated reader left | `grep` for a local SSE split returns nothing |
+| other tracks untouched | `dsh-deepinfra` 0 imports, `dsh-opencode-v2` 0 imports; 158 (+7 skip) and 453 still pass |
+
+**Not done:** no version change (owner-only), no live profile edit, no restart, no real
+generation turn. P3 (`dsh-deepinfra`) is next and is not started.
+
+## Existing agy credential import + OpenCodex model-selection mirror — 2026-11-07
+
+Owner instruction: reuse the local Antigravity web authentication and synchronize
+the DSH model checklist instead of maintaining an unrelated OpenCodex browser login.
+
+The existing `~/.gemini/antigravity-cli/antigravity-oauth-token` was imported via
+OpenCodex's official `account import` flow; the stored account now reports
+`source: credential-file`. No new browser login was performed and no token was
+printed. DSH raw effort ids are projected only onto families actually advertised
+by OpenCodex, including its Gemini 3.5 Flash Lite aliases.
+
+The settings model-save path mirrors to OpenCodex after the DSH write through
+`@nolit/dsh-custom-router/vendor-bridge`. Raw effort ids collapse onto families the
+OpenCodex catalog actually advertises, including its Gemini 3.5 Flash Lite aliases.
+Global `disabledModels` is not used as a pretend authorization layer: OpenCodex
+measures showed it changes catalog visibility only. The bridge, its URL/token/key
+configuration and the shared scope union are owned by `@nolit/dsh-custom-router`.
+
+Verification: `npm run check`; **118/118 tests pass**, including mounted `apply()`;
+isolated real DSH boot clean with the shared bridge linked. No DSH restart or profile
+edit.
 
 ## 0.0.1-rc.7 — version ladder + DSH 0.2.2-rc.1 policy pass — 2026-11-05
 

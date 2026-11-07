@@ -5,7 +5,7 @@ version: 0.0.1-rc.1
 kind: spec
 status: active
 updated: 2026-11-06
-summary: Normative per-service preset schema, the standardisation boundary, how far preset extension can go, and the coverage ceiling for services added in the future.
+summary: Normative per-service preset schema, the common preset data model (delivery kind, authentication mode, endpoint protocol/transport), the standardisation boundary, how far preset extension can go, and the coverage ceiling for services added in the future.
 -->
 
 > Status: **specification built on measurement**, 2026-11-06, DSH `0.2.2-rc.1`. The owner
@@ -117,6 +117,190 @@ shared schema. `configSchema` is **derived** from each plugin's real `Config` �
 hand-written and must be re-measured, never assumed. Shared = identity/activation/credential/
 readiness/plan/usage shape; custom = `configSchema` + `readiness` + `extensions`.
 
+## 2.3 Common preset data model (2026-11-07) — delivery, auth, endpoint
+
+The `ServicePreset` above describes the **settings surface**. The questions a new provider raises
+before any surface exists are answered by a smaller, machine-checked model in
+[`lib/preset-schema.js`](../lib/preset-schema.js) (exported as
+`@nolit/dsh-custom-router/preset-schema`) with a JSON Schema mirror
+(`PRESET_JSON_SCHEMA`). Every preset — measured or declared — must fill it.
+
+### 2.3.1 The three axes
+
+| Axis | Field | Allowed values | Measured ground |
+| :--- | :--- | :--- | :--- |
+| **Delivery** | `kind` | `package` (code-backed, mounted as a child plugin) or `declaration` (JSON data only, no package) | the three vendors are npm packages; a loopback OpenAI endpoint needs no code |
+| **Authentication** | `auth.mode` + ordered `auth.sources` | `api-key`, `web-auth`, `local-socket`, `none`; sources `secret-field`, `env`, `credential-ref`, `token-file`, `daemon-endpoint` | credentials service's two spaces (`CredentialRef` vs `CredentialRecord`), vendor token files, `GET /api/credential` |
+| **Endpoint** | `endpoint.mode`, `.protocol`, `.route`, `.baseUrl`, `.transport` | modes `http`, `local-http`, `daemon`; protocols `openai-completions`, `openai-responses`, `anthropic-messages`, `google-generative-sse`; routes `pi-ai`, `own`; transports `sse`, `websocket`, `websocket-cached`, `auto` | `dsh-llm-pi-ai` `PROTOCOLS` + `transport`; Antigravity's Google SSE wire; localhub `127.0.0.1:8080/v1` |
+
+### 2.3.2 Measured instances
+
+| Preset | kind | endpoint | auth |
+| :--- | :--- | :--- | :--- |
+| `antigravity` | package `@nolit/dsh-antigravity` | `http` · `google-generative-sse` · `own` · `sse` · `cloudcode-pa.googleapis.com` | `web-auth`: token-file → `refreshToken` → `clientSecret` → env `ANTIGRAVITY_REFRESH_TOKEN` |
+| `opencode` | package `@nolit/dsh-opencode-v2` | `daemon` · `openai-completions` · `own` · `sse` · `/chat/completions` | `web-auth`: daemon `/api/credential` → `apiKey` → `password` → env `OPENCODE_API_KEY` |
+| `deepinfra` | package `@nolit/dsh-deepinfra` | `http` · `openai-completions` · `own` · `sse` · `api.deepinfra.com/v1/openai` | `api-key`: `apiKey` → env `DEEPINFRA_API_KEY` |
+
+A `declaration` example ships as `DECLARATION_EXAMPLE` (loopback `local-http`, `auth: none`,
+`catalog: static`) — the shape an operator fills when no package is involved.
+
+### 2.3.3 Catalog & price synchronization — the 3 layers (owner decision 2026-11-07)
+
+`catalog.layers` is an ordered array; merge precedence is **3 > 2 > 1** and merging is
+**field-level** (a later layer patches only the fields it defines).
+
+| Layer | `source` | What it is | Measured |
+| :--- | :--- | :--- | :--- |
+| 1 (fallback) | `upstream` | the pi-ai static snapshot | 42 providers, **1,712 models, all priced**, 261 with price tiers; generated `2026-11-02T10:43:28Z` (manifest `schemaVersion: 6`) |
+| 2 (dynamic) | `probe` | a live API / web-auth probe of the endpoint's own list | OpenAI `GET {baseURL}/models`, Anthropic `GET {root}/v1/models?limit=…`, OpenCode `/api/model`, Antigravity `fetchAvailableModels`, DeepInfra `/models` |
+| 3 (manual) | `override` | preset/local data: local models and new prices | `models[]` (context, maxTokens, modalities, reasoning, cost) and `pricing[]` (`{modelId, cost}` partial rate patches) |
+
+Measured instances: `antigravity` = probe only (absent from pi-ai's snapshot); `opencode` = upstream
+(`opencode`, `opencode-go`) + probe; `deepinfra` = probe only (absent from the snapshot); the
+`DECLARATION_EXAMPLE` = override only (a local loopback model, no package).
+
+**Merge rules** (`lib/catalog.js`, exported as `@nolit/dsh-custom-router/catalog`):
+
+1. `mergeCatalog(layers)` merges by model id, field by field; `cost` is merged rate by rate, and
+   `tiers` replaces only when a layer supplies it.
+2. A later layer may create a model the earlier layers never described (local models).
+3. Each merged model records `source` (highest layer that contributed) and `layers` (provenance).
+4. Layers must be ordered `upstream → probe → override`; a duplicate source in one preset is an error.
+
+**Cost arithmetic** (`lib/cost.js`, exported as `@nolit/dsh-custom-router/cost`) mirrors upstream
+pi-ai `calculateCost()` because the DSH wrapper drops `usage.cost` (measured: `mapUsage()` forwards
+tokens only): rates are US$ per 1M tokens, tiers apply by `input + cacheRead + cacheWrite`, a 1-hour
+cache write bills at 2× the input rate, and `total` sums the four buckets.
+
+### 2.3.4 Routing and the probe executor (2026-11-07)
+
+**Routing** (`lib/routing.js`, exported as `@nolit/dsh-custom-router/routing`) decides which preset
+serves a model id, in this order: explicit `presetId` → explicit `providerId` → the model id's
+**`modelPrefixes`** segment before the first `/`. A prefix claimed by two presets is refused
+(`claimed by a, b`), never guessed; a bare id can route only when exactly one preset is declared.
+`resolveRoute()` returns the same decision plus `endpoint` and `auth` for the caller.
+
+**Probe** (`lib/probe.js`, exported as `@nolit/dsh-custom-router/probe`) is layer 2. The probe layer
+declares `shape`:
+
+| `shape` | Endpoint answer | Executor behaviour |
+| :--- | :--- | :--- |
+| `openai` | `{data:[{id, context_length?, max_output_tokens?}]}` or a bare array | normalizes ids/names/limits; `Authorization: Bearer` |
+| `anthropic` | `{data:[{id, display_name}]}` | one page only (`has_more` not followed); `x-api-key` + `anthropic-version` |
+| `vendor` | provider-specific RPC (`/api/model`, `fetchAvailableModels`) | **refused** (`VENDOR_OWNED`) — the owning plugin parses it, not the router |
+
+`probeCatalog(layer, {baseUrl, apiKey, fetchImpl, signal})` is injected (tests never hit the network);
+`probePreset()` runs every standard layer, skips vendor-owned ones, and returns
+`{models, measuredAt, errors}` ready to feed `mergeCatalog([upstream, probeResult, override])`.
+
+### 2.3.5 Plan and billing — subscription vs flat vs per-token (2026-11-07)
+
+`usage.billing.mode` names the billing model, and `lib/plan.js`
+(`@nolit/dsh-custom-router/plan`) judges and prices it.
+
+| Mode | Provider (measured) | Billing outcome |
+| :--- | :--- | :--- |
+| `subscription` | antigravity (5h / weekly / monthly windows) | plan covers usage → billed `0`, covered `true`; windows `limited` → `throttled` (still covered); verdict `unknown` → billed `null` |
+| `flat` | opencode-v2 (go/zen, per-request allowance) | same as subscription |
+| `pay-per-token` | deepinfra (catalog rates) | billed = `calculateCost().total` (`estimated`) |
+| `none` | loopback declaration | billed `0` |
+
+**PlanVerdict** (spec §1.4) combines L1 declared, L2 account and L3 endpoint probe:
+`no-plan-service` (billing `none`), `throttled` (a window says limited), `mismatch` (declared ≠ account),
+`match` (a settled probe / account plan), and `unknown` (probe failed or never ran — **visible**, never
+rendered as `0%` or "no plan"). `billingOutcome()` returns `{billed, covered, confidence, reason}` and
+never turns `unknown` into zero.
+
+### 2.3.6 Usage binding, quota display, and the vendor-probe connection (2026-11-07)
+
+**Vendor-probe connection** (`probeVendor` in `lib/probe.js`) resolves a `shape: 'vendor'` layer in
+this order:
+
+1. `options.vendorProbes[preset.id]` — an explicit handler supplied by the owning plugin;
+2. `ctx.llm.discoverModels(layer.namespace, {provider, baseURL, apiKey})` — the host discovery seam;
+3. otherwise `VENDOR_OWNED` with a reason naming both missing pieces.
+
+Measured 2026-11-07: **none of the three vendor plugins calls `ctx.llm.registerModelDiscovery`** (0
+hits); OpenCode keeps its discovery inside `lib/provider.js` (`discoverModels`, `discoverModelsViaServe`)
+and derives its settings namespace as `dsh-opencode-v2-http`. So a vendor connects by passing a
+handler or registering discovery — the router never re-implements the RPC.
+
+**Usage binding** (`lib/usage.js`, `bindUsage`) turns one adapter usage record into
+`{usage, cost, billing, readings}`: normalized token buckets, `calculateCost()`, `billingOutcome()`,
+then `UsageReading[]`.
+
+**Quota display** (`windowReadings`) normalizes provider windows (`rolling`→`5h`, `7d`→`weekly`,
+`30d`→`monthly`) into `percent-consumed` / `fraction-remaining` readings with locale-aware
+`display` (`en`/`ko`), `limited`, `resetsAt` and `measuredAt`.
+
+**Invariant:** a reading that could not be measured is `confidence: 'unavailable'` with a reason —
+`bindUsage` appends such a reading instead of claiming `$0` when the plan verdict is `unknown`.
+
+### 2.3.7 Vendor bridges — antigravity, opencode, deepinfra (2026-11-07)
+
+Antigravity cannot use the generic probe: the endpoint rejects a request without the measured
+client identity (documented at `dsh-antigravity/docs/ANTIGRAVITY-DIRECTSDK-MEASUREMENT.md` §"Digital
+fingerprint").
+
+| Without | With |
+| :--- | :--- |
+| UA missing → **403** `"You do not have a valid license of this product"`; `loadCodeAssist` → `UNSUPPORTED_CLIENT` | `antigravity/cli/1.5.0 (aidev_client; os_type=linux; arch=amd64; cl=1013440158; auth_method=consumer)` → accepted |
+
+`lib/bridges/antigravity.js` (`@nolit/dsh-custom-router/bridges/antigravity`) builds the probe from the
+vendor's own exports — no vendor edit:
+
+| Vendor export | Used for |
+| :--- | :--- |
+| `./auth` → `TokenProvider` | OAuth access token (refresh file / explicit token) |
+| `./settings` → `resolveEndpoint` | base URL, project, **measured User-Agent** |
+| `./catalog` → `parseCatalog` | conversation models, quota, utility filtering |
+
+**Flexible slots** (read from `vendorConfig[presetId]`, reactive or plain; every slot optional):
+
+| Slot | Default | Purpose |
+| :--- | :--- | :--- |
+| `tokenPath` | vendor's measured `~/.gemini/antigravity-cli/*` | different machines / token file locations |
+| `refreshToken` | — | explicit token, highest precedence |
+| `userAgent` | measured `antigravity/cli/…` | environment-specific client identity |
+| `extraHeaders` | `{}` | proxy routing / custom headers |
+| `project`, `baseUrl`, `controlBaseUrl` | vendor defaults | host and project overrides |
+
+**The other two bridges** (`lib/bridges/`, `@nolit/dsh-custom-router/bridges`):
+
+| Vendor | Endpoint | Auth | Reused vendor exports |
+| :--- | :--- | :--- | :--- |
+| `opencode` | `GET {daemon}/api/model` | `Basic opencode:<password>` from `opencode/service.json` or slots | `./http` `authHeader`, `serviceStateCandidates`; `lib/shared.js` `modelsFromApiPayload` (file URL, not an export-map entry) |
+| `deepinfra` | `GET https://api.deepinfra.com/v1/openai/models` | `Bearer <apiKey>` / `DEEPINFRA_API_KEY` | none needed — thin wrapper over `probeCatalog` (shape `openai`) |
+
+OpenCode slots: `baseUrl`, `password`, `serviceFile` (or `serviceStatePath`), `extraHeaders`.
+DeepInfra slots: `baseUrl`, `apiKey`, `extraHeaders`. `createVendorBridges({modules})` builds all
+three; without vendor modules only `deepinfra` is available (standard listing).
+
+**Module resolution and the apply seam:** `lib/vendor-modules.js` resolves every vendor entry through
+the **profile's** `package.json` (`createRequire`), because bare specifiers fail from the router's own
+path (measured). `apply()` accepts `profileDir`; it loads the modules, builds the bridges, resolves
+each preset package to a file URL for `ctx.plugin`, and provides the `customRouter` seam
+`{presets, vendorProbes, route(), probe(), merge()}` so the rest of the body never re-derives paths.
+
+Proxy note: the OpenCodex router's management token is a **different** credential (its
+`lib/opencodex-client.js` sends `authorization: Bearer <managementToken>`); antigravity keeps its own
+OAuth chain, and `extraHeaders` (with `HTTPS_PROXY` handling) is the proxy hook. The handler never
+invents a User-Agent — an override wins, otherwise the vendor's resolved value is used.
+
+### 2.3.8 Rules the validator enforces
+
+1. `kind: package` requires a scoped package name; `kind: declaration` forbids one and requires a
+   `static` catalog with at least one model id.
+2. `endpoint.route: 'pi-ai'` requires a protocol the host implements; `own` is required for a wire
+   the host does not speak (Google SSE today).
+3. `endpoint.baseUrl` must be an http(s) URL, except for `daemon` where it may be empty (resolved at
+   runtime).
+4. `auth.mode` and its sources must agree: non-`none` needs at least one source; `none` must declare
+   none; `web-auth` needs a token-file / daemon-endpoint / credential-ref; `local-socket` requires a
+   `local-http` or `daemon` endpoint.
+5. `secret-field` sources are camelCase field names on the plugin's `Config`; values are never
+   inside the preset.
+
 ## 3. Schema conformance rules (스키마 규격)
 
 | # | Rule | Measured ground |
@@ -161,7 +345,7 @@ Measured capability, then the hard ceiling.
 | **Silently intercept a DSH-managed key** | owner decision 2: read-only reference only. |
 | **A number where the provider did not answer** | U2 in [PLAN-AND-USAGE-SPEC.md](./PLAN-AND-USAGE-SPEC.md): `unavailable` with reason, never 0. |
 | **New `SlotKind` / new global seat** | `SlotKind = 'single'|'list'|'keyed'|'chain'` is host-typed; a new top-level seat needs a host change (UI-SLOT-ARCHITECTURE §3). |
-| **Plugin version bump by the agent** | `0.0.1-rc.1` start, `rc#` owner-only (global AGENTS.md §6). |
+| **Plugin version bump by the agent** | `0.0.1-rc.1` start; the numeric part is owner-gated, `rc#` is agent-managed (global AGENTS.md §6). |
 | **Live profile / 3080 restart** | RULES.md §2; owner approval only. |
 
 **Verdict on "어디까지 가능한가":** a preset can grow **without bound in field count, nested

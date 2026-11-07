@@ -240,7 +240,7 @@ No preset row, plugin manifest, or live profile was changed in this session.
 | # | Rule | Measured reason |
 | :--- | :--- | :--- |
 | B1 | One autonomous router per service, registered **inside** `LlmRuntime`. | §1.2; the old subrouter lost retry/attribution/discovery. |
-| B2 | Never re-implement a transport the harness normalises; map into `StreamChunk`. | `types.d.ts` chunk contract. |
+| B2 | Never re-implement a transport the harness normalises; map into `StreamChunk` **through the one shared pipe**, never a fourth copy. | `types.d.ts` chunk contract; [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md) |
 | B3 | Credentials stay in each service's own settings namespace. | 3 different measured boundaries (§3.1). |
 | B4 | Catalogs are provider-owned; DSH consumes `listModels` / `resolveModel` / discovery. | §1.2 `listModels` doc; pi-ai discovery pattern. |
 | B5 | UI seats use additive **list** slots. | `conversation.input.activity` single-slot collision measured earlier. |

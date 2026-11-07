@@ -18,16 +18,12 @@
  * @module @nolit/dsh-antigravity/adapter
  */
 import { LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
+import { normalizeStream, readSseEvents } from '@nolit/dsh-custom-router/stream'
 
 import { GENERATION_PATH, modelForEffort, requestBody } from './wire.js'
-import { readEvents } from './sse.js'
-import { candidateOf, classify, finishReasonFor, partsOf } from './map.js'
 import { groupByBase, toModelInfo, toResolvedModelInfo } from './catalog.js'
-import { toTokenUsage } from './usage.js'
+import { STREAM_DESCRIPTOR, STREAM_HOOKS } from './stream-contract.js'
 import { configValue, resolveEndpoint } from './settings.js'
-
-/** Tool-call ids are synthesised when the provider omits one. */
-let callCounter = 0
 
 /**
  * Statuses an Antigravity generation request is retried on.
@@ -276,94 +272,20 @@ export class AntigravityAdapter extends LlmAdapter {
       throw classifyHttpError(response.status, text)
     }
 
-    let index = 0
-    let sawText = false
-    let sawTool = false
-    let reasoningIndex = -1
-    let textIndex = -1
-    const open = new Set()
-    // Accumulated text per open block, so `block-end` carries the whole answer.
-    // MEASURED 2026-11-05 (session-13e95450): the provider streams whole parts, and
-    // the adapter re-emitted `text: ''` when closing a block, so the host stored an
-    // empty assistant message and the answer vanished from the transcript even
-    // though every delta had arrived. The block-end block is the authoritative
-    // content for the host, so it must be the concatenation, not a placeholder.
-    const textByIndex = new Map()
-    let usage
-    let finishReason
-
-    for await (const event of readEvents(response)) {
-      if (event?.done) break
-      const candidate = candidateOf(event)
-      if (!candidate) continue
-
-      for (const part of partsOf(candidate)) {
-        const kind = classify(part)
-        if (kind === 'reasoning') {
-          if (reasoningIndex === -1) {
-            reasoningIndex = index++
-            open.add(reasoningIndex)
-            yield { type: 'block-start', index: reasoningIndex, blockType: 'reasoning' }
-          }
-          if (part.text) {
-            textByIndex.set(reasoningIndex, (textByIndex.get(reasoningIndex) ?? '') + part.text)
-            yield { type: 'reasoning-delta', index: reasoningIndex, text: part.text }
-          }
-        } else if (kind === 'text') {
-          if (!part.text) continue
-          if (textIndex === -1) {
-            textIndex = index++
-            open.add(textIndex)
-            yield { type: 'block-start', index: textIndex, blockType: 'text' }
-          }
-          sawText = true
-          textByIndex.set(textIndex, (textByIndex.get(textIndex) ?? '') + part.text)
-          yield { type: 'text-delta', index: textIndex, text: part.text }
-        } else if (kind === 'tool-call') {
-          const call = part.functionCall
-          const callIndex = index++
-          const id = call.id ?? `antigravity-${Date.now()}-${callCounter++}`
-          const args = JSON.stringify(call.args ?? {})
-          sawTool = true
-          yield { type: 'block-start', index: callIndex, blockType: 'tool-call' }
-          yield { type: 'tool-call-delta', index: callIndex, id, name: call.name, argumentsDelta: args }
-          yield {
-            type: 'block-end',
-            index: callIndex,
-            block: { type: 'tool-call', id, name: call.name, arguments: args },
-          }
-        }
-      }
-
-      const metadata = (event?.response ?? event)?.usageMetadata
-      const next = toTokenUsage(metadata)
-      if (next) usage = next
-      if (candidate.finishReason) {
-        finishReason = finishReasonFor(candidate.finishReason)
-        if (finishReason.kind === 'tool-calls' || candidate.finishReason === 'STOP') {
-          // STOP with a tool call present means the turn hands back to the harness.
-          if (sawTool) finishReason = { kind: 'tool-calls' }
-        }
-      }
-    }
-
-    // Close blocks that are still open, in index order.
-    for (const blockIndex of [...open].sort((a, b) => a - b)) {
-      const blockType = blockIndex === reasoningIndex ? 'reasoning' : 'text'
-      yield { type: 'block-end', index: blockIndex, block: { type: blockType, text: textByIndex.get(blockIndex) ?? '' } }
-    }
-
-    if (!sawText && !sawTool) {
-      throw new LlmError('Antigravity returned an empty completion', 'EMPTY_RESPONSE')
-    }
-    if (usage) {
-      // Record BEFORE yielding the terminal usage chunk: the host may stop
-      // iterating as soon as it sees `finish`, so a record after the yield can be
-      // missed. The ledger is process-local and has no cost figure.
-      this.dependencies.ledger?.record?.(usage)
-      yield { type: 'usage', usage }
-    }
-    yield { type: 'finish', reason: finishReason ?? (sawTool ? { kind: 'tool-calls' } : { kind: 'stop' }) }
+    // The downstream half is the workspace's one shared pipeline
+    // (`@nolit/dsh-custom-router/stream`): block lifecycle, first-seen indexes,
+    // the finish table, the disjoint usage writer, the failure shape and the
+    // empty/cut/abort terminal policy. This adapter supplies only the provider
+    // binding in `./stream-contract.js`, so a Gemini quirk never edits the core.
+    yield* normalizeStream({
+      events: readSseEvents(response, { signal: options.signal, malformed: STREAM_DESCRIPTOR.malformedRecord }),
+      descriptor: STREAM_DESCRIPTOR,
+      hooks: STREAM_HOOKS,
+      signal: options.signal,
+      // The host may stop iterating as soon as it sees `finish`, so the ledger
+      // is written from the usage chunk itself rather than after the stream.
+      onUsage: (usage) => this.dependencies.ledger?.record?.(usage),
+    })
   }
 }
 

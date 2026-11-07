@@ -110,6 +110,28 @@ Still open in stage 1 (each needs an owner report first — do not pre-emptively
 **Rollback:** `parser: 'legacy'` (config, no rebuild). That is the entire reason the legacy
 file stays in-tree for one release.
 
+### 4.1 Relationship to the shared stream pipe
+
+The recipe parser is the **`classifyText` hook** of the workspace shared downstream pipe
+([SHARED-STREAM-PIPE-SPEC.md](../../dsh-custom-router/docs/SHARED-STREAM-PIPE-SPEC.md) §5.5),
+not a private stage-2 file that happens to live in this package. Stage 2 therefore has two
+possible landing shapes and the order is an owner decision:
+
+The rollout order is fixed by the owner: the shared core lands first (P1, no consumer), then
+**antigravity (P2)**, then **deepinfra (P3)**, and **this track last (P4)**
+([SHARED-STREAM-PIPE-SPEC.md §1 §7](../../dsh-custom-router/docs/SHARED-STREAM-PIPE-SPEC.md)).
+This track is last because it carries the most live traffic and is the only consumer of the
+optional hook, so the wire-only path must be proven twice before it moves.
+
+| Shape | Meaning | Gate |
+| :--- | :--- | :--- |
+| A — local first | port the parser into `lib/` behind `parser: 'legacy' \| 'canonical'` as written above, then register it as the hook when the shared pipe is available to this track | S2-1..S2-5 as written |
+| B — pipe first | once P1–P3 are complete, this track's stage 2 is delivered as the `classifyText` hook | the same gates, measured through the pipe |
+
+Either way the parser is **not** re-implemented per provider: DeepInfra and Antigravity stay
+wire-only (`toolCalls.classifier = 'wire-only'`), and only this track enables the hook. Stage 2
+of this track therefore **cannot start** while P1–P3 are open.
+
 ## 5. The three adversarial inputs that must round-trip
 
 Copied from the live probe (all three are real failures of the current classifier):

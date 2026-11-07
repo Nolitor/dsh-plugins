@@ -257,3 +257,127 @@ test('renderers surface failures, artifacts, and missing globs', () => {
   assert.match(text, /no match for: \*\.css/)
   assert.match(text, /boom/)
 })
+
+test('codex accepts a sandbox mode and a reasoning effort', () => {
+  assert.deepEqual(
+    buildWorkerArgv('codex', { executable: '/bin/codex', model: 'gpt-5-codex', effort: 'high', mode: 'workspace-write' }),
+    [
+      '/bin/codex',
+      'exec',
+      '--json',
+      '--skip-git-repo-check',
+      '--model',
+      'gpt-5-codex',
+      '--sandbox',
+      'workspace-write',
+      '-c',
+      'model_reasoning_effort=high',
+      '-',
+    ],
+  )
+})
+
+test('claude accepts a permission mode and rejects an unknown one', () => {
+  assert.deepEqual(buildWorkerArgv('claude', { executable: '/bin/claude', mode: 'plan' }), [
+    '/bin/claude',
+    '-p',
+    '--output-format',
+    'json',
+    '--permission-mode',
+    'plan',
+  ])
+  assert.throws(
+    () => buildWorkerArgv('claude', { executable: '/bin/claude', mode: 'nope' }),
+    /permission mode/,
+  )
+})
+
+test('a run reports elapsed time, prompt bytes and the stdin transport', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'worker-facts-'))
+  try {
+    const script = `
+      let task = ''
+      process.stdin.on('data', (chunk) => { task += chunk })
+      process.stdin.on('end', () => {
+        process.stdout.write(JSON.stringify({ type: 'text', part: { id: 'p', text: 'ok' } }) + '\\n')
+      })
+    `
+    const result = await runWorker({ subprocess: stubSubprocess(script) }, stubConfig(), {
+      backend: 'opencode',
+      task: 'port the facts',
+      cwd,
+    })
+    assert.equal(result.promptTransport, 'stdin')
+    assert.equal(result.promptBytes, Buffer.byteLength('port the facts'))
+    assert.ok(result.elapsedMs >= 0)
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('a disabled backend never spawns and reports the gate', async () => {
+  const spawned = []
+  const subprocess = {
+    async resolveExecutable() { return process.execPath },
+    spawn(spec) { spawned.push(spec); throw new Error('must not spawn') },
+  }
+  const result = await runWorker({ subprocess }, stubConfig({ workerDisabledBackends: ['opencode'] }), {
+    backend: 'opencode',
+    task: 'x',
+    cwd: '/tmp',
+  })
+  assert.equal(result.errorKind, 'disabled')
+  assert.equal(result.ok, false)
+  assert.match(result.diagnostic, /workerDisabledBackends/)
+  assert.equal(spawned.length, 0)
+})
+
+test('a backend served by a mounted provider yields instead of spawning', async () => {
+  const spawned = []
+  const subprocess = {
+    async resolveExecutable() { return process.execPath },
+    spawn(spec) { spawned.push(spec); throw new Error('must not spawn') },
+  }
+  const subagents = { getProvider: (name) => (name === 'opencode' ? { name } : undefined) }
+  const result = await runWorker({ subprocess, subagents }, stubConfig({ yieldToProviders: { opencode: 'opencode' } }), {
+    backend: 'opencode',
+    task: 'x',
+    cwd: '/tmp',
+  })
+  assert.equal(result.errorKind, 'provider-mounted')
+  assert.equal(result.yieldedProvider, 'opencode')
+  assert.equal(spawned.length, 0)
+})
+
+test('per-backend path, model, effort and mode reach the child', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'worker-backend-config-'))
+  try {
+    const spawned = []
+    const subprocess = {
+      async resolveExecutable(name) { spawned.push({ resolved: name }); return process.execPath },
+      spawn(spec) {
+        spawned.push(spec)
+        return {
+          done: Promise.resolve({ exitCode: 0, signal: null }),
+          collected: {
+            stdout: { readFrom: () => ({ text: '', nextOffset: 0, lossy: false }) },
+            stderr: { readFrom: () => ({ text: '', nextOffset: 0, lossy: false }) },
+          },
+        }
+      },
+    }
+    await runWorker({ subprocess }, stubConfig({
+      workerBackendPaths: { codex: '/opt/codex' },
+      workerBackendModels: { codex: 'gpt-5-codex' },
+      workerBackendEfforts: { codex: 'high' },
+      workerBackendModes: { codex: 'read-only' },
+    }), { backend: 'codex', task: 'x', cwd })
+    assert.equal(spawned[0].resolved, '/opt/codex')
+    const argv = spawned[1].argv
+    assert.ok(argv.includes('gpt-5-codex'))
+    assert.ok(argv.includes('read-only'))
+    assert.ok(argv.includes('model_reasoning_effort=high'))
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})

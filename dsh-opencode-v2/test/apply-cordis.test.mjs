@@ -57,3 +57,35 @@ test('mounting the http entry on a cordis-like context does not throw', () => {
     else process.env.DSH_HOME = previous
   }
 })
+
+test('modelServing:false releases the route instead of registering', () => {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-apply-off-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    const { ctx, state } = cordisLike({
+      llm: {
+        registerAdapter: (providers) => {
+          state.registrations.push(...providers)
+          return { dispose: () => {} }
+        },
+        listProviders: () => [],
+      },
+      subprocess: {},
+      sessions: { get: () => undefined },
+      connection: {},
+      settings: {},
+    })
+    const dispose = applyHttp(ctx, Config({
+      modelServing: false,
+      attachToDaemon: false,
+      spawnServer: false,
+      autoDiscoverModels: false,
+    }))
+    if (typeof dispose === 'function') dispose()
+    assert.deepEqual(state.registrations, [])
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+  }
+})

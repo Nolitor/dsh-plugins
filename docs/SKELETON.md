@@ -26,7 +26,6 @@
 | `dsh-notify/` | [dsh-notify/docs/INDEX.md](../dsh-notify/docs/INDEX.md) |
 | `dsh-opencode-v2/` | [dsh-opencode-v2/docs/INDEX.md](../dsh-opencode-v2/docs/INDEX.md) |
 | `dsh-sidebar-manager/` | [dsh-sidebar-manager/docs/INDEX.md](../dsh-sidebar-manager/docs/INDEX.md) |
-| `dsh-subagent-local/` | [dsh-subagent-local/docs/INDEX.md](../dsh-subagent-local/docs/INDEX.md) |
 | `dsh-tokeneconomizer/` | [dsh-tokeneconomizer/docs/INDEX.md](../dsh-tokeneconomizer/docs/INDEX.md) |
 | `dsh-korean-locale/` (submodule) | separate repository — read `dsh-korean-locale/README.md` there |
 | `pending-docs/` | [pending-docs/INDEX.md](../pending-docs/INDEX.md) — 미승격 · 미구현 · 폐기 · 미정 |
@@ -48,6 +47,8 @@
   DSH plugin runtime specification: manifest, bundle patch, services, lifecycle, client factory, and the measured "declared but unexported inject" activation failure.
 - **1.1** · reference · 2026-10-31 · [docs/plugin-boot-card.md](./plugin-boot-card.md)
   Plugin package baseline: required files, cordis.patch.yml shape, locale/client conventions, and the exported-inject contract that a 0.6.0 client half violated.
+- **1.0** · reference · 2026-10-30 · [archive/dsh-subagent-local/docs/CLI-WORKER-STANDARD.md](../archive/dsh-subagent-local/docs/CLI-WORKER-STANDARD.md)
+  Shared and per-CLI worker contract for the OpenCode (/ocode) and Antigravity (/agy) delegation tools.
 
 ## report
 
@@ -55,6 +56,10 @@
   Engineering history for @nolit/dsh-subrouter. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
 - **1.0** · archived · 2026-11-05 · [archive/dsh-antigravity-directsdk/CHANGELOG.md](../archive/dsh-antigravity-directsdk/CHANGELOG.md)
   History of the archived DirectSDK track (absorbed into @nolit/dsh-antigravity).
+- **1.0** · active · 2026-11-05 · [archive/dsh-subagent-local/CHANGELOG.md](../archive/dsh-subagent-local/CHANGELOG.md)
+  Engineering history for the experimental local-CLI delegation plugin: rc.1 surfaces, the Invalid-effect activation defect, the subagent_oar verdict, and custody of the CLI-worker contract doc.
+- **1.0** · measured · 2026-11-05 · [archive/dsh-subagent-local/COMPATIBILITY.md](../archive/dsh-subagent-local/COMPATIBILITY.md)
+  Measured compatibility of @nolit/dsh-subagent-local with the rc.1 official delegation packages and @tianyicui's subagent_oar, with exact package/version evidence and an explicit UNVERIFIED label where a combined mount could not be exercised.
 - **1.0** · measured · 2026-11-05 · [docs/DSH-RC1-PLUGIN-DELTA.md](./DSH-RC1-PLUGIN-DELTA.md)
   Measured diff between the alpha.3 runtime our plugins were built against and the installed 0.2.2-rc.1 release, limited to plugin/extension surfaces, with per-track impact and the actions this workspace applies.
 - **1.1** · active · 2026-11-05 · [docs/PLUGIN-CONSOLIDATION.md](./PLUGIN-CONSOLIDATION.md)
@@ -69,6 +74,11 @@
   Per-plugin verification against DSH 0.2.2-alpha.3 (excluding opencode-v2) — measured mount state, test results, Korean locale delta, notify settings restyle, sidebar/UTM harness and TE KV-cache interaction.
 - **1.0** · completed · 2026-10-29 · [docs/DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](./DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
   Runtime measurement and optimization report for the three original plugins on DSH 0.2.2-alpha.2.
+
+## measurement
+
+- **1.0** · measured · 2026-11-05 · [archive/dsh-subagent-local/VERIFICATION.md](../archive/dsh-subagent-local/VERIFICATION.md)
+  Measured verification for the experimental local-delegation plugin: unit suite, syntax checks, isolated DSH_HOME composition, real rc.1 boot, and browser checks.
 
 ## policy
 
@@ -96,6 +106,8 @@
   DirectSDK track absorbed into @nolit/dsh-antigravity.
 - **1.0** · archived · 2026-11-05 · [archive/dsh-subagent-antigravity/README.md](../archive/dsh-subagent-antigravity/README.md)
   @nolit/dsh-subagent-antigravity absorbed into @nolit/dsh-antigravity.
+- **1.0** · active · 2026-11-05 · [archive/dsh-subagent-local/README.md](../archive/dsh-subagent-local/README.md)
+  Operator manual for the experimental delegate_local tool (agy, opencode, codex, claude backends), its config, prompt transport, artifacts and collision-yield policy.
 - **1.0** · archived · 2026-11-05 · [archive/dsh-subagent-opencode/README.md](../archive/dsh-subagent-opencode/README.md)
   @nolit/dsh-subagent-opencode absorbed into @nolit/dsh-opencode-v2.
 - **1.0** · active · 2026-10-30 · [archive/dsh-subrouter/bench/README.md](../archive/dsh-subrouter/bench/README.md)
@@ -103,28 +115,30 @@
 
 ## index
 
+- **1.1** · reference · 2026-11-07 · [archive/README.md](../archive/README.md)
+  What lives under archive/ (six absorbed tracks: directsdk, antigravity-cli, subagent-antigravity, subagent-opencode, subrouter, subagent-local), the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
+- **1.0** · active · 2026-11-07 · [archive/dsh-subagent-local/docs/INDEX.md](../archive/dsh-subagent-local/docs/INDEX.md)
+  Generated per-subproject index for @nolit/dsh-subagent-local: every document this track owns, one line each.
 - **4.0** · active · 2026-11-06 · [AGENTS.md](../AGENTS.md)
   Tier-1 auto-loaded entry. Points to the rules, the doc index, per-subproject doc homes, and the latest boot card. Keep it tiny.
 - **1.4** · active · 2026-11-06 · [HISTORY.md](../HISTORY.md)
   The main plugin-history chain for this workspace — vendor merges, archived tracks, version ladders, live-state debt, the per-subproject document split, the harness-owned document transfer, the host-wide docs tier, and the measured disposal gate.
-- **1.1** · reference · 2026-11-06 · [archive/README.md](../archive/README.md)
-  What lives under archive/ (five absorbed tracks: directsdk, antigravity-cli, subagent-antigravity, subagent-opencode, subrouter), the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
 - **1.0** · active · 2026-11-06 · [archive/dsh-subrouter/docs/INDEX.md](../archive/dsh-subrouter/docs/INDEX.md)
   Generated per-subproject index for @nolit/dsh-subrouter: every document this track owns, one line each.
 
-## boot (newest 5 of 46)
+## boot (newest 5 of 47)
 
 - **active** · INDEX.md · [card](../bootcards/INDEX.md)
   Newest-first list of dated boot cards.
+- **active** · 2026-11-07T0531+0900.md · [card](../bootcards/2026-11-07T0531+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-07T0531+0900, including the OpenCodex bridge ownership move to dsh-custom-router.
 - **active** · 2026-11-06T1837+0900.md · [card](../bootcards/2026-11-06T1837+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-06T1837+0900. Older cards are historical.
 - **active** · 2026-11-05T1527+0900.md · [card](../bootcards/2026-11-05T1527+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-05T1527+0900. Older cards are historical.
 - **active** · 2026-11-04T2041+0900.md · [card](../bootcards/2026-11-04T2041+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-04T2041+0900. Older cards are historical.
-- **active** · 2026-11-04T0102+0900.md · [card](../bootcards/2026-11-04T0102+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-11-04T0102+0900. Older cards are historical.
 
 ---
 
-30 workspace docs (46 boot cards), 0 with problems, 9 subprojects.
+36 workspace docs (47 boot cards), 0 with problems, 8 subprojects.

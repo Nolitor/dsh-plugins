@@ -56,10 +56,17 @@ function parseOpencode(stdout) {
  * @returns {string[]} argv tail.
  */
 function codexArgv(options) {
-  const argv = ['exec', '--json', '--skip-git-repo-check', '-']
+  const argv = ['exec', '--json', '--skip-git-repo-check']
   if (options.model) argv.push('--model', options.model)
+  if (options.mode) argv.push('--sandbox', options.mode)
+  if (options.effort) argv.push('-c', `model_reasoning_effort=${options.effort}`)
+  // The trailing `-` is the documented stdin prompt marker; it must stay last.
+  argv.push('-')
   return argv
 }
+
+/** Permission modes accepted by `claude --permission-mode` (measured surface). */
+export const CLAUDE_PERMISSION_MODES = Object.freeze(['default', 'acceptEdits', 'bypassPermissions', 'plan'])
 
 /**
  * Parse `codex exec --json` stdout: the last `item.completed` agent message is
@@ -110,6 +117,14 @@ function parseCodex(stdout) {
 function claudeArgv(options) {
   const argv = ['-p', '--output-format', 'json']
   if (options.model) argv.push('--model', options.model)
+  if (options.mode) {
+    if (!CLAUDE_PERMISSION_MODES.includes(options.mode)) {
+      throw new RangeError(
+        `claude permission mode "${options.mode}" is not one of ${CLAUDE_PERMISSION_MODES.join(', ')}`,
+      )
+    }
+    argv.push('--permission-mode', options.mode)
+  }
   return argv
 }
 
@@ -166,7 +181,7 @@ export function backendSpec(name) {
  * @returns {string[]} argv with the executable first.
  */
 export function buildWorkerArgv(backend, options) {
-  return [options.executable, ...backendSpec(backend).argv({ model: options.model })]
+  return [options.executable, ...backendSpec(backend).argv({ model: options.model, effort: options.effort, mode: options.mode })]
 }
 
 /**

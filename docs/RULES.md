@@ -279,9 +279,14 @@ npm run test:disposal                           # the gate's own fail-case suite
 | **축소 (shrink)** | a track that loses its runtime entry point (`main`/`exports`/`lib/`) must leave every profile — a bundle row that mounts nothing claims liveness (F-48) |
 | **삭제 (delete)** | no active track imports it, no profile references it, no `@nolit` link dangles (F-51) |
 
-- **A track is `spec`, not `active`, when it ships documents only.** `dsh-command-skill` and
-  `dsh-custom-router` are spec tracks: no `main`, no `exports`, no `lib/`, installed nowhere. That is
-  a lifecycle, not an omission. The gate fails if a spec track becomes installed.
+- **A track is `spec`, not `active`, when it ships documents only.** `dsh-command-skill` is a spec
+  track: no `main`, no `exports`, no `lib/`, installed nowhere. That is a lifecycle, not an omission.
+  The gate fails if a spec track becomes installed.
+- **A workspace library is a profile `dependency`, never a bundle row.** `dsh-custom-router` ships
+  runtime code (`lib/`) that other tracks import, so a profile must install it; it must **not** appear
+  in `dsh.profile.bundles`, because a bundle row implies a mount and it mounts nothing. Measured
+  2026-11-07: the disposal gate rejected the track while it shipped `lib/` and no profile installed
+  it, and accepts it as a dependency with no bundle row.
 - **The five-bar test is measured, not read.** Bars 1–4 are checked from `~/.dsh/profiles/*`
   read-only; bar 5 is checked as far as it can be (the README must name a replacement) and the rest
   stays a reviewer's judgement. A gate that claims more than it measures is worse than prose.

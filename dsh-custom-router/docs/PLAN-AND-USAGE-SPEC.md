@@ -20,6 +20,12 @@ summary: Concrete measured logic for subscription-plan detection (OpenCode Go/Ze
 > [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md),
 > [CUSTOM-ROUTER-PRESET-SURFACE.md](./CUSTOM-ROUTER-PRESET-SURFACE.md).
 
+> **Implementation status (2026-11-07):** `lib/plan.js` implements §1.4's `PlanVerdict`
+> (`judgePlan`, `buildVerdict`) and the billing outcome (`billingOutcome`), with the preset
+> `usage.billing.mode` (`subscription` / `flat` / `pay-per-token` / `none`). The vendor probes
+> (L2 account state, L3 endpoint probe) still run inside the vendor plugins; this module judges
+> their output and guarantees `unknown` never becomes a fabricated zero.
+
 ## 1. Subscription-plan detection — concrete logic
 
 The owner asked: *"현재 사용자 상태를 어떻게 정확히 긁어와서 판정할지 구체적인 로직."*
@@ -204,6 +210,7 @@ interface UsageReading {
 | **Service-specific tabs** | ❌ flat `rowCard` section, no tab API | plugin-owned `settings.section` with own React tab strip | [PRESET §3.1](./CUSTOM-ROUTER-PRESET-SURFACE.md), [ARCHITECTURE §2.1](./CUSTOM-ROUTER-ARCHITECTURE.md) |
 | **Model allow-list per service** | ⚠️ profile-wide only | per-tab `enabledModels` with service-specific validation | `cordis.patch.yml` of each plugin |
 | Reasoning effort / wire mapping | ⚠️ generic opaque ids | per-service mapping (`effort-field` / `model-id-suffix` / `ordered-id`) | [PROTOCOL §2](./CUSTOM-ROUTER-PROTOCOL-STANDARD.md) |
+| **Downstream stream normalisation** (SSE→StreamChunk→usage→finish) | ❌ three separate implementations that already drifted | **one shared pipe with hooks**, consumed by all three | [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md), [PROTOCOL §2.1](./CUSTOM-ROUTER-PROTOCOL-STANDARD.md) |
 | **Composer usage chip** | ❌ | `conversation.input.right` list slot, provider-id gated | [UI-SLOT-ARCHITECTURE.md](../../docs/UI-SLOT-ARCHITECTURE.md) |
 
 **Coverage rule:** for every ❌ row, the custom surface must (a) name the **exact endpoint or

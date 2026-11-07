@@ -5,18 +5,19 @@ version: 1.0
 kind: readme
 status: active
 updated: 2026-11-05
-summary: Operator entry for @nolit/dsh-antigravity: the antigravity model route, /agy, agy_worker, and how to verify the mount.
+summary: Operator entry for @nolit/dsh-antigravity: the three switchable surfaces (model serving/router over web auth, subagent provider, CLI worker) plus the auxiliary usage chip, and how to verify each mount.
 -->
 
 
-One plugin, every Antigravity surface, one account.
+One plugin, three surfaces, one account.
 
-| Surface | What it does | Switch |
-| :--- | :--- | :--- |
-| **CLI worker** | `/agy <task>` command and `agy_worker` tool, starting a **managed child session** through the `antigravity` subagent provider | `cliWorker` (+ `workerEnabled`, and the `subagent` provider) |
-| **Model serving** | the `antigravity` provider route, pure HTTP to `cloudcode-pa` | `modelServing` |
-| **Subagent** | `subagent_antigravity` delegation provider | `subagent` |
-| **UI** | an "Antigravity" settings tab for **grouped model selection** and a composer usage chip | `usagePill` |
+| # | Surface | What it serves | Switch | Default |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | **Model serving / router** (web auth) | the `antigravity` provider route — pure HTTP to `cloudcode-pa`, live catalog, quota and plan facts | `modelServing` | on |
+| 2 | **Subagent** | the `antigravity` subagent provider + the `subagent_antigravity` row | `subagent` | on |
+| 3 | **CLI** | `/agy <task>` + `agy_worker` (managed child session); optional `agy_cli` synchronous batch | `cliWorker`; `workerEnabled` disables `agy_worker` only; `cliBatch` adds the batch tool | on / on / **off** |
+
+Auxiliary, not a surface of its own: the composer usage chip and the settings tab (`usagePill`).
 
 `enabled` is the master switch. The plugin itself can also be disabled from the **DSH Plugins page**, which unmounts every surface at once.
 
@@ -208,14 +209,19 @@ Every value resolves **config → environment → built-in default**.
 
 ### Switches
 
-| Switch | Off removes |
-| :--- | :--- |
-| `enabled` | the model route, CLI surface, subagent and usage chip (the panel stays so it can be turned back on) |
-| `modelServing` | the `antigravity` provider route |
-| `cliWorker` | `/agy` and `agy_worker` |
-| `workerEnabled` | `agy_worker` only (keeps `/agy`) |
-| `subagent` | the subagent provider (the CLI worker then reports a missing-provider error instead of spawning) |
-| `usagePill` | the composer usage chip |
+Grouped by the surface they own. `enabled` is the master: off removes all three surfaces (the
+settings panel stays mounted so it can be turned back on).
+
+| Surface | Switch | Off removes |
+| :--- | :--- | :--- |
+| master | `enabled` | every surface below |
+| 1 model serving | `modelServing` | the `antigravity` provider route |
+| 2 subagent | `subagent` | the subagent provider (the CLI worker then reports a missing-provider error instead of spawning) |
+| 3 CLI | `cliWorker` | `/agy` and `agy_worker` |
+| 3 CLI | `workerEnabled` | `agy_worker` only (keeps `/agy`) |
+| 3 CLI (optional) | `cliBatch` | the synchronous `agy_cli` batch tool (off by default; the tracked child stays) |
+| 3 CLI (yield) | `batchYieldToProvider` | makes `agy_cli` report `provider-mounted` instead of spawning when that subagent provider is mounted (empty by default) |
+| auxiliary | `usagePill` | the composer usage chip |
 
 The **settings tab contains grouped model selection only**: the live account catalog is grouped by
 usage family (Gemini Models / Claude and GPT models / Gemini 4 Argon), then by base model, so the

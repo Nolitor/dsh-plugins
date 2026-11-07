@@ -45,6 +45,14 @@ export function workerParameters(config) {
       type: 'string',
       description: 'Backend-specific route override. Leave empty to use the worker CLI\'s own default.',
     },
+    effort: {
+      type: 'string',
+      description: 'Backend-specific reasoning effort (codex: model_reasoning_effort; opencode ignores it).',
+    },
+    mode: {
+      type: 'string',
+      description: 'Backend-specific execution mode (codex: sandbox; claude: permission mode).',
+    },
     timeoutMs: {
       type: 'number',
       description: 'Hard budget in milliseconds. Defaults to the plugin config value.',
@@ -64,6 +72,12 @@ export function workerOutputSchema() {
     properties: {
       ok: { type: 'boolean', required: true },
       backend: { type: 'string', required: true },
+      elapsedMs: { type: 'integer', required: true },
+      promptBytes: { type: 'integer', required: true },
+      promptTransport: { type: 'string', required: true },
+      diagnostic: { type: 'string', required: true },
+      errorKind: { type: 'string', required: true },
+      yieldedProvider: { type: 'string', required: true },
       exitCode: { type: 'integer', required: true },
       timedOut: { type: 'boolean', required: true },
       truncated: { type: 'boolean', required: true },
@@ -103,6 +117,7 @@ export function renderWorkerResult(result) {
       ? `${result.backend} worker finished successfully.`
       : `${result.backend} worker exited with code ${result.exitCode}.`
   const usage = result.inputTokens || result.outputTokens ? `\n[tokens: input ${result.inputTokens}, output ${result.outputTokens}]` : ''
+  const timing = result.promptBytes ? `\n[${result.promptTransport} prompt, ${result.promptBytes} B, ${result.elapsedMs} ms]` : ''
   const files = result.artifacts.length
     ? `\n[artifacts]\n${result.artifacts.map((file) => `${file.path} (${file.bytes} B, sha256 ${file.sha256.slice(0, 12)}…)`).join('\n')}`
     : ''
@@ -110,8 +125,9 @@ export function renderWorkerResult(result) {
   const skipped = result.skipped ? `\n[${result.skipped} artifact(s) dropped by the collection limit]` : ''
   const truncated = result.truncated ? '\n[output truncated — tail shown]' : ''
   const body = result.summary || '(no output)'
+  const diagnostic = result.diagnostic ? `\n[diagnostic] ${result.diagnostic}` : ''
   const error = result.stderrTail ? `\n\n--- stderr ---\n${result.stderrTail}` : ''
-  return `${head}${usage}${files}${missing}${skipped}${truncated}\n\n${body}${error}`
+  return `${head}${usage}${timing}${files}${missing}${skipped}${truncated}${diagnostic}\n\n${body}${error}`
 }
 
 /**
@@ -140,6 +156,8 @@ export async function registerCliWorker(ctx, config) {
           task: args.task,
           cwd: args.cwd,
           model: args.model,
+          effort: args.effort,
+          mode: args.mode,
           timeoutMs: args.timeoutMs,
           collect: args.collect,
           signal: exec.signal,

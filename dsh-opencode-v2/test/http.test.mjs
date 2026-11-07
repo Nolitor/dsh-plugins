@@ -763,10 +763,11 @@ test('model-settings routes expose the catalog and persist the allow-list', asyn
     // The row config is a live accessor; keep the written value in the test.
     let stack = []
     adapter.config.enabledModels = { get: () => stack }
+    const mirrored = []
     // The host settings service is the writer: mirror what `ctx.settings.update` does.
     const updates = []
     ctx.settings = { update: async (ns, patch) => { updates.push([ns, patch]); stack = patch.enabledModels } }
-    assert.equal(registerModelSettingsRoutes(ctx, adapter, adapter.config), true)
+    assert.equal(registerModelSettingsRoutes(ctx, adapter, adapter.config, () => {}, { onModelsApplied: async (enabled) => { mirrored.push(enabled) } }), true)
     assert.ok(registered.has('/api/local/opencode-v2/model-settings'))
     assert.ok(registered.has('/api/local/opencode-v2/model-settings/apply'))
 
@@ -786,6 +787,7 @@ test('model-settings routes expose the catalog and persist the allow-list', asyn
 
     assert.equal(updates.length, 1)
     assert.equal(updates[0][0], 'dsh-opencode-v2-http')
+    assert.deepEqual(mirrored, [['opencode-go/minimax-m3.1-flash', 'opencode/beam-free']])
     assert.deepEqual(updates[0][1].enabledModels, ['opencode-go/minimax-m3.1-flash', 'opencode/beam-free'])
 
     const bad = await applyRoute.fetch(new Request('http://x/', { method: 'POST', body: JSON.stringify({ nope: 1 }) }))

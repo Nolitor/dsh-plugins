@@ -1,14 +1,125 @@
 # Changelog — @nolit/dsh-opencode-v2
 
 <!-- skeleton:
-version: 1.3
+version: 1.4
 kind: report
 status: active
-updated: 2026-11-05
-summary: Engineering history for @nolit/dsh-opencode-v2, including the completed subagent merge, the 0.0.2-rc.2 cleanup, the rc.4 cost-chip seat migration, and the managed child-session delegation cutover.
+updated: 2026-11-07
+summary: Engineering history for @nolit/dsh-opencode-v2, including the completed subagent merge, the 0.0.2-rc.2 cleanup, the rc.4 cost-chip seat migration, the managed child-session delegation cutover, and the OpenCode 2.2.6 isolated compatibility measurement.
 -->
 
-Current version: `0.0.1-rc.1`
+Current version: `0.0.1-rc.2`
+
+## CLI worker: effort/mode and measured run facts — 2026-11-07
+
+`cli_worker` now accepts `effort` (codex `model_reasoning_effort`) and `mode` (codex `--sandbox`,
+claude `--permission-mode`, validated against the measured mode list), and every run reports
+`elapsedMs`, `promptBytes` and `promptTransport` next to the existing exit facts. This is the S1 port
+of the `@nolit/dsh-subagent-local` contract into this plugin
+(`dsh-custom-router/docs/CUSTOM-ROUTER-SURFACE-CONTRACT.md` §8 S1).
+
+Measured: 456/456 tests pass (3 new argv/result cases); the existing argv assertions are unchanged
+because the new flags appear only when the caller passes them.
+
+## Unified surface switches — 2026-11-07
+
+Owner decision: align the switch names with `dsh-antigravity` so both tracks present the same three
+surfaces. Added:
+
+| Switch | Module | Off removes |
+|---|---|---|
+| `enabled` | `lib/index.js` | the `opencode` tool, `/ocode`, `cli_worker` and the subagent provider |
+| `cli` | `lib/index.js` | the `opencode` tool, `/ocode` and `cli_worker` (subagent stays) |
+| `modelServing` | `lib/http.js` | the `opencode-http-agent` adapter (the row's `disabled` still works too) |
+
+Switch changes apply on the next plugin load. Measured: 464/464 tests (5 new switch cases).
+
+## CLI worker S2: per-backend gates and provider-mounted yield — 2026-11-07
+**Peer pin:** `@nolit/dsh-custom-router` moved to `0.0.1-rc.2` when its preset module landed; this package's peer pin follows.
+
+
+
+`cli_worker` now honors `workerDisabledBackends` (a disabled backend never spawns),
+`workerBackendPaths` / `workerBackendModels` / `workerBackendEfforts` / `workerBackendModes`
+(per-backend defaults; an explicit tool argument still wins), and `yieldToProviders` (backend →
+provider name). A disabled backend or a backend served by a mounted provider returns
+`errorKind`/`yieldedProvider` instead of spawning, so one request never runs the same CLI twice.
+`yieldToProviders` is empty by default because the batch shape is usable while the provider is
+mounted. Measured: 459/459 tests pass (4 new S2 cases).
+
+## OpenCode 2.2.6 job/session integration roadmap — 2026-11-07
+
+Planning-only follow-up to the compatibility pass. The 2.2.6 additions that matter are the
+experimental `GET /api/experimental/job` surface, `session_part` storage, and the
+experimental session export/wait/stats endpoints. The roadmap maps them to existing plugin
+seams in `lib/http.js`, `lib/shared.js`, `lib/index.js`, `lib/workers/run.js`, and
+`lib/subagent.js`, with a phased order and a measurement gate per option. No code, config,
+or live state changed.
+
+## OpenCode 2.2.6 compatibility measurement — 2026-11-07
+
+Owner instruction: verify the reported OpenCode upgrade against the actual host and the
+current OpenCode release, using read-only measurement, and update only this subproject's
+documentation.
+
+Measured facts:
+
+- The live canonical CLI (`~/.bun/bin/opencode`) and the running `opencode serve --service`
+  process are **2.2.0**, not 2.2.5. npm `latest` is **2.2.6**.
+- A legacy `~/.opencode/bin/opencode` **0.0.55** was on `PATH` behind the Bun launcher;
+  stale 1.18.35/1.19.3/2.0.x caches and four orphan 1.19.3 global platform trees were also
+  present. Cleanup was later executed: `~/.opencode` is quarantined and absent, stale caches
+  and orphan platform trees are removed, and the `.bashrc` legacy PATH line is gone.
+- A 2.2.6 release binary (asset SHA-256
+  `08bb21d6326ce740d91cce7ebe88a6536933f6e1e30353b91a06b01f25da306c`) was exercised in a
+  throwaway `/tmp` home with a copy of the live DB and credentials.
+- The plugin's mapped catalog was unchanged: 53 routes, 0 added, 0 removed, 0 changed.
+  `/api/info`, `/api/model`, `/api/provider/opencode-go`, and `/api/credential` kept their
+  expected shapes.
+- A real stdin `opencode run --format json --thinking --auto --standalone
+  -m opencode/beam-free` produced `step_start`, `reasoning`, `text`, and `step_finish`;
+  `JsonRunParser`, `parseRunStream`, and the worker parser all assembled `OK` and the usage
+  buckets correctly.
+- An isolated real DSH boot mounted both rows, wrote a load beacon, and passed the browser
+  probe with 0 activation warnings, 0 page errors, and 0 console errors.
+- A real adapter generation against the 2.2.6 data plane reached the backend but returned
+  HTTP 429 `FreeUsageLimitError`; end-to-end generation success is therefore not claimed.
+  `session export`, tool use, background-job waiting, and SIGTERM cancellation were not
+  exercised.
+
+Documents: [full 2.2.0→2.2.6 delta](docs/OPENCODE-220-TO-226-DELTA.md),
+[2.2.6 job/session integration roadmap](docs/OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md),
+[protocol flexibility gap](docs/OPENCODE-PROTOCOL-FLEXIBILITY-GAP.md),
+[compatibility measurement](docs/OPENCODE-226-COMPATIBILITY-MEASUREMENT.md),
+[executed cleanup log](docs/OPENCODE-INSTALL-CLEANUP-LOG-20261107.md), and
+[upgrade runbook](docs/OPENCODE-INSTALL-CLEANUP-RUNBOOK.md).
+
+Cleanup was executed: legacy 0.0.55 quarantined, stale caches and orphan global platform
+trees removed, legacy PATH line removed. The live version remains **2.2.0**; no 2.2.6
+install, DSH restart, live DB migration, or live profile edit was performed.
+
+## OpenCodex model-selection mirror — 2026-11-07
+
+Owner instruction: synchronize DSH-selected OpenCode Go and Zen models with OpenCodex,
+without changing the running DSH service until all three providers are complete.
+
+| Surface | Before | After |
+| :--- | :--- | :--- |
+| Settings model allow-list | saved only in DSH | after `settings.update`, mirrors to `PUT /api/selected-models` with the active plan's namespace |
+| Plan boundary | no OpenCodex projection | Go routes become `opencode-go/<id>`; Zen routes become `opencode/<id>`; no cross-plan leakage |
+| Shared bridge | a private copy of the OpenCodex client | `@nolit/dsh-custom-router/vendor-bridge` owns URL, token, projection and scope; this package keeps only the Go/Zen seam |
+| Failure reporting | no mirror | selection failure returns an error instead of claiming the mirror succeeded |
+
+Measured boundary (recorded in `dsh-custom-router/docs/OPENCODEX-BRIDGE.md`):
+OpenCodex `selectedModels` and `disabledModels` are catalog visibility only, not a
+global request allow-list. The shared scoped key is a per-credential control and is
+not enforced on unauthenticated loopback admission. The bridge, its configuration
+and the scope union belong to `@nolit/dsh-custom-router`; this plugin owns only the
+model checklist and the `opencode-go`/`opencode` namespace seam.
+
+Verification: `npm run check`; **453/453 tests pass**, including the mounted `apply()`
+route and the Go/Zen projection; isolated real DSH boot clean with the shared bridge linked.
+The live DSH service was not restarted and its profile was not edited.
 
 ## Managed child-session delegation — `opencode` tool + `/ocode` — 2026-11-05
 

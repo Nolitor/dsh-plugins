@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { createLedger, json, registerRoutes } from '../lib/server.js'
 
-function harness({ settings } = {}) {
+function harness({ settings, onModelsApplied } = {}) {
   const routes = new Map()
   const ctx = {
     effect: (fn) => fn(),
@@ -23,6 +23,7 @@ function harness({ settings } = {}) {
     endpointOf: () => ({ baseUrl: 'https://example.invalid', project: 'p' }),
     ledger: createLedger(),
     pluginName: '@nolit/dsh-antigravity',
+    onModelsApplied,
   }
   registerRoutes(ctx, deps, { connection, settings })
   return { routes, deps }
@@ -86,4 +87,30 @@ test('json helper always produces a Response', () => {
   const response = json({ ok: true }, 201)
   assert.ok(response instanceof Response)
   assert.equal(response.status, 201)
+})
+
+test('model selection persists in DSH then mirrors to OpenCodex', async () => {
+  const patches = []
+  const mirrored = []
+  const settings = { update: async (id, patch) => { patches.push([id, patch]) } }
+  const { routes } = harness({ settings, onModelsApplied: async (enabled) => { mirrored.push(enabled) } })
+  const route = routes.get('/api/local/dsh-antigravity/models/apply')
+  const response = await route.fetch(new Request('http://localhost/x', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ enabled: ['gemini-3.8-flash-low'] }),
+  }))
+  assert.equal(response.status, 200)
+  assert.deepEqual(patches, [['dsh-antigravity', { enabledModels: ['gemini-3.8-flash-low'] }]])
+  assert.deepEqual(mirrored, [['gemini-3.8-flash-low']])
+})
+
+test('an OpenCodex sync failure is reported after the DSH write, not faked as success', async () => {
+  const settings = { update: async () => {} }
+  const { routes } = harness({ settings, onModelsApplied: async () => { throw new Error('sync unavailable') } })
+  const response = await routes.get('/api/local/dsh-antigravity/models/apply').fetch(new Request('http://localhost/x', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ enabled: ['gemini-3.8-flash-low'] }),
+  }))
+  assert.equal(response.status, 502)
+  assert.equal((await response.json()).ok, false)
 })
