@@ -167,6 +167,10 @@ function loadClient(options = {}) {
     console,
     setTimeout,
     clearTimeout,
+    Promise,
+    // The section reads live vendor usage through globalThis.fetch; a test that
+    // never provides one makes the merge path untestable.
+    fetch: options.fetch ?? (() => Promise.reject(new Error('fetch unavailable in test'))),
   }
   vm.createContext(sandbox)
   vm.runInContext(clientSource, sandbox, { filename: 'client.js' })
@@ -264,6 +268,12 @@ function assertOps(actual, expected) {
 
 // ------------------------------------------------------------------- tests
 
+/** Build the view model through the loaded bundle (the same code the page runs). */
+function exports_buildViewModel(value, now, secrets) {
+  const { exports, dispose } = loadClient({ namespace: value })
+  return exports.buildViewModel(value, now, secrets)
+}
+
 test('the client registers exactly one settings section, id custom-router', () => {
   const { registrations, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const sections = registrations.filter((entry) => entry.options.name === 'settings.section')
@@ -334,6 +344,54 @@ test('usage windows render real progress bars with aria values', () => {
     assert.equal(typeof fill[0].props.style.width, 'string')
   }
   dispose()
+})
+
+test('live vendor usage routes feed the dashboard when the namespace carries none', async () => {
+  const routeAnswers = {
+    '/api/local/dsh-antigravity/models': {
+      groups: [{ kind: 'gemini', limits: [{ window: 'weekly', remainingFraction: 0.96, resetTime: '2026-11-09T00:00:00Z' }] }],
+      total: 19,
+    },
+    '/api/local/opencode-v2/plan-usage': { windows: { rolling: { percent: 12, resetsAt: '2026-11-08T05:00:00Z' } } },
+    '/api/local/opencode-v2/model-settings': { models: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] },
+    '/api/local/deepinfra/cost/summary': {
+      costUsd: 0.75,
+      requests: 560,
+      bySession: [{ tokens: { input: 1000, output: 200 } }],
+    },
+  }
+  const fetchStub = async (path) => {
+    if (!(path in routeAnswers)) throw new Error('unexpected route: ' + path)
+    return { ok: true, status: 200, json: async () => routeAnswers[path], text: async () => JSON.stringify(routeAnswers[path]) }
+  }
+  const { exports, renderRoot, dispose } = loadClient({
+    namespace: { presets: { antigravity: true, opencode: true, deepinfra: true }, vendorConfig: {} },
+    fetch: fetchStub,
+  })
+  // First render runs the effect that starts the fetches; the state lands on a
+  // microtask, so a second render is what proves the readings reach the view.
+  renderRoot(exports.CustomRouterSection, {})
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  const tree = renderRoot(exports.CustomRouterSection, {})
+  const bars = findAll(tree, (node) => node.props?.role === 'progressbar')
+  assert.ok(bars.length >= 2, `expected live windows to render bars, got ${bars.length}`)
+  const texts = findAll(tree, (node) => node.type === '#text').map((node) => node.text).join(' ')
+  assert.match(texts, /0\.75/, 'DeepInfra spend must render from the cost summary')
+  dispose()
+})
+
+test('the next-reset KPI reads epoch-millisecond reset times', () => {
+  const now = Date.parse('2026-11-08T02:00:00.000Z')
+  const view = exports_buildViewModel({
+    presets: { antigravity: true, opencode: true, deepinfra: true },
+    vendorConfig: {},
+    usage: {
+      antigravity: { windows: [{ id: 'weekly', percent: 4, resetsAt: now + 3 * 3600 * 1000 }] },
+    },
+  }, now)
+  assert.notEqual(view.nextReset, null, 'a numeric resetsAt must produce a next-reset KPI')
+  assert.equal(view.nextReset.at, now + 3 * 3600 * 1000)
+  assert.match(view.nextReset.window, /^(Weekly|주간)$/)
 })
 
 test('no block characters are used for progress', () => {

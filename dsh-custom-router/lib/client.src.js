@@ -596,6 +596,39 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Format a reset instant as a clock time for the KPI card.
+     *
+     * The reference layout puts a TIME in the big KPI slot and the date in the
+     * supporting line: a full localized datetime is wider than the third card
+     * and was truncated to "2026. 11. 8. ..." (measured 2026-11-08).
+     * @param {number|string|null} value - epoch ms or an ISO string.
+     * @returns {string} the localized time, or an em dash.
+     */
+    function formatClock(value) {
+      if (value === null || value === undefined || value === '') return '—'
+      const date = typeof value === 'number' ? new Date(value) : new Date(String(value))
+      if (Number.isNaN(date.getTime())) return '—'
+      return date.toLocaleTimeString(currentLang() === 'ko' ? 'ko-KR' : currentLang() === 'zh' ? 'zh-CN' : 'en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+    }
+
+    /**
+     * Format a reset instant compactly for a card line: `11. 11. 00:00`.
+     *
+     * The full localized datetime is wider than a third-width card's reset line
+     * and was truncated to "2026. 11. 11. 오전 12:00:55..." (measured 2026-11-08).
+     * The full text stays available in the element's title attribute.
+     * @param {number|string|null} value - epoch ms or an ISO string.
+     * @returns {string} the compact stamp, or an empty string.
+     */
+    function formatCompactStamp(value) {
+      if (value === null || value === undefined || value === '') return ''
+      const date = typeof value === 'number' ? new Date(value) : new Date(String(value))
+      if (Number.isNaN(date.getTime())) return ''
+      const pad = (n) => String(n).padStart(2, '0')
+      return `${date.getMonth() + 1}. ${date.getDate()}. ${pad(date.getHours())}:${pad(date.getMinutes())}`
+    }
+
+    /**
      * Format one timestamp for the reset copy.
      * @param {unknown} value - an ISO string or epoch milliseconds.
      * @returns {string} the formatted timestamp, or an empty string.
@@ -689,6 +722,7 @@ window.__ModuleLoader__.load({
           percent: typeof entry.percent === 'number' && Number.isFinite(entry.percent) ? entry.percent : null,
           resetsAt: entry.resetsAt ?? null,
           resetsText: formatTimestamp(entry.resetsAt),
+          resetsCompact: formatCompactStamp(entry.resetsAt),
           relative: formatRelative(entry.resetsAt, now),
         }))
       view.serving = buildServing(measurement)
@@ -781,10 +815,17 @@ window.__ModuleLoader__.load({
             tightest = { provider: provider.name, providerId: provider.id, window: window.label, percent: window.percent }
           }
           if (window.resetsAt === null || window.resetsAt === undefined || window.resetsAt === '') continue
-          const at = new Date(String(window.resetsAt)).getTime()
+          // `resetEpoch` normalizes vendor timestamps to EPOCH MILLISECONDS, so a
+          // numeric value must not be re-parsed as a date string: `new
+          // Date('1794111400000')` is Invalid Date and silently blanked the
+          // "다음 초기화" KPI while every window above it rendered (measured
+          // 2026-11-08).
+          const at = typeof window.resetsAt === 'number'
+            ? window.resetsAt
+            : new Date(String(window.resetsAt)).getTime()
           if (Number.isNaN(at)) continue
           if (nextReset === null || at < nextReset.at) {
-            nextReset = { provider: provider.name, providerId: provider.id, window: window.label, at, resetsText: window.resetsText, relative: window.relative }
+            nextReset = { provider: provider.name, providerId: provider.id, window: window.label, at, clock: formatClock(at), resetsText: window.resetsText, relative: window.relative }
           }
         }
       }
@@ -898,9 +939,12 @@ window.__ModuleLoader__.load({
             style: { width: percent + '%' },
           }))
           : null,
-        h('div', { className: 'crUsageReset' },
-          window.resetsText
-            ? t('resetAt', { at: window.resetsText }) + (window.relative ? ' · ' + window.relative : '')
+        h('div', {
+          className: 'crUsageReset',
+          title: window.resetsText || undefined,
+        },
+          window.resetsCompact || window.resetsText
+            ? t('resetAt', { at: window.resetsCompact || window.resetsText }) + (window.relative ? ' · ' + window.relative : '')
             : t('usageNoData')))
     }
 
@@ -1263,7 +1307,11 @@ window.__ModuleLoader__.load({
           })
       }, [])
 
-      const view = buildViewModel(section, Date.now(), secrets)
+      // Merge the LIVE vendor readings over the namespace fallback: the fetch
+      // above updates state, but without this call the cards keep rendering the
+      // settings document (which carries no measurements) and every window
+      // shows "사용량 미제공" while the routes answer 200 (measured 2026-11-08).
+      const view = buildViewModel(mergeRuntimeUsage(section, runtimeUsage), Date.now(), secrets)
 
       /**
        * Toggle one card's settings panel.
@@ -1472,7 +1520,7 @@ window.__ModuleLoader__.load({
           }),
           h(KpiCard, {
             label: t('kpiNextReset'),
-            value: view.nextReset ? view.nextReset.resetsText : t('kpiUnavailable'),
+            value: view.nextReset ? view.nextReset.clock : t('kpiUnavailable'),
             meta: view.nextReset ? t('kpiNextResetMeta', { provider: view.nextReset.provider, window: view.nextReset.window }) + (view.nextReset.relative ? ' · ' + view.nextReset.relative : '') : t('usageUnavailable'),
             jumpHref: view.nextReset ? '#cr-vendor-' + view.nextReset.providerId : undefined,
           })),

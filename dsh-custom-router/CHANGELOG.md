@@ -51,11 +51,29 @@ routes each vendor panel already exposes — Antigravity `/models`, OpenCode `/p
 `/model-settings`, DeepInfra `/cost/summary` — and merges those readings over any published
 `usage` fallback. Missing routes stay `사용량 미제공`; nothing is synthesized as zero.
 
+**Post-restart verification (live 3080, 2026-11-08 02:08–02:12, Chromium E2E).**
+The owner restarted the service at 02:01. Measured in the running GUI:
+
+- Settings (`계정 메뉴 → 설정`) shows **커스텀 라우터** in the settings nav; the dashboard renders
+  under it (KPI 3-grid, three equal vendor cards, two tabs). It is a **settings page**, not a
+  sidebar row: the main sidebar's `더 보기` lists plugin pages, never settings sections.
+- Live readings reach the cards: Antigravity 주간 4% / 5시간 0% (models 9), OpenCode 5시간 3% /
+  주간 57% / 월간 54% (models 32), DeepInfra **$0.75** spend, 560 requests, 2,560,350 input /
+  335,053 output tokens, `요금표 미제공` / `잔액 조회 미제공`. Five `role=progressbar` bars.
+- Two defects found only in that live run and fixed here:
+  1. `runtimeUsage` was fetched (four routes, all 200) but never merged into the view model, so
+     every window still read `사용량 미제공`; `buildViewModel(mergeRuntimeUsage(...))` now feeds it.
+  2. `nextReset` parsed epoch milliseconds as a date string (`new Date(String(1794…))` is
+     Invalid Date), blanking the `다음 초기화` KPI; numeric values are now used directly, the KPI
+     shows a 24-hour clock time, and card reset lines use a compact `11. 11. 00:00` stamp.
+- Client-modules HMR picked up the rebuilt bundle without a second restart (graph rev moved
+  `a4f2bc963d71 → 56b13872db32`), so the fixes were verified on the live process.
+
 **Known gaps (measured, not claimed as done).**
-- The isolated boot proves the client module is registered and served, but the live 3080
-  process scans `dsh.client` once at startup: it needs a restart before the dashboard appears.
 - The `Custom JSON` picker entry remains disabled until the backend has a declaration-preset
   row to enable; the three measured vendor presets are wired.
+- The dashboard opens from Settings only. A sidebar entry would need a page-slot contribution,
+  which this sprint did not add.
 
 ## 0.0.1-rc.3 — 2026-11-07 (multi-row presets + first real mount)
 
