@@ -1,21 +1,34 @@
 # @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.1
+version: 0.0.1-rc.4
 kind: readme
 status: active
-updated: 2026-11-07
-summary: Custom Router track: the single-owner OpenCodex bridge library, plus the specification for a plugin-owned Settings-Models (Custom) surface and the standardised per-service model-serving contract.
+updated: 2026-11-08
+summary: Custom Router track: the single-owner OpenCodex bridge library, the multi-row preset router, and the single browser dashboard that owns provider usage, per-layer switches and credentials.
 -->
 
 | | |
 | :--- | :--- |
 | Package | `@nolit/dsh-custom-router` |
-| Version | `0.0.1-rc.2` (numeric part owner-gated; `rc#` is the agent history marker) |
-| Status | **shared library + specifications.** The OpenCodex bridge in `lib/` is implemented and tested; the Settings-Models (Custom) surface is still spec-only and mounts nothing |
+| Version | `0.0.1-rc.4` (numeric part owner-gated; `rc#` is the agent history marker) |
+| Status | **implemented bundle + browser dashboard.** `lib/index.js` mounts the enabled preset rows; one `settings.section` (`custom-router`) owns usage/billing, per-layer switches and write-only credentials |
 | Docs | [`docs/`](./docs) — measured specs plus the bridge contract and runbook; document skeleton versions follow the `rc.#` history scheme (separate from the plugin version) |
 | History | [`CHANGELOG.md`](./CHANGELOG.md) |
 | Parent workspace | [`docs/RULES.md`](../docs/RULES.md) |
+
+## Browser dashboard (M10, 2026-11-08)
+
+`package.json` now declares `dsh.client` and `lib/client.js` registers exactly one
+`settings.section` named `custom-router`. The surface is a CSS-grid dashboard: three KPI cards,
+three equal-width vendor cards, real DOM progress bars, card-local settings reveals, and a
+DeepInfra pay-per-token billing variant. Provider usage is read from the same local routes the
+vendor panels use; a missing reading stays unavailable instead of becoming zero.
+
+Switch writes are path-scoped and atomic for compound controls. `lib/index.js` reconciles mounted
+child rows on `app-boot/config-reload`, so a volatile settings write remounts only the affected
+row. Credentials are write-only: the schema declares `role('secret')`, and the dashboard renders
+only the redacted `설정됨/미설정` sidecar state.
 
 ## Shared downstream stream pipe (P1, 2026-11-07)
 
@@ -68,12 +81,11 @@ handler or the host discovery seam.
 `modelPrefixes`, ambiguity refused); `lib/probe.js` executes layer-2 endpoint probes for the
 OpenAI/Anthropic shapes and refuses vendor-owned RPCs.
 
-**Plugin body:** `lib/index.js` (`@nolit/dsh-custom-router/plugin`) applies presets by mounting each
-active preset's own package plugin as a child (`ctx.plugin`) and disposing exactly that child when
-the preset is turned off. It registers no adapter itself and mounts nothing by default; a profile
-must opt in per preset (`presets: { antigravity: true }`). The package still ships **no
-`cordis.patch.yml` / bundle row**, so linked profiles keep mounting the vendor plugins directly until
-the migration step lands.
+**Plugin body:** `@nolit/dsh-custom-router` applies presets by mounting each active preset's own
+package plugin as a child (`ctx.plugin`) and disposing exactly that child when the preset is turned
+off. It registers no adapter itself and mounts nothing by default; a profile must opt in per preset
+(`presets: { antigravity: true }`). `cordis.patch.yml` ships the bundle row and the package exposes
+both the plugin and the browser half.
 
 ### Commands
 

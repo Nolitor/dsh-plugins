@@ -43,6 +43,17 @@ import { loadVendorModules, resolveFromAnchor, resolveThroughChain } from './ven
 export const name = '@nolit/dsh-custom-router'
 
 /**
+ * Config schema for the loader row and the settings service.
+ *
+ * MANDATORY and EXPORTED (measured 2026-11-08): without it the settings service
+ * reports the row as not configurable, the browser dashboard's
+ * `ctx.configForms.get('dsh-custom-router')` answers `unavailable`, and the
+ * Plugins list shows the raw package name with no display text. See
+ * `settings-schema.js` for the volatile/secret split.
+ */
+export { Config } from './settings-schema.js'
+
+/**
  * Services the body needs. It reads none: presets are data and the mounted
  * vendor plugins acquire their own services through their own `inject`.
  */
@@ -351,21 +362,37 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
   for (const error of plan.errors) warn(`dsh-custom-router: ${error}`)
 
   const mounted = []
+  let released = false
   // The resolver is injectable so a unit test never reaches the real install
   // tree through the `execPath` fallback (which would make the suite depend on
   // the machine that runs it).
-  const resolve = configValue(config, 'resolve', resolveFromAnchor)
-  // Safety net for a PARTIAL live-profile edit: `startedBundles` is what the
-  // profile actually started, so a vendor still listed there already owns its
-  // registrations and mounting it again is a hard duplicate failure (measured:
-  // the live web profile lists '@nolit/dsh-antigravity').
   const startedBundles = bundleNames(profileContext)
-  for (const item of plan.rows) {
+
+  /**
+   * A stable description of one planned child.
+   *
+   * Volatile settings edits do not re-run this plugin's apply(); the host emits
+   * `app-boot/config-reload` after recomposition. Comparing this fingerprint is
+   * how the router notices that a child row's config actually changed and
+   * remounts ONLY that child. The fingerprint stays in memory and is never
+   * logged: it contains the row config, including write-only credentials.
+   * @param {object} item - one plan row.
+   * @returns {string} stable in-memory fingerprint.
+   */
+  const fingerprint = (item) => JSON.stringify([item.preset, item.row, item.specifier, item.config])
+
+  /**
+   * Resolve and mount one planned row.
+   * @param {object} item - one plan row.
+   * @returns {Promise<object|undefined>} the mounted fixture, or undefined.
+   */
+  const mountRow = async (item) => {
     const owner = startedBundles.find((bundle) => item.specifier === bundle || item.specifier.startsWith(`${bundle}/`))
     if (owner !== undefined) {
       warn(`dsh-custom-router: row "${item.row}" of preset "${item.preset}" skipped: "${owner}" is already a started bundle (mounting it twice would duplicate its registrations)`)
-      continue
+      return undefined
     }
+    const resolve = configValue(config, 'resolve', resolveFromAnchor)
     const resolution = resolveThroughChain({
       profileDir,
       installAnchor,
@@ -374,14 +401,14 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
     })
     if (!resolution.ok) {
       warn(`dsh-custom-router: row "${item.row}" of preset "${item.preset}" could not be resolved: ${item.specifier}\n${resolution.attempts.map((attempt) => `  ${attempt.label} (${attempt.anchor}): ${attempt.error.split('\n')[0]}`).join('\n')}`)
-      continue
+      return undefined
     }
     try {
       const module = await import(resolution.path)
       const plugin = module?.default ?? module
       if (typeof plugin !== 'function' && (plugin === null || typeof plugin?.apply !== 'function')) {
         warn(`dsh-custom-router: row "${item.row}" resolves to a module without apply(); skipping`)
-        continue
+        return undefined
       }
       const fiber = ctx.plugin(plugin, item.config)
       // MEASURED (cordis 4.0.5): `ctx.plugin()` does NOT throw when the child's
@@ -390,17 +417,61 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
       // this seam must survive (a duplicate registration). Awaiting the fiber
       // rethrows that startup error, which makes the report real.
       await fiber
-      // Only a fiber that actually activated may join the disposer: a failed one
-      // has already unloaded itself, and disposing it would be a second release
-      // of a namespace we never owned.
-      mounted.push({ id: item.row, preset: item.preset, fiber })
+      return { id: item.row, preset: item.preset, specifier: item.specifier, fingerprint: fingerprint(item), fiber }
     } catch (error) {
       warn(`dsh-custom-router: row "${item.row}" of preset "${item.preset}" failed to mount: ${error instanceof Error ? error.message : String(error)}`)
+      return undefined
     }
   }
 
-  // Runtime seam for the rest of the body: routing, probing, merging.
-  const vendorConfig = configValue(config, 'vendorConfig', {})
+  /** Dispose one mounted row without letting a bad child block the rest. */
+  const disposeEntry = (entry) => {
+    try {
+      entry?.fiber?.dispose?.()
+    } catch (error) {
+      warn(`dsh-custom-router: row "${entry?.id}" failed to dispose: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  /**
+   * Reconcile the mounted children against the CURRENT volatile config.
+   *
+   * This is not a reload of the router: rows whose fingerprint did not change
+   * stay mounted. A master-off disposes all rows of that preset; a changed
+   * layer switch disposes and remounts only that row so the child's own gate
+   * sees the new value immediately.
+   * @returns {Promise<void>} settlement.
+   */
+  const reconcile = async () => {
+    if (released) return
+    const currentPlan = planApplications({
+      presets: configValue(config, 'presets', {}),
+      packages: configValue(config, 'packages', {}),
+      strict,
+      vendorConfig: configValue(config, 'vendorConfig', {}),
+    }, presets)
+    for (const error of currentPlan.errors) warn(`dsh-custom-router: ${error}`)
+    const desired = new Map(currentPlan.rows.map((item) => [item.row, item]))
+    for (const entry of [...mounted]) {
+      const next = desired.get(entry.id)
+      if (next !== undefined && next.preset === entry.preset && fingerprint(next) === entry.fingerprint) continue
+      disposeEntry(entry)
+      const index = mounted.indexOf(entry)
+      if (index >= 0) mounted.splice(index, 1)
+    }
+    for (const [row, item] of desired) {
+      if (mounted.some((entry) => entry.id === row)) continue
+      const entry = await mountRow(item)
+      if (entry !== undefined && !released) mounted.push(entry)
+    }
+  }
+
+  await reconcile()
+
+  // Runtime seam for the rest of the body: routing, probing, merging. The
+  // closure rereads volatile config, so a probe after a settings edit uses the
+  // current row data rather than the mount-time snapshot.
+  const currentVendorConfig = () => configValue(config, 'vendorConfig', {})
   try {
     ctx?.provide?.('customRouter', {
       presets,
@@ -409,12 +480,29 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
       probe: (preset, options = {}) => probePreset(preset, probeOptions(preset, {
         ...options,
         vendorProbes: vendorProbes ?? {},
-        vendorConfig,
-      }, vendorConfig)),
+        vendorConfig: currentVendorConfig(),
+      }, currentVendorConfig())),
       merge: (layers) => mergeCatalog(layers),
     })
   } catch (error) {
     warn(`dsh-custom-router: runtime seam not provided: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  // Volatile settings writes retain this config object but do not invoke apply()
+  // again. The host emits this event after the recomposition, which is when the
+  // row diff above can actually remount changed children.
+  let reconcileChain = Promise.resolve()
+  const scheduleReconcile = () => {
+    reconcileChain = reconcileChain.then(() => reconcile()).catch((error) => {
+      warn(`dsh-custom-router: switch reconcile failed: ${error instanceof Error ? error.message : String(error)}`)
+    })
+    return reconcileChain
+  }
+  let offReload
+  try {
+    offReload = ctx?.on?.('app-boot/config-reload', scheduleReconcile)
+  } catch (error) {
+    warn(`dsh-custom-router: config-reload listener unavailable: ${error instanceof Error ? error.message : String(error)}`)
   }
 
   // Release in reverse mount order (a later child may depend on an earlier
@@ -422,17 +510,11 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
   // list for a second call. `released` makes the disposer idempotent, so a
   // double unload (loader teardown plus an explicit call) is a no-op rather
   // than a second dispose of already-disposed fibers.
-  let released = false
   return () => {
     if (released) return
     released = true
-    for (const { id, fiber } of [...mounted].reverse()) {
-      try {
-        fiber?.dispose?.()
-      } catch (error) {
-        warn(`dsh-custom-router: row "${id}" failed to dispose: ${error instanceof Error ? error.message : String(error)}`)
-      }
-    }
+    try { offReload?.() } catch { /* already released */ }
+    for (const entry of [...mounted].reverse()) disposeEntry(entry)
     mounted.length = 0
   }
 }

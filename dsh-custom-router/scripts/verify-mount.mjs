@@ -44,7 +44,7 @@ import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { VENDOR_BUNDLES, VENDOR_ROWS, buildIsolatedHome, dshRoot } from './iso-home.mjs'
+import { ROUTER_ROW, VENDOR_BUNDLES, VENDOR_ROWS, buildIsolatedHome, dshRoot } from './iso-home.mjs'
 
 /** Bundle that would make the profile mount the router from config instead of this gate. */
 const ROUTER_BUNDLE = '@nolit/dsh-custom-router'
@@ -156,21 +156,23 @@ if (!Array.isArray(copiedRows)) {
     if (survivingIds.includes(id)) isolationErrors.push(`vendor patch row still present in the copied patch: ${id}`)
   }
   // A no-op drop must be visible: every row the live patch had must be accounted
-  // for as either removed or kept.
+  // for as either removed or kept. TWO LIVE SHAPES are legal: vendor rows
+  // (pre-2026-11-08 wiring) or one router row that owns `vendorConfig` (current).
   if (removedRowIds.length === 0) {
-    isolationErrors.push(`no vendor patch row was removed from the copied patch (expected some of: ${VENDOR_ROWS.join(', ')}) — the drop was a silent no-op`)
+    isolationErrors.push(`no droppable patch row was removed from the copied patch (expected some of: ${[...VENDOR_ROWS, ROUTER_ROW].join(', ')}) — the drop was a silent no-op`)
   }
   for (const id of removedRowIds) {
-    if (!VENDOR_ROWS.includes(id)) isolationErrors.push(`removed a row that is not a declared vendor row: ${id}`)
+    if (!VENDOR_ROWS.includes(id) && id !== ROUTER_ROW) isolationErrors.push(`removed a row that is neither a vendor row nor the router row: ${id}`)
   }
+  if (survivingIds.includes(ROUTER_ROW)) isolationErrors.push(`router patch row still present in the copied patch: ${ROUTER_ROW}`)
   const removedButStillPresent = removedRowIds.filter((id) => survivingIds.includes(id))
   if (removedButStillPresent.length > 0) {
     isolationErrors.push(`rows reported as removed are still in the file: ${removedButStillPresent.join(', ')}`)
   }
 }
 
-if (isolated.missingRows.length === 0 && removedRowIds.length !== VENDOR_ROWS.length) {
-  isolationErrors.push(`expected all ${VENDOR_ROWS.length} vendor rows in the live patch, removed ${removedRowIds.length} (${removedRowIds.join(', ') || 'none'})`)
+if (isolated.missingRows.length > 0) {
+  isolationErrors.push(`vendor config could not be sourced from the live profile for: ${isolated.missingRows.join(', ')} — neither a vendor row nor the router row's vendorConfig carried it`)
 }
 
 if (isolationErrors.length > 0) {
@@ -278,7 +280,7 @@ if (missingRows.length > 0) {
 line(`[vendorConfig] keys: ${Object.keys(vendorConfig).join(', ') || '(none)'}`)
 // (4) Attribution record: which rows this gate removed, so a silent no-op is visible.
 line(`[isolation] bundles dropped (${droppedBundles.length}/${VENDOR_BUNDLES.length}): ${droppedBundles.join(', ') || '(none)'}`)
-line(`[isolation] patch rows removed (${removedRowIds.length}/${VENDOR_ROWS.length}): ${removedRowIds.join(', ') || '(none)'}`)
+line(`[isolation] patch rows removed: ${removedRowIds.join(', ') || '(none)'}`)
 line(`[isolation] vendor ids surviving in the copied profile: none (asserted before boot)`)
 line(`[isolation] vendor entries in the copied patch after the drop: 0 of ${keptRowIds.length + removedRowIds.length} live rows kept ${keptRowIds.length}`)
 line(`[mount] ${mountError === undefined ? 'ok' : `FAILED: ${mountError instanceof Error ? mountError.message : String(mountError)}`}`)

@@ -70,6 +70,11 @@ export const VENDOR_ROWS = Object.freeze([
   'dsh-opencode-v2-http',
 ])
 
+/** The router's own bundle and loader row — dropped so the gate mounts the body itself. */
+export const ROUTER_BUNDLE = '@nolit/dsh-custom-router'
+/** Loader row id of the router in the live profile. */
+export const ROUTER_ROW = 'dsh-custom-router'
+
 /** `dsh.profile.bundles` entries that would mount the same vendors a second time. */
 export const VENDOR_BUNDLES = Object.freeze([
   '@nolit/dsh-deepinfra',
@@ -200,7 +205,19 @@ export function buildIsolatedHome(options = {}) {
     /** @type {Record<string, object>} */
     const vendorConfig = {}
     const missingRows = []
+    // TWO LIVE SHAPES. Before the 2026-11-08 wiring each vendor had its own
+    // patch row. After it, the router row owns them under `vendorConfig` (the
+    // vendor rows are gone), so read that first and fall back to a vendor row
+    // when a profile still carries one.
+    const routerRow = byId.get(ROUTER_ROW)
+    const routerVendorConfig = routerRow?.config?.vendorConfig
+    if (routerVendorConfig !== null && typeof routerVendorConfig === 'object') {
+      for (const [id, value] of Object.entries(routerVendorConfig)) {
+        if (value !== null && typeof value === 'object') vendorConfig[id] = value
+      }
+    }
     for (const id of VENDOR_ROWS) {
+      if (vendorConfig[id] !== undefined) continue
       const row = byId.get(id)
       if (row === undefined) {
         missingRows.push(id)
@@ -213,10 +230,11 @@ export function buildIsolatedHome(options = {}) {
       if (vendorConfig[rowId] !== undefined) vendorConfig[presetId] ??= vendorConfig[rowId]
     }
 
+    const droppableRowIds = [...VENDOR_ROWS, ROUTER_ROW]
     const removedRowIds = rows
-      .filter((row) => row !== null && typeof row === 'object' && VENDOR_ROWS.includes(row.id))
+      .filter((row) => row !== null && typeof row === 'object' && droppableRowIds.includes(row.id))
       .map((row) => row.id)
-    const kept = rows.filter((row) => !(row !== null && typeof row === 'object' && VENDOR_ROWS.includes(row.id)))
+    const kept = rows.filter((row) => !(row !== null && typeof row === 'object' && droppableRowIds.includes(row.id)))
     writeFileSync(patchPath, yaml.stringify(kept))
 
     // 5. Drop the vendor bundles so only the router mounts them.
@@ -226,8 +244,9 @@ export function buildIsolatedHome(options = {}) {
     if (!Array.isArray(bundles)) {
       throw new Error(`iso-home: ${join(source, 'package.json')} has no dsh.profile.bundles array`)
     }
-    const droppedBundles = bundles.filter((name) => VENDOR_BUNDLES.includes(name))
-    pkg.dsh.profile.bundles = bundles.filter((name) => !VENDOR_BUNDLES.includes(name))
+    const droppableBundles = [...VENDOR_BUNDLES, ROUTER_BUNDLE]
+    const droppedBundles = bundles.filter((name) => droppableBundles.includes(name))
+    pkg.dsh.profile.bundles = bundles.filter((name) => !droppableBundles.includes(name))
     writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
 
     return {
@@ -254,7 +273,7 @@ if (process.argv[1] !== undefined && import.meta.url.endsWith(process.argv[1].sp
   process.stdout.write(`iso-home: ok ${built.profileOut}\n`)
   process.stdout.write(`iso-home: vendorConfig rows ${VENDOR_ROWS.filter((id) => built.vendorConfig[id] !== undefined).join(', ') || '(none)'}\n`)
   if (built.missingRows.length > 0) process.stdout.write(`iso-home: rows missing from the live patch: ${built.missingRows.join(', ')}\n`)
-  process.stdout.write(`iso-home: bundles dropped ${built.droppedBundles.length}/${VENDOR_BUNDLES.length}\n`)
+  process.stdout.write(`iso-home: bundles dropped ${built.droppedBundles.length}\n`)
   built.dispose()
   process.stdout.write(`iso-home: disposed ${!built.disposed()}\n`)
 }

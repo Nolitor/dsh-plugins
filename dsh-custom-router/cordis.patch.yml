@@ -4,13 +4,16 @@
 # fields, so it MUST equal the plugin name exported by lib/index.js
 # (@nolit/dsh-custom-router).
 #
-# WHY THE SPECIFIER IS NOT THE BARE PACKAGE NAME
-#   The package's export map has no "." entry, so the bare specifier
-#   `@nolit/dsh-custom-router` fails with ERR_PACKAGE_PATH_NOT_EXPORTED while
-#   `@nolit/dsh-custom-router/plugin` resolves to lib/index.js (measured
-#   2026-11-07 from the profile). `name` therefore stays the bare package name
-#   (the plugin's own `name` export, used for the settings namespace) while the
-#   specifier carries the export subpath.
+# WHY THE SPECIFIER IS THE BARE PACKAGE NAME
+#   The browser half is discovered by `@deepseek-ai/dsh-client-modules`, which
+#   maps a loader row back to its package manifest with
+#   `exactPackageSpecifier(row.name)`: a SCOPED SUBPATH such as
+#   `@nolit/dsh-custom-router/plugin` returns undefined there, so `resolveMeta`
+#   answers null and the client bundle is never registered (measured
+#   2026-11-08 in an isolated boot: the settings namespace mounted, the client
+#   module did not). The bare specifier needs a "." export, so package.json
+#   declares one; the specifier and the plugin's own `name` export are now the
+#   same package name.
 #
 # WHAT THIS ROW DOES
 #   Mounts the three provider presets as CHILD plugins. It deliberately does not
@@ -29,7 +32,7 @@
 #   through `vendorConfig`. This file carries switches only.
 - insert:
   - id: dsh-custom-router
-    name: '@nolit/dsh-custom-router/plugin'
+    name: '@nolit/dsh-custom-router'
     config:
       # A malformed declaration throws before anything mounts. Leave on: a
       # silently skipped preset looks exactly like a provider that never shipped.

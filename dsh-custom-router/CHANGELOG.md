@@ -1,12 +1,61 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.3
+version: 0.0.1-rc.4
 kind: report
 status: active
-updated: 2026-11-07
-summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the single-owner OpenCodex bridge library, the preset declarations, and the first real multi-row mount.
+updated: 2026-11-08
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the single-owner OpenCodex bridge library, the preset declarations, and the first real multi-row mount, extended 2026-11-08 with the settings schema and the single browser dashboard (M10 UI sprint).
 -->
+
+## 0.0.1-rc.4 — 2026-11-08 (settings schema + single dashboard — M10 UI sprint)
+
+**Scope:** the front half the rc.3 row was missing. A `Config` schema makes the row
+configurable, and one browser dashboard (settings section `custom-router`) owns provider usage,
+per-layer switches and credentials under the single `커스텀 라우터 / Custom Router` entry.
+
+**Measured defects this fixes (isolated boot, 2026-11-08).**
+
+| Symptom | Measured before | After |
+| :--- | :--- | :--- |
+| Settings service could not project the row | `describe()` had no `dsh-custom-router` namespace; the Plugins list showed the raw package name | namespace served with `presets` / `vendorConfig` / `usage`; locale `meta.title` renders `커스텀 라우터` |
+| Browser half never registered | `clientModules.sources` had no `@nolit/dsh-custom-router` (`resolveMeta` answered null) | client bundle listed in the graph (`plugins/??@nolit/dsh-custom-router/client.js&rev=…`) |
+| Switches unsaveable | no schema → `settings.write` answered "no configurable plugin entry" | `presets.<id>`/`vendorConfig.<row>.*` writes accepted as volatile; `strict` refused ("is not volatile") |
+| Secret-bearing row visible | — | `role('secret')` redaction: API key absent from `value`, sidecar reports `vendorConfig.dsh-deepinfra.apiKey=true` |
+
+**Why the loader row is now the BARE package name.** `@deepseek-ai/dsh-client-modules`
+maps a row back to its manifest with `exactPackageSpecifier(row.name)`, which returns
+`undefined` for a scoped SUBPATH. A row named `@nolit/dsh-custom-router/plugin` therefore
+never reached `resolveMeta`, so the client half was invisible even though the host half
+mounted and the settings namespace existed. The package now exports `"."`, and
+`cordis.patch.yml` names the row `@nolit/dsh-custom-router`.
+
+**The browser surface (design approved 2026-11-08).** CSS-grid dashboard, real DOM
+`role="progressbar"` bars (no block characters), three equal vendor cards with independent
+`0fr → 1fr` settings reveals, DeepInfra pay-per-token billing variant (unknown balance
+reported as unavailable, never zero), write-only credential inputs whose "set / not set"
+state comes from the settings mirror's secret sidecar (the form snapshot does not carry it),
+and an add-provider tab panel. Display text comes from `locale/{en,ko,zh}.json`, baked into
+`lib/client.js` by `scripts/gen-locale.mjs` + `scripts/build-client.mjs`.
+
+**Tests:** 261/261 (`npm test`, includes the new `settings-schema`, `client`, `locale` and
+`inventory-metadata` suites). `scripts/verify-mount.mjs` now reads the vendor config from
+the router row's `vendorConfig` (the live profile no longer carries vendor rows) and prints
+`PARITY: PASS`: providers 4/4, tools 6/6, commands 6/6, probes 19/53/178 models.
+
+**Runtime controls and usage feed.** Volatile settings writes retain the router config object
+without re-running `apply()`, so `apply()` now listens for `app-boot/config-reload` and diffs
+mounted rows by an in-memory fingerprint: only the changed row is disposed/remounted, and a
+master-off disposes every row of that preset. The dashboard also reads the same measured local
+routes each vendor panel already exposes — Antigravity `/models`, OpenCode `/plan-usage` +
+`/model-settings`, DeepInfra `/cost/summary` — and merges those readings over any published
+`usage` fallback. Missing routes stay `사용량 미제공`; nothing is synthesized as zero.
+
+**Known gaps (measured, not claimed as done).**
+- The isolated boot proves the client module is registered and served, but the live 3080
+  process scans `dsh.client` once at startup: it needs a restart before the dashboard appears.
+- The `Custom JSON` picker entry remains disabled until the backend has a declaration-preset
+  row to enable; the three measured vendor presets are wired.
 
 ## 0.0.1-rc.3 — 2026-11-07 (multi-row presets + first real mount)
 

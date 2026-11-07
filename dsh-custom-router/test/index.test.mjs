@@ -26,10 +26,23 @@ const BOOM = new URL('./fixtures/vendor-boom.mjs', import.meta.url).href
 function fakeCtx({ startedBundles } = {}) {
   const mounted = []
   const warnings = []
+  const listeners = new Map()
   return {
     mounted,
     warnings,
     logger: { warn: (message) => warnings.push(String(message)) },
+    on(event, listener) {
+      const list = listeners.get(event) ?? []
+      list.push(listener)
+      listeners.set(event, list)
+      return () => {
+        const current = listeners.get(event) ?? []
+        listeners.set(event, current.filter((entry) => entry !== listener))
+      }
+    },
+    async emit(event) {
+      await Promise.all((listeners.get(event) ?? []).map((listener) => listener()))
+    },
     get: (service) => (service === 'profileContext' && startedBundles !== undefined
       ? { name: 'fake', startedBundles }
       : undefined),
@@ -440,4 +453,41 @@ test('an unrelated started bundle does not block any row', async () => {
   await apply(ctx, { presets: { deepinfra: true }, resolve: () => FIXTURE, vendorModules: {} })
   assert.equal(ctx.mounted.length, 1)
   assert.equal(ctx.warnings.filter((line) => /started bundle/.test(line)).length, 0)
+})
+
+
+test('config-reload remounts only a changed row and unmounts a disabled preset', async () => {
+  const ctx = fakeCtx()
+  const config = {
+    strict: false,
+    presets: { antigravity: true },
+    packages: { antigravity: FIXTURE },
+    resolve: () => FIXTURE,
+    vendorConfig: { 'dsh-antigravity': { modelServing: true } },
+  }
+  const dispose = await apply(ctx, config)
+  const firstMount = ctx.mounted.length
+  assert.ok(firstMount >= 2, 'antigravity mounts its vendor row and shared subagent row')
+  const oldVendor = ctx.mounted.find((entry) => entry.config?.modelServing === true)
+  assert.ok(oldVendor, 'the vendor row received the live switch')
+
+  // Volatile settings writes retain the config object; the host then announces
+  // the completed recomposition. Only the changed row should remount.
+  config.vendorConfig['dsh-antigravity'] = { modelServing: false }
+  await ctx.emit('app-boot/config-reload')
+  assert.equal(oldVendor.disposed, true, 'changed row is disposed')
+  assert.ok(
+    ctx.mounted.some((entry) => !entry.disposed && entry.config?.modelServing === false),
+    'the changed row remounts with the new config',
+  )
+  assert.equal(
+    ctx.mounted.filter((entry) => !entry.disposed).length,
+    firstMount,
+    'unchanged rows stay mounted',
+  )
+
+  config.presets.antigravity = false
+  await ctx.emit('app-boot/config-reload')
+  assert.equal(ctx.mounted.filter((entry) => !entry.disposed).length, 0, 'master off unmounts every row')
+  dispose()
 })
