@@ -162,6 +162,16 @@ The owner restarted the service at 02:01. Measured in the running GUI:
   save button is disabled with `최소 1개 이상 선택해야 합니다` instead of silently turning a
   clear-all into select-everything (measured live: the button is disabled with zero selected).
 
+**Deferred by the owner (2026-11-08), kept here so the next round does not re-derive them.**
+- Antigravity reports usage PER MODEL GROUP (Gemini / Claude·GPT / Argon); the dashboard card
+  currently merges them (first group wins) and shows one window set. Split the card per group;
+  the window order inside a group is already 5시간 → 주간 → 월간.
+- The OpenCode plan card code (`PlanUsageCard`, tier evidence, documented-limit table) stays
+  exported but is NOT mounted in Settings: usage belongs to the sidebar dashboard, and the
+  settings tab must not duplicate it.
+- S-A (declaration/Custom-JSON onboarding) and S-B (readiness probe surface) are later rounds;
+  S-C (per-model limit / plan tier fidelity) is on hold behind the upstream console API.
+
 **Known gaps (measured, not claimed as done).**
 - The `Custom JSON` picker entry remains disabled until the backend has a declaration-preset
   row to enable; the three measured vendor presets are wired.

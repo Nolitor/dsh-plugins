@@ -950,6 +950,10 @@ window.__ModuleLoader__.load({
           windows.push({ id, percent, resetsAt: resetEpoch(limit?.resetTime ?? limit?.resetsAt) })
         }
       }
+      // The provider reports weekly before 5-hour; the dashboard reads
+      // shortest-window-first (5시간 → 주간 → 월간), so order here once.
+      const WINDOW_ORDER = ['5h', 'weekly', 'monthly']
+      windows.sort((left, right) => WINDOW_ORDER.indexOf(left.id) - WINDOW_ORDER.indexOf(right.id))
       const modelCount = Number.isFinite(Number(payload?.total))
         ? Number(payload.total)
         : groups.reduce((sum, group) => sum + (Array.isArray(group?.models) ? group.models.length : 0), 0)
@@ -2363,23 +2367,6 @@ window.__ModuleLoader__.load({
         return () => { alive = false }
       }, [])
 
-      const [planUsage, setPlanUsage] = React.useState({ status: 'loading' })
-      React.useEffect(() => {
-        let alive = true
-        // The plan windows and the local cost ledger live on two other routes;
-        // the model catalog above does not carry them.
-        Promise.allSettled([
-          postUsageRoute(globalThis.fetch, '/api/local/opencode-v2/plan-usage'),
-          postUsageRoute(globalThis.fetch, '/api/local/opencode-v2/model-settings'),
-        ]).then(([plan, catalog]) => {
-          if (!alive) return
-          const windows = plan.status === 'fulfilled' ? plan.value?.windows ?? null : null
-          const cost = catalog.status === 'fulfilled' ? catalog.value?.cost ?? null : null
-          setPlanUsage({ status: windows === null && cost === null ? 'error' : 'ready', windows, cost })
-        })
-        return () => { alive = false }
-      }, [])
-
       /**
        * Toggle one row: every variant id of the row moves together.
        * @param {string} presetId - preset id.
@@ -2489,7 +2476,6 @@ window.__ModuleLoader__.load({
           tabIndex: 0,
           'data-category': active.id,
         },
-        active.id === 'opencode' ? h(PlanUsageCard, { usage: planUsage }) : null,
         h('div', { className: 'crToolbar' },
           h('input', {
             className: 'crSearchInput',
