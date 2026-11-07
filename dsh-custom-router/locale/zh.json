@@ -111,5 +111,6 @@
   "planGo": "Go 订阅",
   "planZen": "Zen 按量计费",
   "planOpenCode": "OpenCode 套餐",
-  "priceIncluded": "套餐已含"
+  "priceIncluded": "套餐已含",
+  "modelsNeedOne": "至少选择一个模型（空列表在提供方会被视为全部）。"
 }

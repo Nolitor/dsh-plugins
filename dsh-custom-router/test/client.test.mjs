@@ -482,6 +482,33 @@ test('saving a category writes the enabledModels list for that preset row', asyn
   dispose()
 })
 
+test('an empty model selection cannot be saved (vendors read empty as all)', async () => {
+  const routeAnswers = {
+    '/api/local/dsh-antigravity/models': { models: [{ id: 'a', name: 'A', enabled: true }] },
+    '/api/local/opencode-v2/model-settings': { enabled: [], models: [{ route: 'r/one', name: 'One', plan: 'go', available: true }] },
+    '/api/local/deepinfra/models': { models: [{ id: 'm/one', price: { input: 1, output: 2, listInput: 1, listOutput: 2 }, enabled: true }] },
+  }
+  const fetchStub = async (path) => ({ ok: true, status: 200, json: async () => routeAnswers[path] })
+  const { exports, renderRoot, writes, dispose } = loadClient({
+    namespace: { presets: { antigravity: true, opencode: true, deepinfra: true }, vendorConfig: {} },
+    fetch: fetchStub,
+  })
+  renderRoot(exports.CustomRouterModels, {})
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  let tree = renderRoot(exports.CustomRouterModels, {})
+  const category = findAll(tree, (node) => node.props?.['data-category'] === 'deepinfra')[0]
+  const clear = findAll(category, (node) => node.props?.className?.includes('crButtonGhost'))[0]
+  clear.props.onClick()
+  tree = renderRoot(exports.CustomRouterModels, {})
+  const deepinfraCategory = findAll(tree, (node) => node.props?.['data-category'] === 'deepinfra')[0]
+  const saveButton = findAll(deepinfraCategory, (node) => node.props?.className === 'crButton crButtonPrimary')[0]
+  assert.equal(saveButton.props.disabled, true, 'save must be disabled with zero models selected')
+  const texts = findAll(deepinfraCategory, (node) => node.type === '#text').map((node) => node.text).join(' ')
+  assert.match(texts, /Select at least one model/)
+  assert.equal(writes.length, 0)
+  dispose()
+})
+
 test('no block characters are used for progress', () => {
   assert.equal(/[█▓▒░]/u.test(clientSource), false)
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })

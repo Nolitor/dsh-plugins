@@ -1540,11 +1540,18 @@ window.__ModuleLoader__.load({
                   }))),
             h('div', { className: 'crCategoryFoot' },
               errors[source.id] ? h('span', { className: 'crState', 'data-state': 'error' }, t('saveError')) : null,
-              dirty ? h('span', { className: 'crState' }, t('modelsDirty')) : h('span', { className: 'crState', 'data-saved': 'true' }, t('modelsSaved')),
+              chosen.size === 0
+                ? h('span', { className: 'crState', 'data-state': 'empty' }, t('modelsNeedOne'))
+                : dirty
+                  ? h('span', { className: 'crState' }, t('modelsDirty'))
+                  : h('span', { className: 'crState', 'data-saved': 'true' }, t('modelsSaved')),
               h('button', {
                 type: 'button',
                 className: 'crButton crButtonPrimary',
-                disabled: !dirty || saving[source.id] === true,
+                // An empty `enabledModels` means ALL to every vendor, so an
+                // empty selection cannot be expressed: refuse it instead of
+                // silently turning "clear" into "select everything".
+                disabled: !dirty || chosen.size === 0 || saving[source.id] === true,
                 onClick: () => save(source),
               }, saving[source.id] === true ? t('modelsSaving') : t('modelsSave'))))
         }),

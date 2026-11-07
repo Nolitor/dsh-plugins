@@ -90,6 +90,9 @@ The owner restarted the service at 02:01. Measured in the running GUI:
   through `settings.write` took the DeepInfra provider from 4 advertised models to exactly 1,
   and restoring the list brought all 4 back — the reconcile remounts the child and the prompt
   picker follows the saved selection.
+- An EMPTY selection cannot be saved: every vendor reads `enabledModels: []` as "all", so the
+  save button is disabled with `최소 1개 이상 선택해야 합니다` instead of silently turning a
+  clear-all into select-everything (measured live: the button is disabled with zero selected).
 
 **Known gaps (measured, not claimed as done).**
 - The `Custom JSON` picker entry remains disabled until the backend has a declaration-preset

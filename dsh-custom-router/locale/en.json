@@ -111,5 +111,6 @@
   "planGo": "Go subscription",
   "planZen": "Zen pay-as-you-go",
   "planOpenCode": "OpenCode plan",
-  "priceIncluded": "included in plan"
+  "priceIncluded": "included in plan",
+  "modelsNeedOne": "Select at least one model (an empty list means ALL to the vendors)."
 }

@@ -111,5 +111,6 @@
   "planGo": "Go 구독",
   "planZen": "Zen 종량제",
   "planOpenCode": "OpenCode 요금제",
-  "priceIncluded": "구독 포함"
+  "priceIncluded": "구독 포함",
+  "modelsNeedOne": "최소 1개 이상 선택해야 합니다 (빈 목록은 벤더에서 전체로 해석됩니다)."
 }

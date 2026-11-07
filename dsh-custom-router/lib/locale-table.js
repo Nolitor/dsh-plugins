@@ -117,7 +117,8 @@ export const I18N = {
     "planGo": "Go subscription",
     "planZen": "Zen pay-as-you-go",
     "planOpenCode": "OpenCode plan",
-    "priceIncluded": "included in plan"
+    "priceIncluded": "included in plan",
+    "modelsNeedOne": "Select at least one model (an empty list means ALL to the vendors)."
   },
   "ko": {
     "meta": {
@@ -232,7 +233,8 @@ export const I18N = {
     "planGo": "Go 구독",
     "planZen": "Zen 종량제",
     "planOpenCode": "OpenCode 요금제",
-    "priceIncluded": "구독 포함"
+    "priceIncluded": "구독 포함",
+    "modelsNeedOne": "최소 1개 이상 선택해야 합니다 (빈 목록은 벤더에서 전체로 해석됩니다)."
   },
   "zh": {
     "meta": {
@@ -347,6 +349,7 @@ export const I18N = {
     "planGo": "Go 订阅",
     "planZen": "Zen 按量计费",
     "planOpenCode": "OpenCode 套餐",
-    "priceIncluded": "套餐已含"
+    "priceIncluded": "套餐已含",
+    "modelsNeedOne": "至少选择一个模型（空列表在提供方会被视为全部）。"
   }
 }
