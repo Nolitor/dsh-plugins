@@ -78,7 +78,7 @@ export const PRESETS = Object.freeze([
       Object.freeze({
         row: 'tool-subagent-antigravity',
         specifier: TOOL_SUBAGENT_ROW,
-        config: Object.freeze({ provider: 'antigravity', toolName: 'subagent_antigravity', maxDepth: 'provider-managed' }),
+        config: Object.freeze({ provider: 'antigravity', toolName: 'subagent_antigravity', maxDepth: 'provider-managed', modelSelection: true }),
       }),
     ]),
     providerId: 'antigravity',
@@ -154,7 +154,7 @@ export const PRESETS = Object.freeze([
       Object.freeze({
         row: 'tool-subagent-opencode',
         specifier: TOOL_SUBAGENT_ROW,
-        config: Object.freeze({ provider: 'opencode', toolName: 'subagent_opencode', maxDepth: 'provider-managed' }),
+        config: Object.freeze({ provider: 'opencode', toolName: 'subagent_opencode', maxDepth: 'provider-managed', modelSelection: true }),
       }),
     ]),
     providerId: 'opencode-http-agent',

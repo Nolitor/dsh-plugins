@@ -64,6 +64,12 @@ downstream work.
    identify the priceable record; the row is written on the first positive output count, else once
    in `finally`.
 
+**Addendum — the opt-in flag needs schema fields (2026-11-08).** `anthropicRoute` and
+`anthropicBaseURL` were added to the plugin `Config` schema. Without them a Schemastery-validated
+profile strips the keys before `apply()` sees them, so `anthropicRoute: true` in a profile would
+silently register nothing. Neither field has a settings-UI control; enabling the route is a profile
+edit.
+
 **Not done:** no live-profile write, no restart, no bundle/settings-UI entry for the new route.
 Enabling it is an operator decision (`anthropicRoute: true`) and needs an owner-approved profile
 edit. `pi-ai` is not involved anywhere in this path.

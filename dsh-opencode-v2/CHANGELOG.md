@@ -1,14 +1,40 @@
 # Changelog — @nolit/dsh-opencode-v2
 
 <!-- skeleton:
-version: 1.4
+version: 1.5
 kind: report
 status: active
-updated: 2026-11-07
+updated: 2026-11-08
 summary: Engineering history for @nolit/dsh-opencode-v2, including the completed subagent merge, the 0.0.2-rc.2 cleanup, the rc.4 cost-chip seat migration, the managed child-session delegation cutover, and the OpenCode 2.2.6 isolated compatibility measurement.
 -->
 
-Current version: `0.0.1-rc.2`
+Current version: `0.0.1-rc.3`
+
+## 0.0.1-rc.3 — CLI subagent: model selection, absolute resolution, usage ledger — 2026-11-08
+
+Owner instruction: the CLI child spends on the same account as the HTTP route, so its usage must be
+visible and its model must be choosable per call.
+
+- **Model selection**: `capabilities.agentOptions` false -> true; `request.agentOptions.model` beats
+  `config.model` and reaches `opencode run -m`.
+- **Executable resolution**: `resolveExecutable()` (absolute/exists -> PATH search -> named error) is
+  now argv[0]. Measured failure it removes: the default `'opencode'` is not on the host PATH
+  (`~/.bun/bin` missing), so every delegation failed before the CLI started.
+- **Usage**: `parseRunStream` sums the run NDJSON's `step_finish` tokens
+  (`part.tokens ?? tokens`, fields input/output/reasoning/cache.read/cache.write) and returns
+  `usage` (null when the run reported none — tool-free v2 runs emit no `step_finish`). The provider
+  records it once per completed run through a new `recordUsage` callback.
+- **One ledger, two rows**: `lib/cost.js` gained `sharedCostLedger()` (one instance per owner key) and
+  the HTTP adapter uses it too, so the CLI row and the HTTP row feed the SAME persisted
+  `opencode-session-cost.json` instead of two snapshots clobbering each other. `resetSharedCostLedgers()`
+  exists for tests only.
+
+**Verification:** `test/subagent-usage.test.mjs` 7 new tests; suite **453 -> 471 pass / 0 fail**.
+`resetSharedCostLedgers()` is called by the one cost-summary test that builds several adapters in one
+process.
+
+**Not done:** no live-profile write; `modelSelection: true` arrives with the custom-router preset
+change and the owner-approved restart.
 
 ## CLI worker: effort/mode and measured run facts — 2026-11-07
 

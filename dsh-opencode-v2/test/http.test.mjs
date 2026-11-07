@@ -8,6 +8,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { resetSharedCostLedgers } from '../lib/cost.js'
 import http from 'node:http'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { mkdtempSync } from 'node:fs'
@@ -805,6 +806,7 @@ test('model-settings routes expose the catalog and persist the allow-list', asyn
  * surface fed by the same chunk that reports usage.
  */
 test('a streamed generation records its cost against the DSH session', async () => {
+  resetSharedCostLedgers()
   // The measured Go payload, injected as the final usage chunk.
   const usage = {
     prompt_tokens: 32,

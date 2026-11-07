@@ -1,14 +1,35 @@
 # Changelog — @nolit/dsh-antigravity
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: report
 status: active
-updated: 2026-11-07
+updated: 2026-11-08
 summary: Engineering history for @nolit/dsh-antigravity, including the rc.6 fix for empty stored answers and the route-gated usage chip. Created 2026-11-05 by merging the CLI worker surface of @nolit/dsh-antigravity-cli with the HTTP model route proven in @nolit/dsh-antigravity-directsdk, plus a settings section, a usage chip and per-surface switches.
 -->
 
-Current version: `0.0.1-rc.8`
+Current version: `0.0.1-rc.9`
+
+## 0.0.1-rc.9 — CLI subagent: model selection, absolute resolution, usage ledger — 2026-11-08
+
+Owner instruction: the CLI bridge is a first-class subagent path, not an opaque side channel. Three
+measured gaps closed in `lib/subagent.js` (+ the provider config in `lib/index.js`):
+
+| Gap | Before (measured) | After |
+| :--- | :--- | :--- |
+| per-call model | `capabilities.agentOptions = false`; the tool never declared `model`, so a delegation always used the configured default | `agentOptions: true`; `request.agentOptions.model` beats the default and reaches `agy --model` |
+| executable | `argv[0] = config.agyPath` (`agy`), so a PATH without it failed at spawn | `resolveExecutable()`: absolute + exists else PATH search (PATHEXT on win32), else a named error before any child exists |
+| usage | the `agy` envelope's `usage` was parsed and discarded (`SubagentResult` has no usage field) | mapped to the host `TokenUsage` and recorded once per **completed** run via `recordUsage` -> `ledger.record`; aborted/timeout/non-zero runs record nothing |
+
+The mapping accepts the repo's measured CLI field `cache_read_tokens` (backends.js) as well as
+`cache_read_input_tokens`/`cacheReadTokens`, so the real field is not silently zeroed.
+
+**Verification:** `test/subagent-usage.test.mjs` 13 new tests; suite **151 -> 164 pass / 0 fail**.
+The one pre-existing argv assertion in `cli-worker.test.mjs` was updated to accept the resolved
+absolute path (its old expectation pinned the bare name, which is exactly the bug).
+
+**Not done:** no live-profile write (the `modelSelection: true` switch lands with the custom-router
+preset change and needs the restart).
 
 ### 2026-11-07 — synchronous batch tool `agy_cli` (port of `dsh-subagent-local`)
 

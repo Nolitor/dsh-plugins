@@ -40,6 +40,15 @@ signature lives in the provider binding's state and in `replayState` on the repl
 `tool_use` block announces `id`/`name` on `content_block_start` and its JSON arrives as
 `input_json_delta.partial_json` fragments (same fragmented shape the pipe already owns).
 
+**Addendum — subagent tool rows opt into per-call model selection (2026-11-08).**
+`PRESETS.antigravity` and `PRESETS.opencode` now declare `modelSelection: true` on their
+`tool-subagent-*` entry, and both vendor `cordis.patch.yml` rows carry the same switch. Measured
+requirement: `dsh-tool-subagent` rejects `modelSelection` unless the provider's
+`capabilities.agentOptions` is true (the vendor providers were changed in the same round), and the
+allowed-route policy comes from the Session's `subagent/model-selection-policy` event, not from the
+provider — so no provider-side route table was invented. `test/presets.test.mjs` was updated to the
+new measured entry set.
+
 **Verification (measured):** `npm test` **313 pass / 0 fail** (286 -> 313, +27 protocol tests);
 `npm run verify:stream` 7/7, vendor loads 0; `node --check` on every edited module. No adapter
 registered, no provider table, no `dsh-llm` import — R0 unchanged.

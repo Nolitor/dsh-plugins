@@ -281,7 +281,10 @@ test('the registered provider runs agy through the injected subprocess service',
     signal: SIGNAL,
   })
   assert.equal(spawned.length, 1, 'the provider spawns agy for the child')
-  assert.deepEqual(spawned[0].argv.slice(0, 3), ['agy', '-p', 'run the child'])
+  // Since the absolute-path patch (2026-11-08) argv[0] is the resolved path, not
+  // the bare name: a bare `agy` only works when PATH happens to contain it.
+  assert.equal(spawned[0].argv[0].split(/[\\/]/).pop(), 'agy')
+  assert.deepEqual(spawned[0].argv.slice(1, 3), ['-p', 'run the child'])
   const settled = await run.result
   assert.equal(settled.stopReason, 'completed')
   await run.dispose()

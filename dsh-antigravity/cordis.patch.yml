@@ -76,3 +76,4 @@
         provider: antigravity
         toolName: subagent_antigravity
         maxDepth: provider-managed
+        modelSelection: true

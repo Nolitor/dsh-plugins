@@ -106,3 +106,4 @@
       provider: opencode
       toolName: subagent_opencode
       maxDepth: provider-managed
+      modelSelection: true

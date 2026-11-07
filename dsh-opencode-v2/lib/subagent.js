@@ -9,7 +9,8 @@
  * @module @nolit/dsh-opencode-v2/subagent
  */
 import { randomUUID } from 'node:crypto'
-import { isAbsolute } from 'node:path'
+import { existsSync, statSync } from 'node:fs'
+import { delimiter, isAbsolute, join } from 'node:path'
 
 const MAX_DIAGNOSTIC_BYTES = 4096
 const MAX_STDOUT_BYTES = 8 * 1024 * 1024
@@ -42,6 +43,49 @@ function promptText(prompt) {
 }
 
 /**
+ * Whether a path names a real file (a directory never counts as an executable).
+ * @param path - candidate path.
+ * @returns true when the path exists and is a file.
+ */
+function isFile(path) {
+  try {
+    return existsSync(path) && statSync(path).isFile()
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Resolve the configured CLI name to an absolute executable path.
+ *
+ * Measured: a bare `opencode` is resolved by the CHILD's own PATH lookup, which
+ * fails when the host daemon was started without the user's shell PATH. Doing
+ * the lookup here makes that failure say what to fix instead of surfacing ENOENT.
+ *
+ * @param command - the configured `opencodePath` (default `'opencode'`).
+ * @returns the first existing executable file: the path itself when absolute, otherwise the PATH match.
+ * @throws {Error} when no candidate exists.
+ */
+export function resolveExecutable(command) {
+  const value = String(command ?? '')
+  if (value !== '' && isAbsolute(value) && isFile(value)) return value
+  // Resolve against the host PATH exactly as a shell would. On win32 an
+  // extensionless name only exists through PATHEXT, so try those variants.
+  const extensions =
+    process.platform === 'win32'
+      ? ['', ...String(process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)]
+      : ['']
+  for (const dir of String(process.env.PATH ?? '').split(delimiter)) {
+    if (dir === '') continue
+    for (const extension of extensions) {
+      const candidate = join(dir, value + extension)
+      if (isFile(candidate)) return candidate
+    }
+  }
+  throw new Error('opencode subagent: opencode CLI not found (set opencodePath or add it to PATH)')
+}
+
+/**
  * Build the one-shot argv for a delegation.
  * @param options - resolved options.
  * @returns the argv.
@@ -58,12 +102,21 @@ export function buildOpencodeArgv(options) {
  *
  * Events carry cumulative `part.text` snapshots, so the last snapshot for each
  * part id wins; reasoning and tool events are ignored, keeping only the answer.
+ *
+ * Measured (`lib/shared.js` JsonRunParser, the `run --format json` peer of this
+ * parser): token usage rides on the `step_finish` event, at `part.tokens` or the
+ * top-level `tokens`, and it is that STEP's usage, never a whole-run total. A
+ * tool-free v2 run emits no `step_finish` at all, so `usage` is null there
+ * rather than a row of invented zeros. Steps are summed so multi-step runs keep
+ * every step's numbers; the shape mirrors `usageFromTokens` in `lib/http.js`.
+ *
  * @param stdout - captured NDJSON output.
- * @returns the answer text and reported errors.
+ * @returns the answer text, reported errors, and summed usage (null when the run reported none).
  */
 export function parseRunStream(stdout) {
   const parts = new Map()
   const errors = []
+  let usage = null
   for (const line of String(stdout ?? '').split('\n')) {
     const trimmed = line.trim()
     if (!trimmed.startsWith('{')) continue
@@ -78,18 +131,46 @@ export function parseRunStream(stdout) {
       parts.set(event.part.id ?? `anon-${parts.size}`, event.part.text)
       continue
     }
+    if (event.type === 'step_finish') {
+      // Same lookup the authoritative run parser uses: a wrapper `part` wins
+      // over the top-level field, and both are tolerated.
+      const tokens = event.part?.tokens ?? event.tokens
+      if (tokens && typeof tokens === 'object') {
+        const cache = tokens.cache && typeof tokens.cache === 'object' ? tokens.cache : {}
+        const buckets = {
+          input: tokens.input,
+          output: tokens.output,
+          reasoning: tokens.reasoning,
+          cacheRead: cache.read,
+          cacheWrite: cache.write,
+        }
+        usage ??= {}
+        let added = 0
+        for (const [bucket, raw] of Object.entries(buckets)) {
+          const value = Number(raw)
+          // Numbers only when present: an absent bucket stays absent instead
+          // of becoming a measured-looking zero.
+          if (raw === undefined || raw === null || !Number.isFinite(value)) continue
+          usage[bucket] = (usage[bucket] ?? 0) + value
+          added += 1
+        }
+        // A `tokens` object with nothing numeric in it reports no usage at all.
+        if (added === 0 && Object.keys(usage).length === 0) usage = null
+      }
+      continue
+    }
     if (event.type === 'error') {
       const error = event.error
       if (typeof error === 'string') errors.push(error)
       else if (error && typeof error === 'object') errors.push(String(error.message ?? error.name ?? 'error'))
     }
   }
-  return { text: [...parts.values()].join('').trim(), errors }
+  return { text: [...parts.values()].join('').trim(), errors, usage }
 }
 
 /** Provider implementation handed to `ctx.subagents`. */
 export class OpenCodeSubagentProvider {
-  capabilities = Object.freeze({ agentOptions: false, agentPreset: false, outputSchema: false, depthLimit: false })
+  capabilities = Object.freeze({ agentOptions: true, agentPreset: false, outputSchema: false, depthLimit: false })
   inheritsParentContext = false
 
   /**
@@ -117,9 +198,13 @@ export class OpenCodeSubagentProvider {
     const env = { ...process.env, ...this.config.env }
     const timeout = AbortSignal.timeout(this.config.timeoutMs)
     const signal = AbortSignal.any([request.signal, timeout])
+    // A per-request model beats the configured default. Read defensively: the
+    // field type is AgentOptions, and an older or partial caller may omit it.
+    const requested = request.agentOptions?.model
+    const model = typeof requested === 'string' && requested !== '' ? requested : this.config.model
     const argv = buildOpencodeArgv({
-      executable: this.config.opencodePath,
-      model: this.config.model,
+      executable: resolveExecutable(this.config.opencodePath),
+      model,
       auto: this.config.auto,
       agent: this.config.agent,
     })
@@ -159,6 +244,16 @@ export class OpenCodeSubagentProvider {
         if ((outcome.exitCode ?? 0) !== 0 || parsed.errors.length > 0) {
           const detail = parsed.errors.join('; ') || stderr || stdout || 'opencode exited non-zero'
           return { output: [], stopReason: 'error', diagnostic: boundDiagnostic(detail) }
+        }
+        // A successful run reports its spend here, once. A child that reported no
+        // usage (tool-free v2 runs emit no `step_finish`) records nothing rather
+        // than a fabricated zero row. Recording never throws into the result.
+        if (parsed.usage !== null) {
+          try {
+            this.config.recordUsage?.({ usage: parsed.usage, model })
+          } catch {
+            /* a ledger failure must not fail the delegation */
+          }
         }
         if (parsed.text === '') return { output: [], stopReason: 'completed' }
         return { output: [{ type: 'text', text: parsed.text }], stopReason: 'completed' }

@@ -38,6 +38,7 @@ import { readSelection, writeSelection } from './selection.js'
 import { WORKER_BACKENDS } from './workers/backends.js'
 import { registerCliWorker } from './workers/index.js'
 import { OpenCodeSubagentProvider } from './subagent.js'
+import { createCostStore, parseCost, sharedCostLedger } from './cost.js'
 
 /** Host plugin name; must match package.json `name` and the cordis.patch.yml row id. */
 export const name = 'dsh-opencode-v2'
@@ -672,6 +673,15 @@ export async function apply(ctx, config) {
       return clear
     }
     try {
+      // The CLI child spends on the same account as the HTTP route, so its
+      // usage feeds the SAME persisted ledger the cost pill reads. The shared
+      // instance prevents the two rows from clobbering each other's snapshot.
+      const cliLedger = sharedCostLedger('opencode-http-agent', {
+        store: createCostStore({
+          profileDir: ctx?.get?.('profileContext')?.dir,
+          dshHome: process.env.DSH_HOME,
+        }),
+      })
       const provider = new OpenCodeSubagentProvider(providerName, ctx, {
         opencodePath: config.opencodePath.get(),
         model: config.model.get(),
@@ -680,6 +690,20 @@ export async function apply(ctx, config) {
         timeoutMs: config.subagentTimeoutMs.get(),
         disposeGraceMs: config.subagentDisposeGraceMs.get(),
         env: config.subagentEnv.get(),
+        // One row per completed CLI run: the wire reports `step_finish` steps,
+        // never estimated_cost, so this is a token-only record (costUsd null).
+        recordUsage: ({ usage, model }) => {
+          if (usage === null || typeof usage !== 'object') return
+          const tokens = {
+            input: usage.input ?? 0,
+            output: usage.output ?? 0,
+            reasoning: usage.reasoning ?? 0,
+            cache_read: usage.cacheRead ?? 0,
+            cache_write_5m: 0,
+            cache_write_1h: 0,
+          }
+          cliLedger.record(undefined, model, parseCost({ opencode: { tokens } }))
+        },
       })
       const release = service.registerProvider(provider)
       return () => {

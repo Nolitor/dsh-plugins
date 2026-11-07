@@ -178,7 +178,7 @@ test('every package preset declares its measured entry set', () => {
   assert.equal(antigravity.entries[1].specifier, TOOL_SUBAGENT_ROW)
   assert.deepEqual(
     { ...antigravity.entries[1].config },
-    { provider: 'antigravity', toolName: 'subagent_antigravity', maxDepth: 'provider-managed' },
+    { provider: 'antigravity', toolName: 'subagent_antigravity', maxDepth: 'provider-managed', modelSelection: true },
   )
 
   const opencode = findPreset('opencode')

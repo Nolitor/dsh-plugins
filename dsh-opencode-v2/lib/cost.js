@@ -271,6 +271,38 @@ export function createCostLedger({ now = Date.now, store = null } = {}) {
  * @param {ReturnType<typeof parseCost>} cost - parsed record.
  * @returns {string} e.g. `go-plus cost=0.000000 list=0.000010 plan=0.000012 in=32 out=8`.
  */
+/**
+ * Process-wide ledger registry.
+ *
+ * The HTTP adapter and the CLI-subagent provider are two loader rows of ONE
+ * process, and both spend against the same account. Two ledger instances would
+ * each hold their own sessions map and each write the whole persisted snapshot,
+ * so whichever flushed last would silently erase the other's newest rows. One
+ * instance per owner key keeps the bill additive.
+ *
+ * @param {string} key - ledger owner (the provider id).
+ * @param {{ now?: () => number, store?: object }} [options] - forwarded to createCostLedger on first use.
+ * @returns the shared ledger.
+ */
+const sharedLedgers = new Map()
+
+export function sharedCostLedger(key, options) {
+  const existing = sharedLedgers.get(key)
+  if (existing !== undefined) return existing
+  const ledger = createCostLedger(options)
+  sharedLedgers.set(key, ledger)
+  return ledger
+}
+
+/**
+ * Drop every shared ledger. Test-only: one process that builds several adapters
+ * would otherwise carry earlier tests' rows into the next summary assertion.
+ * Production never calls this.
+ */
+export function resetSharedCostLedgers() {
+  sharedLedgers.clear()
+}
+
 export function describeCost(cost) {
   const usd = (value) => (value === null ? 'n/a' : value.toFixed(9).replace(/0+$/, '').replace(/\.$/, ''))
   const tokens = cost?.tokens

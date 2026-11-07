@@ -645,6 +645,9 @@ export function apply(ctx, config) {
         timeoutMs: Number(configValue(config, 'subagentTimeoutMs')) || 900000,
         disposeGraceMs: Number(configValue(config, 'subagentDisposeGraceMs')) || 5000,
         env: configValue(config, 'subagentEnv') ?? {},
+        // A delegated child spends the same account as the adapter, so its
+        // measured usage belongs in the one ledger the chip and panel read.
+        recordUsage: (usage) => ledger.record(usage),
       })
       const registration = services.subagents.registerProvider(provider)
       parts.set('subagent', typeof registration === 'function' ? registration : () => {})

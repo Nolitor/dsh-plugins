@@ -57,7 +57,7 @@ import { inferToolFromArguments, normalizeArguments } from './arguments.js'
 import { createTrace, summarizePart, summarizeRequest } from './trace.js'
 import { stripThinkingTags } from './display-clean.js'
 import { mapChatDelta } from './upstream-map.js'
-import { createCostLedger, createCostStore, describeCost, parseCost, pickSession } from './cost.js'
+import { createCostLedger, createCostStore, describeCost, parseCost, pickSession, sharedCostLedger } from './cost.js'
 import { installResilience } from './resilience.js'
 import { syncOpenCodeSelection } from './opencodex-models.js'
 import {
@@ -942,7 +942,7 @@ export class OpencodeHttpAdapter {
     // Per-session spend, from the wire's own cost fields (lib/cost.js). Kept on
     // the adapter so every stream of one process feeds the same ledger.
     // Persisted so a restart does not reset the session's running total.
-    this.costLedger = createCostLedger({
+    this.costLedger = sharedCostLedger('opencode-http-agent', {
       store: createCostStore({
         explicit: config.costPath?.get?.() ?? '',
         profileDir: ctx?.get?.('profileContext')?.dir,

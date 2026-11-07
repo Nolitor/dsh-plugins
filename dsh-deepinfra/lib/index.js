@@ -98,6 +98,16 @@ export const Config = Schema.object({
   defaultEffort: Schema.string().default('').description('Default reasoning effort: none|minimal|low|medium|high|xhigh|max.').volatile(),
   /** Advertise only these model ids (empty = every chat route in the catalog). */
   enabledModels: Schema.array(Schema.string()).default([]).description('Only advertise these model ids (empty = all).').volatile(),
+  /**
+   * Opt-in second route on DeepInfra's Anthropic-compatible mount.
+   *
+   * Default false keeps a profile that does not ask for it registering exactly
+   * the single chat route. The flag is config-only: no bundle row and no
+   * settings-UI control, so enabling it is a deliberate profile edit.
+   */
+  anthropicRoute: Schema.boolean().default(false).description('Register the deepinfra-anthropic route (Anthropic Messages endpoint).').volatile(),
+  /** Anthropic base URL; '' derives the origin from `baseURL`. */
+  anthropicBaseURL: Schema.string().default('').description("DeepInfra Anthropic base URL (empty = derive from baseURL).").volatile(),
 })
 
 /**
