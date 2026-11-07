@@ -19,47 +19,30 @@
  *    the host double-counts cached input.
  */
 
+import { usageFrom } from '@nolit/dsh-custom-router/stream'
+
 /** Cost currency the provider reports and the catalog prices in. */
 export const CURRENCY = 'USD'
 
 /**
  * Convert one provider `usage` object into the host's disjoint buckets.
  *
+ * The shared pipe's writer (`usageFrom`) now owns the buckets, the
+ * `totalTokens` cross-check rule and the "absence is not zero" rule, so the
+ * workspace has exactly one usage implementation. This export remains because
+ * the cost path and its tests read it; it delegates rather than reimplementing.
+ *
+ * Measured, and preserved by the shared writer: `prompt_tokens` is the folded
+ * TOTAL (cache hits must be split out), and `total_tokens` equals
+ * `prompt_tokens + completion_tokens`, so the `prompt+output` formula is the
+ * aggregate that cross-checks.
+ *
  * @param usage - the provider's usage object; may be partial.
  * @returns disjoint `TokenUsage`, or undefined when the payload carries no
  *   usable counts (an all-zero/absent object is not evidence of a zero call).
  */
 export function tokenUsage(usage) {
-  if (usage == null || typeof usage !== 'object') return undefined
-  const promptTotal = count(usage.prompt_tokens)
-  const completion = count(usage.completion_tokens)
-  if (promptTotal === undefined && completion === undefined) return undefined
-
-  const cached = count(usage.prompt_tokens_details?.cached_tokens) ?? 0
-  const written = count(usage.prompt_tokens_details?.cache_write_tokens) ?? 0
-  // Cache fields are subsets of prompt_tokens. Clamp so a provider that reports
-  // them separately cannot make the uncached remainder negative.
-  const cacheRead = Math.min(cached, promptTotal ?? cached)
-  const cacheWrite = Math.min(written, Math.max(0, (promptTotal ?? 0) - cacheRead))
-  const input = Math.max(0, (promptTotal ?? 0) - cacheRead - cacheWrite)
-
-  /** @type {{ inputTokens: number, outputTokens: number, totalTokens?: number, cacheReadTokens?: number, cacheWriteTokens?: number, reasoningTokens?: number }} */
-  const out = {
-    inputTokens: input,
-    outputTokens: completion ?? 0,
-  }
-  const total = count(usage.total_tokens)
-  // Preserve the provider's own aggregate only when it agrees with the buckets
-  // it is supposed to describe; an inconsistent total is worse than none.
-  if (total !== undefined && total === (promptTotal ?? 0) + (completion ?? 0)) out.totalTokens = total
-  if (cacheRead > 0) out.cacheReadTokens = cacheRead
-  if (cacheWrite > 0) out.cacheWriteTokens = cacheWrite
-  // reasoning_tokens is already included in completion_tokens: informational
-  // detail, never added again. Measured present on some routes and absent on
-  // others (see reasoningTokensOf).
-  const reasoning = count(usage.completion_tokens_details?.reasoning_tokens)
-  if (reasoning !== undefined && reasoning > 0) out.reasoningTokens = reasoning
-  return out
+  return usageFrom(usage, { formula: 'prompt+output' })
 }
 
 /**

@@ -4,6 +4,13 @@ import test from 'node:test'
 import { DONE, readEvents } from '../lib/sse.js'
 
 /**
+ * The framing lives in `@nolit/dsh-custom-router/stream` (P3); this file is
+ * the provider's compatibility surface over the one shared reader. These tests
+ * pin the framing rules this provider's wire depends on, so a change in the
+ * shared reader that breaks DeepInfra fails here.
+ */
+
+/**
  * Build a ReadableStream from string fragments, so a test can split an event
  * across chunks exactly the way a socket does.
  * @param {string[]} fragments - body fragments, in order.
@@ -68,12 +75,33 @@ test('a final record without a trailing blank line is still decoded', async () =
   assert.deepEqual(events, [{ a: 1 }, { usage: 1 }])
 })
 
-test('an undecodable record is surfaced, not silently dropped', async () => {
+test('an undecodable record THROWS a protocol defect, not a silently dropped event', async () => {
+  // Contract change (P3): the old reader yielded `{ __unparsed }` and left the
+  // decision to the caller. The shared reader now throws `PROTOCOL_DEFECT`,
+  // because skipping such a record silently truncates a turn.
+  const body = streamOf(['data: {oops\n\n', `data: ${DONE}\n\n`])
+  await assert.rejects(
+    async () => {
+      for await (const _event of readEvents(body)) {
+        // drain: the throw happens while the record is decoded
+      }
+    },
+    (error) => {
+      assert.equal(error.code, 'PROTOCOL_DEFECT')
+      assert.equal(typeof error.message, 'string')
+      assert.ok(error.message.length > 0)
+      return true
+    },
+  )
+})
+
+test('an undecodable record never yields an event at all', async () => {
   const body = streamOf(['data: {oops\n\n', `data: ${DONE}\n\n`])
   const events = []
-  for await (const event of readEvents(body)) events.push(event)
-  assert.equal(events.length, 1)
-  assert.equal(events[0].__unparsed, '{oops')
+  await assert.rejects(async () => {
+    for await (const event of readEvents(body)) events.push(event)
+  }, (error) => error.code === 'PROTOCOL_DEFECT')
+  assert.deepEqual(events, [], 'no partial or placeholder event may be produced')
 })
 
 test('DONE terminates iteration immediately', async () => {

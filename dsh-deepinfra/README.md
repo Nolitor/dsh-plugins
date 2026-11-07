@@ -121,6 +121,25 @@ deltas and sending nothing produced none. The adapter therefore accepts an effor
 first. Measured on `moonshotai/Kimi-K2.6` at `medium`: `max_tokens:256` was consumed entirely by
 reasoning (finish `length`, zero text); `2048` produced 381 reasoning tokens then the answer.
 
+## Stream pipe (P3, 2026-11-08)
+
+Everything downstream of one decoded SSE payload is the workspace's shared pipe,
+`@nolit/dsh-custom-router/stream`: block lifecycle, first-seen block indexes, the finish table, the
+disjoint usage writer, the failure shape, and the empty/cut/abort terminal policy. This package
+contributes only `lib/stream-contract.js`:
+
+| Descriptor / hook | Value |
+|---|---|
+| `toolCallShape` | `fragmented` (the wire's own ordinals) |
+| `usage.totalFormula` | `prompt+output` |
+| `malformedRecord` | `fail` (a skipped frame would silently truncate a turn) |
+| `readEvent(payload)` | `choices[0].delta` → typed parts, raw `usage`, raw `finish_reason` |
+
+Contract changes this brings: `content_filter` is now an error (`CONTENT_FILTERED`), not a clean
+`stop`; an unknown `finish_reason` is `UNKNOWN_FINISH_REASON`, not `stop`; a stream cut preserves
+the partial blocks and the original cause; an abort ends in-band as `finish{kind:'aborted'}`; and
+an undecodable record throws `PROTOCOL` with `cause.code === 'PROTOCOL_DEFECT'`.
+
 ## Usage and cost
 
 Counts are **disjoint**, as the host requires. DeepInfra folds cache hits into `prompt_tokens`
@@ -144,8 +163,10 @@ others; absence is reported as "not reported", never as 0.
 | 429 | `RATE_LIMIT` (`providerRetryAfterMs` from `Retry-After`) |
 | 5xx | `SERVER` |
 | context overflow wording | `CONTEXT_WINDOW_EXCEEDED` |
-| stream cut / transport | `TRANSPORT` (thrown) |
-| undecodable SSE record | `PROTOCOL` (thrown) |
+| stream cut after partial output | in-band `finish{kind:'error', failure.code:'STREAM_CUT'}`, original cause preserved; accumulated blocks are emitted first |
+| aborted by the caller | in-band `finish{kind:'aborted', failure.code:'ABORTED'}` |
+| undecodable SSE record | `PROTOCOL` (thrown; `cause.code === 'PROTOCOL_DEFECT'`) |
+| provider `content_filter` finish | `finish{kind:'error', failure.code:'CONTENT_FILTERED'}` |
 | `>16` stop sequences | `UNSUPPORTED_OPTION` (thrown before any request) |
 | terminal `stop` with no content | `finish{kind:'error', code:'EMPTY_RESPONSE'}` |
 

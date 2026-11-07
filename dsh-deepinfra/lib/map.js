@@ -22,6 +22,8 @@
  * DeepInfra also allows SEVERAL calls in one response, each with its own index.
  */
 
+import { finishReasonFor } from '@nolit/dsh-custom-router/stream'
+
 export const PART_TEXT = 'text'
 export const PART_REASONING = 'reasoning'
 export const PART_TOOL_CALL = 'tool-call'
@@ -94,31 +96,27 @@ export function toolCallFragments(value) {
 /**
  * Translate the provider's finish_reason into a harness FinishReason.
  *
- * Measured values: `stop`, `tool_calls`, `length`. Anything else is mapped to
- * `stop` because a finish the harness does not know must not become a failure —
- * but it is reported to the caller so an unknown value is visible in a trace
- * rather than silently swallowed.
+ * The table itself lives in the shared pipe (`finishReasonFor`): one table for
+ * every provider is the whole point, so this is a delegation plus the
+ * `recognized` flag this provider's callers (and tests) report.
+ *
+ * Measured values: `stop`, `tool_calls`, `length`. Two closures this delegation
+ * brings, both intended (spec §5.2, D4):
+ *   - `content_filter` is now `{kind:'error'}`, code `CONTENT_FILTERED`, instead
+ *     of a clean `stop` the host would commit as a complete answer;
+ *   - an unrecognised value is now `{kind:'error'}`, code
+ *     `UNKNOWN_FINISH_REASON`, instead of being flattened to `stop`.
  *
  * @param reason - provider `finish_reason`.
  * @returns `{ reason, recognized }`.
  */
 export function finishReason(reason) {
-  switch (reason) {
-    case 'tool_calls':
-    case 'function_call':
-      return { reason: { kind: 'tool-calls' }, recognized: true }
-    case 'length':
-    case 'max_tokens':
-      return { reason: { kind: 'max-tokens' }, recognized: true }
-    case 'stop':
-    case 'end_turn':
-    case null:
-    case undefined:
-      return { reason: { kind: 'stop' }, recognized: true }
-    case 'content_filter':
-      return { reason: { kind: 'stop' }, recognized: true }
-    default:
-      return { reason: { kind: 'stop' }, recognized: false }
+  const mapped = finishReasonFor(reason)
+  // "Recognised" means the shared table had a rule for it: only the catch-all
+  // UNKNOWN_FINISH_REASON branch counts as unrecognised.
+  return {
+    reason: mapped,
+    recognized: !(mapped.kind === 'error' && mapped.failure?.code === 'UNKNOWN_FINISH_REASON'),
   }
 }
 

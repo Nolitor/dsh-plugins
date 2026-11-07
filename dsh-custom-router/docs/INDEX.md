@@ -34,7 +34,7 @@ summary: Generated per-subproject index for @nolit/dsh-custom-router: every docu
 | 0.0.1-rc.1 | spec | active | 2026-11-06 | [PRESET-SCHEMA-AND-EXTENSION.md](PRESET-SCHEMA-AND-EXTENSION.md) | Normative per-service preset schema, the common preset data model (delivery kind, authentication mode, endpoint protocol/transport), the standardisation boundary, how far preset extension can go, and the coverage ceiling for services added in the future. |
 | 0.0.1-rc.1 | reference | active | 2026-11-07 | [README-OWNERSHIP.md](README-OWNERSHIP.md) | One-page ownership map: which package owns which surface, what this track does NOT own yet, and the rule that keeps a fourth service from re-deriving the same bridge. |
 | 0.0.1-rc.1 | spec | active | 2026-11-06 | [RETRY-POLICY.md](RETRY-POLICY.md) | Normative bounded retry policy for the custom router: only transport/socket failures and transient 502/503/504, no automatic model fallback, no circuit breaker, short exponential backoff, clean terminal error. |
-| 0.0.1-rc.1 | spec | draft | 2026-11-07 | [SHARED-STREAM-PIPE-SPEC.md](SHARED-STREAM-PIPE-SPEC.md) | Normative spec for one shared downstream pipeline (SSE decode, wire-part to StreamChunk, usage, finish, failure, cut/empty policy) owned by dsh-custom-router, with declarative descriptors and overridable hooks for the three measured provider edges. |
+| 0.0.1-rc.2 | spec | active | 2026-11-08 | [SHARED-STREAM-PIPE-SPEC.md](SHARED-STREAM-PIPE-SPEC.md) | Normative spec for one shared downstream pipeline (SSE decode, wire-part to StreamChunk, usage, finish, failure, cut/empty policy) owned by dsh-custom-router, with declarative descriptors and overridable hooks for the three measured provider edges. P1-P3 done (antigravity, deepinfra integrated). |
 | 0.0.1-rc.1 | spec | active | 2026-11-06 | [WEB-AUTH-PIPELINE-ENGINE.md](WEB-AUTH-PIPELINE-ENGINE.md) | Answers whether upper/lower pipelines, model serving, tool standardisation and router-engine logic can be standardised, or stay per-service: measured layer-ownership split. |
 | 0.0.1-rc.5 | readme | active | 2026-11-08 | [README.md](../README.md) | Custom Router track: the single-owner OpenCodex bridge library, the multi-row preset router, and the single browser dashboard that owns provider usage, per-layer switches and credentials. |
 
@@ -42,12 +42,12 @@ summary: Generated per-subproject index for @nolit/dsh-custom-router: every docu
 
 - **0.0.1-rc.1** · active · 2026-11-08 · [OPENCODE-PLAN-USAGE-SPEC.md](OPENCODE-PLAN-USAGE-SPEC.md)
   Measured specification of how the Custom Router's OpenCode tab shows the four OpenCode console plans (Zen, Go, Go Plus, Go Team), their windows, spend and per-model limits, plus the API gaps behind it.
+- **0.0.1-rc.2** · active · 2026-11-08 · [SHARED-STREAM-PIPE-SPEC.md](SHARED-STREAM-PIPE-SPEC.md)
+  Normative spec for one shared downstream pipeline (SSE decode, wire-part to StreamChunk, usage, finish, failure, cut/empty policy) owned by dsh-custom-router, with declarative descriptors and overridable hooks for the three measured provider edges. P1-P3 done (antigravity, deepinfra integrated).
 - **0.0.1-rc.1** · draft · 2026-11-07 · [CUSTOM-ROUTER-SURFACE-CONTRACT.md](CUSTOM-ROUTER-SURFACE-CONTRACT.md)
   Normative contract for the four surfaces a provider preset must declare (CLI worker, subagent provider, tool/command, skill invocation), plus the measured baseline, the protocol-lane rule (reuse PiAiAdapter for DSH-supported wires, own adapter otherwise), and the migration that folds @nolit/dsh-subagent-local into the provider plugins and then into the router preset layer.
 - **0.0.1-rc.1** · active · 2026-11-07 · [OPENCODEX-BRIDGE.md](OPENCODEX-BRIDGE.md)
   The single owner contract for mirroring DSH model selections into a local OpenCodex instance, including the catalog-vs-authorization split, the shared client-key scope rule, configuration, and the failure modes this design refuses to hide.
-- **0.0.1-rc.1** · draft · 2026-11-07 · [SHARED-STREAM-PIPE-SPEC.md](SHARED-STREAM-PIPE-SPEC.md)
-  Normative spec for one shared downstream pipeline (SSE decode, wire-part to StreamChunk, usage, finish, failure, cut/empty policy) owned by dsh-custom-router, with declarative descriptors and overridable hooks for the three measured provider edges.
 - **0.0.1-rc.1** · active · 2026-11-06 · [CUSTOM-ROUTER-ARCHITECTURE.md](CUSTOM-ROUTER-ARCHITECTURE.md)
   The missing composition diagrams and normative per-service module contract for the three custom routers, the new Settings-Models (Custom) surface, and credential/readiness decision flow.
 - **0.0.1-rc.1** · active · 2026-11-06 · [CUSTOM-ROUTER-PRESET-SURFACE.md](CUSTOM-ROUTER-PRESET-SURFACE.md)

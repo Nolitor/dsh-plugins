@@ -34,9 +34,13 @@ dependency is one HTTPS endpoint.
    └───────┬──────────────────────────────────┬──────────────────┘
            │                                  │
    lib/adapter.js                     lib/server.js
-   lib/wire.js   lib/sse.js           lib/cost.js
-   lib/map.js    lib/usage.js         lib/settings.js
-   lib/catalog.js
+   lib/wire.js   lib/map.js           lib/cost.js
+   lib/catalog.js  lib/usage.js       lib/settings.js
+   lib/stream-contract.js  (binding)
+   lib/sse.js  (wrapper: shared reader)
+        │
+        ▼
+   @nolit/dsh-custom-router/stream  (P3: blocks · finish · usage · terminal policy)
            │
            ▼
    https://api.deepinfra.com/v1/openai/chat/completions
@@ -50,9 +54,11 @@ copy is where drift starts.
 | Fact | Owner | Never recomputed by |
 |---|---|---|
 | Request JSON | `wire.js` | adapter, server |
-| SSE framing | `sse.js` | adapter |
+| SSE framing | `@nolit/dsh-custom-router/stream` (`sse.js` is a wrapper) | adapter |
 | Delta → typed part | `map.js` | client, display |
-| Usage buckets + cost | `usage.js` / `cost.js` | client |
+| Block lifecycle, finish table, terminal policy | `@nolit/dsh-custom-router/stream` | adapter |
+| Usage buckets | `@nolit/dsh-custom-router/stream` (`usage.js` delegates) | client |
+| Cost | `cost.js` | client |
 | Catalog → model metadata | `catalog.js` | adapter |
 | Credential precedence | `settings.js` | client |
 | Ledger persistence | `cost.js` | server |

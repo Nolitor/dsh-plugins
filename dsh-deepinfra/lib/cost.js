@@ -21,7 +21,11 @@
  *                         recomputed when present.
  *   prompt_tokens         the TOTAL prompt, cache included.
  *   cached_tokens         the cached SUBSET of prompt_tokens, not an addition.
- *   cache_write_tokens    always null on DeepInfra today; parsed, never assumed.
+ *   cache_write_tokens    null/0 for every request this plugin sends, because it
+ *                         never opts into prompt-cache retention; the field is
+ *                         populated only when `prompt_cache_options` opens or
+ *                         extends a retention window (docs, 2026-11-08). Parsed,
+ *                         never assumed.
  *   reasoning_tokens      present on some routes, entirely absent on others
  *                         (gpt-oss-120b, claude-sonnet-5). Absence is "not
  *                         reported", never a fabricated zero.

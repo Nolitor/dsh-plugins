@@ -1,17 +1,94 @@
 # CHANGELOG — @nolit/dsh-deepinfra
 
 <!-- skeleton:
-version: 1.2
+version: 1.3
 kind: report
 status: active
-updated: 2026-11-04
-summary: Every change to this track with measured before/after: the 0.0.1-rc.1 adapter, five brief assumptions the live API contradicted, the 0.2.0 production integration, and the 0.2.1 architecture correction (config-layer credentials, model selection UI, production registration).
+updated: 2026-11-08
+summary: Every change to this track with measured before/after: the 0.0.1-rc.1 adapter, five brief assumptions the live API contradicted, the 0.2.0 production integration, the 0.2.1 architecture correction (config-layer credentials, model selection UI, production registration), and 0.0.1-rc.10 — P3 migration of the downstream half onto the shared stream pipe (D4/D6 closed, docs basis recorded).
 -->
 
 > History for this plugin only (RULES §6.1). Measurements that outlive one plugin belong in
 > root `docs/`. Every entry states what was measured, not what was intended.
 
-Current version: `0.0.1-rc.9`
+Current version: `0.0.1-rc.10`
+
+## 0.0.1-rc.10 — P3: the downstream half is the shared stream pipe — 2026-11-08
+
+Owner instruction: migrate this provider onto the workspace's one shared downstream pipe
+([SHARED-STREAM-PIPE-SPEC.md](../dsh-custom-router/docs/SHARED-STREAM-PIPE-SPEC.md) §7, P3), so the
+backend is safe before any further feature work. Version `0.0.1-rc.9` → `0.0.1-rc.10` (global
+rule §6: `rc` is the agent's history marker; the numeric part `0.0.1` is untouched).
+
+**Before (measured):** this package owned its own copy of the downstream half — `lib/sse.js`
+(106 L reader), `lib/usage.js` (token writer), a finish table inside `lib/map.js`, `parseCost`
+call, and ~150 lines of block/index/close/terminal logic inside `lib/adapter.js`. Consequences:
+`content_filter` was reported as a clean `stop` (D4); a cut threw with no preserved partial (D6);
+an empty completion was an in-band error (D8, already correct here); usage was recorded after the
+stream, so a host that stopped at `finish` could lose the ledger row.
+
+**After:** the downstream half is `@nolit/dsh-custom-router/stream`. This package contributes
+`lib/stream-contract.js` — descriptor (`fragmented` / `prompt+output` / `malformedRecord:'fail'`),
+`readEvent` over `choices[0].delta`, and `mapFinish` delegating to the shared six-way table.
+`lib/sse.js` is a wrapper; `lib/map.js` `finishReason` delegates; `lib/usage.js` `tokenUsage`
+delegates; `lib/adapter.js` binds `normalizeStream` and records cost from the first usage arrival
+with the RAW provider object (so `estimated_cost` still reaches the ledger before `finish`).
+
+| Defect | Before | After |
+| :--- | :--- | :--- |
+| D4 filtered finish reported as clean stop | `content_filter` → `{kind:'stop'}` | `{kind:'error', failure:{code:'CONTENT_FILTERED'}}` |
+| D5/D7 terminal policy belonged to this plugin | cut threw, abort threw `ABORTED` | cut: accumulated `block-end`s then in-band `STREAM_CUT` with the original cause; abort: in-band `finish{kind:'aborted'}` |
+| D6 no cut preservation | throw, partial lost | partial blocks closed before the error chunk |
+| D8 empty completion | already in-band `EMPTY_RESPONSE` | unchanged, now emitted by the shared pipe with usage first |
+
+### Docs basis (read 2026-11-08, corpus `/llms-full.txt`)
+
+| Fact used | Source | Kind |
+| :--- | :--- | :--- |
+| SSE `data: {json}`, terminal `[DONE]`, final chunk carries `finish_reason` **and** `usage` | [Streaming](https://docs.deepinfra.com/chat/streaming) | docs |
+| `usage.prompt_tokens_details.cached_tokens` / `cache_write_tokens` | [Prompt Caching](https://docs.deepinfra.com/chat/prompt-caching), [Prompt Cache Retention](https://docs.deepinfra.com/chat/prompt-cache-retention) | docs |
+| `usage.estimated_cost` | [Quickstart](https://docs.deepinfra.com/quickstart) response example | docs |
+| `reasoning_content` in the final message **and each streaming delta** | [Microsoft Agent Framework](https://docs.deepinfra.com/integrations/microsoft-agent-framework) | docs |
+| Assembled tool call `{id, function:{name, arguments}}`, parallel calls, streaming supported | [Tool Calling](https://docs.deepinfra.com/chat/tool-calling) | docs |
+| **Fragmented** tool-call delta shape (first fragment carries id/name, later ones arguments only) | measured 2026-11-04, fixture in `test/map.test.mjs` | measured |
+| `completion_tokens_details.reasoning_tokens` | measured on some routes; the docs never name this field (Batch API uses a different object) | measured |
+| `content_filter` finish value | 0 mentions in the whole docs corpus | measured |
+| `total_tokens == prompt_tokens + completion_tokens` | measured on four routes → `prompt+output` formula, not the Gemini formula | measured |
+| `max_tokens` above the documented 16384 cap accepted | measured 2026-11-05; docs are simplified here — outside P3 scope, unchanged | measured |
+
+Not sent, therefore not parsed: `service_tier`, `fail_fast`, `prompt_cache_key` /
+`prompt_cache_options` / `prompt_cache_breakpoint`, the `reasoning` object (only
+`reasoning_effort` is sent), `response_format`, `logprobs`. A `logprobs` field arriving on a delta
+is ignored by `readEvent`; the host stream contract has no slot for it.
+
+### Findings only the integration could produce
+
+1. **The usage-bearing event can carry `choices: []`.** Reading usage only when a delta is present
+   loses the ledger row; `readEvent` therefore reads `usage` independently of `choices[0]` (same
+   finding as P2's F4, different shape).
+2. **Cost must be recorded on arrival, exactly once.** The pipe emits one usage chunk and the host
+   may stop iterating at `finish`; `onUsage` records from the first usage event and a flag prevents
+   a second row. A wire with no usage records nothing (previously `recordCost` was called with
+   `undefined`, which returned early — same outcome, one fewer call).
+3. **`ToolCallId` is a type brand, not runtime state.** The old adapter wrapped ids in
+   `ToolCallId(...)`; the shared pipe emits plain strings, which the host assembler accepts
+   (`brandString` is identity at runtime). Accepted: importing `dsh-llm` into the pipe would break
+   G8 (no `dsh-llm` registry import in the shared module).
+
+### Verification (measured)
+
+| Check | Result |
+| :--- | :--- |
+| `npm run check` (11 modules) | pass |
+| `npm test` in this track | **196 tests / 189 pass / 0 fail / 7 skip** (was 165 / 158 / 0 / 7; +31 tests) |
+| new tests vs the old `lib/` (sensitivity control) | 10 named tests + the whole `stream-contract` suite fail against pre-P3 lib — the assertions really catch the old behaviour |
+| `dsh-custom-router` suite | 286 / 286 pass |
+| `dsh-custom-router` `verify:stream` | 7 / 7 cases, 0 vendor module loads |
+| docs / history gates | `npm run docs:check`, `node scripts/check-plugin-history.mjs` pass |
+
+**Not done:** no live-profile write, no service restart, no version beyond the `rc` counter. The
+`./stream-contract` subpath stays unexported (same as `dsh-antigravity`; it is an internal binding
+with no cross-package consumer, and adding a public export would widen the surface for nothing).
 
 ## Peer pin follows the router rc.2 — 2026-11-07
 

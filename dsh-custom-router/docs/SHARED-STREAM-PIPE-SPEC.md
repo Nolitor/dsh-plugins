@@ -1,23 +1,24 @@
 # Shared Stream Pipe — one extensible parser/emitter, hooks for provider edges
 
 <!-- skeleton:
-version: 0.0.1-rc.1
+version: 0.0.1-rc.2
 kind: spec
-status: draft
-updated: 2026-11-07
-summary: Normative spec for one shared downstream pipeline (SSE decode, wire-part to StreamChunk, usage, finish, failure, cut/empty policy) owned by dsh-custom-router, with declarative descriptors and overridable hooks for the three measured provider edges.
+status: active
+updated: 2026-11-08
+summary: Normative spec for one shared downstream pipeline (SSE decode, wire-part to StreamChunk, usage, finish, failure, cut/empty policy) owned by dsh-custom-router, with declarative descriptors and overridable hooks for the three measured provider edges. P1-P3 done (antigravity, deepinfra integrated).
 -->
 
-> Status: **P1 implemented and unit-tested (2026-11-07); no consumer integrated yet.** Supersedes
-> the "implement M2/M3 per service" sentence in
+> Status: **P1 implemented and unit-tested (2026-11-07); P2 `dsh-antigravity` integrated
+> (2026-11-07); P3 `dsh-deepinfra` integrated (2026-11-08).** P4 (`dsh-opencode-v2`) is next.
+> Supersedes the "implement M2/M3 per service" sentence in
 > [CUSTOM-ROUTER-ARCHITECTURE.md §3.1](./CUSTOM-ROUTER-ARCHITECTURE.md). Does not touch the
 > router engine (R0 still holds), any adapter instance, or any live state.
 >
 > Shipped in `lib/stream/`: `index.js` (`normalizeStream`), `sse.js` (`readSseEvents`),
 > `usage.js` (`usageFrom`, `usageFromProjection`), `wire.js` (`finishReasonFor`),
 > `failure.js` (`fail`, `emptyCompletion`, `cutCompletion`, `abortedCompletion`).
-> Exported as `@nolit/dsh-custom-router/stream`. 71 tests in this package pass; the three
-> vendor suites are unchanged and no vendor imports the module.
+> Exported as `@nolit/dsh-custom-router/stream`. 286 tests in this package pass; two vendor
+> plugins now import the module (`dsh-antigravity`, `dsh-deepinfra`) and `dsh-opencode-v2` does not yet.
 
 ## 1. Decision
 
@@ -244,7 +245,7 @@ Measured values:
 | :--- | :--- | :--- | :--- |
 | **P1** | Build `lib/stream/` + `./stream` export **inside this package**. Zero consumers. | none — no plugin imports it yet | the module's own unit suite green; the three vendor suites byte-identical to before |
 | **P2** | Integrate **`dsh-antigravity`** first — primary testbed | low: rarely used live, and it is the **only web-auth** upper pipeline, so it proves hook binding across the auth boundary | **done 2026-11-07** — 144/144; D3/D4/D6/D8 closed; `usageMetadata` proves `usageFrom`; the web-auth edge below was the finding |
-| **P3** | Integrate **`dsh-deepinfra`** | low: pure API, no daemon, no web auth | its suite green; fragmented tool-call path and `prompt+output` total prove the other branch; D4/D6/D8 closed |
+| **P3** | Integrate **`dsh-deepinfra`** | low: pure API, no daemon, no web auth | **done 2026-11-08** — 189/189 tests (+7 skip); D4/D6 closed, D8 kept; the fragmented tool-call branch and the `prompt+output` total are proven |
 | **P4** | Integrate **`dsh-opencode-v2`** last | high: most live traffic, largest surface | 453 tests green; replay `markerDeltas == 0` shapes identical; S2-3 prose gate; `classifyText` hook lands here |
 | **P5** | Parity suite: one recorded fixture per provider replayed through the shared core | — | the three streams produce the same `StreamChunk` shape for the same semantic class |
 
@@ -264,6 +265,25 @@ Three things only the integration could show:
 | F2 | **Legacy reader contracts differ at `[DONE]`.** This provider yielded a `{ done: true }` sentinel; the shared reader ends iteration. | `readSseEvents` gained `emitDone` so a wrapper can keep a published contract without forking the parser. Also accepts a `Response` (not just its body), which is what the vendor files passed. |
 | F3 | **Cut preservation needs a real stream, not a scripted one.** `controller.error()` in `start()` discards the already-queued chunk, so the first version of the cut test measured the harness, not the pipe. The failure must be raised on `pull` after the frame was handed over. | The cut semantics were already correct; the test now reproduces a live socket cut. No core change. |
 | F4 | **Usage must reach the ledger on arrival.** The host may stop iterating at `finish`. | `normalizeStream` gained an `onUsage` sink; the adapter records there instead of after the stream. |
+
+## 7.2 P3 findings (measured 2026-11-08)
+
+`dsh-deepinfra` is the second integrated consumer. Its descriptor is `fragmented` /
+`prompt+output` / `malformedRecord: 'fail'`; the binding is
+[`dsh-deepinfra/lib/stream-contract.js`](../../dsh-deepinfra/lib/stream-contract.js). Three things
+only the integration could show:
+
+| # | Finding | Consequence for the spec |
+| :--- | :--- | :--- |
+| F5 | **The usage-bearing event can carry `choices: []`.** DeepInfra emits `FINISH -> USAGE -> [DONE]`, and the usage event has no choice. A `readEvent` that reads usage only when a delta exists loses the ledger row. | §4: `usage` is read independently of `choices[0]`. Same class as P2's F4, different shape — `onUsage` must not be gated on parts. |
+| F6 | **Cost is recorded on usage arrival, once.** The host may stop iterating at `finish`, so a post-stream `recordCost` can be skipped; the adapter records from the first usage event and a flag prevents a second row. | §7.1 F4 generalises: any ledger write rides the usage chunk, not the stream tail. |
+| F7 | **`ToolCallId` is a type brand, not runtime state.** The pre-P3 adapter branded ids; the pipe emits plain strings, which the host assembler accepts (`brandString` is identity at runtime). | Pipes stay free of `dsh-llm` imports (G8); a provider that needs a branded value brands it above the pipe, never inside it. |
+
+No core edit was required: `normalizeStream` dispatched the fragmented branch, the empty/cut/abort
+policy and the `prompt+output` writer without a change. The docs corpus
+(`https://docs.deepinfra.com/llms-full.txt`) also confirmed what the previous round had only
+measured — `reasoning_content` reaches each streaming delta, and `usage.estimated_cost` is
+documented — while the fragmented tool-call shape itself remains measurement-only.
 
 ## 8. Gates
 

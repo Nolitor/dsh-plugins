@@ -5,37 +5,31 @@
  *   1. `stream(options)` is an AsyncIterable<StreamChunk>.
  *   2. Emit `usage` BEFORE `finish`; emit NOTHING after `finish`. DeepInfra sends
  *      its usage chunk AFTER the finish_reason event (measured: ... FINISH:tool_calls
- *      -> USAGE -> [DONE]), and sometimes sends finish and usage on the same event,
- *      which is exactly the case the buffer-then-flush rule exists for.
+ *      -> USAGE -> [DONE]), and sometimes sends finish and usage on the same event.
+ *      The shared pipe buffers usage until the body ends, so both shapes hold.
  *   3. Tool-call arguments are raw JSON strings end-to-end; indexes are allocated
- *      in first-seen order and reused per block.
+ *      in first-seen order and reused per block (owned by the shared pipe).
  *   4. Two error paths: throw LlmError (transport/protocol) or finish{kind:'error'}.
- *   5. Honor options.signal.
+ *   5. Honor options.signal; an abort ends IN-BAND as finish{kind:'aborted'}.
  *   6. An unhonorable option throws UNSUPPORTED_OPTION, never dropped silently.
  *   7. Every request carries attributionHeaders().
  *   8. An empty completion is EMPTY_RESPONSE, not a silent success.
+ *
+ * Only the request half lives here. Everything downstream of the decoded payload
+ * — block lifecycle, indexes, finish table, usage buckets, terminal policy — is
+ * `@nolit/dsh-custom-router/stream`, bound to this provider by
+ * `./stream-contract.js`.
  */
 import {
   LlmAdapter,
   LlmError,
-  ReasoningEffortId,
-  ToolCallId,
   attributionHeaders,
   isContextWindowExceededError,
 } from '@deepseek-ai/dsh-llm'
+import { normalizeStream, readSseEvents } from '@nolit/dsh-custom-router/stream'
 
 import { COMPLETIONS_PATH, DEFAULT_BASE_URL, requestBody } from './wire.js'
-import { readEvents } from './sse.js'
-import {
-  PART_REASONING,
-  PART_TEXT,
-  PART_TOOL_CALL,
-  finishReason,
-  isFinishEvent,
-  mapDelta,
-} from './map.js'
-import { tokenUsage } from './usage.js'
-import { parseCost } from './cost.js'
+import { STREAM_DESCRIPTOR, STREAM_HOOKS } from './stream-contract.js'
 
 /**
  * DeepInfra provider adapter.
@@ -194,150 +188,62 @@ export class DeepInfraAdapter extends LlmAdapter {
   /**
    * Translate the SSE body into harness chunks.
    *
-   * Blocks are allocated in first-seen order. Text and reasoning each occupy one
-   * block index for the whole response; each tool call occupies its own index,
-   * keyed by the provider's tool-call index.
+   * The downstream half is the workspace's one shared pipeline
+   * (`@nolit/dsh-custom-router/stream`): block lifecycle, first-seen indexes,
+   * the finish table, the disjoint usage writer, the failure shape and the
+   * empty/cut/abort terminal policy. This adapter supplies only the provider
+   * binding in `./stream-contract.js`, so a DeepInfra quirk never edits the core.
    *
-   * Usage and finish are buffered until the stream ends: DeepInfra emits its
-   * usage event after the finish_reason event, so flushing eagerly would break
-   * the "usage before finish, nothing after" order.
+   * DeepInfra emits its usage event AFTER the finish_reason event (measured:
+   * FINISH -> USAGE -> [DONE]), and sometimes sends both on one event. The pipe
+   * buffers usage until the body ends, which satisfies "usage before finish,
+   * nothing after" for both shapes.
    *
    * @param body - response body stream.
    * @param options - the originating request.
+   * @param pricing - catalog `metadata.pricing`, for the list-price figure.
+   * @param requestId - the provider's `x-request-id`, when it sent one.
    */
   async * translate(body, options, pricing, requestId) {
-    let nextIndex = 0
-    let textIndex = -1
-    let reasoningIndex = -1
-    /** @type {Map<number, number>} provider tool-call index -> block index */
-    const callBlocks = new Map()
-    /** @type {Map<number, { id: string, name: string, args: string }>} */
-    const calls = new Map()
-    let usage
-    let lastUsage
-    let finish
-    let emittedBlocks = 0
-    let sawFinish = false
-    let textBuffer = ''
-    let reasoningBuffer = ''
+    // The cost figure comes from `estimated_cost`, which the host's TokenUsage
+    // has no slot for, so the RAW provider usage object is kept as it arrives.
+    let lastRawUsage
+    // One ledger row per response: the pipe can only produce one usage chunk,
+    // and the host may stop iterating at `finish`, so the record happens on
+    // arrival rather than after the stream (spec §7.1 F4).
+    let costRecorded = false
+    const hooks = {
+      ...STREAM_HOOKS,
+      readEvent: (payload) => {
+        const record = STREAM_HOOKS.readEvent(payload)
+        if (record?.usage !== undefined) lastRawUsage = record.usage
+        return record
+      },
+    }
 
     try {
-      for await (const event of readEvents(body, options.signal)) {
-        if (event?.__unparsed !== undefined) {
-          throw new LlmError('DeepInfra stream carried an undecodable event', 'PROTOCOL')
-        }
-        // Usage may arrive on any event, including the finish event itself.
-        const eventUsage = tokenUsage(event?.usage)
-        if (eventUsage !== undefined) {
-          usage = eventUsage
-          // Keep the RAW object too: the cost figure comes from
-          // `estimated_cost`, which the host's TokenUsage has no slot for.
-          lastUsage = event.usage
-        }
-        if (!sawFinish && isFinishEvent(event)) {
-          sawFinish = true
-          finish = finishReason(event.choices[0].finish_reason)
-        }
-        const delta = event?.choices?.[0]?.delta
-        if (delta == null) continue
-
-        for (const part of mapDelta(delta)) {
-          if (part.kind === PART_REASONING) {
-            if (reasoningIndex < 0) {
-              reasoningIndex = nextIndex++
-              yield { type: 'block-start', index: reasoningIndex, blockType: 'reasoning' }
-            }
-            reasoningBuffer += part.text
-            yield { type: 'reasoning-delta', index: reasoningIndex, text: part.text }
-            continue
-          }
-          if (part.kind === PART_TEXT) {
-            if (textIndex < 0) {
-              textIndex = nextIndex++
-              yield { type: 'block-start', index: textIndex, blockType: 'text' }
-            }
-            textBuffer += part.text
-            yield { type: 'text-delta', index: textIndex, text: part.text }
-            continue
-          }
-          if (part.kind === PART_TOOL_CALL) {
-            let blockIndex = callBlocks.get(part.index)
-            if (blockIndex === undefined) {
-              blockIndex = nextIndex++
-              callBlocks.set(part.index, blockIndex)
-              calls.set(part.index, { id: part.id ?? `deepinfra-${part.index}`, name: part.name ?? '', args: '' })
-              yield { type: 'block-start', index: blockIndex, blockType: 'tool-call' }
-            }
-            const call = calls.get(part.index)
-            // A later fragment carries id:null and name:null; the identity from
-            // the first fragment stands (measured fragmentation shape).
-            if (part.id !== undefined && call.id.startsWith('deepinfra-')) call.id = part.id
-            if (part.name !== undefined && call.name.length === 0) call.name = part.name
-            if (part.argumentsDelta.length > 0) {
-              call.args += part.argumentsDelta
-              yield {
-                type: 'tool-call-delta',
-                index: blockIndex,
-                id: ToolCallId(call.id),
-                ...(call.name.length > 0 ? { name: call.name } : {}),
-                argumentsDelta: part.argumentsDelta,
-              }
-            }
-          }
-        }
-      }
+      yield* normalizeStream({
+        events: readSseEvents(body, { signal: options.signal, malformed: STREAM_DESCRIPTOR.malformedRecord }),
+        descriptor: STREAM_DESCRIPTOR,
+        hooks,
+        signal: options.signal,
+        onUsage: () => {
+          if (costRecorded) return
+          costRecorded = true
+          // Never throws into the stream: a ledger failure must not fail a
+          // generation (recordCost swallows and logs its own errors).
+          this.dependencies.recordCost?.(options, lastRawUsage, pricing, requestId)
+        },
+      })
     } catch (error) {
-      if (options.signal?.aborted) throw new LlmError('DeepInfra stream aborted', 'ABORTED', { cause: error })
       if (error instanceof LlmError) throw error
+      // Contract rule N5 / spec §5.4: a protocol defect is a thrown failure, not
+      // an in-band clean finish. The pipe rethrows it for exactly this reason.
+      if (error?.code === 'PROTOCOL_DEFECT') {
+        throw new LlmError(error.message ?? 'DeepInfra stream carried an undecodable event', 'PROTOCOL', { cause: error })
+      }
       throw new LlmError('DeepInfra stream failed', 'TRANSPORT', { cause: error })
     }
-
-    // Close every block that opened, in index order, before the terminal chunks.
-    for (const [providerIndex, blockIndex] of [...callBlocks.entries()].sort((a, b) => a[1] - b[1])) {
-      const call = calls.get(providerIndex)
-      emittedBlocks += 1
-      yield {
-        type: 'block-end',
-        index: blockIndex,
-        block: { type: 'tool-call', id: ToolCallId(call.id), name: call.name, arguments: call.args },
-      }
-    }
-    // block-end carries the FULLY ASSEMBLED block, not a placeholder: consumers
-    // are documented as not having to re-assemble deltas, and the assembler
-    // stores this block as the message content. Emitting an empty string here
-    // produced a completed turn whose text was '' (measured on the isolated
-    // headless boot, 2026-11-04, before this fix).
-    if (textIndex >= 0) {
-      emittedBlocks += 1
-      yield { type: 'block-end', index: textIndex, block: { type: 'text', text: textBuffer } }
-    }
-    if (reasoningIndex >= 0) {
-      emittedBlocks += 1
-      yield { type: 'block-end', index: reasoningIndex, block: { type: 'reasoning', text: reasoningBuffer } }
-    }
-
-    const reason = finish?.reason ?? { kind: 'stop' }
-
-    // An empty completion is a retryable error, not a silent success.
-    if (emittedBlocks === 0 && reason.kind === 'stop') {
-      if (usage !== undefined) yield { type: 'usage', usage }
-      yield {
-        type: 'finish',
-        reason: {
-          kind: 'error',
-          failure: { message: 'DeepInfra returned no content blocks', code: 'EMPTY_RESPONSE' },
-        },
-      }
-      return
-    }
-
-    // Contract order: usage strictly before finish, nothing after.
-    if (usage !== undefined) yield { type: 'usage', usage }
-    // Cost bookkeeping happens on the way out, after the wire's own usage object
-    // has been read and before the terminal chunk. It never throws into the
-    // stream: a ledger failure must not fail a generation.
-    this.dependencies.recordCost?.(options, lastUsage, pricing, requestId)
-    yield { type: 'finish', reason }
   }
 }
 
