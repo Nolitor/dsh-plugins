@@ -140,6 +140,22 @@ Contract changes this brings: `content_filter` is now an error (`CONTENT_FILTERE
 the partial blocks and the original cause; an abort ends in-band as `finish{kind:'aborted'}`; and
 an undecodable record throws `PROTOCOL` with `cause.code === 'PROTOCOL_DEFECT'`.
 
+## Anthropic route (opt-in, rc.11)
+
+DeepInfra also serves an Anthropic-compatible Messages endpoint. This package can register a
+second, independent provider route for it — **our own parser, not a foreign adapter layer**:
+
+| | |
+| :--- | :--- |
+| Provider id | `deepinfra-anthropic` (separate from `deepinfra`, so `DUPLICATE_ADAPTER` cannot happen) |
+| Endpoint | `https://api.deepinfra.com/anthropic/v1/messages` (`anthropicBaseURL` overrides; a `baseURL` ending in `/v1/openai` is stripped) |
+| Headers | `x-api-key`, `anthropic-version: 2023-06-01` |
+| Enable | plugin config `anthropicRoute: true` (default off; no bundle row, no settings UI) |
+| Wire | `@nolit/dsh-custom-router/stream/anthropic` — `thinking_delta` -> `reasoning-delta`, `input_json_delta` -> fragmented tool calls, `message_start` + `message_delta` usage merged |
+| Limits | no `cache_control`/`prompt_cache_key` sent; `estimated_cost` absent, so cost uses catalog list price; DeepInfra currently emits no thinking block on this route even when `thinking` is enabled |
+
+The chat route (`/v1/openai/chat/completions`) is unchanged and remains the default.
+
 ## Usage and cost
 
 Counts are **disjoint**, as the host requires. DeepInfra folds cache hits into `prompt_tokens`

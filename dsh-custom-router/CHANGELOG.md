@@ -1,12 +1,48 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.5
+version: 0.0.1-rc.6
 kind: report
 status: active
 updated: 2026-11-08
-summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the single-owner OpenCodex bridge library, the preset declarations, and the first real multi-row mount, extended 2026-11-08 with the settings schema and the single browser dashboard (M10 UI sprint).
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the single-owner OpenCodex bridge library, the preset declarations, and the first real multi-row mount, extended 2026-11-08 with the settings schema and the single browser dashboard (M10 UI sprint), and with the Anthropic Messages protocol hooks in the shared stream pipe.
 -->
+
+## 0.0.1-rc.6 — 2026-11-08 (Anthropic Messages protocol hooks in the shared pipe)
+
+Owner instruction: a provider's protocol is the axis, not the vendor. The shared downstream pipe
+must absorb **Anthropic Messages** the same way it absorbed OpenAI, so any provider that speaks the
+protocol (DeepInfra's `/anthropic` route, OpenCode's `/v1/messages`, or a direct Anthropic key) can
+be served by a thin binding instead of a copy of the parser.
+
+**Added**
+- `lib/stream/anthropic.js` (new, exported as `@nolit/dsh-custom-router/stream/anthropic`):
+  - `readAnthropicSse` — event-typed SSE (`event:` + `data:`), multi-line data, CRLF, comments,
+    **no `[DONE]` sentinel**, malformed JSON -> `PROTOCOL_DEFECT`, empty data frames skipped;
+  - `readAnthropicEvent` — `message_start` usage, `content_block_start` (text/tool_use/thinking/
+    redacted_thinking), `content_block_delta` (`text_delta`/`thinking_delta`/`input_json_delta`/
+    `signature_delta`), `message_delta` (stop_reason + usage), `message_stop`; a mid-stream `error`
+    event becomes an in-band failure (`PROVIDER_RESOURCE` for `overloaded_error`/`api_error`,
+    `RATE_LIMIT` for `rate_limit_error`) instead of a successful stop;
+  - `createAnthropicHooks()` — per-stream state so usage pieces from `message_start` and
+    `message_delta` merge (the pipe replaces usage per record) and per-block `signature` survives;
+  - `usageFromAnthropic` — Anthropic `input_tokens` **excludes** cache, so the projection does not
+    subtract `cacheRead` the way the OpenAI writer does; `cacheReadTokens`/`cacheWriteTokens` are
+    separate buckets; `totalTokens` only when the provider total agrees;
+  - `mapAnthropicFinish`, `ANTHROPIC_DESCRIPTOR` (`fragmented`, `input+output+cache`, `fail`).
+- `lib/stream/wire.js` finish table: `pause_turn` -> stop (server paused a long turn, not an error)
+  and `model_context_window_exceeded` -> max-tokens. Measured: leaving them unmapped turned a
+  provider pause into `UNKNOWN_FINISH_REASON` and killed the turn.
+
+**Measured constraints encoded** (2026-11-08): `thinking_delta` is the only reasoning channel;
+`signature_delta` emits no chunk and the host `ContentBlockMap` has no signature field, so the
+signature lives in the provider binding's state and in `replayState` on the replay path; a
+`tool_use` block announces `id`/`name` on `content_block_start` and its JSON arrives as
+`input_json_delta.partial_json` fragments (same fragmented shape the pipe already owns).
+
+**Verification (measured):** `npm test` **313 pass / 0 fail** (286 -> 313, +27 protocol tests);
+`npm run verify:stream` 7/7, vendor loads 0; `node --check` on every edited module. No adapter
+registered, no provider table, no `dsh-llm` import — R0 unchanged.
 
 ## 0.0.1-rc.5 — 2026-11-08 (width container, one tab panel, tabbed model picker)
 

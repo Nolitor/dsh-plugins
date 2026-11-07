@@ -1,17 +1,72 @@
 # CHANGELOG — @nolit/dsh-deepinfra
 
 <!-- skeleton:
-version: 1.3
+version: 1.4
 kind: report
 status: active
 updated: 2026-11-08
-summary: Every change to this track with measured before/after: the 0.0.1-rc.1 adapter, five brief assumptions the live API contradicted, the 0.2.0 production integration, the 0.2.1 architecture correction (config-layer credentials, model selection UI, production registration), and 0.0.1-rc.10 — P3 migration of the downstream half onto the shared stream pipe (D4/D6 closed, docs basis recorded).
+summary: Every change to this track with measured before/after: the 0.0.1-rc.1 adapter, five brief assumptions the live API contradicted, the 0.2.0 production integration, the 0.2.1 architecture correction (config-layer credentials, model selection UI, production registration), 0.0.1-rc.10 — P3 migration of the downstream half onto the shared stream pipe (D4/D6 closed, docs basis recorded), and 0.0.1-rc.11 — an opt-in second route on DeepInfra's native Anthropic Messages endpoint with our own SSE parser (no pi-ai).
 -->
 
 > History for this plugin only (RULES §6.1). Measurements that outlive one plugin belong in
 > root `docs/`. Every entry states what was measured, not what was intended.
 
-Current version: `0.0.1-rc.10`
+Current version: `0.0.1-rc.11`
+
+## 0.0.1-rc.11 — DeepInfra's native Anthropic route, served by our own parser — 2026-11-08
+
+Owner instruction: do not route a provider through a foreign adapter layer. Every model-serving
+integration in this workspace registers itself with `ctx.llm.registerAdapter`; an Anthropic wire is
+not an exception, and the host only needs `reasoning-delta` chunks. So this track now speaks the
+Anthropic protocol itself, on a **second provider id**, with the shared stream pipe doing the
+downstream work.
+
+**Added (opt-in, default off)**
+- `lib/stream-anthropic.js` — provider binding: delegates to
+  `@nolit/dsh-custom-router/stream/anthropic`, keeps per-stream state so the two usage pieces
+  (`message_start` input/cache and `message_delta` output) merge and each thinking block's
+  `signature` survives.
+- `lib/anthropic-adapter.js` — `DeepInfraAnthropicAdapter`, provider id **`deepinfra-anthropic`**
+  (never `deepinfra`: two adapters on one id is `DUPLICATE_ADAPTER`, all-or-nothing). Endpoint
+  `https://api.deepinfra.com/anthropic/v1/messages`, headers `x-api-key` +
+  `anthropic-version: 2023-06-01`, errors mapped 401/403/404/422/429/5xx.
+- `lib/wire.js` — `requestBodyAnthropic()`: Anthropic `input_schema` tools, text/image content
+  parts, `max_tokens` (required), `thinking` budget from `reasoningEffort`
+  (low 1024 / medium 2048 / high 4096). It sends no `cache_control`/`prompt_cache_key`.
+- `lib/index.js` — the second route registers only when the plugin config sets
+  `anthropicRoute: true`; it shares the credential closure and `fetchImpl` with the chat route.
+- Cost: recorded exactly once per response (a `finally` guard), with the Anthropic usage mapped to
+  the OpenAI-shaped raw object `cost.js` parses (`prompt_tokens = input + cacheRead + cacheWrite`).
+  `estimated_cost` is absent on this wire, so the catalog list price is used and the row says so.
+
+**Measured before -> after**
+
+| Check | Before | After |
+| :--- | :--- | :--- |
+| this track `npm test` | 196 / 189 pass / 7 skip | **212 / 205 pass / 7 skip / 0 fail** (+16 route tests) |
+| `npm run check` | 11 modules | 13 modules |
+| `custom-router` suite | 286 | **313** (Anthropic protocol hooks) |
+| `verify:stream` | 7/7 | 7/7 |
+
+**Findings only the integration produced**
+1. **The base URL is not the OpenAI base.** Reusing `settings.baseURL`
+   (`https://api.deepinfra.com/v1/openai`) built `/v1/openai/anthropic/v1/messages` — a route that
+   could never work. The adapter now strips a `/v1/openai` suffix and honours an optional
+   `anthropicBaseURL`.
+2. **DeepInfra puts the input count on `message_delta`, not `message_start`** (measured:
+   `message_start.input_tokens: 0`, `message_delta.input_tokens: 51`). Reading only the first event
+   emitted `inputTokens: 0`; the reader now also takes non-zero counts from `message_delta`.
+3. **DeepInfra's native route does not emit thinking blocks even with `thinking` enabled** — the
+   captured response carries `text_delta` only. The parser supports `thinking_delta` per spec and is
+   covered by synthetic fixtures; the provider-side gap is recorded, not worked around by sniffing
+   content.
+4. **A placeholder usage record exists** (`message_start` with zeros), so "has output_tokens" cannot
+   identify the priceable record; the row is written on the first positive output count, else once
+   in `finally`.
+
+**Not done:** no live-profile write, no restart, no bundle/settings-UI entry for the new route.
+Enabling it is an operator decision (`anthropicRoute: true`) and needs an owner-approved profile
+edit. `pi-ai` is not involved anywhere in this path.
 
 ## 0.0.1-rc.10 — P3: the downstream half is the shared stream pipe — 2026-11-08
 

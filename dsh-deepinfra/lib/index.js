@@ -15,6 +15,7 @@
 import Schema from '@deepseek-ai/schemastery'
 
 import { DeepInfraAdapter } from './adapter.js'
+import { DeepInfraAnthropicAdapter } from './anthropic-adapter.js'
 import {
   DEFAULT_CATALOG_TTL_MS,
   chatRoutes,
@@ -29,6 +30,15 @@ import { DEFAULT_BASE_URL, DEFAULT_CONTEXT_WINDOW, DEFAULT_TURN_MAX_TOKENS } fro
 
 /** Provider route this plugin owns. */
 export const PROVIDER_ID = 'deepinfra'
+
+/**
+ * The second route: DeepInfra's Anthropic-compatible mount.
+ *
+ * Registered ONLY when the config-only `anthropicRoute` flag is `true`; it is
+ * absent from bundles and from the settings UI, so a profile opts in
+ * deliberately. Default off keeps the existing single-route behaviour intact.
+ */
+export const ANTHROPIC_PROVIDER_ID = 'deepinfra-anthropic'
 
 /** This plugin's entry name; also its settings namespace. */
 export const name = 'dsh-deepinfra'
@@ -213,28 +223,42 @@ export function apply(ctx, config) {
     log,
   })
 
+  // Reads through the LIVE config on every request, so a key saved in the UI
+  // takes effect on the next turn without a restart. Shared by both routes: the
+  // Anthropic mount takes the same credential and the same base URL.
+  const settings = () => {
+    const baseURL = stringAt('baseURL', DEFAULT_BASE_URL)
+    const uiKey = stringAt('apiKey', '')
+    const envKey = typeof process.env.DEEPINFRA_API_KEY === 'string' ? process.env.DEEPINFRA_API_KEY.trim() : ''
+    return {
+      baseURL: baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL,
+      apiKey: uiKey.trim().length > 0 ? uiKey.trim() : envKey,
+    }
+  }
+
+  /** One `fetch` per call, resolved at call time so a test double stays swappable. */
+  const fetchImpl = (...args) => globalThis.fetch(...args)
+
+  // Both routes share the credential, the catalog and the cost sink. The
+  // Anthropic route previously received only `settings`/`catalog`/`fetchImpl`,
+  // so every one of its turns was served but never recorded (measured
+  // 2026-11-08: a completed turn left the ledger empty while the chat route's
+  // did not). The dependency object is therefore built ONCE and given to both.
+  const catalogEntry = async (model) => {
+    await catalogReader()
+    return chatRoutes(cache?.entries ?? []).find((entry) => entry.id === model) ?? null
+  }
+  // The adapter asks for the turn at record time, so one DSH turn that makes
+  // several model calls is still one turn's cost.
+  const recordCost = (options, rawUsage, pricing, requestId) => server.recordCost(options, rawUsage, currentTurn(), pricing, requestId)
+
   const adapter = new DeepInfraAdapter({
-    // Reads through the LIVE config on every request, so a key saved in the UI
-    // takes effect on the next turn without a restart.
-    settings: () => {
-      const baseURL = stringAt('baseURL', DEFAULT_BASE_URL)
-      const uiKey = stringAt('apiKey', '')
-      const envKey = typeof process.env.DEEPINFRA_API_KEY === 'string' ? process.env.DEEPINFRA_API_KEY.trim() : ''
-      return {
-        baseURL: baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL,
-        apiKey: uiKey.trim().length > 0 ? uiKey.trim() : envKey,
-      }
-    },
+    settings,
     catalog: catalogReader,
     // Look up one catalog row by id, so a request can be priced at list too.
-    catalogEntry: async (model) => {
-      await catalogReader()
-      return chatRoutes(cache?.entries ?? []).find((entry) => entry.id === model) ?? null
-    },
-    fetchImpl: (...args) => globalThis.fetch(...args),
-    // The adapter asks for the turn at record time, so one DSH turn that makes
-    // several model calls is still one turn's cost.
-    recordCost: (options, rawUsage, pricing, requestId) => server.recordCost(options, rawUsage, currentTurn(), pricing, requestId),
+    catalogEntry,
+    fetchImpl,
+    recordCost,
     log,
   })
 
@@ -242,6 +266,24 @@ export function apply(ctx, config) {
   // route throws instead of silently shadowing (hard mount failure by design).
   const registration = ctx.llm.registerAdapter([PROVIDER_ID], adapter)
   ctx.effect?.(() => () => registration?.())
+
+  // Second route, opt-in by config only (`anthropicRoute: true`). Guarded so the
+  // default profile registers exactly what it registered before, and disposed by
+  // its own effect so a reload cannot leave a stale route behind.
+  if (configValue(config, 'anthropicRoute') === true) {
+    const anthropicAdapter = new DeepInfraAnthropicAdapter({
+      settings,
+      catalog: catalogReader,
+      // The SAME three cost dependencies the chat route gets: without them the
+      // stream serves, but no ledger row is ever written.
+      catalogEntry,
+      fetchImpl,
+      recordCost,
+      log,
+    })
+    const anthropicRegistration = ctx.llm.registerAdapter([ANTHROPIC_PROVIDER_ID], anthropicAdapter)
+    ctx.effect?.(() => () => anthropicRegistration?.())
+  }
 
   // Panel routes need services that may not exist yet.
   //

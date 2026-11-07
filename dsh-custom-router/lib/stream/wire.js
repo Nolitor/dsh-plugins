@@ -42,9 +42,13 @@ export function finishReasonFor(value) {
 
 const FINISH_NORMAL = new Set([
   'stop', 'end_turn', 'eos', 'completed', 'stop_sequence', 'stopsequence', 'finish_reason_stop',
+  'pause_turn', // Anthropic: a long turn paused and can be resumed, not truncated
 ])
 const FINISH_TOOLS = new Set(['tool_calls', 'function_call', 'tool_use', 'tool_use_start', 'tool_calls_start'])
-const FINISH_BUDGET = new Set(['length', 'max_tokens', 'max_output_tokens', 'token_limit', 'max_tokens_reached'])
+const FINISH_BUDGET = new Set([
+  'length', 'max_tokens', 'max_output_tokens', 'token_limit', 'max_tokens_reached',
+  'model_context_window_exceeded', // Anthropic: the context window, not the output budget, ran out
+])
 const FINISH_FILTER = new Set([
   'content_filter', 'safety', 'recitation', 'blocklist', 'prohibited_content', 'spii', 'refusal', 'blocked', 'guardrail',
 ])

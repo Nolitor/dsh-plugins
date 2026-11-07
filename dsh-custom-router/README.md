@@ -56,6 +56,21 @@ through a descriptor plus hooks, so a vendor quirk never edits the core.
 Exported as `@nolit/dsh-custom-router/stream`. It registers no adapter, holds no provider table,
 contains no retry loop, and imports no `dsh-llm` — the router engine stays entirely the host's.
 
+### Anthropic Messages (rc.6)
+
+The pipe speaks two protocol families. `lib/stream/anthropic.js` (exported as
+`@nolit/dsh-custom-router/stream/anthropic`) owns the Anthropic wire: event-typed SSE with no
+`[DONE]`, `content_block_start`/`content_block_delta` (`text_delta`, `thinking_delta`,
+`input_json_delta`, `signature_delta`), `message_delta` usage, and `message_stop`. A `thinking_delta`
+becomes a `reasoning-delta` chunk — the host assembles it into a `reasoning` block — and a
+`tool_use` block's `partial_json` becomes the same fragmented `tool-call-delta` the OpenAI lane
+uses. The `signature` has no host chunk field, so it lives in the binding's per-stream state.
+
+`createAnthropicHooks()` returns per-stream hooks (the pipe passes a fresh context per event), which
+merge the two usage pieces and keep per-block signatures. Any provider that speaks the protocol
+(DeepInfra `/anthropic`, OpenCode `/v1/messages`, a direct Anthropic key) reuses this module by
+adding only endpoint, auth and catalog.
+
 ## Provider preset declarations (S4, 2026-11-07)
 
 `lib/presets.js` (exported as `@nolit/dsh-custom-router/presets`) holds the M13–M16 surface contract

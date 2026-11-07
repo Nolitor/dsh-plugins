@@ -1,6 +1,6 @@
 {
   "name": "@nolit/dsh-deepinfra",
-  "version": "0.0.1-rc.10",
+  "version": "0.0.1-rc.11",
   "private": false,
   "description": "DeepInfra pure LLM adapter for DeepSeek Harness: a `deepinfra` provider route that calls the OpenAI-compatible /v1/openai/chat/completions endpoint directly (streaming text/reasoning/tool deltas, disjoint usage, cache-aware usage buckets, catalog-derived context and reasoning metadata). No daemon, no spawn, no credential store — one bearer key.",
   "keywords": [
@@ -83,7 +83,7 @@
   },
   "scripts": {
     "test": "node --import ./test/setup-isolate.mjs --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/wire.js && node --check lib/catalog.js && node --check lib/map.js && node --check lib/usage.js && node --check lib/cost.js && node --check lib/settings.js && node --check lib/server.js && node --check lib/adapter.js && node --check lib/sse.js",
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/wire.js && node --check lib/catalog.js && node --check lib/map.js && node --check lib/usage.js && node --check lib/cost.js && node --check lib/settings.js && node --check lib/server.js && node --check lib/adapter.js && node --check lib/sse.js && node --check lib/anthropic-adapter.js && node --check lib/stream-anthropic.js",
     "docs:index": "node ../scripts/doc-index-track.mjs",
     "docs:check": "node ../scripts/doc-index-track.mjs --check"
   },
