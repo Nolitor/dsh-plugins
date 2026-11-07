@@ -44,8 +44,18 @@ export {
   WIRE_PROTOCOLS,
 }
 
+/** A loader/settings row id (`preset-schema` keeps the same pattern private). */
+const KEBAB = /^[a-z][a-z0-9-]*$/
+
 /** Contract revision; bump when a declared field changes meaning. */
-export const PRESET_CONTRACT_VERSION = 2
+export const PRESET_CONTRACT_VERSION = 3
+
+/**
+ * The host's shared delegation tool. It is NOT a vendor package: it ships with
+ * DSH itself and lives under the install tree, so it never resolves from a
+ * profile's `node_modules` (measured 2026-11-07).
+ */
+export const TOOL_SUBAGENT_ROW = '@deepseek-ai/dsh-tool-subagent'
 
 /** How a preset's wire is served (kept as a named constant for callers). */
 export const ROUTES = Object.freeze(['pi-ai', 'own'])
@@ -61,6 +71,16 @@ export const PRESETS = Object.freeze([
     kind: 'package',
     package: '@nolit/dsh-antigravity',
     row: 'dsh-antigravity',
+    // One preset = the rows the vendor bundle itself inserts. Measured against
+    // the vendor's own bundle patch file (2 inserts) on 2026-11-07.
+    entries: Object.freeze([
+      Object.freeze({ row: 'dsh-antigravity' }),
+      Object.freeze({
+        row: 'tool-subagent-antigravity',
+        specifier: TOOL_SUBAGENT_ROW,
+        config: Object.freeze({ provider: 'antigravity', toolName: 'subagent_antigravity', maxDepth: 'provider-managed' }),
+      }),
+    ]),
     providerId: 'antigravity',
     modelPrefixes: Object.freeze(['antigravity']),
     endpoint: Object.freeze({
@@ -124,6 +144,19 @@ export const PRESETS = Object.freeze([
     kind: 'package',
     package: '@nolit/dsh-opencode-v2',
     row: 'dsh-opencode-v2',
+    // Three rows, and the two OpenCode rows carry DIFFERENT live configs: the
+    // index row is the CLI/delegation surface, the `/http` row is the native
+    // model router. Mounting only the first is why `opencode-http-agent` was
+    // missing (measured 2026-11-07).
+    entries: Object.freeze([
+      Object.freeze({ row: 'dsh-opencode-v2' }),
+      Object.freeze({ row: 'dsh-opencode-v2-http', specifier: '@nolit/dsh-opencode-v2/http' }),
+      Object.freeze({
+        row: 'tool-subagent-opencode',
+        specifier: TOOL_SUBAGENT_ROW,
+        config: Object.freeze({ provider: 'opencode', toolName: 'subagent_opencode', maxDepth: 'provider-managed' }),
+      }),
+    ]),
     providerId: 'opencode-http-agent',
     modelPrefixes: Object.freeze(['opencode-http-agent', 'opencode-go', 'opencode']),
     endpoint: Object.freeze({
@@ -182,6 +215,9 @@ export const PRESETS = Object.freeze([
     kind: 'package',
     package: '@nolit/dsh-deepinfra',
     row: 'dsh-deepinfra',
+    // Single-package preset: one entry, no shared rows (the vendor's own bundle
+    // patch file has one insert). Kept explicit so every preset has the same shape.
+    entries: Object.freeze([Object.freeze({ row: 'dsh-deepinfra' })]),
     providerId: 'deepinfra',
     modelPrefixes: Object.freeze(['deepinfra']),
     endpoint: Object.freeze({
@@ -229,6 +265,8 @@ export const DECLARATION_EXAMPLE = Object.freeze({
   name: 'Local Hub (loopback)',
   kind: 'declaration',
   row: 'custom-local-hub',
+  // A declaration preset mounts nothing, so it declares no entries.
+  entries: Object.freeze([]),
   providerId: 'local-hub',
   modelPrefixes: Object.freeze(['local-hub']),
   endpoint: Object.freeze({
@@ -272,6 +310,59 @@ export function findPreset(id) {
 }
 
 /**
+ * Validate the `entries` list of one preset: the rows a preset mounts.
+ *
+ * An entry names a loader/settings row, an optional specifier and optional
+ * static config. The rule that matters is that a `package` preset must declare
+ * at least one entry — and must actually name a package — while a `declaration`
+ * preset mounts nothing and must declare no entries. Entry rows are unique: two
+ * entries with the same row would mount the same settings namespace twice.
+ * @param {unknown} preset - candidate declaration.
+ * @returns {string[]} validation errors.
+ */
+export function validateEntries(preset) {
+  const errors = []
+  const entries = preset?.entries
+  if (preset?.kind === 'package') {
+    // A package preset is mounted by name: without one there is nothing to import.
+    if (typeof preset.package !== 'string' || preset.package === '') {
+      errors.push('a package preset must name a package')
+    }
+  }
+  if (entries === undefined) {
+    // Back-compat: a preset without `entries` mounts its single package. The
+    // package check above is what makes that fallback meaningful; a declaration
+    // preset legitimately has no entries at all.
+    return errors
+  }
+  if (!Array.isArray(entries)) return [...errors, 'entries must be an array']
+  if (preset?.kind === 'package' && entries.length === 0) {
+    return [...errors, 'a package preset requires at least one entry']
+  }
+  if (preset?.kind === 'declaration' && entries.length > 0) {
+    errors.push('a declaration preset must not declare entries (it mounts nothing)')
+  }
+  const rows = new Set()
+  for (const entry of entries) {
+    if (entry === null || typeof entry !== 'object') { errors.push('entries must be objects'); continue }
+    if (typeof entry.row !== 'string' || !KEBAB.test(entry.row)) {
+      errors.push('entry.row must be a loader row id')
+    } else if (rows.has(entry.row)) {
+      errors.push(`entry row "${entry.row}" is declared twice`)
+    } else {
+      rows.add(entry.row)
+    }
+    if (entry.specifier !== undefined && (typeof entry.specifier !== 'string' || entry.specifier === '')) {
+      errors.push('entry.specifier must be a non-empty string when present')
+    }
+    if (entry.config !== undefined && (entry.config === null || typeof entry.config !== 'object')) {
+      errors.push('entry.config must be an object when present')
+    }
+  }
+  return errors
+}
+
+/**
  * Validate one preset declaration: the common data model plus the surface and
  * switch rules the host registries impose.
  * @param {unknown} preset - candidate declaration.
@@ -283,6 +374,7 @@ export function validatePreset(preset) {
   if (preset === null || typeof preset !== 'object') return { ok: false, errors }
 
   const add = (message) => errors.push(message)
+  for (const error of validateEntries(preset)) add(error)
   const surfaces = preset.surfaces
   if (surfaces === null || typeof surfaces !== 'object') {
     add('surfaces must be an object')
@@ -354,7 +446,7 @@ export function validatePreset(preset) {
 
 /**
  * Validate a list of presets, including cross-preset uniqueness (the host tool
- * and command registries are global).
+ * and command registries are global, and a loader row has exactly one owner).
  * @param {readonly unknown[]} presets - candidate declarations.
  * @returns {{ok: boolean, errors: string[]}} validation verdict.
  */
@@ -365,6 +457,7 @@ export function validatePresets(presets) {
   const providerIds = new Set()
   const toolOwners = new Map()
   const commandOwners = new Map()
+  const rowOwners = new Map()
   for (const preset of presets) {
     const verdict = validatePreset(preset)
     errors.push(...verdict.errors.map((error) => `${preset?.id ?? '<anonymous>'}: ${error}`))
@@ -375,6 +468,15 @@ export function validatePresets(presets) {
     if (preset?.providerId !== undefined) {
       if (providerIds.has(preset.providerId)) errors.push(`duplicate providerId "${preset.providerId}"`)
       providerIds.add(preset.providerId)
+    }
+    // A loader row is a settings namespace: two presets claiming one row would
+    // register it twice when both activate. One row, one owner.
+    for (const entry of Array.isArray(preset?.entries) ? preset.entries : []) {
+      if (typeof entry?.row !== 'string') continue
+      if (rowOwners.has(entry.row) && rowOwners.get(entry.row) !== preset?.id) {
+        errors.push(`row "${entry.row}" is claimed by both "${rowOwners.get(entry.row)}" and "${preset?.id}"`)
+      }
+      rowOwners.set(entry.row, preset?.id)
     }
     for (const tool of preset?.surfaces?.tools ?? []) {
       if (toolOwners.has(tool) && toolOwners.get(tool) !== preset.id) {

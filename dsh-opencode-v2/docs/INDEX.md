@@ -4,7 +4,7 @@
 version: 1.0
 kind: index
 status: active
-updated: 2026-11-07
+updated: 2026-11-08
 summary: Generated per-subproject index for @nolit/dsh-opencode-v2: every document this track owns, one line each.
 -->
 
@@ -23,7 +23,7 @@ summary: Generated per-subproject index for @nolit/dsh-opencode-v2: every docume
 | 1.0 | spec | active | 2026-11-04 | [ARCHITECTURE.md](../ARCHITECTURE.md) | Module map, control-plane vs serving boundary, credential resolution, slot contract and ledger ownership for @nolit/dsh-opencode-v2, aligned with the same host standards now documented in dsh-deepinfra/ARCHITECTURE.md. |
 | 1.4 | report | active | 2026-11-07 | [CHANGELOG.md](../CHANGELOG.md) | Engineering history for @nolit/dsh-opencode-v2, including the completed subagent merge, the 0.0.2-rc.2 cleanup, the rc.4 cost-chip seat migration, the managed child-session delegation cutover, and the OpenCode 2.2.6 isolated compatibility measurement. |
 | 2.0 | design | implemented | 2026-10-29 | [CLI-WORKER-PLUGIN-DESIGN.md](CLI-WORKER-PLUGIN-DESIGN.md) | The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin. |
-| 1.0 | index | active | 2026-11-07 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-opencode-v2: every document this track owns, one line each. |
+| 1.0 | index | active | 2026-11-08 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-opencode-v2: every document this track owns, one line each. |
 | 1.0 | measurement | measured | 2026-11-07 | [OPENCODE-220-TO-226-DELTA.md](OPENCODE-220-TO-226-DELTA.md) | Full 2.2.0-to-2.2.6 upstream delta by surface, including five DB migrations, background-job persistence, schedules, artifacts, and measured limits. |
 | 1.1 | measurement | measured | 2026-11-07 | [OPENCODE-226-COMPATIBILITY-MEASUREMENT.md](OPENCODE-226-COMPATIBILITY-MEASUREMENT.md) | Measured OpenCode 2.2.6 compatibility and host installation state without changing live DSH or the OpenCode service; legacy 0.0.55 and stale caches were later cleaned up. |
 | 1.0 | design | draft | 2026-11-07 | [OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md](OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md) | Planned, read-only-derived integration options for OpenCode 2.2.6 session_part/job APIs with @nolit/dsh-opencode-v2, with efficiency hypotheses and measurement gates. |
@@ -111,6 +111,6 @@ summary: Generated per-subproject index for @nolit/dsh-opencode-v2: every docume
 
 ## index
 
-- **1.0** · active · 2026-11-07 · [INDEX.md](INDEX.md)
+- **1.0** · active · 2026-11-08 · [INDEX.md](INDEX.md)
   Generated per-subproject index for @nolit/dsh-opencode-v2: every document this track owns, one line each.
 

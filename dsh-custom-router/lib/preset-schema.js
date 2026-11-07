@@ -380,6 +380,19 @@ export const PRESET_JSON_SCHEMA = Object.freeze({
     kind: { enum: ['package', 'declaration'] },
     package: { type: 'string', pattern: '^@[a-z0-9-]+/[a-z0-9-]+$' },
     row: { type: 'string', pattern: '^[a-z][a-z0-9-]*$' },
+    entries: {
+      type: 'array',
+      description: 'Loader rows this preset mounts. `row` is the settings namespace; `specifier` defaults to the preset package.',
+      items: {
+        type: 'object',
+        required: ['row'],
+        properties: {
+          row: { type: 'string', pattern: '^[a-z][a-z0-9-]*$' },
+          specifier: { type: 'string', minLength: 1 },
+          config: { type: 'object' },
+        },
+      },
+    },
     providerId: { type: 'string', minLength: 1 },
     modelPrefixes: { type: 'array', minItems: 1, items: { type: 'string', pattern: '^[^/]+$' } },
     endpoint: {

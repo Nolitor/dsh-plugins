@@ -4,7 +4,7 @@
 version: 1.0
 kind: index
 status: active
-updated: 2026-11-07
+updated: 2026-11-08
 summary: Generated per-subproject index for @nolit/dsh-antigravity: every document this track owns, one line each.
 -->
 
@@ -23,7 +23,7 @@ summary: Generated per-subproject index for @nolit/dsh-antigravity: every docume
 | 1.0 | report | active | 2026-11-07 | [CHANGELOG.md](../CHANGELOG.md) | Engineering history for @nolit/dsh-antigravity, including the rc.6 fix for empty stored answers and the route-gated usage chip. Created 2026-11-05 by merging the CLI worker surface of @nolit/dsh-antigravity-cli with the HTTP model route proven in @nolit/dsh-antigravity-directsdk, plus a settings section, a usage chip and per-surface switches. |
 | 1 | measurement | active | 2026-11-05 | [ANTIGRAVITY-DIRECTSDK-MEASUREMENT.md](ANTIGRAVITY-DIRECTSDK-MEASUREMENT.md) | Measured feasibility of reusing the Hermes antigravity-subscription-directsdk module to build DSH plugins (OpenCode v2 / DeepInfra class). Verdict: NOT a drop-in; usable only as an LLMAdapter after solving 4 blockers. |
 | 1.0 | design | active | 2026-11-05 | [ANTIGRAVITY-STAGE-PLAN.md](ANTIGRAVITY-STAGE-PLAN.md) | Stage-1 stabilisation gate for @nolit/dsh-antigravity, the measured S1–S7 status after today's reinforcement, and the rule that its stage 2/3 upgrades ride with the OpenCode v2 stage plan. |
-| 1.0 | index | active | 2026-11-07 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-antigravity: every document this track owns, one line each. |
+| 1.0 | index | active | 2026-11-08 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-antigravity: every document this track owns, one line each. |
 | 1.0 | readme | active | 2026-11-05 | [README.md](../README.md) | Operator entry for @nolit/dsh-antigravity: the three switchable surfaces (model serving/router over web auth, subagent provider, CLI worker) plus the auxiliary usage chip, and how to verify each mount. |
 
 ## report
@@ -48,6 +48,6 @@ summary: Generated per-subproject index for @nolit/dsh-antigravity: every docume
 
 ## index
 
-- **1.0** · active · 2026-11-07 · [INDEX.md](INDEX.md)
+- **1.0** · active · 2026-11-08 · [INDEX.md](INDEX.md)
   Generated per-subproject index for @nolit/dsh-antigravity: every document this track owns, one line each.
 

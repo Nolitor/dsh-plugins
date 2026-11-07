@@ -15,10 +15,13 @@ import {
   DECLARATION_EXAMPLE,
   DSH_PROTOCOLS,
   PRESETS,
+  TOOL_SUBAGENT_ROW,
   findPreset,
+  validateEntries,
   validatePreset,
   validatePresets,
 } from '../lib/presets.js'
+import { planApplications, presetEntries } from '../lib/index.js'
 import { PRESET_JSON_SCHEMA } from '../lib/preset-schema.js'
 
 test('the three measured presets validate cleanly', () => {
@@ -164,4 +167,150 @@ test('the JSON Schema mirror names the required fields', () => {
     ['auth', 'catalog', 'endpoint', 'id', 'kind', 'providerId', 'row', 'usage'].sort(),
   )
   assert.equal(PRESET_JSON_SCHEMA.properties.endpoint.properties.protocol.enum.includes('google-generative-sse'), true)
+})
+
+// ---- entries: the rows one preset mounts (2026-11-07) ----------------------
+
+test('every package preset declares its measured entry set', () => {
+  const antigravity = findPreset('antigravity')
+  assert.deepEqual(antigravity.entries.map((entry) => entry.row), ['dsh-antigravity', 'tool-subagent-antigravity'])
+  // The shared row is the host's own package, not the vendor's.
+  assert.equal(antigravity.entries[1].specifier, TOOL_SUBAGENT_ROW)
+  assert.deepEqual(
+    { ...antigravity.entries[1].config },
+    { provider: 'antigravity', toolName: 'subagent_antigravity', maxDepth: 'provider-managed' },
+  )
+
+  const opencode = findPreset('opencode')
+  assert.deepEqual(
+    opencode.entries.map((entry) => entry.row),
+    ['dsh-opencode-v2', 'dsh-opencode-v2-http', 'tool-subagent-opencode'],
+  )
+  // The /http row is the SAME package under a different export subpath: it is
+  // the native model router, and mounting only the index row drops
+  // `opencode-http-agent` entirely (measured 2026-11-07).
+  assert.equal(opencode.entries[1].specifier, '@nolit/dsh-opencode-v2/http')
+  assert.equal(opencode.entries[2].specifier, TOOL_SUBAGENT_ROW)
+
+  // A single-package preset still carries one entry, so every preset has the
+  // same shape and the router has one code path.
+  assert.deepEqual(findPreset('deepinfra').entries.map((entry) => entry.row), ['dsh-deepinfra'])
+})
+
+test('an entry without a specifier inherits the preset package', () => {
+  for (const preset of PRESETS) {
+    for (const entry of preset.entries ?? []) {
+      if (entry.specifier === undefined) assert.equal(typeof preset.package, 'string')
+    }
+  }
+})
+
+test('entry validation rejects duplicate rows and empty package presets', () => {
+  const duplicate = structuredClone(PRESETS[0])
+  duplicate.entries = [{ row: 'dsh-antigravity' }, { row: 'dsh-antigravity' }]
+  const duplicateVerdict = validatePreset(duplicate)
+  assert.equal(duplicateVerdict.ok, false)
+  assert.match(duplicateVerdict.errors.join(' '), /declared twice/)
+
+  const empty = structuredClone(PRESETS[0])
+  empty.entries = []
+  assert.match(validatePreset(empty).errors.join(' '), /at least one entry/)
+
+  const badRow = structuredClone(PRESETS[0])
+  badRow.entries = [{ row: 'Not A Row' }]
+  assert.match(validatePreset(badRow).errors.join(' '), /loader row id/)
+
+  const badConfig = structuredClone(PRESETS[0])
+  badConfig.entries = [{ row: 'dsh-antigravity', config: 'nope' }]
+  assert.match(validatePreset(badConfig).errors.join(' '), /entry\.config must be an object/)
+})
+
+test('a declaration preset declares no entries and a package preset without entries stays valid', () => {
+  const declared = structuredClone(DECLARATION_EXAMPLE)
+  declared.entries = [{ row: 'some-row' }]
+  assert.match(validatePreset(declared).errors.join(' '), /must not declare entries/)
+
+  // Back-compat: a preset predating `entries` still validates.
+  const legacy = structuredClone(PRESETS[2])
+  delete legacy.entries
+  assert.deepEqual(validatePreset(legacy).errors, [])
+})
+
+test('the JSON Schema mirror documents entries', () => {
+  const entries = PRESET_JSON_SCHEMA.properties.entries
+  assert.equal(entries.type, 'array')
+  assert.deepEqual([...entries.items.required], ['row'])
+  assert.equal(entries.items.properties.specifier.minLength, 1)
+})
+
+// ---- entry validation and cross-preset row ownership (2026-11-08) ----------
+
+test('a package preset must name a package', () => {
+  // `validateEntries` never checked this: a package preset with no `package`
+  // validated cleanly, and `presetEntries()` then synthesised nothing — a
+  // preset that mounts zero rows while claiming to be code-backed.
+  const candidate = structuredClone(PRESETS[0])
+  delete candidate.package
+  const verdict = validatePreset(candidate)
+  assert.equal(verdict.ok, false)
+  assert.match(verdict.errors.join(' '), /must name a package/)
+
+  // The same rule holds for an entry-less legacy preset: the fallback mount is
+  // "this preset's own package", which cannot exist without the name.
+  const legacy = structuredClone(PRESETS[2])
+  delete legacy.entries
+  delete legacy.package
+  assert.match(validatePreset(legacy).errors.join(' '), /must name a package/)
+
+  // An empty string is not a package name either.
+  const empty = structuredClone(PRESETS[0])
+  empty.package = ''
+  assert.match(validatePreset(empty).errors.join(' '), /must name a package/)
+})
+
+test('a package preset with no entries and no package is rejected in one pass', () => {
+  // The dead double-`return []` branch is gone: both rules now report.
+  const candidate = structuredClone(PRESETS[0])
+  delete candidate.package
+  candidate.entries = []
+  const errors = validateEntries(candidate)
+  assert.deepEqual(errors, ['a package preset must name a package', 'a package preset requires at least one entry'])
+})
+
+test('presetEntries refuses to synthesise a mount for a declaration preset with a package', () => {
+  // The validator rejects this shape, but the export is callable unvalidated.
+  const declared = { ...structuredClone(DECLARATION_EXAMPLE), package: '@nolit/sneaky' }
+  assert.deepEqual(presetEntries(declared), [])
+  // A declaration preset with well-formed entries is refused too.
+  assert.deepEqual(presetEntries({ ...declared, entries: [{ row: 'some-row' }] }), [])
+})
+
+test('two presets may not claim the same loader row', () => {
+  const first = structuredClone(PRESETS[2])
+  const second = structuredClone(PRESETS[2])
+  second.id = 'deepinfra-copy'
+  second.providerId = 'deepinfra-copy'
+  // Same row id, different preset: one settings namespace, two owners.
+  const verdict = validatePresets([first, second])
+  assert.equal(verdict.ok, false)
+  assert.match(verdict.errors.join(' '), /row "dsh-deepinfra" is claimed by both "deepinfra" and "deepinfra-copy"/)
+})
+
+test('a row collision is reported by the plan, not silently mounted twice', () => {
+  const first = structuredClone(PRESETS[2])
+  const second = structuredClone(PRESETS[2])
+  second.id = 'deepinfra-copy'
+  second.providerId = 'deepinfra-copy'
+  const plan = planApplications({ presets: { deepinfra: true, 'deepinfra-copy': true } }, [first, second])
+  assert.equal(plan.errors.length > 0, true)
+  assert.match(plan.errors.join(' '), /row "dsh-deepinfra" is declared by both/)
+})
+
+test('the measured presets claim disjoint rows', () => {
+  // The real declarations must stay collision-free: the three vendors own
+  // different rows, and only the SHARED subagent package is reused (under
+  // distinct row ids).
+  const rows = PRESETS.flatMap((preset) => preset.entries.map((entry) => entry.row))
+  assert.equal(new Set(rows).size, rows.length)
+  assert.deepEqual(validatePresets(PRESETS).errors, [])
 })

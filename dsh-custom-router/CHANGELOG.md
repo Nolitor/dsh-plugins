@@ -1,12 +1,85 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.2
+version: 0.0.1-rc.3
 kind: report
 status: active
 updated: 2026-11-07
-summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the single-owner OpenCodex bridge library.
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the single-owner OpenCodex bridge library, the preset declarations, and the first real multi-row mount.
 -->
+
+## 0.0.1-rc.3 — 2026-11-07 (multi-row presets + first real mount)
+
+**Scope:** the router's first **real mount**. `entries` makes a preset declare the loader rows it
+owns, and `apply()` mounts one child per row with **that row's own config**. Ships
+`cordis.patch.yml` + the `dsh.bundle` manifest, so the router is a bundle row instead of a library
+only.
+
+**The measured defect this fixes.** The old body mounted `preset.package` once. Against the live
+profile that produced **providers 3/4, tools 4/6** (missing `opencode-http-agent`,
+`subagent_opencode`, `subagent_antigravity`) — a vendor bundle inserts several rows, and a
+single-package mount silently drops every row but the first.
+
+| Surface | Before | After |
+| :--- | :--- | :--- |
+| providers | 3/4 (`opencode-http-agent` absent) | 4/4 |
+| tools | 4/6 (`subagent_opencode`, `subagent_antigravity` absent) | 6/6 |
+| commands | 6/6 | 6/6 |
+| deepinfra probe | 0 models (`INVALID_PROBE: probe needs a baseUrl`) | 178 models |
+
+**Design as implemented.**
+
+- `preset.entries: [{ row, specifier?, config? }]`. `row` is the loader/settings namespace of the
+  row being mounted; `specifier` defaults to `preset.package`; `config` is static NON-SECRET config
+  for the host-shared rows the router owns.
+- Entry sets: `antigravity` = `dsh-antigravity` + `tool-subagent-antigravity`;
+  `opencode` = `dsh-opencode-v2` + `dsh-opencode-v2-http` + `tool-subagent-opencode`;
+  `deepinfra` = `dsh-deepinfra`. `preset.package`/`preset.row` stay for back-compat, and a preset
+  without `entries` still mounts its own package as one row.
+- **Mount config lookup is keyed by `entry.row`**, because the two OpenCode rows carry different
+  live configs. Merge rule: `entry.config` (declared, non-secret) is the base and
+  `vendorConfig[row]` (operator/live) is applied on top, shallowly, with `undefined` values skipped
+  so a live `undefined` cannot erase a declared default. The probe layer keeps scoping by
+  `preset.id` — a different question — so both key sets coexist in one object.
+- **Resolution is an ordered anchor chain**: profile → `installAnchor` → extras → `execPath`
+  fallback. `@nolit/*` resolves through the profile; `@deepseek-ai/dsh-tool-subagent` resolves
+  through the install anchor. `profileContext` supplies both when the caller passes neither.
+
+**Measured resolution (2026-11-07).**
+
+| Specifier | Anchor that resolved it | Path |
+| :--- | :--- | :--- |
+| `@nolit/dsh-antigravity` | profile | `<profile>/node_modules/@nolit/dsh-antigravity/lib/index.js` |
+| `@nolit/dsh-opencode-v2/http` | profile | `…/dsh-opencode-v2/lib/http.js` |
+| `@nolit/dsh-deepinfra` | profile | `…/dsh-deepinfra/lib/index.js` |
+| `@deepseek-ai/dsh-tool-subagent` | installAnchor | `/home/minami/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-tool-subagent/lib/index.js` |
+
+**Measured hazard — why the install anchor is explicit.** DSH patches `Module._resolveFilename`
+during boot (`dsh-app-boot` `profile-resolution-bootstrap`) to route `@deepseek-ai/*` into the
+install tree. The SAME `createRequire(<profile>/package.json).resolve('@deepseek-ai/dsh-tool-subagent')`
+call **fails before a boot and succeeds after one**, in the same process. A resolver that trusted
+the profile for host packages would work only by accident and only after the first boot.
+
+**Bundle row.** `package.json` gains `dsh.manifestVersion: 1` + `dsh.bundle.patch`, and
+`cordis.patch.yml` inserts row `dsh-custom-router` with specifier `@nolit/dsh-custom-router/plugin`:
+the export map has **no `"."`** entry, so the bare package name fails with
+`ERR_PACKAGE_PATH_NOT_EXPORTED` while the `/plugin` subpath resolves. Measured both ways. The row
+carries switches only (`strict: true`, all presets `false`); no vendor secrets. Verified as a real
+loader row: booting an isolated profile with it in `dsh.profile.bundles` reports
+`seam present: true` and no router warning. Without the `dsh.bundle` field the host skips the
+package with `declares no dsh.bundle in its package.json` (measured), which is why the manifest is
+part of this change.
+
+**Probe `baseUrl` default.** A probe layer declares only a path (`endpoint: '/models'`); its host
+lives once in `preset.endpoint.baseUrl`. The seam now defaults `baseUrl` (and `apiKey` from the
+preset-scoped `vendorConfig`) so the generic executor receives it. DeepInfra keeps `shape: 'openai'`
+— its `/models` IS a standard OpenAI listing, and `shape: 'vendor'` is reserved for provider-specific
+RPCs the router must not parse (§2.3.4); routing it to the vendor bridge would have hidden the
+missing-`baseUrl` bug instead of fixing it.
+
+**Measured:** 192/192 tests (23 new across `presets`, `index`, `vendor-modules`).
+`node /tmp/lead-verify-mount.mjs` → `PARITY: PASS` (exit 0); `npm run verify:presets` OK;
+`node scripts/check-dsh-isolation.mjs` exit 0.
 
 ## 0.0.1-rc.2 — 2026-11-07 (preset declarations as data, S4)
 

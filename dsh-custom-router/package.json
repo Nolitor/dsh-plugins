@@ -1,8 +1,8 @@
 {
   "name": "@nolit/dsh-custom-router",
-  "version": "0.0.1-rc.2",
+  "version": "0.0.1-rc.3",
   "private": false,
-  "description": "Custom Router shared library and specifications: one owner for OpenCodex model-selection mirroring, the extensible shared downstream stream pipe (with a standalone dispatch verifier), credential scope aggregation, and the future plugin-owned Settings-Models (Custom) surface. No standalone runtime surface is mounted yet.",
+  "description": "Custom Router: one owner for the provider presets a profile mounts. Each preset declares the loader rows it owns (entries) and the router mounts each row's own plugin with that row's own config — multi-row presets included (the two OpenCode rows, the shared subagent rows). Ships the bundle row, the shared library (routing, probe, catalog, cost, plan, usage) and its specifications.",
   "keywords": [
     "dsh",
     "deepseek-harness",
@@ -14,6 +14,12 @@
   ],
   "license": "MIT",
   "type": "module",
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
   "exports": {
     "./opencodex": {
       "default": "./lib/selection-sync.js"
@@ -84,6 +90,7 @@
     }
   },
   "files": [
+    "cordis.patch.yml",
     "lib/",
     "scripts/",
     "docs/",

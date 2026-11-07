@@ -2,9 +2,9 @@
  * Custom Router — plugin body (preset application).
  *
  * The router applies **preset declarations** instead of re-implementing
- * providers. A preset names a provider package; activating it mounts that
- * package's own plugin as a child of this one (`ctx.plugin`), and deactivation
- * disposes exactly that child. The router therefore
+ * providers. A preset names the loader rows it owns; activating it mounts each
+ * row's plugin as a child of this one (`ctx.plugin`), and deactivation disposes
+ * exactly those children. The router therefore
  *   - never calls `ctx.llm.registerAdapter` itself (R0 stays intact),
  *   - never carries a second route table, retry loop or credential reader,
  *   - owns only the decision of *which preset is mounted*.
@@ -14,9 +14,17 @@
  *   {
  *     strict?: boolean,               // throw when a declaration is invalid (default true)
  *     presets?: { [id]: boolean },    // which presets to mount (default: none)
- *     packages?: { [id]: string },    // module override (bare name, file: URL, path)
- *     vendorConfig?: { [id]: object } // per-preset plugin Config handed to the child
+ *     packages?: { [id]: string },    // module override for the preset's own package
+ *     vendorConfig?: { [row]: object }, // per-ROW plugin Config handed to the child
+ *     profileDir?: string,            // profile whose node_modules holds the @nolit links
+ *     installAnchor?: string          // DSH install package.json (host-shared rows)
  *   }
+ *
+ * `vendorConfig` is keyed by **row**, not by preset id: one preset can mount
+ * several rows, and those rows carry different live configs (the two OpenCode
+ * rows are the measured case). The probe layer still scopes by preset id, which
+ * asks a different question ("which preset owns this credential"), so both key
+ * sets may be present in the same object without colliding.
  *
  * Mounting is deliberately opt-in: a profile that still lists the vendor
  * bundles must not mount the same plugin twice (the host would see duplicate
@@ -29,7 +37,7 @@ import { createVendorBridges } from './bridges/index.js'
 import { mergeCatalog } from './catalog.js'
 import { probePreset } from './probe.js'
 import { resolveRoute } from './routing.js'
-import { loadVendorModules } from './vendor-modules.js'
+import { loadVendorModules, resolveFromAnchor, resolveThroughChain } from './vendor-modules.js'
 
 /** Plugin name used by the loader. */
 export const name = '@nolit/dsh-custom-router'
@@ -41,7 +49,7 @@ export const name = '@nolit/dsh-custom-router'
 export const inject = []
 
 /** Runtime revision of the applied-config shape. */
-export const PRESET_RUNTIME_VERSION = 1
+export const PRESET_RUNTIME_VERSION = 2
 
 /**
  * Read a plain config value with a fallback (the value may also be a reactive
@@ -61,15 +69,76 @@ function configValue(config, key, fallback) {
 }
 
 /**
+ * The entries one preset mounts, normalised for back-compat.
+ *
+ * A preset that predates `entries` (or an operator's hand-written declaration)
+ * mounts exactly one row: its own package under its own row id.
+ * @param {object} preset - a preset declaration.
+ * @returns {Array<{row: string, specifier: string, config: object}>} normalised entries.
+ */
+export function presetEntries(preset) {
+  // A declaration preset mounts nothing by definition. The validator already
+  // rejects one that carries a package or entries, but this export is callable
+  // with an unvalidated declaration, so the rule is enforced here too.
+  if (preset?.kind === 'declaration') return []
+  const declared = Array.isArray(preset?.entries) ? preset.entries : []
+  if (declared.length === 0) {
+    if (typeof preset?.package !== 'string' || preset.package === '') return []
+    return [{ row: preset.row, specifier: preset.package, config: {} }]
+  }
+  return declared.map((entry) => ({
+    row: entry.row,
+    specifier: typeof entry.specifier === 'string' && entry.specifier !== '' ? entry.specifier : preset.package,
+    config: entry.config ?? {},
+  }))
+}
+
+/**
+ * Merge the two config sources one entry can have.
+ *
+ * `entry.config` is the **static, non-secret** config the preset declares (the
+ * two host-shared `@deepseek-ai/dsh-tool-subagent` rows). `vendorConfig[row]` is
+ * the **operator's live** config. They are merged shallowly with the live layer
+ * last, so an operator can override a declared default while a declared default
+ * still applies when the profile says nothing. A key the operator sets to
+ * `undefined` is skipped rather than erasing the declared value.
+ *
+ * MEASURED HAZARD — a Cordis **reactive** config is not a plain object. It is
+ * `{ get(): object, [write](value): void }`, and spreading it yields
+ * `{ get: <fn>, [write]: <fn> }`: the child receives that accessor object as
+ * its own `get` field instead of the values it wraps ("garbage", measured
+ * 2026-11-08). A getter object is therefore handed through **by identity** as
+ * the child's config slot — Cordis reads it itself — and only plain objects are
+ * shallow-merged. Declared defaults cannot be merged into a reactive slot
+ * without destroying the reactivity the operator relies on, so a reactive live
+ * config wins outright; that is the layer with the live values in it anyway.
+ * @param {object} entry - normalised entry.
+ * @param {object} vendorConfig - config keyed by row id.
+ * @returns {object} the merged config, or the reactive accessor unchanged.
+ */
+export function entryConfig(entry, vendorConfig = {}) {
+  const live = vendorConfig !== null && typeof vendorConfig === 'object' ? vendorConfig[entry?.row] : undefined
+  // Reactive Cordis config: pass the accessor through untouched (identity kept).
+  if (live !== null && typeof live === 'object' && typeof live.get === 'function') return live
+  const declared = entry?.config ?? {}
+  const merged = { ...declared }
+  for (const [key, value] of Object.entries(live ?? {})) {
+    if (value !== undefined) merged[key] = value
+  }
+  return merged
+}
+
+/**
  * Plan which presets to mount, without importing or mounting anything.
  * Pure: safe to unit-test and to call from a dry-run command.
  * @param {object} [config] - plugin config.
  * @param {readonly unknown[]} [presets] - declarations (defaults to the measured set).
- * @returns {{errors: string[], active: Array<{id: string, specifier: string, config: object}>, ignored: string[]}} the plan.
+ * @returns {{errors: string[], active: Array<{id: string, specifier: string, config: object, entries: Array<{row: string, specifier: string, config: object}>}>, rows: Array<{preset: string, row: string, specifier: string, config: object}>, ignored: string[]}} the plan.
  */
 export function planApplications(config = {}, presets = PRESETS) {
   const errors = []
   const active = []
+  const rows = []
   const ignored = []
 
   const declared = validatePresets(presets)
@@ -92,24 +161,143 @@ export function planApplications(config = {}, presets = PRESETS) {
     }
     const preset = byId.get(id)
     const override = packages?.[id]
+    const overrideSpecifier = typeof override === 'string' && override !== '' ? override : undefined
+
+    // A package override swaps the preset's OWN package. A shared host row
+    // (`@deepseek-ai/dsh-tool-subagent`) is not the vendor's package and cannot
+    // be swapped this way, so it keeps its declared specifier.
+    const entries = presetEntries(preset).map((entry) => ({
+      preset: id,
+      row: entry.row,
+      specifier: entry.specifier === preset.package && overrideSpecifier !== undefined
+        ? overrideSpecifier
+        : entry.specifier,
+      config: entryConfig(entry, vendorConfig),
+    }))
+    rows.push(...entries)
     active.push({
       id,
-      specifier: typeof override === 'string' && override !== '' ? override : preset.package,
-      config: (vendorConfig?.[id] ?? {}),
+      specifier: overrideSpecifier ?? preset.package,
+      // rc.2 back-compat FALLBACK only. Precedence: the ROW key wins (the
+      // measured shape — one preset mounts several rows with different live
+      // configs), and `vendorConfig[preset.id]` is consulted only when no row
+      // key exists for this preset at all. A preset-id slot is the old
+      // single-row keying; without this fallback an rc.2 profile reports `{}`.
+      config: presetScopedConfig(preset, vendorConfig),
+      entries,
     })
   }
 
-  return { errors, active, ignored }
+  // Cross-preset duplicate row ids: two presets claiming one loader row would
+  // mount the same settings namespace twice. Rejected here (the plan is the
+  // gate that runs even when `validatePresets` is bypassed).
+  const rowOwners = new Map()
+  for (const row of rows) {
+    const owner = rowOwners.get(row.row)
+    if (owner !== undefined && owner !== row.preset) {
+      errors.push(`row "${row.row}" is declared by both "${owner}" and "${row.preset}" (one loader row, one owner)`)
+    } else {
+      rowOwners.set(row.row, row.preset)
+    }
+  }
+
+  return { errors, active, rows, ignored }
 }
 
 /**
- * Apply the preset plan: mount every active preset's plugin as a child, and
+ * The preset-scoped config slot, with the rc.2 fallback.
+ *
+ * Precedence, in one line: **the preset's own row key wins; `vendorConfig[preset.id]`
+ * is the fallback when that row key is absent.**
+ *
+ * The measured shape is row-keyed (`vendorConfig['dsh-opencode-v2-http']`),
+ * because one preset mounts several rows carrying different live configs, and
+ * `plan.rows[]` is where those per-row slots belong. rc.2 keyed the same object
+ * by preset id alone, so a profile written then has only `vendorConfig['opencode']`;
+ * reading just row keys would hand back `{}` and report a configured preset as
+ * unconfigured.
+ * @param {object} preset - the preset declaration.
+ * @param {object} vendorConfig - config keyed by row id (measured), or by preset id (rc.2).
+ * @returns {object} the scoped config (never undefined; reactive accessors pass through).
+ */
+function presetScopedConfig(preset, vendorConfig) {
+  const scoped = vendorConfig !== null && typeof vendorConfig === 'object' ? vendorConfig : {}
+  const byRow = scoped[preset.row]
+  if (byRow !== undefined) return byRow
+  const legacy = scoped[preset.id]
+  if (legacy !== undefined) return legacy
+  return {}
+}
+
+/**
+ * Read the host's `profileContext` service, tolerating its absence.
+ * @param {object} ctx - cordis context.
+ * @returns {{name?: string, dir?: string, installAnchor?: string}|undefined} the context.
+ */
+function readProfileContext(ctx) {
+  try {
+    return ctx?.get?.('profileContext')
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The bundle packages this process already started.
+ *
+ * `profileContext.startedBundles` is the host's own list (measured available;
+ * the live web profile reports the vendor bundles). Reading it is how the router
+ * notices that a preset's package is ALREADY mounted: a profile edited by hand
+ * (or a half-applied live edit) can list both the vendor bundle and this router,
+ * and the host would then see duplicate provider/tool registrations.
+ * @param {object} profileContext - the host's profile context, if any.
+ * @returns {string[]} started bundle package names (empty when unknown).
+ */
+function bundleNames(profileContext) {
+  const bundles = profileContext?.startedBundles
+  if (!Array.isArray(bundles)) return []
+  return bundles.filter((name) => typeof name === 'string' && name !== '')
+}
+
+/**
+ * Default the probe options from the preset itself.
+ *
+ * A probe layer declares only `endpoint` (a path); the host it belongs to is
+ * declared once, as `preset.endpoint.baseUrl`. Without this the generic probe
+ * executor receives no `baseUrl` and fails with
+ * `INVALID_PROBE: probe needs a baseUrl` — measured on deepinfra, whose layer is
+ * a standard OpenAI listing (`shape: 'openai'`) and therefore correctly routed
+ * to the generic executor rather than a vendor bridge.
+ *
+ * Precedence: the caller's explicit option wins, then the preset declaration,
+ * then (for the key only) the preset-scoped `vendorConfig` slot.
+ * @param {object} preset - preset declaration.
+ * @param {object} options - caller options.
+ * @param {object} vendorConfig - config keyed by preset id (probe scope).
+ * @returns {object} probe options.
+ */
+function probeOptions(preset, options, vendorConfig) {
+  const scoped = (vendorConfig !== null && typeof vendorConfig === 'object' ? vendorConfig[preset?.id] : undefined) ?? {}
+  const declaredBase = preset?.endpoint?.baseUrl
+  const baseUrl = options.baseUrl
+    ?? (typeof declaredBase === 'string' && declaredBase !== '' ? declaredBase : undefined)
+  const apiKey = options.apiKey ?? (typeof scoped?.apiKey === 'string' ? scoped.apiKey : undefined)
+  return {
+    ...options,
+    ...(baseUrl === undefined ? {} : { baseUrl }),
+    ...(apiKey === undefined ? {} : { apiKey }),
+  }
+}
+
+/**
+ * Apply the preset plan: mount every active preset's rows as children, and
  * return a disposer that unmounts exactly those children.
  *
- * Failures are isolated: one unimportable package or one throwing child must
- * not take the other presets down. With `strict` on (default), an invalid
- * declaration throws before anything is mounted.
- * @param {object} ctx - cordis context (uses `plugin` and `logger`).
+ * Failures are isolated per ROW: one unimportable package or one throwing child
+ * must not take the other rows down (the two OpenCode rows are independent — a
+ * missing `/http` row must still leave the CLI surface mounted). With `strict`
+ * on (default), an invalid declaration throws before anything is mounted.
+ * @param {object} ctx - cordis context (uses `plugin`, `get` and `logger`).
  * @param {object} [config] - plugin config.
  * @param {readonly unknown[]} [presets] - declarations (tests inject a fixture set).
  * @returns {Promise<() => void>} the disposer releasing every mounted child.
@@ -120,10 +308,12 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
     try { ctx?.logger?.warn?.(message) } catch { /* logging is advisory */ }
   }
 
-  // Resolve vendor modules through the DSH profile: the router's own package
-  // cannot resolve the @nolit links (measured), and the bridges need the
-  // vendors' own auth/catalog parsers.
-  const profileDir = configValue(config, 'profileDir', undefined)
+  // The profile holds the `@nolit` links; the install anchor holds the host's
+  // own packages. Neither is discoverable from the router's own path (measured),
+  // and `profileContext` is the host's own answer when the caller omits both.
+  const profileContext = readProfileContext(ctx)
+  const profileDir = configValue(config, 'profileDir', undefined) ?? profileContext?.dir
+  const installAnchor = configValue(config, 'installAnchor', undefined) ?? profileContext?.installAnchor
   const packages = { ...(configValue(config, 'packages', {}) ?? {}) }
   let modules = configValue(config, 'vendorModules', undefined)
   if (modules === undefined && typeof profileDir === 'string' && profileDir !== '') {
@@ -161,45 +351,88 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
   for (const error of plan.errors) warn(`dsh-custom-router: ${error}`)
 
   const mounted = []
-  for (const item of plan.active) {
+  // The resolver is injectable so a unit test never reaches the real install
+  // tree through the `execPath` fallback (which would make the suite depend on
+  // the machine that runs it).
+  const resolve = configValue(config, 'resolve', resolveFromAnchor)
+  // Safety net for a PARTIAL live-profile edit: `startedBundles` is what the
+  // profile actually started, so a vendor still listed there already owns its
+  // registrations and mounting it again is a hard duplicate failure (measured:
+  // the live web profile lists '@nolit/dsh-antigravity').
+  const startedBundles = bundleNames(profileContext)
+  for (const item of plan.rows) {
+    const owner = startedBundles.find((bundle) => item.specifier === bundle || item.specifier.startsWith(`${bundle}/`))
+    if (owner !== undefined) {
+      warn(`dsh-custom-router: row "${item.row}" of preset "${item.preset}" skipped: "${owner}" is already a started bundle (mounting it twice would duplicate its registrations)`)
+      continue
+    }
+    const resolution = resolveThroughChain({
+      profileDir,
+      installAnchor,
+      specifier: item.specifier,
+      resolve,
+    })
+    if (!resolution.ok) {
+      warn(`dsh-custom-router: row "${item.row}" of preset "${item.preset}" could not be resolved: ${item.specifier}\n${resolution.attempts.map((attempt) => `  ${attempt.label} (${attempt.anchor}): ${attempt.error.split('\n')[0]}`).join('\n')}`)
+      continue
+    }
     try {
-      const module = await import(item.specifier)
+      const module = await import(resolution.path)
       const plugin = module?.default ?? module
       if (typeof plugin !== 'function' && (plugin === null || typeof plugin?.apply !== 'function')) {
-        warn(`dsh-custom-router: preset "${item.id}" resolves to a module without apply(); skipping`)
+        warn(`dsh-custom-router: row "${item.row}" resolves to a module without apply(); skipping`)
         continue
       }
       const fiber = ctx.plugin(plugin, item.config)
-      mounted.push({ id: item.id, fiber })
+      // MEASURED (cordis 4.0.5): `ctx.plugin()` does NOT throw when the child's
+      // apply rejects. It records the error and settles the fiber at state 3, so
+      // a try/catch around the call alone is dead code for exactly the failure
+      // this seam must survive (a duplicate registration). Awaiting the fiber
+      // rethrows that startup error, which makes the report real.
+      await fiber
+      // Only a fiber that actually activated may join the disposer: a failed one
+      // has already unloaded itself, and disposing it would be a second release
+      // of a namespace we never owned.
+      mounted.push({ id: item.row, preset: item.preset, fiber })
     } catch (error) {
-      warn(`dsh-custom-router: preset "${item.id}" failed to mount: ${error instanceof Error ? error.message : String(error)}`)
+      warn(`dsh-custom-router: row "${item.row}" of preset "${item.preset}" failed to mount: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
   // Runtime seam for the rest of the body: routing, probing, merging.
+  const vendorConfig = configValue(config, 'vendorConfig', {})
   try {
     ctx?.provide?.('customRouter', {
       presets,
       vendorProbes: vendorProbes ?? {},
       route: (query) => resolveRoute(query, presets),
-      probe: (preset, options = {}) => probePreset(preset, {
+      probe: (preset, options = {}) => probePreset(preset, probeOptions(preset, {
         ...options,
         vendorProbes: vendorProbes ?? {},
-        vendorConfig: configValue(config, 'vendorConfig', {}),
-      }),
+        vendorConfig,
+      }, vendorConfig)),
       merge: (layers) => mergeCatalog(layers),
     })
   } catch (error) {
     warn(`dsh-custom-router: runtime seam not provided: ${error instanceof Error ? error.message : String(error)}`)
   }
 
+  // Release in reverse mount order (a later child may depend on an earlier
+  // one), over a COPY: `reverse()` mutates in place, which would corrupt the
+  // list for a second call. `released` makes the disposer idempotent, so a
+  // double unload (loader teardown plus an explicit call) is a no-op rather
+  // than a second dispose of already-disposed fibers.
+  let released = false
   return () => {
-    for (const { id, fiber } of mounted.reverse()) {
+    if (released) return
+    released = true
+    for (const { id, fiber } of [...mounted].reverse()) {
       try {
         fiber?.dispose?.()
       } catch (error) {
-        warn(`dsh-custom-router: preset "${id}" failed to dispose: ${error instanceof Error ? error.message : String(error)}`)
+        warn(`dsh-custom-router: row "${id}" failed to dispose: ${error instanceof Error ? error.message : String(error)}`)
       }
     }
+    mounted.length = 0
   }
 }

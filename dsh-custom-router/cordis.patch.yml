@@ -1,0 +1,41 @@
+# Bundle config layer for @nolit/dsh-custom-router.
+#
+# The row id is the settings namespace the loader derives for volatile Config
+# fields, so it MUST equal the plugin name exported by lib/index.js
+# (@nolit/dsh-custom-router).
+#
+# WHY THE SPECIFIER IS NOT THE BARE PACKAGE NAME
+#   The package's export map has no "." entry, so the bare specifier
+#   `@nolit/dsh-custom-router` fails with ERR_PACKAGE_PATH_NOT_EXPORTED while
+#   `@nolit/dsh-custom-router/plugin` resolves to lib/index.js (measured
+#   2026-11-07 from the profile). `name` therefore stays the bare package name
+#   (the plugin's own `name` export, used for the settings namespace) while the
+#   specifier carries the export subpath.
+#
+# WHAT THIS ROW DOES
+#   Mounts the three provider presets as CHILD plugins. It deliberately does not
+#   re-implement them: each preset names the loader rows it owns, and the router
+#   mounts each row's own plugin with that row's own config.
+#
+# THIS ROW MUST NOT COEXIST WITH THE VENDOR BUNDLE ROWS
+#   A profile that still lists @nolit/dsh-antigravity, @nolit/dsh-deepinfra or
+#   @nolit/dsh-opencode-v2 mounts the same plugins twice, which is a hard mount
+#   failure (duplicate provider/tool registrations). Remove those bundle rows
+#   before enabling this one.
+#
+# NO SECRETS HERE
+#   The live per-row config (API keys, tokens, daemon paths) is the operator's
+#   and lives in the profile's own patch layer, keyed by ROW id and passed
+#   through `vendorConfig`. This file carries switches only.
+- insert:
+  - id: dsh-custom-router
+    name: '@nolit/dsh-custom-router/plugin'
+    config:
+      # A malformed declaration throws before anything mounts. Leave on: a
+      # silently skipped preset looks exactly like a provider that never shipped.
+      strict: true
+      # Opt-in by design (see above): every preset starts unmounted.
+      presets:
+        antigravity: false
+        deepinfra: false
+        opencode: false

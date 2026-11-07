@@ -4,7 +4,7 @@
 version: 1.0
 kind: index
 status: active
-updated: 2026-11-07
+updated: 2026-11-08
 summary: Generated per-subproject index for @nolit/dsh-deepinfra: every document this track owns, one line each.
 -->
 
@@ -24,7 +24,7 @@ summary: Generated per-subproject index for @nolit/dsh-deepinfra: every document
 | 1.2 | report | active | 2026-11-04 | [CHANGELOG.md](../CHANGELOG.md) | Every change to this track with measured before/after: the 0.0.1-rc.1 adapter, five brief assumptions the live API contradicted, the 0.2.0 production integration, and the 0.2.1 architecture correction (config-layer credentials, model selection UI, production registration). |
 | 1.0 | index | active | 2026-11-05 | [CONTEXT.md](../CONTEXT.md) | The context a future session must load before touching this plugin — current version and state, the seven defects already made here and the rule each one produced, where each fact is measured from, and the exact verification commands. |
 | 2.0 | spec | reference | 2026-11-04 | [DEEPINFRA-ADAPTER-BRIEF.md](DEEPINFRA-ADAPTER-BRIEF.md) | Build brief (SUPERSEDED IN PART — 5 assumptions corrected by live measurement, 2026-11-04) for the DeepInfra adapter @nolit/dsh-deepinfra, now built. Read section 12 first. |
-| 1.0 | index | active | 2026-11-07 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-deepinfra: every document this track owns, one line each. |
+| 1.0 | index | active | 2026-11-08 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-deepinfra: every document this track owns, one line each. |
 | 1.3 | readme | active | 2026-11-04 | [README.md](../README.md) | Operator manual for the DeepInfra LLM adapter for DeepSeek Harness — config-layer credentials (no systemd edit), model enable/disable with promotion badges, the composer cost chip, the usage ledger and i18n. |
 | 1.0 | measurement | measured | 2026-11-05 | [UPSTREAM-APIS.md](../UPSTREAM-APIS.md) | Every DeepInfra endpoint relevant to this adapter, probed live on 2026-11-05 with the owner's credential — which are deployed, which return 404 despite being documented, and what each is and is not allowed to feed. |
 | 1.0 | measurement | measured | 2026-11-05 | [UPSTREAM-COMPAT.md](../UPSTREAM-COMPAT.md) | Measured cross-vendor behaviour of DeepInfra's OpenAI-compatible endpoint across 20 catalog vendors — which wire fields, role forms, tool shapes and error codes are universal and which are vendor-specific, with the two defects the survey exposed. |
@@ -55,7 +55,7 @@ summary: Generated per-subproject index for @nolit/dsh-deepinfra: every document
 
 ## index
 
-- **1.0** · active · 2026-11-07 · [INDEX.md](INDEX.md)
+- **1.0** · active · 2026-11-08 · [INDEX.md](INDEX.md)
   Generated per-subproject index for @nolit/dsh-deepinfra: every document this track owns, one line each.
 - **1.0** · active · 2026-11-05 · [CONTEXT.md](../CONTEXT.md)
   The context a future session must load before touching this plugin — current version and state, the seven defects already made here and the rule each one produced, where each fact is measured from, and the exact verification commands.

@@ -4,7 +4,7 @@
 version: 1.0
 kind: index
 status: active
-updated: 2026-11-07
+updated: 2026-11-08
 summary: Generated per-subproject index for @nolit/dsh-command-skill: every document this track owns, one line each.
 -->
 
@@ -23,7 +23,7 @@ summary: Generated per-subproject index for @nolit/dsh-command-skill: every docu
 | 1.0 | report | active | 2026-11-04 | [CHANGELOG.md](../CHANGELOG.md) | Engineering history for @nolit/dsh-command-skill. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after. |
 | 1.0 | spec | active | 2026-11-02 | [CONFIGURATION.md](CONFIGURATION.md) | Where every tunable value lives today, why they are currently scattered across three layers, and the target externalized schema with precedence, validation and fail-open behaviour. |
 | 1.0 | spec | active | 2026-11-02 | [CROSS-PROJECT-COLLABORATION.md](CROSS-PROJECT-COLLABORATION.md) | The shared interface contract between dsh-workspace/dsh-plugins and projects/total_skill — integration endpoints, boundary ownership, version handshake, duplicate-name gate, and the change protocol both repositories follow. |
-| 1.0 | index | active | 2026-11-07 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-command-skill: every document this track owns, one line each. |
+| 1.0 | index | active | 2026-11-08 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-command-skill: every document this track owns, one line each. |
 | 1.0 | spec | active | 2026-11-02 | [INTERRUPT-ARCHITECTURE.md](INTERRUPT-ARCHITECTURE.md) | Compares wiring the interrupt capability into the TokenEconomizer watchdog (A) against a standalone dsh-interrupt plugin (B), on failure isolation, blast radius, mount-surface risk, maintenance and event lifecycle, and records the measured facts that decide it. |
 | 1.0 | measurement | measured | 2026-11-02 | [INTERRUPT-LIFECYCLE.md](INTERRUPT-LIFECYCLE.md) | Measured why the TokenEconomizer watchdog never interrupts and why /interrupt can abort a turn prematurely, with the exact code paths, the reproduced probe, and what the prompt runtime may legitimately do about it. |
 | 1.0 | design | draft | 2026-11-02 | [CONFIG-EXTERNALIZATION-DESIGN.md](research/CONFIG-EXTERNALIZATION-DESIGN.md) | Measured option-resolution chain for @nolit/dsh-tokeneconomizer, the config sources DSH actually supports, and a fail-open JSON settings-file schema. |
@@ -63,6 +63,6 @@ summary: Generated per-subproject index for @nolit/dsh-command-skill: every docu
 
 ## index
 
-- **1.0** · active · 2026-11-07 · [INDEX.md](INDEX.md)
+- **1.0** · active · 2026-11-08 · [INDEX.md](INDEX.md)
   Generated per-subproject index for @nolit/dsh-command-skill: every document this track owns, one line each.
 
