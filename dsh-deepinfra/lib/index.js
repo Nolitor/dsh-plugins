@@ -162,6 +162,10 @@ export function apply(ctx, config) {
       return routes.filter((entry) => set.has(entry.id))
     }
     return {
+      // The raw chat routes, before the `enabledModels` filter. The Anthropic
+      // mount serves its own model family, which an operator's chat allow-list
+      // was never meant to restrict.
+      all: () => chatRoutes(cache.entries),
       list: (provider) => selected().map((entry) => toModelInfo(provider, entry)),
       resolve: (provider, model) => {
         const route = selected().find((entry) => entry.id === model)

@@ -64,6 +64,8 @@ downstream work.
    identify the priceable record; the row is written on the first positive output count, else once
    in `finally`.
 
+**Addendum — the route advertises the Claude family (2026-11-08).** `listModels`/`resolveModel` were added to the Anthropic adapter, listing catalog routes whose id starts with `anthropic/` and bypassing the chat route's `enabledModels` allow-list (that list is a CHAT selection). Without them the route registers but the picker shows nothing. `catalog.all()` was added to the catalog reader for that purpose.
+
 **Addendum — the opt-in flag needs schema fields (2026-11-08).** `anthropicRoute` and
 `anthropicBaseURL` were added to the plugin `Config` schema. Without them a Schemastery-validated
 profile strips the keys before `apply()` sees them, so `anthropicRoute: true` in a profile would
