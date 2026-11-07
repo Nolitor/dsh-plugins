@@ -23,7 +23,6 @@ import { readAnthropicSse } from '@nolit/dsh-custom-router/stream/anthropic'
 
 import { createAnthropicBinding } from './stream-anthropic.js'
 import { requestBodyAnthropic } from './wire.js'
-import { toModelInfo, toResolvedModelInfo } from './catalog.js'
 
 /**
  * The Messages path on DeepInfra's Anthropic-compatible mount.
@@ -166,37 +165,6 @@ export class DeepInfraAnthropicAdapter extends LlmAdapter {
    */
   providerInfo() {
     return { id: 'deepinfra-anthropic', name: 'DeepInfra (Anthropic)' }
-  }
-
-  /**
-   * Advertise the Claude family the Anthropic mount serves.
-   *
-   * The chat route's `enabledModels` allow-list is a CHAT selection, so it must
-   * not hide the Anthropic family: this route lists the catalog routes whose id
-   * is `anthropic/*` (measured: nine on 2026-11-08) regardless of that filter.
-   *
-   * @param provider - the `deepinfra-anthropic` route id.
-   * @returns advisory model metadata for the host picker.
-   */
-  async listModels(provider) {
-    const catalog = await this.dependencies.catalog()
-    const all = typeof catalog.all === 'function' ? catalog.all() : []
-    return all.filter((entry) => String(entry?.id ?? '').startsWith('anthropic/')).map((entry) => toModelInfo(provider, entry))
-  }
-
-  /**
-   * Resolve exact-route metadata for one Anthropic model id.
-   *
-   * @param provider - the `deepinfra-anthropic` route id.
-   * @param model - exact `anthropic/...` model id.
-   * @returns host model metadata.
-   */
-  async resolveModel(provider, model) {
-    const catalog = await this.dependencies.catalog()
-    const all = typeof catalog.all === 'function' ? catalog.all() : []
-    const route = all.find((entry) => entry?.id === model)
-    if (route === undefined) return toModelInfo(provider, { id: model, metadata: {} })
-    return toResolvedModelInfo(provider, route, { defaultMaxTokens: 4096, defaultEffort: '' })
   }
 
   /**
