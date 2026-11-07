@@ -51,7 +51,7 @@
 |---|---|---|
 | `dsh-antigravity/` | 5 | [docs/INDEX.md](dsh-antigravity/docs/INDEX.md) |
 | `dsh-command-skill/` | 9 | [docs/INDEX.md](dsh-command-skill/docs/INDEX.md) |
-| `dsh-custom-router/` | 16 | [docs/INDEX.md](dsh-custom-router/docs/INDEX.md) |
+| `dsh-custom-router/` | 17 | [docs/INDEX.md](dsh-custom-router/docs/INDEX.md) |
 | `dsh-deepinfra/` | 8 | [docs/INDEX.md](dsh-deepinfra/docs/INDEX.md) |
 | `dsh-notify/` | 20 | [docs/INDEX.md](dsh-notify/docs/INDEX.md) |
 | `dsh-opencode-v2/` | 24 | [docs/INDEX.md](dsh-opencode-v2/docs/INDEX.md) |
