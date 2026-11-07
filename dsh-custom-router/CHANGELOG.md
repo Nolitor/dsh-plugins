@@ -10,6 +10,18 @@ summary: Engineering history for the Custom Router track: created 2026-11-06 as 
 
 ## 0.0.1-rc.5 — 2026-11-08 (width container, one tab panel, tabbed model picker)
 
+**Addendum — OpenCode plan/usage card (2026-11-08 04:30).** The OpenCode tab now opens with a
+`플랜 사용량` card built strictly from measured data:
+- tier from the local ledger's `bySource` (`go-plus` present → **Go Plus**, labelled 원장 증거;
+  no evidence → `플랜 미확인`, never a guess) — the console API exposes no plan id;
+- the three windows (`5시간 / 주간 / 월간`) as real progress bars with a `한도 도달` badge;
+- `사용 $23.60 · 허용량 $64.35 · 37%` from `cost.listCostUsd / allowanceUsd` + request count;
+- a per-model table aggregating `cost.bySession[].byModel` (requests, spent, allowance) with the
+  **documented monthly limit** (`Go Plus` column, docs 2026-11-07) beside it, and an explicit
+  `로컬 기록 기준` note. Measured live: 9 rows; `kimi-k3.1-pro $60`, `deepseek-v4.1-flash $200`.
+  Witnessed live: 3 bars, tier go-plus, allowance line, 9 table rows.
+
+
 **Scope:** the two surfaces the owner rejected in the rc.4 build. No backend row, switch, schema
 field or write path changed; the writes are the same ones rc.4 measured end-to-end.
 

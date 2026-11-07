@@ -895,6 +895,103 @@ test('the search box filters the active tab only', async () => {
   loaded.dispose()
 })
 
+test('the plan tier comes from ledger evidence, never from a guess', () => {
+  const { exports, dispose } = loadClient({ namespace: {} })
+  const plus = exports.detectOpencodeTier({ bySession: [{ bySource: { 'go-plus': 54 } }, { bySource: { go: 3 } }] })
+  assert.equal(plus.tier, 'go-plus')
+  assert.equal(plus.counts['go-plus'], 54)
+  const go = exports.detectOpencodeTier({ bySession: [{ bySource: { go: 3 } }] })
+  assert.equal(go.tier, 'go')
+  const unknown = exports.detectOpencodeTier({ bySession: [{ bySource: {} }, {}] })
+  assert.equal(unknown.tier, null, 'no evidence must answer null, never go')
+  const none = exports.detectOpencodeTier(null)
+  assert.equal(none.tier, null)
+  dispose()
+})
+
+test('the documented monthly limit resolves through the provider prefix', () => {
+  const { exports, dispose } = loadClient({ namespace: {} })
+  assert.equal(exports.documentedLimit('opencode-go/minimax-m3.1-flash', 'go-plus'), 80)
+  assert.equal(exports.documentedLimit('opencode-go/minimax-m3.1-flash', 'go'), 20)
+  assert.equal(exports.documentedLimit('opencode-go/minimax-m3.1-flash', 'go-teams'), 25)
+  assert.equal(exports.documentedLimit('opencode-go/minimax-m3.1-flash', null), null, 'unknown tier has no limit')
+  assert.equal(exports.documentedLimit('opencode-go/not-in-docs', 'go-plus'), null)
+  dispose()
+})
+
+test('the per-model ledger aggregates sessions and sorts by allowance burn', () => {
+  const { exports, dispose } = loadClient({ namespace: {} })
+  const rows = exports.opencodeCostByModel({
+    bySession: [
+      { byModel: { 'opencode-go/a': { requests: 2, costUsd: 0, listCostUsd: 1.5, allowanceUsd: 1.2, tokens: { input: 10, output: 5 } } } },
+      { byModel: { 'opencode-go/a': { requests: 3, listCostUsd: 0.5, allowanceUsd: 0.4 }, 'opencode-go/b': { requests: 1, listCostUsd: 9, allowanceUsd: 0.1 } } },
+    ],
+  })
+  assert.equal(rows.length, 2)
+  assert.equal(rows[0].route, 'opencode-go/a')
+  assert.equal(rows[0].requests, 5)
+  assert.equal(rows[0].listCostUsd, 2)
+  assert.equal(rows[0].allowanceUsd, 1.6)
+  assert.equal(rows[0].tokens, 15)
+  assert.equal(rows[1].route, 'opencode-go/b')
+  dispose()
+})
+
+test('the plan card renders windows, allowance and the documented limit column', async () => {
+  const routeAnswers = {
+    '/api/local/opencode-v2/plan-usage': {
+      ok: true,
+      windows: {
+        rolling: { label: '5-hour', percent: 5, limited: false, resetsAt: 1794084398000 },
+        weekly: { label: 'Weekly', percent: 58, limited: false, resetsAt: 1794182400000 },
+        monthly: { label: 'Monthly', percent: 54, limited: false, resetsAt: 1794998310000 },
+      },
+    },
+    '/api/local/opencode-v2/model-settings': {
+      activePlan: 'go',
+      enabled: [],
+      models: [{ route: 'opencode-go/minimax-m3.1-flash', name: 'MiniMax M3.1 Flash', plan: 'go', available: true }],
+      cost: {
+        requests: 9126,
+        costUsd: 0,
+        listCostUsd: 23.43,
+        allowanceUsd: 63.98,
+        bySession: [
+          { bySource: { 'go-plus': 54 }, byModel: { 'opencode-go/minimax-m3.1-flash': { requests: 53, listCostUsd: 0.13, allowanceUsd: 0.39 } } },
+        ],
+      },
+    },
+  }
+  const fetchStub = async (path) => {
+    if (!(path in routeAnswers)) throw new Error('unexpected route: ' + path)
+    return { ok: true, status: 200, json: async () => routeAnswers[path] }
+  }
+  const { exports, renderRoot, dispose } = loadClient({
+    namespace: { presets: { opencode: true }, vendorConfig: {} },
+    fetch: fetchStub,
+  })
+  renderRoot(exports.CustomRouterModels, {})
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  let tree = renderRoot(exports.CustomRouterModels, {})
+  const opencodeTab = findAll(tree, (node) => node.props?.id === 'cr-models-tab-opencode')[0]
+  assert.ok(opencodeTab, 'the OpenCode tab must exist')
+  opencodeTab.props.onClick()
+  tree = renderRoot(exports.CustomRouterModels, {})
+  const cards = findAll(tree, (node) => node.props?.['data-plan-card'] !== undefined)
+  assert.equal(cards.length, 1)
+  assert.equal(cards[0].props['data-plan-card'], 'go-plus', 'ledger evidence must name Go Plus')
+  const texts = findAll(tree, (node) => node.type === '#text').map((node) => node.text).join(' ')
+  assert.match(texts, /Plan usage/)
+  assert.match(texts, /ledger evidence/)
+  assert.match(texts, /used \$23\.43 · allowance \$63\.98 · 37%/, 'allowance line uses list cost over allowance')
+  assert.match(texts, /monthly limit \(doc\)/)
+
+  // Unmount the settings tab and switch to the OpenCode tab is the default only
+  // for the first preset; render asserts the model list still works.
+  assert.ok(findAll(tree, (node) => node.props?.role === 'tabpanel').length === 1)
+  dispose()
+})
+
 test('no block characters are used for progress', () => {
   assert.equal(/[█▓▒░]/u.test(clientSource), false)
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })

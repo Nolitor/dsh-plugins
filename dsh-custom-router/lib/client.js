@@ -172,7 +172,25 @@ window.__ModuleLoader__.load({
     "planOther": "Other plan",
     "quotaLeft": "{pct}% left",
     "promoCount": "{n} on promotion",
-    "modelsSelectedTotal": "{enabled} of {total} models selected"
+    "modelsSelectedTotal": "{enabled} of {total} models selected",
+    "windowRolling": "5-hour",
+    "planTitle": "Plan usage",
+    "planUnknown": "plan unknown",
+    "planEvidenceLedger": "ledger evidence",
+    "planEvidenceNone": "no evidence",
+    "planDocs": "Plan docs",
+    "planLimited": "limit reached",
+    "planNoWindows": "No window data reported.",
+    "planAllowance": "used ${spent} · allowance ${allowance} · {percent}%",
+    "planAllowanceUnknown": "allowance not provided",
+    "planRequests": "{n} requests",
+    "planModel": "Model",
+    "planRequestsShort": "req",
+    "planSpentShort": "used",
+    "planAllowanceShort": "allow.",
+    "planDocLimit": "monthly limit (doc)",
+    "planNoUsage": "No per-model usage recorded locally yet.",
+    "planLocalNote": "Local ledger only — may differ from the account total. Documented limits as of 2026-11-07."
   },
   "ko": {
     "meta": {
@@ -296,7 +314,25 @@ window.__ModuleLoader__.load({
     "planOther": "기타 요금제",
     "quotaLeft": "{pct}% 잔여",
     "promoCount": "할인 {n}건",
-    "modelsSelectedTotal": "모델 {total}개 중 {enabled}개 선택"
+    "modelsSelectedTotal": "모델 {total}개 중 {enabled}개 선택",
+    "windowRolling": "5시간",
+    "planTitle": "플랜 사용량",
+    "planUnknown": "플랜 미확인",
+    "planEvidenceLedger": "원장 증거",
+    "planEvidenceNone": "증거 없음",
+    "planDocs": "요금제 문서",
+    "planLimited": "한도 도달",
+    "planNoWindows": "사용 창 정보가 없습니다.",
+    "planAllowance": "사용 ${spent} · 허용량 ${allowance} · {percent}%",
+    "planAllowanceUnknown": "허용량 미제공",
+    "planRequests": "요청 {n}",
+    "planModel": "모델",
+    "planRequestsShort": "요청",
+    "planSpentShort": "사용액",
+    "planAllowanceShort": "허용량",
+    "planDocLimit": "월 한도(문서)",
+    "planNoUsage": "로컬에 기록된 모델별 사용량이 없습니다.",
+    "planLocalNote": "로컬 기록 기준 — 계정 전체와 다를 수 있습니다. 문서 한도는 2026-11-07 기준."
   },
   "zh": {
     "meta": {
@@ -420,7 +456,25 @@ window.__ModuleLoader__.load({
     "planOther": "其他套餐",
     "quotaLeft": "剩余 {pct}%",
     "promoCount": "{n} 项优惠",
-    "modelsSelectedTotal": "已选 {enabled} / {total} 个模型"
+    "modelsSelectedTotal": "已选 {enabled} / {total} 个模型",
+    "windowRolling": "5 小时",
+    "planTitle": "套餐用量",
+    "planUnknown": "套餐未知",
+    "planEvidenceLedger": "账本证据",
+    "planEvidenceNone": "无证据",
+    "planDocs": "套餐文档",
+    "planLimited": "已达上限",
+    "planNoWindows": "未提供窗口数据。",
+    "planAllowance": "已用 ${spent} · 额度 ${allowance} · {percent}%",
+    "planAllowanceUnknown": "未提供额度",
+    "planRequests": "{n} 次请求",
+    "planModel": "模型",
+    "planRequestsShort": "请求",
+    "planSpentShort": "已用",
+    "planAllowanceShort": "额度",
+    "planDocLimit": "月限额（文档）",
+    "planNoUsage": "本地尚无按模型的用量记录。",
+    "planLocalNote": "仅本地账本，可能与账户总量不同。文档限额截至 2026-11-07。"
   }
 }
 
@@ -574,6 +628,23 @@ window.__ModuleLoader__.load({
       '.crBadgeMeta[data-tone=muted]{color:var(--dsw-alias-label-tertiary)}',
       '.crEmpty{padding:16px 14px;margin:0;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
       '.crFooterBar{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:.5px solid var(--dsw-alias-border-l3);min-width:0;flex-wrap:wrap}',
+      '.crPlanCard{display:flex;flex-direction:column;gap:10px;border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);padding:12px 14px;min-width:0}',
+      '.crPlanHead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
+      '.crPlanTitle{font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:600;color:var(--dsw-alias-label-primary);margin:0}',
+      '.crPlanTier{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-secondary)}',
+      '.crPlanBadge{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-tertiary);border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);padding:0 6px}',
+      '.crPlanWindows{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;min-width:0}',
+      '.crPlanWindow{display:flex;flex-direction:column;gap:4px;min-width:0}',
+      '.crPlanWindowHead{display:flex;align-items:center;justify-content:space-between;gap:6px;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-secondary)}',
+      '.crPlanBar{height:6px;border-radius:999px;background:var(--dsw-alias-border-l2);overflow:hidden;min-width:0}',
+      '.crPlanBarFill{height:100%;border-radius:999px;background:var(--dsw-alias-state-business-primary)}',
+      '.crPlanMeta{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-tertiary);display:flex;gap:10px;flex-wrap:wrap}',
+      '.crPlanTable{display:flex;flex-direction:column;max-height:280px;overflow:auto;border-top:.5px solid var(--dsw-alias-border-l2)}',
+      '.crPlanRow{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto auto;align-items:center;gap:10px;padding:6px 2px;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-primary);min-width:0}',
+      '.crPlanRowHead{color:var(--dsw-alias-label-tertiary);position:sticky;top:0;background:var(--dsw-alias-settings-card-fill)}',
+      '.crPlanModel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}',
+      '.crPlanCell{text-align:right;white-space:nowrap;font-family:var(--ds-font-family-code,monospace)}',
+      '.crPlanNote{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-tertiary);margin:0}',
       '@media (max-width:960px){.crKpiGrid,.crVendorGrid,.crBillingGrid,.crLayerGrid,.crPickerGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}',
       '@media (max-width:640px){.crKpiGrid,.crVendorGrid,.crBillingGrid,.crLayerGrid,.crPickerGrid{grid-template-columns:minmax(0,1fr)}}',
     ].join('')
@@ -2063,6 +2134,199 @@ window.__ModuleLoader__.load({
      * selection is refused rather than silently inverted.
      * @returns {object} the element.
      */
+    /** Documented OpenCode per-model monthly USD limits (docs 2026-11-07). */
+    const OPENCODE_DOC_LIMITS = Object.freeze({
+      'glm-5.3-flash': Object.freeze([60, 180, 65]),
+      'glm-5.3': Object.freeze([15, 120, 20]),
+      'glm-5.2': Object.freeze([60, 180, 65]),
+      'kimi-k3.1-pro': Object.freeze([15, 60, 20]),
+      'kimi-k3': Object.freeze([15, 60, 20]),
+      'kimi-k2.7-code': Object.freeze([60, 180, 65]),
+      'longcat-2.0': Object.freeze([60, 240, 65]),
+      'step-5-preview': Object.freeze([15, 60, 20]),
+      'mimo-v2.6-flash': Object.freeze([60, 120, 65]),
+      'mimo-v2.6-pro': Object.freeze([15, 60, 20]),
+      'mimo-v2.5': Object.freeze([60, 120, 65]),
+      'mimo-v2.5-pro': Object.freeze([15, 60, 20]),
+      'minimax-m3.1-flash': Object.freeze([20, 80, 25]),
+      'minimax-m3': Object.freeze([60, 180, 65]),
+      'muse-spark-1.3-contributor': Object.freeze([60, 120, 65]),
+      'muse-spark-1.2-contributor': Object.freeze([60, 120, 65]),
+      'qwen3.8-max': Object.freeze([15, 60, 20]),
+      'qwen3.8-flash': Object.freeze([30, 90, 35]),
+      'qwen3.7-plus': Object.freeze([60, 180, 65]),
+      'deepseek-v4.1-flash': Object.freeze([100, 200, 105]),
+      'deepseek-v4-pro': Object.freeze([15, 60, 20]),
+      'hy4': Object.freeze([60, 240, 65]),
+      'hy4-preview': Object.freeze([30, 120, 35]),
+      'hy3': Object.freeze([60, 240, 65]),
+      'grok-4.7': Object.freeze([15, 60, 20]),
+      'gpt-6-luna': Object.freeze([15, 60, 20]),
+      'gpt-5.6-luna': Object.freeze([15, 60, 20]),
+      'claude-haiku-5.5': Object.freeze([15, 60, 20]),
+      'gemini-4-argon': Object.freeze([30, 120, 35]),
+      'crouton-alpha-free-/-beam-free-/-iceman-contributor-free': Object.freeze([null, null, null]),
+    })
+
+    /** The published plan page the limits come from. */
+    const OPENCODE_DOCS_URL = 'https://opencode.ai/docs/console/go#privacy'
+
+    /**
+     * Normalize a model name onto the documented-limit key.
+     * @param {string} name - route or display name.
+     * @returns {string} the key used by OPENCODE_DOC_LIMITS.
+     */
+    function opencodeLimitKey(name) {
+      return String(name ?? '')
+        .replace(/^opencode-(go|zen)\//, '')
+        .replace(/\([^)]*\)/g, '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+    }
+
+    /**
+     * The documented monthly limit for one model under a tier.
+     * @param {string} name - route or display name.
+     * @param {string|null} tier - `go` / `go-plus` / `go-teams` / null.
+     * @returns {number|null} the USD limit, or null when unknown.
+     */
+    function documentedLimit(name, tier) {
+      const row = OPENCODE_DOC_LIMITS[opencodeLimitKey(name)]
+      if (row === undefined) return null
+      if (tier === 'go') return row[0]
+      if (tier === 'go-teams') return row[2]
+      if (tier === 'go-plus') return row[1]
+      return null
+    }
+
+    /**
+     * The plan tier the local ledger proves, and the sources it counted.
+     *
+     * `bySource` is PARTIAL (some requests carry no source), so this is
+     * evidence, not proof: an empty tally answers `null` and the UI says
+     * "미확인" instead of guessing `go`.
+     * @param {object|null} cost - the `cost` block of `/model-settings`.
+     * @returns {object} `{ tier, counts }`.
+     */
+    function detectOpencodeTier(cost) {
+      const counts = {}
+      for (const session of Array.isArray(cost?.bySession) ? cost.bySession : []) {
+        const bySource = session?.bySource
+        if (bySource === null || typeof bySource !== 'object') continue
+        for (const [source, value] of Object.entries(bySource)) {
+          counts[source] = (counts[source] ?? 0) + (Number(value) || 0)
+        }
+      }
+      if (counts['go-plus'] > 0) return { tier: 'go-plus', counts }
+      if (counts.go > 0) return { tier: 'go', counts }
+      return { tier: null, counts }
+    }
+
+    /**
+     * Aggregate the local per-model ledger across sessions.
+     * @param {object|null} cost - the `cost` block of `/model-settings`.
+     * @returns {object[]} rows sorted by allowance burn.
+     */
+    function opencodeCostByModel(cost) {
+      const totals = new Map()
+      for (const session of Array.isArray(cost?.bySession) ? cost.bySession : []) {
+        const byModel = session?.byModel
+        if (byModel === null || typeof byModel !== 'object') continue
+        for (const [route, entry] of Object.entries(byModel)) {
+          if (entry === null || typeof entry !== 'object') continue
+          const row = totals.get(route) ?? { route, requests: 0, costUsd: 0, listCostUsd: 0, allowanceUsd: 0, tokens: 0 }
+          row.requests += Number(entry.requests) || 0
+          row.costUsd += Number(entry.costUsd) || 0
+          row.listCostUsd += Number(entry.listCostUsd) || 0
+          row.allowanceUsd += Number(entry.allowanceUsd) || 0
+          const tokens = entry.tokens ?? {}
+          row.tokens += (Number(tokens.input) || 0) + (Number(tokens.output) || 0)
+          totals.set(route, row)
+        }
+      }
+      return [...totals.values()].sort((left, right) => right.allowanceUsd - left.allowanceUsd)
+    }
+
+    /**
+     * The OpenCode plan/usage card: plan evidence, windows, allowance and the
+     * per-model table with the documented monthly limit beside the measured
+     * local usage (never a fabricated ratio).
+     * @param {object} props - `{ usage }`.
+     * @returns {object} the element.
+     */
+    function PlanUsageCard(props) {
+      const usage = props.usage ?? { status: 'loading' }
+      const cost = usage.cost ?? null
+      const tier = detectOpencodeTier(cost)
+      const tierLabel = tier.tier === 'go-plus'
+        ? 'Go Plus'
+        : tier.tier === 'go'
+          ? 'Go'
+          : t('planUnknown')
+      const windows = usage.windows ?? null
+      const windowEntries = windows === null
+        ? []
+        : [
+          { id: 'rolling', label: t('windowRolling'), entry: windows.rolling },
+          { id: 'weekly', label: t('windowWeekly'), entry: windows.weekly },
+          { id: 'monthly', label: t('windowMonthly'), entry: windows.monthly },
+        ].filter((item) => item.entry !== null && typeof item.entry === 'object')
+      const allowance = Number(cost?.allowanceUsd)
+      const spent = Number(cost?.listCostUsd)
+      const hasAllowance = Number.isFinite(allowance) && allowance > 0
+      const burn = hasAllowance && Number.isFinite(spent) ? Math.min(100, Math.max(0, Math.round((spent / allowance) * 100))) : null
+      const rows = opencodeCostByModel(cost)
+
+      return h('section', { className: 'crPlanCard', 'data-plan-card': tier.tier ?? 'unknown' },
+        h('div', { className: 'crPlanHead' },
+          h('h4', { className: 'crPlanTitle' }, t('planTitle')),
+          h('span', { className: 'crPlanTier' }, tierLabel),
+          h('span', { className: 'crPlanBadge' }, t(tier.tier === null ? 'planEvidenceNone' : 'planEvidenceLedger')),
+          h('a', { className: 'crJump', href: OPENCODE_DOCS_URL, target: '_blank', rel: 'noreferrer' }, t('planDocs'))),
+        windowEntries.length > 0
+          ? h('div', { className: 'crPlanWindows' }, windowEntries.map((item) => {
+            const percent = Number.isFinite(Number(item.entry.percent)) ? Math.max(0, Math.min(100, Math.round(Number(item.entry.percent)))) : null
+            return h('div', { className: 'crPlanWindow', 'data-window': item.id },
+              h('div', { className: 'crPlanWindowHead' },
+                h('span', null, item.label),
+                percent === null ? h('span', null, t('usageUnavailable')) : h('span', null, item.entry.limited === true || percent >= 100 ? t('planLimited') : percent + '%')),
+              percent === null
+                ? null
+                : h('div', {
+                  className: 'crPlanBar',
+                  role: 'progressbar',
+                  'aria-valuenow': percent,
+                  'aria-valuemin': 0,
+                  'aria-valuemax': 100,
+                  'aria-label': item.label,
+                }, h('div', { className: 'crPlanBarFill', style: { width: percent + '%' } }))
+            )
+          }))
+          : h('p', { className: 'crPlanNote' }, t('planNoWindows')),
+        h('div', { className: 'crPlanMeta' },
+          hasAllowance && burn !== null
+            ? h('span', null, t('planAllowance', { spent: formatAmount(spent), allowance: formatAmount(allowance), percent: burn }))
+            : h('span', null, t('planAllowanceUnknown')),
+          h('span', null, t('planRequests', { n: formatNumber(cost?.requests ?? 0) }))),
+        rows.length > 0
+          ? h('div', { className: 'crPlanTable' },
+            h('div', { className: 'crPlanRow crPlanRowHead' },
+              h('span', null, t('planModel')),
+              h('span', { className: 'crPlanCell' }, t('planRequestsShort')),
+              h('span', { className: 'crPlanCell' }, t('planSpentShort')),
+              h('span', { className: 'crPlanCell' }, t('planAllowanceShort')),
+              h('span', { className: 'crPlanCell' }, t('planDocLimit'))),
+            rows.map((row) => h('div', { className: 'crPlanRow', key: row.route },
+              h('span', { className: 'crPlanModel', title: row.route }, row.route.replace(/^opencode-(go|zen)\//, '')),
+              h('span', { className: 'crPlanCell' }, formatNumber(row.requests)),
+              h('span', { className: 'crPlanCell' }, '$' + formatAmount(row.listCostUsd)),
+              h('span', { className: 'crPlanCell' }, row.allowanceUsd > 0 ? '$' + formatAmount(row.allowanceUsd) : '—'),
+              h('span', { className: 'crPlanCell' }, documentedLimit(row.route, tier.tier) === null ? '—' : '$' + documentedLimit(row.route, tier.tier)))))
+          : h('p', { className: 'crPlanNote' }, t('planNoUsage')),
+        h('p', { className: 'crPlanNote' }, t('planLocalNote')))
+    }
+
     function CustomRouterModels() {
       ensureStyle()
       const [tab, setTab] = React.useState(MODEL_PRESETS[0].id)
@@ -2096,6 +2360,23 @@ window.__ModuleLoader__.load({
               if (alive) setStatus((previous) => ({ ...previous, [preset.id]: 'error' }))
             })
         }
+        return () => { alive = false }
+      }, [])
+
+      const [planUsage, setPlanUsage] = React.useState({ status: 'loading' })
+      React.useEffect(() => {
+        let alive = true
+        // The plan windows and the local cost ledger live on two other routes;
+        // the model catalog above does not carry them.
+        Promise.allSettled([
+          postUsageRoute(globalThis.fetch, '/api/local/opencode-v2/plan-usage'),
+          postUsageRoute(globalThis.fetch, '/api/local/opencode-v2/model-settings'),
+        ]).then(([plan, catalog]) => {
+          if (!alive) return
+          const windows = plan.status === 'fulfilled' ? plan.value?.windows ?? null : null
+          const cost = catalog.status === 'fulfilled' ? catalog.value?.cost ?? null : null
+          setPlanUsage({ status: windows === null && cost === null ? 'error' : 'ready', windows, cost })
+        })
         return () => { alive = false }
       }, [])
 
@@ -2208,6 +2489,7 @@ window.__ModuleLoader__.load({
           tabIndex: 0,
           'data-category': active.id,
         },
+        active.id === 'opencode' ? h(PlanUsageCard, { usage: planUsage }) : null,
         h('div', { className: 'crToolbar' },
           h('input', {
             className: 'crSearchInput',
@@ -2698,6 +2980,10 @@ window.__ModuleLoader__.load({
     exports.CustomRouterModels = CustomRouterModels
     exports.RouterPanelGlyph = RouterPanelGlyph
     exports.MODEL_PRESETS = MODEL_PRESETS
+    exports.PlanUsageCard = PlanUsageCard
+    exports.detectOpencodeTier = detectOpencodeTier
+    exports.opencodeCostByModel = opencodeCostByModel
+    exports.documentedLimit = documentedLimit
     exports.flattenVariants = flattenVariants
     exports.VendorCard = VendorCard
     exports.KpiCard = KpiCard
