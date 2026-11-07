@@ -1269,10 +1269,67 @@ window.__ModuleLoader__.load({
      * router namespace; the router's reconcile remounts that child, so the
      * prompt model picker reflects the selection without a restart.
      */
-    const MODEL_SOURCES = Object.freeze([
-      Object.freeze({ id: 'antigravity', row: 'dsh-antigravity', route: '/api/local/dsh-antigravity/models', planKey: 'planSubscription', normalize: normalizeAntigravityModels }),
-      Object.freeze({ id: 'opencode', row: 'dsh-opencode-v2-http', route: '/api/local/opencode-v2/model-settings', planKey: 'planOpenCode', normalize: normalizeOpencodeModels }),
-      Object.freeze({ id: 'deepinfra', row: 'dsh-deepinfra', route: '/api/local/deepinfra/models', planKey: 'planPayAsYouGo', normalize: normalizeDeepinfraModels }),
+    /**
+     * ONE descriptor per preset. Everything the presets share — the tablist,
+     * the toolbar, the group card, the row, the footer, the save state and the
+     * `form.mutate` write — lives below in a single implementation; a preset
+     * only declares what nobody else can know:
+     *
+     *   id, labelKey        the tab id and its label key
+     *   row, route          the loader row that carries `enabledModels`, and
+     *                       the local panel route that lists the catalog
+     *   planKey             the plan/vendor label key
+     *   metered             true for a pay-per-token preset (price block)
+     *   load(payload)       -> `{ groups }`, the preset's own catalog shape
+     *   saveValue(chosen, groups)
+     *                       -> string[] written to `enabledModels`
+     *                       (optional; defaults to the flattened row order)
+     *   renderRowExtras(row, { note })
+     *                       -> the row's trailing cell (optional; defaults to
+     *                       the subscription note)
+     *
+     * A group is `{ key, titleKey|title, quota?, quotaTitle?, rows }`; a row is
+     * `{ key, name, id, variants, enabled, badges, price?, note? }`, where
+     * `badges` entries are a string (muted chip) or `{ label, tone }` and
+     * `price` is `{ input, output, listInput, listOutput, promoPercent? }`.
+     * Adding a fourth preset is one entry here, not a new JSX branch.
+     */
+    const MODEL_PRESETS = Object.freeze([
+      Object.freeze({
+        id: 'antigravity',
+        labelKey: 'vendorAntigravity',
+        row: 'dsh-antigravity',
+        route: '/api/local/dsh-antigravity/models',
+        planKey: 'planSubscription',
+        // FAMILY groups: `groups[].limits[]` becomes the card's quota badge and
+        // one row owns every reasoning-effort variant of one base model.
+        load: (payload) => ({ groups: antigravityGroups(payload) }),
+        // One row owns its variants: the saved value is their flatten.
+        saveValue: flattenVariants,
+      }),
+      Object.freeze({
+        id: 'opencode',
+        labelKey: 'vendorOpenCode',
+        row: 'dsh-opencode-v2-http',
+        route: '/api/local/opencode-v2/model-settings',
+        planKey: 'planOpenCode',
+        // PLAN groups (`go` / `zen`), seeded from the route's `enabled` list.
+        load: (payload) => ({ groups: opencodeGroups(payload) }),
+      }),
+      Object.freeze({
+        id: 'deepinfra',
+        labelKey: 'vendorDeepInfra',
+        row: 'dsh-deepinfra',
+        route: '/api/local/deepinfra/models',
+        planKey: 'planPayAsYouGo',
+        // The only preset billed per token: `metered` is what turns on the price
+        // block and the promotion count, never a hardcoded vendor id.
+        metered: true,
+        // ONE flat card; the only preset whose rows carry a rate, a struck list
+        // price and a promotion badge.
+        load: (payload) => ({ groups: deepinfraGroups(payload) }),
+        renderRowExtras: (row, ctx) => h(PriceBlock, { price: row.price, note: ctx.note }),
+      }),
     ])
 
     /**
@@ -1342,47 +1399,68 @@ window.__ModuleLoader__.load({
 
     /**
      * Build one model row of the shared list layout.
+     *
+     * A row is data only: the id set it owns (`variants`), its `enabled` seed
+     * and display fields. Nothing here knows which preset produced it.
      * @param {object} fields - row fields.
      * @returns {object} the normalized row.
      */
     function modelRow(fields) {
+      const badges = Array.isArray(fields.badges) ? fields.badges : []
       return {
-        id: fields.id,
-        name: fields.name ?? fields.id,
-        variants: Array.isArray(fields.variants) && fields.variants.length > 0 ? fields.variants : [fields.id],
+        key: String(fields.key ?? fields.id),
+        id: String(fields.id),
+        name: String(fields.name ?? fields.id),
+        variants: Array.isArray(fields.variants) && fields.variants.length > 0 ? fields.variants.map((id) => String(id)) : [String(fields.id)],
         enabled: fields.enabled === true,
-        meta: Array.isArray(fields.meta) ? fields.meta : [],
-        price: fields.price !== null && typeof fields.price === 'object' ? fields.price : null,
-        promotion: fields.promotion !== null && typeof fields.promotion === 'object' ? fields.promotion : null,
+        badges: badges.map((badge) => (typeof badge === 'string' ? { label: badge, tone: 'muted' } : { label: String(badge.label), tone: badge.tone ?? 'muted' })),
+        price: fields.price !== null && typeof fields.price === 'object' ? {
+          input: fields.price.input,
+          output: fields.price.output,
+          listInput: fields.price.listInput,
+          listOutput: fields.price.listOutput,
+          promoPercent: fields.price.promoPercent === null || fields.price.promoPercent === undefined ? null : Number(fields.price.promoPercent),
+        } : null,
+        note: typeof fields.note === 'string' ? fields.note : undefined,
       }
     }
 
+    /** Muted "supports thinking" chip, shared by the presets that report it. */
+    function thinkingBadge(entry) {
+      return entry?.supportsThinking === true ? [{ label: t('modelThinking'), tone: 'muted' }] : []
+    }
+
+    /** Context-window chip, shared by the presets that report one. */
+    function contextBadge(entry) {
+      return formatContext(entry?.contextWindow) ? [{ label: formatContext(entry?.contextWindow), tone: 'muted' }] : []
+    }
+
     /**
-     * Normalize the Antigravity model list into FAMILY groups.
+     * Antigravity catalog -> FAMILY groups (one row per base model).
      *
      * The route collapses the reasoning-effort ids into one BASE row per model
      * (`groups[].models[]` with `variants`), which is exactly the shape this
-     * settings list renders: one checkbox owns every variant id, and the saved
-     * value is the flattened variant list. A payload without `groups` still
-     * renders: the flat `models` list becomes one "other" card of single-id rows.
+     * settings list renders: one checkbox owns every variant id. A payload
+     * without `groups` still renders: the flat `models` list becomes one
+     * "other" card of single-id rows.
      * @param {object} payload - `/models` answer.
-     * @returns {object[]} normalized groups.
+     * @returns {object[]} groups.
      */
-    function normalizeAntigravityModels(payload) {
+    function antigravityGroups(payload) {
       const groups = Array.isArray(payload?.groups) ? payload.groups : []
       if (groups.length > 0) {
         return groups.map((group, index) => {
           const rows = (Array.isArray(group?.models) ? group.models : []).map((entry) => modelRow({
+            key: String(entry?.id ?? ''),
             id: String(entry?.id ?? ''),
             name: String(entry?.name ?? entry?.id ?? ''),
-            variants: Array.isArray(entry?.variants) ? entry.variants.map((id) => String(id)) : [],
+            variants: Array.isArray(entry?.variants) ? entry.variants : [],
             enabled: entry?.enabled === true,
-            meta: entry?.supportsThinking === true ? [{ label: t('modelThinking'), tone: 'muted' }] : [],
+            badges: thinkingBadge(entry),
           })).filter((row) => row.id !== '')
           return {
-            id: String(group?.kind ?? 'group-' + index),
-            labelKey: FAMILY_LABELS[group?.kind] ?? 'groupOther',
-            label: typeof group?.label === 'string' ? group.label : '',
+            key: String(group?.kind ?? 'group-' + index),
+            titleKey: FAMILY_LABELS[group?.kind] ?? 'groupOther',
             quota: groupQuotaText(group),
             quotaTitle: (Array.isArray(group?.limits) ? group.limits : []).map((limit) => limit?.description).filter(Boolean).join(' / '),
             rows,
@@ -1391,50 +1469,41 @@ window.__ModuleLoader__.load({
       }
       const models = Array.isArray(payload?.models) ? payload.models : []
       const rows = models.map((entry) => modelRow({
+        key: String(entry?.id ?? ''),
         id: String(entry?.id ?? ''),
         name: String(entry?.name ?? entry?.id ?? ''),
         enabled: entry?.enabled === true,
-        meta: [
-          ...(formatContext(entry?.contextWindow) ? [{ label: formatContext(entry?.contextWindow), tone: 'muted' }] : []),
-          ...(entry?.supportsThinking === true ? [{ label: t('modelThinking'), tone: 'muted' }] : []),
-        ],
+        badges: [...contextBadge(entry), ...thinkingBadge(entry)],
       })).filter((row) => row.id !== '')
-      return rows.length === 0 ? [] : [{ id: 'other', labelKey: 'groupOther', label: '', quota: '', quotaTitle: '', rows }]
+      return rows.length === 0 ? [] : [{ key: 'other', titleKey: 'groupOther', rows }]
     }
 
     /**
-     * Normalize the OpenCode route list into PLAN groups.
+     * OpenCode catalog -> PLAN groups (`go` / `zen`), seeded from `enabled`.
      *
-     * A subscription route has no per-token rate, so the row carries a plan badge
-     * and no price: the price block says the model is included in the plan.
+     * A subscription route has no per-token rate: the row carries no price and
+     * the shared row falls back to the "included in plan" note.
      * @param {object} payload - `/model-settings` answer.
-     * @returns {object[]} normalized groups.
+     * @returns {object[]} groups.
      */
-    function normalizeOpencodeModels(payload) {
+    function opencodeGroups(payload) {
       const enabled = Array.isArray(payload?.enabled) ? payload.enabled : []
       const models = Array.isArray(payload?.models) ? payload.models : []
       const groups = new Map()
+      const titleKeys = { go: 'planGo', zen: 'planZen', other: 'planOther' }
       for (const entry of models) {
         const id = String(entry?.route ?? '')
         if (id === '') continue
         const plan = String(entry?.plan ?? '')
         const key = plan === 'go' || plan === 'zen' ? plan : 'other'
-        if (!groups.has(key)) {
-          groups.set(key, {
-            id: key,
-            labelKey: key === 'go' ? 'planGo' : key === 'zen' ? 'planZen' : 'planOther',
-            label: plan,
-            quota: '',
-            quotaTitle: '',
-            rows: [],
-          })
-        }
+        if (!groups.has(key)) groups.set(key, { key, titleKey: titleKeys[key], rows: [] })
         groups.get(key).rows.push(modelRow({
+          key: id,
           id,
           name: String(entry?.name ?? id),
           enabled: enabled.includes(id),
-          meta: [
-            ...(formatContext(entry?.contextWindow) ? [{ label: formatContext(entry?.contextWindow), tone: 'muted' }] : []),
+          badges: [
+            ...contextBadge(entry),
             ...(entry?.available === false ? [{ label: t('modelUnavailable'), tone: 'muted' }] : []),
           ],
         }))
@@ -1443,42 +1512,45 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Normalize the DeepInfra catalog into ONE card (pay-per-token).
+     * DeepInfra catalog -> ONE flat card (pay-per-token).
      *
-     * These rows are the only ones that carry a rate and a promotion, so the
-     * price block renders "in $x · out $y / 1M" beside the struck-through list
-     * price and the promotion badge.
+     * The only preset whose rows carry a rate and a promotion, so its rows are
+     * the only ones that render the price block.
      * @param {object} payload - `/models` answer.
-     * @returns {object[]} normalized groups.
+     * @returns {object[]} groups.
      */
-    function normalizeDeepinfraModels(payload) {
+    function deepinfraGroups(payload) {
       const models = Array.isArray(payload?.models) ? payload.models : []
       const rows = models.map((entry) => modelRow({
+        key: String(entry?.id ?? ''),
         id: String(entry?.id ?? ''),
         name: String(entry?.id ?? ''),
         enabled: entry?.enabled === true,
-        meta: [
-          ...(formatContext(entry?.contextWindow) ? [{ label: formatContext(entry?.contextWindow), tone: 'muted' }] : []),
+        badges: [
+          ...contextBadge(entry),
           ...(entry?.vision === true ? [{ label: t('modelVision'), tone: 'positive' }] : []),
           ...(entry?.reasoning === true ? [{ label: t('modelThinking'), tone: 'muted' }] : []),
         ],
-        price: entry?.price,
-        promotion: entry?.promotion,
+        price: entry?.price === null || typeof entry?.price !== 'object' ? null : {
+          ...entry.price,
+          promoPercent: entry?.promotion !== null && typeof entry?.promotion === 'object' ? entry.promotion.percentOff : null,
+        },
       })).filter((row) => row.id !== '')
-      return rows.length === 0 ? [] : [{
-        id: 'deepinfra',
-        labelKey: 'vendorDeepInfra',
-        label: '',
-        quota: '',
-        quotaTitle: '',
-        rows,
-      }]
+      return rows.length === 0 ? [] : [{ key: 'deepinfra', titleKey: 'vendorDeepInfra', rows }]
     }
 
-    /** The translation key of a source's vendor name. */
-    function sourceNameKey(source) {
-      const provider = ROUTER_PROVIDERS.find((entry) => entry.id === source.id)
-      return provider ? provider.nameKey : 'vendorAntigravity'
+    /**
+     * Save projection: the selected ids, in row order.
+     *
+     * Every preset can leave `saveValue` out: the shared default writes the
+     * flattened variant order, which is what both the family and the plan tabs
+     * need because their row ids are their own id sets.
+     * @param {Set<string>} chosen - the selected id set.
+     * @param {object[]} groups - the preset's groups.
+     * @returns {string[]} the value for `enabledModels`.
+     */
+    function flattenVariants(chosen, groups) {
+      return allIds(groups).filter((id) => chosen.has(id))
     }
 
     /**
@@ -1496,22 +1568,6 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The saved value of a selection: the flattened id list, in row order.
-     * @param {object[]} groups - normalized groups.
-     * @param {Set<string>} chosen - the selected id set.
-     * @returns {string[]} the ids to write to `enabledModels`.
-     */
-    function flattenSelected(groups, chosen) {
-      const value = []
-      for (const group of groups) {
-        for (const row of group.rows) {
-          for (const id of row.variants) if (chosen.has(id)) value.push(id)
-        }
-      }
-      return value
-    }
-
-    /**
      * Every id a full selection of these groups would carry.
      * @param {object[]} groups - normalized groups.
      * @returns {string[]} the ids.
@@ -1523,44 +1579,61 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * One model row: checkbox, name/id, meta badges and the price block.
+     * The price block of a metered row: rate, sideways promo, struck list price.
+     *
+     * Shared by every preset that renders it — the descriptor decides WHICH
+     * rows carry a price, never how one looks.
+     * @param {object} props - `{ price, note }`.
+     * @returns {object} the element.
+     */
+    function PriceBlock(props) {
+      const price = props.price
+      const promoPercent = price !== null && Number.isFinite(Number(price.promoPercent)) ? Number(price.promoPercent) : null
+      const hasListPrice = price !== null && Number.isFinite(Number(price.listInput)) && Number.isFinite(Number(price.listOutput))
+      return h('span', { className: 'crPrice' },
+        price !== null
+          ? h('span', { className: 'crPriceRate' }, t('modelRate', { input: formatRate(price.input), output: formatRate(price.output) }))
+          : h('span', { className: 'crPriceNote' }, props.note),
+        price !== null && promoPercent !== null && hasListPrice
+          ? h('span', { className: 'crPriceList' }, t('modelRate', { input: formatRate(price.listInput), output: formatRate(price.listOutput) }))
+          : null,
+        promoPercent !== null
+          ? h('span', { className: 'crBadgeMeta', 'data-tone': 'promo' }, t('promoOff', { percent: promoPercent }))
+          : null)
+    }
+
+    /**
+     * One model row: checkbox, name/id, meta badges and the trailing cell.
+     *
+     * The trailing cell is the preset's `renderRowExtras` or, without one, the
+     * shared subscription note (a plan row has no rate to render).
      * @param {object} props - component props.
      * @returns {object} the element.
      */
     function ModelRow(props) {
       const row = props.row
-      const price = row.price
-      const promotion = row.promotion
-      const promoPercent = promotion !== null && Number.isFinite(Number(promotion.percentOff)) ? Number(promotion.percentOff) : null
-      const hasListPrice = price !== null && Number.isFinite(Number(price.listInput)) && Number.isFinite(Number(price.listOutput))
+      const note = row.note ?? t(props.priceIncluded === true ? 'priceIncluded' : 'priceUnavailable')
       return h('label', { className: 'crRow', 'data-model': row.id },
         h('input', {
           type: 'checkbox',
           className: 'crRowCheck',
           checked: props.selected === true,
           'aria-label': row.name,
-          onChange: (event) => props.onToggle(row.id, event.target.checked),
+          onChange: (event) => props.onToggle(row.key, event.target.checked),
         }),
         h('span', { className: 'crRowMain' },
           h('span', { className: 'crRowName', title: row.id }, row.name),
           row.name !== row.id ? h('span', { className: 'crRowId', title: row.id }, row.id) : null,
-          row.meta.length > 0
-            ? h('span', { className: 'crRowMeta' }, row.meta.map((entry, index) => h('span', {
+          row.badges.length > 0
+            ? h('span', { className: 'crRowMeta' }, row.badges.map((entry, index) => h('span', {
               className: 'crBadgeMeta',
               'data-tone': entry.tone,
               key: entry.label + ':' + index,
             }, entry.label)))
             : null),
-        h('span', { className: 'crPrice' },
-          price !== null
-            ? h('span', { className: 'crPriceRate' }, t('modelRate', { input: formatRate(price.input), output: formatRate(price.output) }))
-            : h('span', { className: 'crPriceNote' }, props.priceNote),
-          price !== null && promoPercent !== null && hasListPrice
-            ? h('span', { className: 'crPriceList' }, t('modelRate', { input: formatRate(price.listInput), output: formatRate(price.listOutput) }))
-            : null,
-          promoPercent !== null
-            ? h('span', { className: 'crBadgeMeta', 'data-tone': 'promo' }, t('promoOff', { percent: promoPercent }))
-            : null))
+        props.renderRowExtras
+          ? props.renderRowExtras(row, { note })
+          : h(PriceBlock, { price: row.price, note }))
     }
 
     /**
@@ -1570,19 +1643,20 @@ window.__ModuleLoader__.load({
      */
     function ModelGroup(props) {
       const group = props.group
-      return h('section', { className: 'crGroup', 'data-group': group.id, key: props.groupId },
+      return h('section', { className: 'crGroup', 'data-group': group.key, key: props.groupId },
         h('div', { className: 'crGroupHead' },
-          h('h4', { className: 'crGroupTitle' }, t(group.labelKey)),
+          h('h4', { className: 'crGroupTitle' }, group.title ?? t(group.titleKey)),
           h('div', { className: 'crGroupSide' },
-            group.quota !== ''
+            group.quota
               ? h('span', { className: 'crBadgeMeta', 'data-tone': 'muted', title: group.quotaTitle || undefined }, group.quota)
               : null,
             h('span', { className: 'crGroupMeta' }, t('modelsSelectedTotal', { enabled: props.selectedCount, total: group.rows.length })))),
         h('div', { className: 'crGroupBody' }, h('div', { className: 'crList' }, group.rows.map((row) => h(ModelRow, {
-          key: row.id,
+          key: row.key,
           row,
           selected: rowSelected(row, props.chosen),
-          priceNote: t(props.priceIncluded === true ? 'priceIncluded' : 'priceUnavailable'),
+          priceIncluded: props.priceIncluded,
+          renderRowExtras: props.renderRowExtras,
           onToggle: props.onToggle,
         })))))
     }
@@ -1603,6 +1677,12 @@ window.__ModuleLoader__.load({
     /**
      * The settings section: ONE tab per preset, only the active tab renders.
      *
+     * ONE implementation serves every preset. The descriptor supplies the tab
+     * label, the catalog (`load`), the save projection (`saveValue`) and the
+     * optional row extras; the tablist, toolbar, group card, row, footer, dirty
+     * tracking, `form.mutate` write and the empty-selection guard are shared
+     * and know nothing about a vendor name.
+     *
      * The user picks the models the prompt picker should offer and saves; the
      * write lands in `vendorConfig.<row>.enabledModels`, the field each vendor
      * already filters its catalog with, and the router reconcile applies it to
@@ -1612,7 +1692,7 @@ window.__ModuleLoader__.load({
      */
     function CustomRouterModels() {
       ensureStyle()
-      const [tab, setTab] = React.useState(MODEL_SOURCES[0].id)
+      const [tab, setTab] = React.useState(MODEL_PRESETS[0].id)
       const [catalogs, setCatalogs] = React.useState({})
       const [selected, setSelected] = React.useState({})
       const [saved, setSaved] = React.useState({})
@@ -1623,24 +1703,24 @@ window.__ModuleLoader__.load({
 
       React.useEffect(() => {
         let alive = true
-        for (const source of MODEL_SOURCES) {
+        for (const preset of MODEL_PRESETS) {
           // The initial state is already 'loading'; resetting it here would
           // overwrite an answered catalog on every re-render.
-          postUsageRoute(globalThis.fetch, source.route)
+          postUsageRoute(globalThis.fetch, preset.route)
             .then((payload) => {
               if (!alive) return
-              const groups = source.normalize(payload)
+              const groups = preset.load(payload).groups
               const enabled = new Set()
               for (const group of groups) {
                 for (const row of group.rows) if (row.enabled) for (const id of row.variants) enabled.add(id)
               }
-              setCatalogs((previous) => ({ ...previous, [source.id]: groups }))
-              setSelected((previous) => ({ ...previous, [source.id]: enabled }))
-              setSaved((previous) => ({ ...previous, [source.id]: new Set(enabled) }))
-              setStatus((previous) => ({ ...previous, [source.id]: 'ready' }))
+              setCatalogs((previous) => ({ ...previous, [preset.id]: groups }))
+              setSelected((previous) => ({ ...previous, [preset.id]: enabled }))
+              setSaved((previous) => ({ ...previous, [preset.id]: new Set(enabled) }))
+              setStatus((previous) => ({ ...previous, [preset.id]: 'ready' }))
             })
             .catch(() => {
-              if (alive) setStatus((previous) => ({ ...previous, [source.id]: 'error' }))
+              if (alive) setStatus((previous) => ({ ...previous, [preset.id]: 'error' }))
             })
         }
         return () => { alive = false }
@@ -1648,69 +1728,71 @@ window.__ModuleLoader__.load({
 
       /**
        * Toggle one row: every variant id of the row moves together.
-       * @param {string} sourceId - preset id.
+       * @param {string} presetId - preset id.
        * @param {string[]} variants - the row's variant ids.
        * @param {boolean} next - requested state.
        * @returns {void}
        */
-      const toggle = (sourceId, variants, next) => {
+      const toggle = (presetId, variants, next) => {
         setSelected((previous) => {
-          const set = new Set(previous[sourceId] ?? [])
+          const set = new Set(previous[presetId] ?? [])
           for (const id of variants) {
             if (next) set.add(id)
             else set.delete(id)
           }
-          return { ...previous, [sourceId]: set }
+          return { ...previous, [presetId]: set }
         })
       }
 
       /**
        * Select every id of a preset, or clear it.
-       * @param {string} sourceId - preset id.
+       * @param {string} presetId - preset id.
        * @param {boolean} all - true selects all, false clears.
        * @returns {void}
        */
-      const setAll = (sourceId, all) => {
-        const ids = all ? allIds(catalogs[sourceId] ?? []) : []
-        setSelected((previous) => ({ ...previous, [sourceId]: new Set(ids) }))
+      const setAll = (presetId, all) => {
+        const ids = all ? allIds(catalogs[presetId] ?? []) : []
+        setSelected((previous) => ({ ...previous, [presetId]: new Set(ids) }))
       }
 
       /**
        * Persist one preset's selection through the router namespace.
-       * @param {object} source - model source.
+       * @param {object} preset - the active descriptor.
        * @returns {void}
        */
-      const save = (source) => {
+      const save = (preset) => {
         const form = hostCtx && hostCtx.configForms ? hostCtx.configForms.get(NAMESPACE) : null
-        if (!form || saving[source.id] === true) return
-        const groups = catalogs[source.id] ?? []
-        const chosen = selected[source.id] ?? new Set()
-        const value = flattenSelected(groups, chosen)
+        if (!form || saving[preset.id] === true) return
+        const groups = catalogs[preset.id] ?? []
+        const chosen = selected[preset.id] ?? new Set()
+        // The descriptor owns the projection: a row that owns variants writes
+        // the flatten, a row that owns its own route writes the route id.
+        const value = (preset.saveValue ?? flattenVariants)(chosen, groups)
         if (value.length === 0) return
-        setSaving((previous) => ({ ...previous, [source.id]: true }))
-        form.mutate([{ op: 'set', path: ['vendorConfig', source.row, 'enabledModels'], value }])
+        setSaving((previous) => ({ ...previous, [preset.id]: true }))
+        form.mutate([{ op: 'set', path: ['vendorConfig', preset.row, 'enabledModels'], value }])
           .then((accepted) => {
-            setSaving((previous) => ({ ...previous, [source.id]: false }))
+            setSaving((previous) => ({ ...previous, [preset.id]: false }))
             if (accepted) {
-              setSaved((previous) => ({ ...previous, [source.id]: new Set(chosen) }))
-              setErrors((previous) => ({ ...previous, [source.id]: '' }))
+              setSaved((previous) => ({ ...previous, [preset.id]: new Set(chosen) }))
+              setErrors((previous) => ({ ...previous, [preset.id]: '' }))
             } else {
-              setErrors((previous) => ({ ...previous, [source.id]: 'refused' }))
+              setErrors((previous) => ({ ...previous, [preset.id]: 'refused' }))
             }
           })
           .catch((failure) => {
-            setSaving((previous) => ({ ...previous, [source.id]: false }))
-            setErrors((previous) => ({ ...previous, [source.id]: failure instanceof Error ? failure.message : String(failure) }))
+            setSaving((previous) => ({ ...previous, [preset.id]: false }))
+            setErrors((previous) => ({ ...previous, [preset.id]: failure instanceof Error ? failure.message : String(failure) }))
           })
       }
 
-      const active = MODEL_SOURCES.find((source) => source.id === tab) ?? MODEL_SOURCES[0]
+      const active = MODEL_PRESETS.find((preset) => preset.id === tab) ?? MODEL_PRESETS[0]
       const groups = catalogs[active.id] ?? []
       const chosen = selected[active.id] ?? new Set()
       const initial = saved[active.id]
       const dirty = initial === undefined ? false : !sameSelection(chosen, initial)
       const query = String(queries[active.id] ?? '').trim().toLowerCase()
-      const priceIncluded = active.planKey !== 'planPayAsYouGo'
+      const priceIncluded = active.metered !== true
       const visibleGroups = query === ''
         ? groups
         : groups
@@ -1720,9 +1802,9 @@ window.__ModuleLoader__.load({
           }))
           .filter((group) => group.rows.length > 0)
       const state = status[active.id] ?? 'loading'
-      const total = allIds(groups).length
       const selectedRows = groups.reduce((sum, group) => sum + group.rows.filter((row) => rowSelected(row, chosen)).length, 0)
-      const promoCount = groups.reduce((sum, group) => sum + group.rows.filter((row) => row.promotion !== null && Number.isFinite(Number(row.promotion.percentOff))).length, 0)
+      const promoCount = groups.reduce((sum, group) => sum + group.rows.filter((row) => row.price !== null && row.price.promoPercent !== null && Number.isFinite(row.price.promoPercent)).length, 0)
+      const emptyGroups = groups.length === 0 || visibleGroups.length === 0
 
       return h('div', { className: 'crSection crPage crPageNarrow crModels', 'data-models-tab': active.id },
         h('div', { className: 'crHeader' },
@@ -1730,19 +1812,19 @@ window.__ModuleLoader__.load({
             h('h2', { className: 'crTitle' }, t('modelsTitle')),
             h('p', { className: 'crSubtitle' }, t('modelsHint')))),
         h('div', { className: 'crTabs', role: 'tablist' },
-          MODEL_SOURCES.map((source) => h('button', {
-            key: source.id,
+          MODEL_PRESETS.map((preset) => h('button', {
+            key: preset.id,
             type: 'button',
             className: 'crTab',
             role: 'tab',
-            id: 'cr-models-tab-' + source.id,
+            id: 'cr-models-tab-' + preset.id,
             // Only the active panel exists, so only the active tab points at it:
             // an aria-controls on an unmounted id would be a dangling IDREF.
-            'aria-controls': active.id === source.id ? 'cr-models-panel-' + source.id : undefined,
-            'aria-selected': active.id === source.id ? 'true' : 'false',
-            tabIndex: active.id === source.id ? 0 : -1,
-            onClick: () => setTab(source.id),
-          }, t(sourceNameKey(source))))),
+            'aria-controls': active.id === preset.id ? 'cr-models-panel-' + preset.id : undefined,
+            'aria-selected': active.id === preset.id ? 'true' : 'false',
+            tabIndex: active.id === preset.id ? 0 : -1,
+            onClick: () => setTab(preset.id),
+          }, t(preset.labelKey)))),
         // Only the active panel is rendered: the host layout must never show two
         // tabs' content at once, and an unmounted panel cannot be un-hidden.
         h('div', {
@@ -1768,25 +1850,24 @@ window.__ModuleLoader__.load({
           ? h('p', { className: 'crEmpty' }, t('modelsLoadFailed'))
           : state === 'loading'
             ? h('p', { className: 'crEmpty' }, t('loading'))
-            : groups.length === 0
+            : emptyGroups
               ? h('p', { className: 'crEmpty' }, t('modelsEmpty'))
-              : visibleGroups.length === 0
-                ? h('p', { className: 'crEmpty' }, t('modelsEmpty'))
-                : h('div', { className: 'crCards' }, visibleGroups.map((group) => h(ModelGroup, {
-                  key: active.id + ':' + group.id,
-                  groupId: active.id + ':' + group.id,
-                  group,
-                  chosen,
-                  selectedCount: group.rows.filter((row) => rowSelected(row, chosen)).length,
-                  priceIncluded,
-                  onToggle: (id, next) => {
-                    const row = group.rows.find((entry) => entry.id === id)
-                    if (row) toggle(active.id, row.variants, next)
-                  },
-                }))),
+              : h('div', { className: 'crCards' }, visibleGroups.map((group) => h(ModelGroup, {
+                key: active.id + ':' + group.key,
+                groupId: active.id + ':' + group.key,
+                group,
+                chosen,
+                selectedCount: group.rows.filter((row) => rowSelected(row, chosen)).length,
+                priceIncluded,
+                renderRowExtras: active.renderRowExtras,
+                onToggle: (rowKey, next) => {
+                  const row = group.rows.find((entry) => entry.key === rowKey)
+                  if (row) toggle(active.id, row.variants, next)
+                },
+              }))),
         h('div', { className: 'crFooterBar' },
           h('span', { className: 'crState' }, t('modelsSelectedTotal', { enabled: selectedRows, total: groups.reduce((sum, group) => sum + group.rows.length, 0) })),
-          active.planKey === 'planPayAsYouGo' && promoCount > 0
+          active.metered === true && promoCount > 0
             ? h('span', { className: 'crBadgeMeta', 'data-tone': 'promo' }, t('promoCount', { n: promoCount }))
             : null,
           errors[active.id] ? h('span', { className: 'crState', 'data-state': 'error' }, t('saveError')) : null,
@@ -2243,10 +2324,8 @@ window.__ModuleLoader__.load({
     exports.CustomRouterDashboard = CustomRouterDashboard
     exports.CustomRouterModels = CustomRouterModels
     exports.RouterPanelGlyph = RouterPanelGlyph
-    exports.MODEL_SOURCES = MODEL_SOURCES
-    exports.normalizeAntigravityModels = normalizeAntigravityModels
-    exports.normalizeOpencodeModels = normalizeOpencodeModels
-    exports.normalizeDeepinfraModels = normalizeDeepinfraModels
+    exports.MODEL_PRESETS = MODEL_PRESETS
+    exports.flattenVariants = flattenVariants
     exports.VendorCard = VendorCard
     exports.KpiCard = KpiCard
     exports.UsageWindow = UsageWindow

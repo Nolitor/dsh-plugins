@@ -88,7 +88,7 @@
   "switchOn": "On",
   "switchOff": "Off",
   "panelLabel": "Custom Router",
-  "modelsTitle": "Model serving",
+  "modelsTitle": "Models",
   "groupGemini": "Gemini models",
   "groupClaudeGpt": "Claude and GPT models",
   "groupArgon": "Gemini 4 Argon",

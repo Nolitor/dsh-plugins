@@ -147,49 +147,78 @@ test('the model-serving tabs map onto the three presets and their declared rows'
   const rows = new Set()
   for (const preset of PRESETS) for (const entry of preset.entries) rows.add(entry.row)
 
-  assert.equal(JSON.stringify(exports.MODEL_SOURCES.map((source) => source.id)), JSON.stringify(['antigravity', 'opencode', 'deepinfra']))
-  for (const source of exports.MODEL_SOURCES) {
-    assert.ok(presets.has(source.id), 'unknown preset behind a model tab: ' + source.id)
+  // ONE descriptor per preset, and no fourth implementation hiding in the JSX.
+  assert.equal(JSON.stringify(exports.MODEL_PRESETS.map((preset) => preset.id)), JSON.stringify(['antigravity', 'opencode', 'deepinfra']))
+  for (const descriptor of exports.MODEL_PRESETS) {
+    assert.ok(presets.has(descriptor.id), 'unknown preset behind a model tab: ' + descriptor.id)
     // The saved value lands in this row's config, so the row MUST be one the
     // preset declares; a typo would write a vendor row nobody mounts.
-    assert.ok(rows.has(source.row), 'unknown vendor row behind a model tab: ' + source.row)
-    assert.equal(source.route.startsWith('/api/local/'), true, 'every catalog route is a local panel route')
-    assert.equal(typeof source.normalize, 'function')
+    assert.ok(rows.has(descriptor.row), 'unknown vendor row behind a model tab: ' + descriptor.row)
+    assert.equal(descriptor.route.startsWith('/api/local/'), true, 'every catalog route is a local panel route')
+    // The shape every entry must carry: id, labelKey, row, route, load().
+    assert.equal(typeof descriptor.labelKey, 'string')
+    assert.equal(typeof descriptor.planKey, 'string')
+    assert.equal(typeof descriptor.load, 'function')
+    // Optional hooks, when present, are functions.
+    for (const hook of ['saveValue', 'renderRowExtras']) {
+      assert.equal(descriptor[hook] === undefined || typeof descriptor[hook] === 'function', true, hook + ' must be a function when declared')
+    }
+    const loaded = descriptor.load({})
+    assert.equal(Array.isArray(loaded.groups), true, descriptor.id + ' load() must return { groups }')
   }
   // The OpenCode tab writes the HTTP row, the one that carries `enabledModels`.
-  assert.equal(exports.MODEL_SOURCES.find((source) => source.id === 'opencode').row, 'dsh-opencode-v2-http')
+  assert.equal(exports.MODEL_PRESETS.find((preset) => preset.id === 'opencode').row, 'dsh-opencode-v2-http')
+  // Only the metered preset declares a row extra; a subscription row shares the note.
+  // (JSON, not deepEqual: the values come from the vm realm.)
+  assert.equal(JSON.stringify(exports.MODEL_PRESETS.filter((preset) => typeof preset.renderRowExtras === 'function').map((preset) => preset.id)), JSON.stringify(['deepinfra']))
 })
 
-test('the grouped normalizers return groups, never a flat vendor list', () => {
+test('every preset loads its own groups, and the shared projection saves them', () => {
   const exports = loadExports()
-  const antigravity = exports.normalizeAntigravityModels({
+  const byId = (id) => exports.MODEL_PRESETS.find((preset) => preset.id === id)
+
+  const antigravity = byId('antigravity').load({
     groups: [
       { kind: 'gemini', limits: [], models: [{ id: 'gemini-3.8-flash', variants: ['gemini-3.8-flash-high', 'gemini-3.8-flash-low'], enabled: true }] },
       { kind: 'other', limits: [], models: [] },
     ],
-  })
+  }).groups
   assert.equal(antigravity.length, 1, 'an empty family is dropped instead of rendering a bare header')
-  assert.equal(antigravity[0].labelKey, 'groupGemini')
+  assert.equal(antigravity[0].titleKey, 'groupGemini')
   assert.equal(JSON.stringify(antigravity[0].rows[0].variants), JSON.stringify(['gemini-3.8-flash-high', 'gemini-3.8-flash-low']))
+  // The family tab declares the flatten explicitly: one row owns its variants.
+  assert.equal(JSON.stringify(byId('antigravity').saveValue(new Set(['gemini-3.8-flash-low']), antigravity)), JSON.stringify(['gemini-3.8-flash-low']))
 
   // A flat payload still renders as one fallback card (no groups key).
-  const flat = exports.normalizeAntigravityModels({ models: [{ id: 'a', enabled: false }] })
+  const flat = byId('antigravity').load({ models: [{ id: 'a', enabled: false }] }).groups
   assert.equal(flat.length, 1)
-  assert.equal(flat[0].labelKey, 'groupOther')
+  assert.equal(flat[0].titleKey, 'groupOther')
   assert.equal(JSON.stringify(flat[0].rows[0].variants), JSON.stringify(['a']))
 
-  const opencode = exports.normalizeOpencodeModels({
+  const opencode = byId('opencode').load({
     enabled: ['r/one'],
     models: [{ route: 'r/one', plan: 'go' }, { route: 'r/two', plan: 'zen' }],
-  })
-  assert.equal(JSON.stringify(opencode.map((group) => group.id)), JSON.stringify(['go', 'zen']))
+  }).groups
+  assert.equal(JSON.stringify(opencode.map((group) => group.key)), JSON.stringify(['go', 'zen']))
+  assert.equal(opencode[0].titleKey, 'planGo')
   assert.equal(opencode[0].rows[0].enabled, true)
   assert.equal(opencode[1].rows[0].enabled, false)
+  // A plan preset without its own saveValue uses the shared flatten, which
+  // writes the ROUTE ids: `enabledModels` for this row is a route list.
+  const opencodePreset = byId('opencode')
+  const opencodeSave = (opencodePreset.saveValue ?? exports.flattenVariants)(new Set(['r/one']), opencode)
+  assert.equal(JSON.stringify(opencodeSave), JSON.stringify(['r/one']))
 
-  const deepinfra = exports.normalizeDeepinfraModels({
+  const deepinfra = byId('deepinfra').load({
     models: [{ id: 'm/one', price: { input: 1, output: 2, listInput: 3, listOutput: 4 }, promotion: { percentOff: 50 }, enabled: true }],
-  })
+  }).groups
   assert.equal(deepinfra.length, 1, 'DeepInfra is one price card, not one card per model')
+  assert.equal(deepinfra[0].key, 'deepinfra')
   assert.equal(deepinfra[0].rows[0].price.input, 1)
-  assert.equal(deepinfra[0].rows[0].promotion.percentOff, 50)
+  assert.equal(deepinfra[0].rows[0].price.listInput, 3)
+  // The promotion is carried on the row's price, the only place it renders.
+  assert.equal(deepinfra[0].rows[0].price.promoPercent, 50)
+  const deepinfraSave = (byId('deepinfra').saveValue ?? exports.flattenVariants)(new Set(['m/one']), deepinfra)
+  assert.equal(JSON.stringify(deepinfraSave), JSON.stringify(['m/one']))
 })
+

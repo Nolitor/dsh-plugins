@@ -88,7 +88,7 @@
   "switchOn": "开启",
   "switchOff": "关闭",
   "panelLabel": "自定义路由",
-  "modelsTitle": "模型服务",
+  "modelsTitle": "模型",
   "groupGemini": "Gemini 模型",
   "groupClaudeGpt": "Claude 与 GPT 模型",
   "groupArgon": "Gemini 4 Argon",

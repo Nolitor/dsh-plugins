@@ -88,7 +88,7 @@
   "switchOn": "사용",
   "switchOff": "미사용",
   "panelLabel": "커스텀 라우터",
-  "modelsTitle": "모델 서빙",
+  "modelsTitle": "모델",
   "groupGemini": "Gemini 모델",
   "groupClaudeGpt": "Claude 및 GPT 모델",
   "groupArgon": "Gemini 4 Argon",

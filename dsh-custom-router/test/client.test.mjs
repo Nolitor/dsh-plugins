@@ -733,6 +733,84 @@ test('saving a preset writes the enabledModels list for that preset row', async 
   loaded.dispose()
 })
 
+test('each preset saves its own exact payload through the same shared write', async () => {
+  // Two DeepInfra rows, so a save can move off the seeded set without emptying it.
+  const answers = {
+    ...MODEL_ROUTE_ANSWERS,
+    '/api/local/deepinfra/models': {
+      models: [
+        MODEL_ROUTE_ANSWERS['/api/local/deepinfra/models'].models[0],
+        { id: 'google/gemma-3-27b', price: { input: 0.06, output: 0.12, listInput: 0.06, listOutput: 0.12 }, enabled: false },
+      ],
+    },
+  }
+  const loaded = await loadModels({ answers })
+  const saveActive = async () => {
+    const tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+    const button = findAll(activeModelsPanel(tree), (node) => node.props?.className === 'crButton crButtonPrimary')[0]
+    assert.equal(button.props.disabled, false, 'a dirty selection must enable save')
+    button.props.onClick()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    return loaded.writes.at(-1)
+  }
+
+  // Antigravity: the seeded set, written as the FLATTENED variant ids.
+  findAll(activeModelsPanel(loaded.renderRoot(loaded.exports.CustomRouterModels, {})), (node) => node.props?.type === 'checkbox')[1].props.onChange({ target: { checked: true } })
+  assertOps(await saveActive(), [{
+    op: 'set',
+    path: ['vendorConfig', 'dsh-antigravity', 'enabledModels'],
+    value: [
+      'gemini-3.8-flash-high',
+      'gemini-3.8-flash-medium',
+      'gemini-3.8-flash-low',
+      'gemini-3.5-flash-lite',
+      'claude-sonnet-4.5',
+    ],
+  }])
+
+  // OpenCode: the ROUTE ids, one per row, seeded from `enabled`.
+  selectModelsTab(loaded, 'opencode')
+  // A tab whose seed is untouched cannot save: the guard is per tab.
+  let tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  let opencodeBoxes = findAll(activeModelsPanel(tree), (node) => node.props?.type === 'checkbox')
+  assert.equal(opencodeBoxes.length, 2)
+  assert.equal(opencodeBoxes[1].props.checked, false, 'the zen route starts disabled')
+  opencodeBoxes[1].props.onChange({ target: { checked: true } })
+  assertOps(await saveActive(), [{
+    op: 'set',
+    path: ['vendorConfig', 'dsh-opencode-v2-http', 'enabledModels'],
+    value: ['opencode-go/minimax-m3.1-flash', 'opencode-zen/qwen3-coder'],
+  }])
+
+  // DeepInfra: the model ids.
+  selectModelsTab(loaded, 'deepinfra')
+  tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  const deepBoxes = findAll(activeModelsPanel(tree), (node) => node.props?.type === 'checkbox')
+  assert.equal(deepBoxes.length, 2)
+  deepBoxes[0].props.onChange({ target: { checked: false } })
+  deepBoxes[1].props.onChange({ target: { checked: true } })
+  assertOps(await saveActive(), [{
+    op: 'set',
+    path: ['vendorConfig', 'dsh-deepinfra', 'enabledModels'],
+    value: ['google/gemma-3-27b'],
+  }])
+  loaded.dispose()
+})
+
+test('save stays disabled until the selection is dirty, on every tab', async () => {
+  const loaded = await loadModels()
+  for (const id of ['antigravity', 'opencode', 'deepinfra']) {
+    const tree = selectModelsTab(loaded, id)
+    const panel = activeModelsPanel(tree)
+    const saveButton = findAll(panel, (node) => node.props?.className === 'crButton crButtonPrimary')[0]
+    assert.equal(saveButton.props.disabled, true, id + ' must not offer a no-op save')
+    const texts = findAll(panel, (node) => node.type === '#text').map((node) => node.text).join(' ')
+    assert.match(texts, /Saved/)
+  }
+  assert.equal(loaded.writes.length, 0)
+  loaded.dispose()
+})
+
 test('an empty model selection cannot be saved (vendors read empty as all)', async () => {
   const loaded = await loadModels()
   let tree = selectModelsTab(loaded, 'deepinfra')
@@ -745,6 +823,59 @@ test('an empty model selection cannot be saved (vendors read empty as all)', asy
   const texts = findAll(panel, (node) => node.type === '#text').map((node) => node.text).join(' ')
   assert.match(texts, /Select at least one model/)
   assert.equal(loaded.writes.length, 0)
+  loaded.dispose()
+})
+
+test('the section heading is the short "Models", in every locale', async () => {
+  const loaded = await loadModels()
+  const tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  const panel = activeModelsPanel(tree)
+  const heading = findAll(tree, (node) => node.props?.className === 'crTitle')[0]
+  assert.equal(heading.props.children, 'Models')
+  // The hint is NOT shortened with it.
+  const hint = findAll(tree, (node) => node.props?.className === 'crSubtitle')[0]
+  assert.match(hint.props.children, /prompt picker/)
+  assert.equal(loaded.exports.I18N.en.modelsTitle, 'Models')
+  assert.equal(loaded.exports.I18N.ko.modelsTitle, '모델')
+  assert.equal(loaded.exports.I18N.zh.modelsTitle, '模型')
+  loaded.dispose()
+})
+
+test('the three presets are descriptors: shared chrome, preset-only hooks', async () => {
+  const loaded = await loadModels()
+  const presets = loaded.exports.MODEL_PRESETS
+  assert.equal(JSON.stringify(presets.map((preset) => preset.id)), JSON.stringify(['antigravity', 'opencode', 'deepinfra']))
+  // The descriptor table carries data and hooks, never elements.
+  for (const preset of presets) {
+    assert.equal(typeof preset.load, 'function')
+    assert.equal(typeof preset.labelKey, 'string')
+    assert.equal(typeof preset.row, 'string')
+    // Adding a fourth preset needs only a descriptor: no `planKey`-style vendor
+    // branch may be reachable from the section, so metered is a flag.
+    assert.equal(preset.metered === undefined || preset.metered === true, true)
+  }
+  assert.equal(presets.find((preset) => preset.id === 'deepinfra').metered, true)
+  assert.equal(presets.filter((preset) => preset.metered === true).length, 1)
+  // The family tab owns the variant flatten; the others fall back to it.
+  assert.equal(typeof presets[0].saveValue, 'function')
+  assert.equal(presets[1].saveValue, undefined)
+  assert.equal(presets[2].saveValue, undefined)
+  // Every load() answers the SAME group shape: key + rows of {key,id,name,badges}.
+  for (const preset of presets) {
+    const { groups } = preset.load(MODEL_ROUTE_ANSWERS[preset.route])
+    assert.equal(Array.isArray(groups), true)
+    for (const group of groups) {
+      assert.equal(typeof group.key, 'string')
+      assert.equal(Array.isArray(group.rows), true)
+      for (const row of group.rows) {
+        assert.equal(typeof row.key, 'string')
+        assert.equal(typeof row.id, 'string')
+        assert.equal(typeof row.name, 'string')
+        assert.equal(Array.isArray(row.badges), true)
+        assert.equal(Array.isArray(row.variants), true)
+      }
+    }
+  }
   loaded.dispose()
 })
 
