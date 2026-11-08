@@ -345,6 +345,14 @@ export function createCatalog({ config, tokens, fetchImpl, log, now, onChanged }
 export function apply(ctx, config) {
   /** Services acquired from deferred sub-contexts. */
   const services = {}
+  /**
+   * The router's CLI dispatch control plane, once available.
+   *
+   * Two verbs matter here: `gate` decides whether this session may reach an
+   * external CLI at all, and `track` makes a spawned worker reclaimable when the
+   * session is torn down. Both are optional -- a standalone mount has neither.
+   */
+  let dispatch
   /** Installed surfaces, keyed so each can be released independently. */
   const parts = new Map()
   /** Long-lived disposers (injection bindings + the reload listener). */
@@ -603,7 +611,7 @@ export function apply(ctx, config) {
       return
     }
     try {
-      const registration = tools.register(batchToolDefinition({ services, config }))
+      const registration = tools.register(batchToolDefinition({ services, config, dispatch }))
       parts.set('cli-batch', typeof registration === 'function' ? registration : () => {})
     } catch (error) {
       warn(`antigravity: batch tool registration failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -648,6 +656,16 @@ export function apply(ctx, config) {
         // A delegated child spends the same account as the adapter, so its
         // measured usage belongs in the one ledger the chip and panel read.
         recordUsage: (usage) => ledger.record(usage),
+        // Router control plane: refuse a restricted session before any argv is
+        // built, and keep the spawned handle reclaimable if that session is torn
+        // down mid-run. Both are absent under a standalone mount.
+        // Pass the identity through UNWRAPPED: the provider already hands the
+        // parent Agent, and the router's `gate` normalizes Agent-or-Session
+        // itself. Wrapping it a second time here produced `{agent:{session:Agent}}`,
+        // which normalized to `undefined` and silently ALLOWED a restricted
+        // session (measured regression, 2026-11-08).
+        gate: (subject) => dispatch?.gate?.(subject),
+        track: (session, handle, label) => dispatch?.track?.(session, handle, label),
       })
       const registration = services.subagents.registerProvider(provider)
       parts.set('subagent', typeof registration === 'function' ? registration : () => {})
@@ -751,10 +769,40 @@ export function apply(ctx, config) {
     syncAll()
   }
 
+  /**
+   * Acquire the router's dispatch control plane.
+   *
+   * Independent of `bind()` because the router's `customRouter` service is
+   * provided by the router row, not by a host subsystem: a profile that mounts
+   * this vendor without the router must not wait forever for it, and a profile
+   * that does mount the router must pick the seam up as soon as it appears.
+   */
+  const bindDispatch = () => {
+    if (typeof ctx.inject !== 'function') return
+    try {
+      const off = ctx.inject(['customRouter'], (scoped) => {
+        dispatch = scoped.customRouter?.cliDispatch
+        syncAll()
+        return () => {
+          dispatch = undefined
+        }
+      })
+      if (typeof off === 'function') disposers.push(off)
+    } catch (error) {
+      warn('antigravity: router dispatch seam unavailable: ' + (error instanceof Error ? error.message : String(error)))
+    }
+  }
+
   bind(['tools', 'subprocess'])
   bind(['commands'])
   bind(['subagents'])
   bind(['connection', 'settings'])
+  // The router's dispatch control plane. Deferred like every other service:
+  // the router provides `customRouter` during ITS apply, and a child that reads
+  // it eagerly sees nothing (measured 2026-11-08: a child's plain `ctx.get()`
+  // does not see a parent-provided service; `ctx.inject` does). A standalone
+  // mount simply never gets this binding and keeps signal-only cancellation.
+  bindDispatch()
 
   // Volatile config updates do not re-run apply(); the host announces the
   // completed recompose instead, and that is when gates must be re-evaluated.

@@ -54,6 +54,23 @@ order is already 5시간 → 주간 → 월간.
 `CUSTOM-ROUTER-PRESET-SURFACE.md` is specification only: no `settings.section` row, no client half,
 no real mount, no generation turn. **Requires owner implementation approval.**
 
+### S4b — provider-slot migration, Step 1 (delivered 2026-11-08)
+
+| Field | Value |
+| :--- | :--- |
+| Entry | owner approval 2026-11-08 (M9 explicitly deferred) |
+| Work | peer alignment to the shipped router version; OpenCode CLI surface switched off; `surfaces.cli` gained `default: false` + `gates`, and the drift gate learned both |
+| Exit gate | `verify:presets` OK on the live profile; model serving still mounted |
+| Result | **done** — tools `working_directory, agy_worker, subagent_antigravity, subagent_opencode`; providers unchanged |
+| Detail | [CLI-DISPATCH-CONTROL-PLANE.md §8](./CLI-DISPATCH-CONTROL-PLANE.md) |
+
+**Open issue this step exposed:** `dsh-opencode-v2` has no `app-boot/config-reload` reconcile, so
+the toggle needs a `dsh-web.service` restart (ledger F-46 class). Not fixed — owner has not
+approved a code change there.
+
+**Step 2 is already satisfied** in the live profile (`dsh-opencode-v2` is a dependency, not a
+bundle), so what remains is a regression guard. **Step 3 stays blocked on M9.**
+
 ### S5 — later rounds
 
 - **S-A** (declaration / Custom-JSON onboarding) and **S-B** (readiness probe surface): later rounds.

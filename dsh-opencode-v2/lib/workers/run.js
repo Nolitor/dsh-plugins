@@ -154,10 +154,29 @@ export async function runWorker(ctx, config, options) {
     signal,
     env,
   })
+  // Router control plane (optional): a `cli_worker` run is an external CLI
+  // process, so it is registered the same way the delegation providers register
+  // theirs. A session torn down while this batch runs would otherwise leave the
+  // child unreaped. `ownerSession` is the DSH Session, distinct from the batch's
+  // own `options.session`.
+  let release = () => {}
+  if (typeof options.track === 'function' && options.ownerSession !== undefined && options.ownerSession !== null) {
+    try {
+      const registered = options.track(options.ownerSession, handle, `cli_worker ${backend}`)
+      if (typeof registered === 'function') release = registered
+    } catch {
+      // A registry that cannot accept the handle must not fail the run.
+    }
+  }
   const startedAt = Date.now()
   const promptBytes = Buffer.byteLength(String(options.task ?? ''), 'utf8')
   const delivered = sendPrompt(handle, options.task)
-  const outcome = await handle.done
+  let outcome
+  try {
+    outcome = await handle.done
+  } finally {
+    release()
+  }
   const stdout = handle.collected.stdout?.readFrom(0)
   const stderr = handle.collected.stderr?.readFrom(0)
   const timedOut = timeout.aborted

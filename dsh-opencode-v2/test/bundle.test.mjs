@@ -83,8 +83,27 @@ test('P0-1: every host import is declared as a peerDependency', () => {
     '@deepseek-ai/schemastery': '~3.18.4',
     // Workspace-owned shared bridge: the host resolves linked workspace packages
     // through the same peer route, so it must be declared here as well.
-    '@nolit/dsh-custom-router': '0.0.1-rc.2',
+    //
+    // The VALUE is asserted separately by the alignment test below instead of
+    // being pinned to a literal here: a hardcoded version turns every router
+    // release into a false failure in THIS package, which is how the rc.2 ->
+    // rc.9 drift survived unnoticed (measured 2026-11-08).
+    '@nolit/dsh-custom-router': pkg.peerDependencies['@nolit/dsh-custom-router'],
   })
+})
+
+test('the router peer tracks the shipped router version (no silent drift)', async () => {
+  // The peer must equal the router this workspace actually ships. A stale value
+  // makes a strict resolver refuse the install and surfaces at mount time.
+  const { readFile } = await import('node:fs/promises')
+  const routerPkg = JSON.parse(
+    await readFile(new URL('../../dsh-custom-router/package.json', import.meta.url), 'utf8'),
+  )
+  assert.equal(
+    pkg.peerDependencies['@nolit/dsh-custom-router'],
+    routerPkg.version,
+    'peer @nolit/dsh-custom-router must equal the workspace router version',
+  )
 })
 
 test('P0-1: schemastery is a peer (runtime value), never a bare dependency', () => {

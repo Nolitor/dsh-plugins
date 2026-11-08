@@ -172,8 +172,26 @@ export async function runOpencode(ctx, config, options) {
     signal,
     env,
   })
+  // Reclaimable fallback: a bare process is exactly the orphan this registry
+  // exists for, so the handle is tracked before anything else can fail.
+  // `ownerSession` is the DSH Session (not `options.session`, which is the
+  // OpenCode conversation id).
+  let release = () => {}
+  if (typeof options.track === 'function' && options.ownerSession !== undefined && options.ownerSession !== null) {
+    try {
+      const registered = options.track(options.ownerSession, handle, 'opencode fallback')
+      if (typeof registered === 'function') release = registered
+    } catch {
+      // A registry that cannot accept the handle must not fail the run.
+    }
+  }
   const promptDelivered = sendPrompt(handle, options.prompt)
-  const outcome = await handle.done
+  let outcome
+  try {
+    outcome = await handle.done
+  } finally {
+    release()
+  }
   const rawStdout = handle.collected.stdout?.readFrom(0)
   const stderr = handle.collected.stderr?.readFrom(0)
   const timedOut = timeout.aborted
@@ -466,6 +484,12 @@ export async function apply(ctx, config) {
   // child session and the explicit refusal — never an untracked spawn.
   let subagents = null
 
+  // The router's CLI dispatch control plane, when this plugin is mounted by
+  // @nolit/dsh-custom-router. Acquired through `ctx.inject` like every other
+  // service here: a child's plain `ctx.get()` cannot see a service its parent
+  // fiber provided (measured 2026-11-08), and a standalone mount never gets it.
+  let dispatch = null
+
   // Surface gates (2026-11-07, unified with dsh-antigravity): `enabled` is the
   // master, `cli` gates the delegation tool + `/ocode` + `cli_worker`, and
   // `subagent` keeps owning only the delegation provider. Registration happens
@@ -524,6 +548,8 @@ export async function apply(ctx, config) {
       const result = await runOpencode(ctx, config, {
         prompt: args.prompt,
         cwd: args.cwd ?? process.cwd(),
+        ownerSession: exec?.agent?.session,
+        track: dispatch?.track,
         model: args.model,
         agent: args.agent,
         session: args.session,
@@ -568,6 +594,16 @@ export async function apply(ctx, config) {
       )
     }
   }
+
+  // The router's dispatch seam. Deferred, exactly like `subagents`: it is
+  // provided by the router row during that row's own apply, so an eager read at
+  // plugin load sees nothing.
+  ctx.inject(['customRouter'], (scoped) => {
+    dispatch = scoped.customRouter?.cliDispatch ?? null
+    return () => {
+      dispatch = null
+    }
+  })
 
   ctx.inject(['commands'], (commandCtx) => {
     if (!cliOn) return
@@ -631,6 +667,8 @@ export async function apply(ctx, config) {
         const result = await runOpencode(ctx, config, {
           prompt: task,
           cwd: process.cwd(),
+          ownerSession: agent?.session,
+          track: dispatch?.track,
           model,
           timeoutMs,
         })
@@ -645,7 +683,7 @@ export async function apply(ctx, config) {
 
   // The isolated batch worker ships with the same plugin. It belongs to the CLI
   // surface, so `enabled`/`cli` gate it alongside the tool and `/ocode`.
-  if (cliOn) await registerCliWorker(ctx, config)
+  if (cliOn) await registerCliWorker(ctx, config, dispatch)
 
   // Subagent delegation provider, merged from @nolit/dsh-subagent-opencode
   // (2026-11-05) so one package owns every OpenCode surface. Gated on its own
@@ -690,6 +728,16 @@ export async function apply(ctx, config) {
         timeoutMs: config.subagentTimeoutMs.get(),
         disposeGraceMs: config.subagentDisposeGraceMs.get(),
         env: config.subagentEnv.get(),
+        // Router control plane: refuse a restricted session before any argv is
+        // built, and keep the handle reclaimable if that session is torn down
+        // mid-run. Both are absent under a standalone (non-router) mount.
+        // Pass the identity through UNWRAPPED: the provider already hands the
+        // parent Agent, and the router's `gate` normalizes Agent-or-Session
+        // itself. Wrapping it a second time here produced `{agent:{session:Agent}}`,
+        // which normalized to `undefined` and silently ALLOWED a restricted
+        // session (measured regression, 2026-11-08).
+        gate: (subject) => dispatch?.gate?.(subject),
+        track: (session, handle, label) => dispatch?.track?.(session, handle, label),
         // One row per completed CLI run: the wire reports `step_finish` steps,
         // never estimated_cost, so this is a token-only record (costUsd null).
         recordUsage: ({ usage, model }) => {

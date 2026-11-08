@@ -1,14 +1,61 @@
 # Changelog — @nolit/dsh-opencode-v2
 
 <!-- skeleton:
-version: 1.5
+version: 1.6
 kind: report
 status: active
 updated: 2026-11-08
 summary: Engineering history for @nolit/dsh-opencode-v2, including the completed subagent merge, the 0.0.2-rc.2 cleanup, the rc.4 cost-chip seat migration, the managed child-session delegation cutover, and the OpenCode 2.2.6 isolated compatibility measurement.
 -->
 
-Current version: `0.0.1-rc.3`
+Current version: `0.0.1-rc.4`
+
+## 0.0.1-rc.4 (cont.) — 2026-11-08 (router peer aligned to rc.9)
+
+Owner instruction 2026-11-08 approved two items and nothing else: the peer alignment and the
+OpenCode CLI toggle. This entry records the half that lives in this package.
+
+- **`peerDependencies['@nolit/dsh-custom-router']`: `0.0.1-rc.2` → `0.0.1-rc.9`.** The router had
+  shipped rc.9 while this package still demanded rc.2; a strict resolver refuses that pairing and
+  the failure would have appeared at mount time. Measured 2026-11-08.
+- **The suite had pinned the stale value.** `test/bundle.test.mjs` asserted the literal `'0.0.1-rc.2'`
+  inside a `deepEqual`, so a router release turned this package's test red and the drift looked like
+  a test defect. The assertion now compares against `dsh-custom-router/package.json`, so the check
+  is an alignment test, not a copy of the current value.
+- **No behavioural change here.** The CLI toggle is a profile edit plus the router's declaration;
+  this package's `cli` switch already existed and already gated the `opencode` tool, `/ocode` and
+  `cli_worker` together.
+
+Recorded, not fixed: this plugin does **not** reconcile its surfaces on
+`app-boot/config-reload`, so a `cli` switch flipped in the profile takes effect only on the next
+`dsh-web.service` restart (same class as ledger F-46). Fixing it is a code change the owner has not
+approved.
+
+Suite: 481 pass.
+
+## 0.0.1-rc.4 — 2026-11-08 (router dispatch control plane)
+
+The provider now participates in the router's CLI dispatch control plane, as one half of an
+owner-ordered integration (the router owns the gate; this package honors it).
+
+- **`start()` asserts the admission rule** before any argv is built. The router already refuses
+  the tool call, but a direct `ctx.subagents` caller never passes a tool, so the provider is the
+  last place the rule can be enforced. The message is byte-identical to the router's
+  (`Disallowed: CLI worker invocation blocked under restricted sandbox/preset`), so one grep
+  finds every refusal.
+- **`auto: true` cannot resurrect a denied run.** The decision precedes argv construction, so
+  `--auto` is never materialized. Pinned by `test/subagent-dispatch-gate.test.mjs`.
+- **Spawned handles are registered** with the router registry (`track`), so a worker whose
+  session is torn down mid-run is reclaimed instead of orphaned. Released on `dispose()` and on
+  natural settlement; a throwing registry cannot fail the run.
+- **The fallback spawn path and the `cli_worker` batch tool are tracked too** (`runOpencode`,
+  `workers/run.js`) — a bare process is exactly the orphan the registry exists for. Note the
+  identity split: `options.session` is the OpenCode conversation id, `options.ownerSession` is
+  the DSH Session.
+- **Standalone mounts are unchanged**: without `customRouter`, `gate`/`track` are `undefined`
+  and the plugin behaves exactly as before. A new test pins that.
+
+Suite: 479 pass (8 new).
 
 ## 0.0.1-rc.3 — CLI subagent: model selection, absolute resolution, usage ledger — 2026-11-08
 

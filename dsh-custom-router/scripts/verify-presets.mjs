@@ -132,16 +132,25 @@ try {
     if (!providers.has(preset.providerId)) {
       problems.push(`${preset.id}: provider "${preset.providerId}" is not registered at runtime`)
     }
+    // Tools/commands a gated-off surface also disables in the vendor. `gates`
+    // exists because one vendor switch can guard more than `cli.toolName`
+    // (measured: OpenCode's `cliOn` guards the `opencode` tool, `/ocode` and the
+    // `cli_worker` batch). Declaring the extra names keeps the drift gate strict
+    // instead of relaxing it.
+    const gatedSurfaces = [preset.surfaces.cli, preset.surfaces.batch]
+      .filter((surface) => surface && surface.default === false)
     const gatedOffTools = new Set(
-      [preset.surfaces.cli, preset.surfaces.batch]
-        .filter((surface) => surface && surface.default === false)
-        .map((surface) => surface.toolName),
+      gatedSurfaces.flatMap((surface) => [surface.toolName, ...(Array.isArray(surface.gates) ? surface.gates : [])]),
+    )
+    const gatedOffCommands = new Set(
+      gatedSurfaces.map((surface) => surface.commandName).filter((name) => typeof name === 'string'),
     )
     for (const tool of preset.surfaces.tools) {
       if (gatedOffTools.has(tool)) continue
       if (!tools.has(tool)) problems.push(`${preset.id}: tool "${tool}" is declared but not registered`)
     }
     for (const command of preset.surfaces.commands) {
+      if (gatedOffCommands.has(command)) continue
       if (!commands.has(command)) problems.push(`${preset.id}: command "/${command}" is declared but not registered`)
     }
     for (const surface of [preset.surfaces.cli, preset.surfaces.batch]) {
@@ -155,8 +164,11 @@ try {
       if (gatedOff && tools.has(surface.toolName)) {
         problems.push(`${preset.id}: CLI tool "${surface.toolName}" is declared off by default but IS registered`)
       }
-      if ('commandName' in surface && !commands.has(surface.commandName)) {
+      if ('commandName' in surface && !gatedOff && !commands.has(surface.commandName)) {
         problems.push(`${preset.id}: CLI command "/${surface.commandName}" is declared but not registered`)
+      }
+      if ('commandName' in surface && gatedOff && commands.has(surface.commandName)) {
+        problems.push(`${preset.id}: CLI command "/${surface.commandName}" is declared off by default but IS registered`)
       }
     }
 

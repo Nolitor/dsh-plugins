@@ -58,6 +58,22 @@ The pipe-side delivery is `classifyText`. Its owner-side work is in the Custom R
 [OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md](OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md)
 is a **draft**. P0 requires owner approval and a DB backup. Not scheduled.
 
+### S5 — provider-slot migration (2026-11-08)
+
+Owner-approved Step 1 puts this package's CLI surface under the router's control and switched
+OFF in the live profile. Peer on `@nolit/dsh-custom-router` moved `rc.2` → `rc.9`.
+
+| Item | State |
+| :--- | :--- |
+| `peerDependencies['@nolit/dsh-custom-router']` | `0.0.1-rc.9` (was `rc.2`) |
+| CLI surface in the live profile | `cli: false` — `opencode` tool, `/ocode`, `cli_worker` unmounted |
+| Model serving (`opencode-http-agent`) | **unchanged and mounted** |
+| Subagent surface (`subagent_opencode`) | **unchanged and mounted** |
+
+**Recorded, not fixed:** this plugin installs no `app-boot/config-reload` reconcile, so a `cli`
+flip needs a `dsh-web.service` restart (ledger F-46 class). `vendor/antigravity` does have
+`syncAll`; this package does not. Fixing it is outside the approved scope.
+
 ## 4. Open state
 
 - `modelSelection: true` arrives through the Custom Router preset; the live profile patch does

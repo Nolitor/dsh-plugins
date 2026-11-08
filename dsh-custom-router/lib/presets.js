@@ -198,7 +198,33 @@ export const PRESETS = Object.freeze([
         toolName: 'subagent_opencode',
         maxDepth: 'provider-managed',
       }),
-      cli: Object.freeze({ shape: 'sync', toolName: 'cli_worker', commandName: 'ocode' }),
+      // Owner-approved 2026-11-08 (Step 1 of the provider-slot migration): the
+      // OpenCode CLI surface ships DISABLED. `default: false` is the router's
+      // existing gated-surface marker (the AGY batch row uses it); it tells the
+      // drift gate that these tools/commands are expected to be ABSENT from a
+      // default profile, so absence is parity rather than drift.
+      //
+      // The `opencode` TOOL is gated with the CLI surface because the vendor
+      // itself registers it under the same `cli` switch (measured: `cliOn` in
+      // dsh-opencode-v2/lib/index.js guards the tool, `/ocode`, `cli_worker`),
+      // so declaring it here keeps the declaration equal to what the vendor does.
+      // Model serving is untouched: `opencode-http-agent` remains mounted.
+      cli: Object.freeze({
+        shape: 'sync',
+        toolName: 'cli_worker',
+        commandName: 'ocode',
+        // Owner-approved 2026-11-08 (migration Step 1): the OpenCode CLI surface
+        // ships OFF. `default: false` is this router's existing gated-surface
+        // marker (the AGY batch row uses it), so absence is parity, not drift.
+        default: false,
+        // The vendor gates MORE than `cli.toolName` with one switch: measured in
+        // dsh-opencode-v2/lib/index.js, `cliOn` guards the `opencode` delegation
+        // tool, `/ocode`, and the `cli_worker` batch. Naming those here keeps the
+        // declaration equal to what the vendor actually does, instead of
+        // loosening the drift gate to hide the difference. Model serving is
+        // untouched: `opencode-http-agent` stays mounted.
+        gates: Object.freeze(['opencode']),
+      }),
       batch: null,
       tools: Object.freeze(['opencode', 'cli_worker']),
       commands: Object.freeze(['ocode']),

@@ -138,7 +138,7 @@ export function renderWorkerResult(result) {
  * @param {object} config - plugin config.
  * @returns {Promise<void>} resolves after registration.
  */
-export async function registerCliWorker(ctx, config) {
+export async function registerCliWorker(ctx, config, dispatch = null) {
   if (!config.workerEnabled.get()) return
   const { defineTool } = await import('@deepseek-ai/dsh-tools')
   ctx.tools.register(
@@ -161,6 +161,8 @@ export async function registerCliWorker(ctx, config) {
           timeoutMs: args.timeoutMs,
           collect: args.collect,
           signal: exec.signal,
+          ownerSession: exec?.agent?.session,
+          track: dispatch?.track,
         })
       },
       presentResult: (_args, result) => ({

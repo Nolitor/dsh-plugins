@@ -1,14 +1,43 @@
 # Changelog — @nolit/dsh-antigravity
 
 <!-- skeleton:
-version: 1.1
+version: 1.2
 kind: report
 status: active
 updated: 2026-11-08
 summary: Engineering history for @nolit/dsh-antigravity, including the rc.6 fix for empty stored answers and the route-gated usage chip. Created 2026-11-05 by merging the CLI worker surface of @nolit/dsh-antigravity-cli with the HTTP model route proven in @nolit/dsh-antigravity-directsdk, plus a settings section, a usage chip and per-surface switches.
 -->
 
-Current version: `0.0.1-rc.9`
+Current version: `0.0.1-rc.10`
+
+## 0.0.1-rc.10 (cont.) — 2026-11-08 (router peer aligned to rc.9)
+
+- **`peerDependencies['@nolit/dsh-custom-router']`: `0.0.1-rc.2` → `0.0.1-rc.9`.** Measured
+  2026-11-08; the same alignment applied to `dsh-opencode-v2`.
+- **No runtime import of the router exists in this vendored provider** (measured: no
+  `@nolit/dsh-custom-router/*` import under `vendor/antigravity/lib/`). The peer is declared for
+  resolver parity with its sibling, not because a module binds to it. It also carries no
+  `peerDependenciesMeta.optional` entry, so a strict resolver treats it as required.
+- The dispatch seam this provider consumes (`customRouter.cliDispatch`) is reached through
+  `ctx.inject` at runtime, not through this package import.
+
+Suite: 172 pass.
+
+## 0.0.1-rc.10 — 2026-11-08 (router dispatch control plane)
+
+The vendored AGY surfaces now participate in the router's CLI dispatch control plane.
+
+- **`AntigravitySubagentProvider.start()` asserts the admission rule** before any argv exists,
+  because the router's tool gate is bypassed by a direct `ctx.subagents` caller; the message
+  matches the router's exactly.
+- **`agy_cli` batch runs and CLI children register their handle** (`track`), so a session torn
+  down mid-run reclaims the `agy` process instead of waiting out `agyBatchTimeoutMs`. Released
+  on `dispose()`/settlement; a throwing registry cannot fail a run.
+- **The router seam is acquired through deferred `ctx.inject(['customRouter'])`** — measured:
+  a child's plain `ctx.get()` cannot see a service its parent fiber provided.
+- **Standalone mounts are unchanged**: no `customRouter` means no `gate`/`track`.
+
+Suite: 171 pass (7 new).
 
 ## 0.0.1-rc.9 — CLI subagent: model selection, absolute resolution, usage ledger — 2026-11-08
 

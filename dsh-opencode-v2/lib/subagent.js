@@ -168,6 +168,28 @@ export function parseRunStream(stdout) {
   return { text: [...parts.values()].join('').trim(), errors, usage }
 }
 
+/**
+ * Register one spawned handle with the router's process registry, when present.
+ *
+ * The subprocess seam already terminates on the spec's abort signal; this is the
+ * separate reclamation path for a handle whose session ends while the delegation
+ * is still in flight and no abort is raised.
+ * @param track - the router's `track` verb, or undefined.
+ * @param session - owning session.
+ * @param handle - the seam handle.
+ * @param label - diagnostic label.
+ * @returns {() => void} idempotent release.
+ */
+function trackHandle(track, session, handle, label) {
+  if (typeof track !== 'function' || session === undefined || session === null) return () => {}
+  try {
+    const release = track(session, handle, label)
+    return typeof release === 'function' ? release : () => {}
+  } catch {
+    return () => {}
+  }
+}
+
 /** Provider implementation handed to `ctx.subagents`. */
 export class OpenCodeSubagentProvider {
   capabilities = Object.freeze({ agentOptions: true, agentPreset: false, outputSchema: false, depthLimit: false })
@@ -191,6 +213,14 @@ export class OpenCodeSubagentProvider {
    */
   start(request) {
     if (request.signal.aborted) throw new Error('opencode subagent request was aborted before start')
+    // Defense in depth. The router's `tools/pre-execute` gate refuses the tool
+    // call before this provider runs; a direct `ctx.subagents` caller bypasses
+    // tools entirely, so the same rule is asserted here. The message is byte
+    // identical to the router's so one grep finds every refusal.
+    const verdict = this.config.gate?.(request.parent)
+    if (verdict !== undefined && verdict.allowed === false) {
+      throw new Error(`Disallowed: CLI worker invocation blocked under restricted sandbox/preset (${verdict.causes.join(', ')})`)
+    }
     if (!request.cwd || !isAbsolute(request.cwd)) throw new Error('opencode subagent requires an absolute child cwd')
     const prompt = promptText(request.prompt)
     if (prompt === '') throw new Error('opencode subagent requires a non-empty text prompt')
@@ -221,6 +251,11 @@ export class OpenCodeSubagentProvider {
       signal,
       env,
     })
+
+    // Router control plane (optional): registering the handle makes a worker
+    // whose session is torn down reclaimable even though nobody raised its abort
+    // signal. A standalone mount has no `track` and keeps signal-only teardown.
+    const release = trackHandle(this.config.track, request.parent, handle, 'opencode subagent')
 
     // The prompt goes to stdin: a flattened transcript can exceed the argv cap.
     try {
@@ -275,6 +310,7 @@ export class OpenCodeSubagentProvider {
         } catch {
           // A handle that already settled has nothing left to terminate.
         }
+        release()
         await result.catch(() => {})
       },
     }

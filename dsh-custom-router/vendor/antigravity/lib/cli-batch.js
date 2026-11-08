@@ -299,7 +299,25 @@ export async function runBatch(options) {
       signal,
       env: { ...env, PWD: cwd },
     })
-    const outcome = await handle.done
+    // Router control plane (optional). A batch run is an external `agy` process
+    // with its own timeout; registering it lets a Session teardown reclaim it
+    // instead of waiting out `agyBatchTimeoutMs`. A standalone mount has no
+    // `track` and keeps the signal-only path.
+    let release = () => {}
+    if (typeof options.track === 'function' && options.agent?.session !== undefined && options.agent?.session !== null) {
+      try {
+        const registered = options.track(options.agent.session, handle, 'agy batch')
+        if (typeof registered === 'function') release = registered
+      } catch {
+        // A registry that cannot accept the handle must not fail the run.
+      }
+    }
+    let outcome
+    try {
+      outcome = await handle.done
+    } finally {
+      release()
+    }
     const stdout = handle.collected.stdout?.readFrom(0)
     const stderr = handle.collected.stderr?.readFrom(0)
     const parsed = parseAgyOutput(stdout?.text ?? '')
@@ -382,6 +400,7 @@ export function batchToolDefinition(deps) {
         timeoutMs: args?.timeoutMs,
         collect: args?.collect,
         signal: exec?.signal,
+        track: deps.dispatch?.track,
       })
     },
   }

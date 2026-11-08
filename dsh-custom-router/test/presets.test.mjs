@@ -314,3 +314,54 @@ test('the measured presets claim disjoint rows', () => {
   assert.equal(new Set(rows).size, rows.length)
   assert.deepEqual(validatePresets(PRESETS).errors, [])
 })
+
+test('the OpenCode CLI surface is declared gated-off for migration Step 1', () => {
+  // Owner-approved 2026-11-08. The vendor gates the `opencode` tool, `/ocode` and
+  // `cli_worker` with ONE switch (`cliOn`); declaring only `toolName` would have
+  // forced the drift gate to loosen. `gates` names the rest.
+  const opencode = findPreset('opencode')
+  assert.equal(opencode.surfaces.cli.default, false, 'the CLI surface ships OFF')
+  assert.deepEqual([...opencode.surfaces.cli.gates], ['opencode'])
+  assert.equal(opencode.surfaces.cli.toolName, 'cli_worker')
+  assert.equal(opencode.surfaces.cli.commandName, 'ocode')
+})
+
+test('gating the OpenCode CLI surface does not touch model serving', () => {
+  // The HTTP route is the row this very session's model arrives on. A migration
+  // step that silently took it down would be indistinguishable from an outage.
+  const opencode = findPreset('opencode')
+  assert.equal(opencode.surfaces.model.adapter, true)
+  assert.equal(opencode.providerId, 'opencode-http-agent')
+  assert.equal(opencode.row, 'dsh-opencode-v2')
+  // The /http row is a separate entry with its own config.
+  const rows = opencode.entries.map((entry) => entry.row)
+  assert.ok(rows.includes('dsh-opencode-v2-http'), 'the model row stays declared')
+})
+
+test('the subagent surface is independent of the CLI switch', () => {
+  // `subagent` and `cli` are separate vendor switches; only the latter moved.
+  const opencode = findPreset('opencode')
+  assert.equal(opencode.surfaces.subagent.toolName, 'subagent_opencode')
+  assert.equal(opencode.surfaces.subagent.maxDepth, 'provider-managed')
+})
+
+test('every provider package agrees with the router version it peers on', async () => {
+  // Measured defect (pre-existing, fixed 2026-11-08): both vendor packages pinned
+  // `@nolit/dsh-custom-router@0.0.1-rc.2` while the router had reached rc.9. A peer
+  // range that is not the shipped version makes a strict resolver refuse the
+  // installation, and the failure surfaces at mount time rather than here.
+  const { readFile } = await import('node:fs/promises')
+  const routerPkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+  const peers = [
+    new URL('../vendor/antigravity/package.json', import.meta.url),
+    new URL('../../dsh-opencode-v2/package.json', import.meta.url),
+  ]
+  for (const url of peers) {
+    const pkg = JSON.parse(await readFile(url, 'utf8'))
+    assert.equal(
+      pkg.peerDependencies['@nolit/dsh-custom-router'],
+      routerPkg.version,
+      `${pkg.name} must peer on @nolit/dsh-custom-router@${routerPkg.version}`,
+    )
+  }
+})

@@ -182,9 +182,34 @@ export const UsageMeasurement = Schema.object({
  * to a non-volatile path is refused by the service, which is the correct
  * behaviour for fields that decide what gets mounted.
  */
+/**
+ * The CLI dispatch control plane, as the settings surface sees it.
+ *
+ * It sits beside `strict`/`packages` (mount-time, non-volatile) on purpose: the
+ * gate is installed during `apply()`, exactly like the preset plan, and a
+ * volatile write would not reinstall it. Turning the gate off is therefore a
+ * profile edit the operator writes deliberately, not a dashboard toggle that
+ * silently widens every running session.
+ *
+ * `enabled` has no `default()`: the runtime treats an ABSENT field as ON, so a
+ * profile written before this row existed still gets the gate. Declaring a
+ * default here would materialise a value the operator never set -- the same
+ * rule the vendor rows follow.
+ */
+export const CliDispatchGate = Schema.object({
+  /** Refuse external CLI dispatch from a restricted session. Absent means ON. */
+  enabled: Schema.boolean(),
+  /** Preset ids that may not dispatch an external CLI. */
+  restrictedPresets: Schema.array(Schema.string()),
+  /** Sandbox modes that may not dispatch an external CLI. */
+  restrictedModes: Schema.array(Schema.string()),
+})
+
 export const Config = Schema.object({
   /** Throw on an invalid preset plan instead of warning. */
   strict: Schema.boolean().default(true),
+  /** CLI dispatch control plane (admission + reclamation). */
+  cliDispatchGate: CliDispatchGate,
   /** Which presets are mounted, keyed by preset id. */
   presets: Schema.dict(Schema.boolean()).volatile(),
   /** Per-row config handed to each mounted child, keyed by ROW id. */

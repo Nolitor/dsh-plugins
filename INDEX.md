@@ -51,7 +51,7 @@
 | Subproject | Docs | Index |
 |---|---|---|
 | `dsh-command-skill/` | 10 | [docs/INDEX.md](dsh-command-skill/docs/INDEX.md) |
-| `dsh-custom-router/` | 19 | [docs/INDEX.md](dsh-custom-router/docs/INDEX.md) |
+| `dsh-custom-router/` | 20 | [docs/INDEX.md](dsh-custom-router/docs/INDEX.md) |
 | `dsh-notify/` | 21 | [docs/INDEX.md](dsh-notify/docs/INDEX.md) |
 | `dsh-opencode-v2/` | 25 | [docs/INDEX.md](dsh-opencode-v2/docs/INDEX.md) |
 | `dsh-sidebar-manager/` | 19 | [docs/INDEX.md](dsh-sidebar-manager/docs/INDEX.md) |

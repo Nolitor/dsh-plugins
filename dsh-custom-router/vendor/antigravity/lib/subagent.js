@@ -164,6 +164,53 @@ export function buildSubagentArgv(options) {
   return argv
 }
 
+/**
+ * Capture the router's dispatch gate for this session, if the router provided
+ * one. A vendor mounted standalone (or by an older router) has no gate, and the
+ * delegation then relies on the sandbox + approval policy alone.
+ * @param ctx - the calling agent's context.
+ * @param session - the delegating session.
+ * @returns {{allowed: boolean, causes: string[]}|undefined} the decision, if a gate exists.
+ */
+export function routerGate(ctx, session) {
+  let dispatch
+  try {
+    dispatch = ctx?.get?.('customRouter')?.cliDispatch
+  } catch {
+    return undefined
+  }
+  if (dispatch === undefined || typeof dispatch.gate !== 'function') return undefined
+  try {
+    return dispatch.gate({ agent: { session } })
+  } catch {
+    // A gate that throws must not read as "allowed".
+    return { allowed: false, causes: ['gate failure'] }
+  }
+}
+
+/**
+ * Register one spawned handle with the router's process registry, when present.
+ *
+ * This is NOT the primary cancellation path -- the subprocess seam already
+ * terminates on the spec's abort signal. It is the reclamation path for a
+ * handle whose owner never raises that signal (a session torn down while a
+ * delegation is still in flight).
+ * @param track - the router's `track` verb, or undefined.
+ * @param session - owning session.
+ * @param handle - the seam handle.
+ * @param label - diagnostic label.
+ * @returns {() => void} idempotent release.
+ */
+function invokeTrack(track, session, handle, label) {
+  if (typeof track !== 'function' || session === undefined || session === null) return () => {}
+  try {
+    const release = track(session, handle, label)
+    return typeof release === 'function' ? release : () => {}
+  } catch {
+    return () => {}
+  }
+}
+
 /** Provider implementation handed to `ctx.subagents`. */
 export class AntigravitySubagentProvider {
   capabilities = Object.freeze({ agentOptions: true, agentPreset: false, outputSchema: false, depthLimit: false })
@@ -187,6 +234,16 @@ export class AntigravitySubagentProvider {
    */
   start(request) {
     if (request.signal.aborted) throw new Error('antigravity subagent request was aborted before start')
+    // Defense in depth: the router's `tools/pre-execute` gate refuses the tool
+    // call before this provider runs, but a direct `ctx.subagents` caller (or a
+    // vendor mounted under a router whose gate is off) reaches `start()` without
+    // passing a tool at all. The provider is the last place the decision can be
+    // made, so the rule is asserted here too — and the message is the same one,
+    // so an operator grepping the log finds one string.
+    const verdict = this.config.gate?.(request.parent)
+    if (verdict !== undefined && verdict.allowed === false) {
+      throw new Error(`Disallowed: CLI worker invocation blocked under restricted sandbox/preset (${verdict.causes.join(', ')})`)
+    }
     if (!request.cwd || !isAbsolute(request.cwd)) throw new Error('antigravity subagent requires an absolute child cwd')
     const prompt = promptText(request.prompt)
     if (prompt === '') throw new Error('antigravity subagent requires a non-empty text prompt')
@@ -220,6 +277,12 @@ export class AntigravitySubagentProvider {
       env,
     })
 
+    // Router control plane (optional). The router mounts this provider, so it
+    // owns the list of external CLI processes a session may still be holding:
+    // registering the handle there is what lets a Session teardown reclaim a
+    // worker whose own abort signal was never raised. A standalone mount has no
+    // `track` and keeps the plain signal-only behaviour.
+    const release = invokeTrack(this.config.track, request.parent, handle, 'agy subagent')
     const id = randomUUID()
     // Usage is recorded at most once per run, and only for a run that actually
     // completed: an aborted, timed-out, or failed child did no measured work.
@@ -272,6 +335,7 @@ export class AntigravitySubagentProvider {
         } catch {
           // A handle that already settled has nothing left to terminate.
         }
+        release()
         await result.catch(() => {})
       },
     }

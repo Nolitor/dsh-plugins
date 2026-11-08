@@ -1,12 +1,94 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.8
+version: 0.0.1-rc.9
 kind: report
 status: active
 updated: 2026-11-08
 summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree.
 -->
+
+## 0.0.1-rc.9 (cont.) — 2026-11-08 (provider-slot migration, Step 1)
+
+Owner instruction: *"M9 readiness probe는 보류하고, 1) 벤더의 라우터 의존성 버전 정렬(rc.2 → rc.9)과
+2) OpenCode CLI 토글 비활성화(Step 1) 두 가지만 승인한다. 규정 절차대로 문서 갱신 및 마운트 검증
+거쳐서 깔끔히 커밋하고 한글로 간략히 보고해라."*
+
+**1. Router peer alignment.** Both provider packages pinned
+`@nolit/dsh-custom-router: 0.0.1-rc.2` while this package had reached `rc.9`. A strict resolver
+refuses that pairing, and the failure would surface at mount time rather than in review.
+
+| Package | Before | After |
+| :--- | :--- | :--- |
+| `dsh-opencode-v2` | `0.0.1-rc.2` | `0.0.1-rc.9` |
+| `vendor/antigravity` | `0.0.1-rc.2` | `0.0.1-rc.9` |
+
+The `opencode-v2` suite asserted the literal `rc.2`, so it pinned the drift instead of catching
+it. That assertion now compares against the router's own `package.json` version, and this track
+gained the same check.
+
+**2. OpenCode CLI surface shipped OFF (migration Step 1).** `vendorConfig['dsh-opencode-v2'].cli
+= false` in the live profile removes the `opencode` tool, `/ocode`, and `cli_worker`. Model serving
+on `opencode-http-agent` is untouched — that is the `/http` row, with its own config, and it is the
+route this session's model arrives on.
+
+The declaration followed the vendor, not the drift gate: the vendor gates all three surfaces with
+ONE switch (`cliOn`), so `surfaces.cli` gained an explicit `gates: ['opencode']` list plus
+`default: false`. `scripts/verify-presets.mjs` now understands both markers — a gated-off surface
+expects its tools and its command to be ABSENT, and reports drift if they are present.
+
+**Measured (real mount, isolated `DSH_HOME`, not `--dump-config`):**
+
+| Check | Result |
+| :--- | :--- |
+| `verify:presets` (live profile) | OK — tools `working_directory, agy_worker, subagent_antigravity, subagent_opencode` |
+| providers | `deepseek-account, antigravity, deepinfra, deepinfra-anthropic, opencode-http-agent` — model serving survives |
+| commands | `agy, export, feedback, interrupt, permission` — `/ocode` gone |
+
+**Latent defect recorded, not fixed.** `dsh-opencode-v2` has no
+`app-boot/config-reload` reconciliation (measured 2026-11-08), so `cli: false` takes effect on the
+next `dsh-web.service` restart. Until then the three CLI surfaces stay mounted. This is the same
+class as ledger F-46 (volatile config is live data, not an install trigger); fixing it is a code
+change the owner has not approved, so it is recorded here and in the profile comment.
+
+## 0.0.1-rc.9 — 2026-11-08 (CLI dispatch control plane: admission + reclamation)
+
+Owner instruction: *"프리셋/샌드박스 제한 시 비인가 CLI 디스패치가 자연스럽게 차단될 것 … 세션
+중단 시 외부 워커 프로세스가 좀비나 탈주 상태로 남지 않고 회수될 것"*
+
+Two duties, both placed in the router because the router is the only owner of the preset
+mounts, and both built on seams that already existed rather than new mechanisms.
+
+| Duty | Implementation | Seam reused |
+| :--- | :--- | :--- |
+| Refuse dispatch under a restricted preset/sandbox | `tools/pre-execute` listener, `prepend`ed, installed before the rows mount | the shipped policy seam Auto-review uses; denial is an ordinary `{kind:'deny'}` |
+| Reclaim a dispatched worker on session end | `CliWorkerRegistry` + `agent/disposed` / `session/disposed` / router disposer | the subprocess handle's own `terminate()` verb |
+
+**Measured, and each one changed the implementation:**
+
+| Finding | Consequence |
+| :--- | :--- |
+| The sandbox blocks file effects, not process creation (`read-only` still spawns `dsh`, nested `bwrap`) | a gate is the only thing that stops a restricted session outsourcing work |
+| A child cannot see a parent-provided service via `ctx.get()`; `ctx.inject` can | every vendor acquires `customRouter` through deferred injection |
+| Providers hold the parent Agent; lifecycle edges deliver a Session | `sessionOf()` normalizes both identities, or reclamation would never match |
+| The settings schema materialises `[]` for an absent array | empty lists fall back to the shipped defaults instead of restricting nothing |
+
+**Files.** New `lib/dispatch-gate.js` (gate, registry, lifecycle binding) and
+`docs/CLI-DISPATCH-CONTROL-PLANE.md`; `lib/index.js` extends the existing `customRouter` seam
+with `cliDispatch` and releases gate/registry in its disposer; `lib/settings-schema.js` gains
+`cliDispatchGate`. Vendored AGY (`subagent.js`, `cli-batch.js`, `index.js`) and OpenCode v2
+(`subagent.js`, `index.js`, `workers/run.js`, `workers/index.js`) register handles and assert
+the same rule in `start()`.
+
+**Neutralizing `auto: true`.** The decision lands before the tool body, so no argv is built and
+no `--auto` can be read. A regression test pins that `--auto` never reaches a process under a
+denial.
+
+**Verification.** `npm run verify:dispatch` — 10/10 live checks (4 restricted combinations deny
+all CLI tools with `bodyRuns: 0`; a real child is killed by agent disposal, session disposal,
+and router unload; a sibling session's worker survives). Suites: router 361, AGY 171,
+OpenCode v2 479 — all pass. `dsh --profile web --dump-config` exits 0 and the router still
+mounts with `cliDispatch` present.
 
 ## 0.0.1-rc.8 — 2026-11-08 (Antigravity/DeepInfra absorbed; llm-pi-ai re-enabled)
 

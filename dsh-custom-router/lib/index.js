@@ -38,6 +38,7 @@ import { mergeCatalog } from './catalog.js'
 import { probePreset } from './probe.js'
 import { resolveRoute } from './routing.js'
 import { loadVendorModules, resolveFromAnchor, resolveThroughChain } from './vendor-modules.js'
+import { CliWorkerRegistry, bindLifecycle, decideDispatch, gateConfig, installDispatchGate, resolveDispatchPolicy, sessionOf } from './dispatch-gate.js'
 
 /** Plugin name used by the loader. */
 export const name = '@nolit/dsh-custom-router'
@@ -469,6 +470,14 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
     }
   }
 
+  // CLI dispatch control plane. Installed BEFORE the rows are mounted so a
+  // vendor that registers its tool during its own apply() is already covered,
+  // and installed once, not per row.
+  const registry = new CliWorkerRegistry(ctx, { warn })
+  const gateCfg = gateConfig(config)
+  const disposeGate = installDispatchGate(ctx, { presets, config, warn })
+  const unbindLifecycle = bindLifecycle(ctx, registry)
+
   await reconcile()
 
   // Runtime seam for the rest of the body: routing, probing, merging. The
@@ -486,6 +495,24 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
         vendorConfig: currentVendorConfig(),
       }, currentVendorConfig())),
       merge: (layers) => mergeCatalog(layers),
+      // CLI-worker control plane. Vendor rows reach this through the deferred
+      // `inject(['customRouter'])` seam (measured: a child's plain `ctx.get()`
+      // does not see a service provided by its parent fiber; `inject` does),
+      // so one registry and one gate serve every vendor mounted here.
+      cliDispatch: {
+        registry,
+        // Every verb accepts an Agent OR a Session: the delegation providers hold
+        // the parent Agent, the lifecycle edges deliver a Session, and a tool
+        // execution carries both. `sessionOf` is the single normalization point,
+        // so a worker tracked through one identity is reclaimable through the
+        // other.
+        gate: (subject) => {
+          const session = sessionOf(subject?.agent ?? subject)
+          return decideDispatch(resolveDispatchPolicy(ctx, session), gateCfg)
+        },
+        track: (owner, handle, label) => registry.track(owner, handle, label),
+        reclaim: (owner, reason) => registry.reclaimSession(owner, reason),
+      },
     })
   } catch (error) {
     warn(`dsh-custom-router: runtime seam not provided: ${error instanceof Error ? error.message : String(error)}`)
@@ -517,6 +544,13 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
     if (released) return
     released = true
     try { offReload?.() } catch { /* already released */ }
+    // Reclaim before unmounting: a vendor row's unload disposes its own handles,
+    // but an external process whose handle already left that row's scope (a
+    // timed-out delegation, a background CLI worker) has no owner left to reap
+    // it. The registry is the only list of those.
+    try { disposeGate() } catch { /* already released */ }
+    try { unbindLifecycle() } catch { /* already released */ }
+    try { registry.dispose('router unloaded') } catch { /* already released */ }
     for (const entry of [...mounted].reverse()) disposeEntry(entry)
     mounted.length = 0
   }
