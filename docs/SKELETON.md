@@ -50,6 +50,8 @@
 
 ## report
 
+- **1.0** · active · 2026-11-08 · [docs/HANDOFF.md](./HANDOFF.md)
+  Workspace-level progress roll-up — per-track state, the ordered cross-track next actions, the owner decisions that block them, and the measured gates that say whether a track is releasable.
 - **1.2** · active · 2026-11-08 · [docs/PLUGIN-CONSOLIDATION.md](./PLUGIN-CONSOLIDATION.md)
   Why the per-surface plugins were folded into one package per vendor, then how Antigravity and DeepInfra were absorbed into @nolit/dsh-custom-router on 2026-11-08, and what a future agent must check before reinstalling any of them.
 - **1.1** · archived · 2026-11-06 · [archive/dsh-subrouter/CHANGELOG.md](../archive/dsh-subrouter/CHANGELOG.md)
@@ -124,19 +126,19 @@
 - **1.0** · active · 2026-11-06 · [archive/dsh-subrouter/docs/INDEX.md](../archive/dsh-subrouter/docs/INDEX.md)
   Generated per-subproject index for @nolit/dsh-subrouter: every document this track owns, one line each.
 
-## boot (newest 5 of 51)
+## boot (newest 5 of 52)
 
 - **active** · INDEX.md · [card](../bootcards/INDEX.md)
   Newest-first list of dated boot cards.
+- **active** · 2026-11-08T2020+0900.md · [card](../bootcards/2026-11-08T2020+0900.md)
+  Next-section work order. Each track now owns a docs/HANDOFF.md with ordered stages; this card carries the priority order, the owner-only blockers, and the measured gates for the 2026-11-08 session.
 - **active** · 2026-11-08T0902+0900.md · [card](../bootcards/2026-11-08T0902+0900.md)
   Session card. Anthropic Messages protocol lane (shared hooks + DeepInfra direct route, opt-in) and CLI-subagent patches (model selection, usage ledger, absolute path) landed; live profile has anthropicRoute:true and the restart is the owner's. Lists every unresolved item with its measured state.
 - **active** · 2026-11-08T0503+0900.md · [card](../bootcards/2026-11-08T0503+0900.md)
   Session card (tier 5): the Custom Router M10 UI sprint is complete (settings schema, sidebar dashboard, tabbed model picker, OpenCode plan evidence). Handoff: P3 deepinfra stream-pipe integration, deferred UI cleanup, and the fixed 4-worker orchestration schema.
 - **active** · 2026-11-08T0105+0900.md · [card](../bootcards/2026-11-08T0105+0900.md)
   Session card (tier 5): the custom router mounted for real — isolated E2E parity, live web-profile wiring, hardened apply seam, daemon bridge fixes. Backend done; the client surface is the open work (M10 UI sprint).
-- **active** · 2026-11-07T2332+0900.md · [card](../bootcards/2026-11-07T2332+0900.md)
-  Session card (tier 5): custom-router preset data model, 3-layer catalog/pricing, routing + probe executor, plan/usage layers, three vendor bridges and the apply seam. Next session starts with the isolated E2E mount verification.
 
 ---
 
-36 workspace docs (51 boot cards), 0 with problems, 6 subprojects.
+37 workspace docs (52 boot cards), 0 with problems, 6 subprojects.
