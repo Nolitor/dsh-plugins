@@ -1,10 +1,10 @@
 # DSH Plugin Harness Policy & Version Changelog
 <!-- skeleton:
-version: 2.8
+version: 2.9
 kind: policy
 status: active
-updated: 2026-11-06
-summary: Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving (llm-pi-ai deprecated), release rules, and the browser-boot verification gate.
+updated: 2026-11-08
+summary: Authoritative harness policy: versions, live-state gates, single-writer rule, 4-step plugin replacement, autonomous model-serving with llm-pi-ai re-enabled, release rules, and the browser-boot verification gate.
 -->
 
 
@@ -23,13 +23,18 @@ The harness must keep runtime compatibility, release artifacts, policy decisions
 evidence together. A report is not a measurement unless it names the actual boot/route/browser
 result it came from.
 
-## 1.1 Model-serving policy (2026-10-30)
+## 1.1 Model-serving policy (updated 2026-11-08)
 
-- **`llm-pi-ai` is deprecated and is not restored.** It is a generic multi-provider layer, not a
-  required harness capability.
-- **Every model-serving integration is its own autonomous router.** It registers its adapter
-  directly with `ctx.llm.registerAdapter([providerId], adapter)` and owns its catalog,
-  `reasoning.efforts`, disjoint usage accounting, session mapping, and stable error codes.
+- **`llm-pi-ai` is enabled again by owner instruction (2026-11-08).** The 2026-10-30
+  "deprecated, not restored" policy is superseded. The row is available in Settings → Models and
+  starts dormant with zero routes until a provider profile is saved; `deepseek-account` remains
+  the default model route.
+- **The Custom Router is the single UI and composition owner for its provider presets.** It mounts
+  each enabled preset as a child plugin and no longer requires Antigravity or DeepInfra as separate
+  profile packages; their source is vendored at `dsh-custom-router/vendor/`.
+- **Every model-serving integration still registers its own adapter.** A provider registers with
+  `ctx.llm.registerAdapter([providerId], adapter)` and owns its catalog, `reasoning.efforts`,
+  disjoint usage accounting, session mapping, and stable error codes.
 - **No intermediary bridge/proxy plugin.** Reuse another plugin's measured serving surface by
   importing its adapter/library, never by inserting a second route table between it and the host.
 - **Extensions must export `apply`.** A module without `apply` is a library and must not be listed
@@ -41,7 +46,8 @@ result it came from.
   from `/api/model`'s `status`/`enabled`, which are uniformly active.
 - **Conflict handling is local.** A plugin may warn or yield its own namespace when a legacy
   provider is active; it must never unload or mutate a sibling plugin's registration.
-- Rationale and incident record: [dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md](../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md).
+- Rationale and incident record: [dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md](../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md),
+  integration record: [dsh-custom-router/docs/PROVIDER-INTEGRATION.md](../dsh-custom-router/docs/PROVIDER-INTEGRATION.md).
 
 ## 2. Version policy
 
@@ -62,6 +68,7 @@ result it came from.
 | 2026-10-31 | DSH `0.2.2-alpha.2` | 0.6.0's client half killed the whole web UI after the 23:34 restart: `web boot: 1 entry did not activate` / `@nolit/dsh-opencode-v2: failed` — `lib/client.js` declared `const inject = ['slots']` and never exported it, so `ctx.slots` was undefined at activation | `dsh-opencode-v2@0.6.1` exports `inject`; contract test added; verification gate now requires a **browser boot**, not route probes; see [plan](../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md) §5.2.8 |
 | 2026-10-31 | DSH `0.2.2-alpha.2` | The entitlement sweep spent **one real completion per catalog route** (49 requests/press) against a request-counted quota; no cheaper truthful surface exists (provider `/models` 404, `/api/model` uniform `active`, `opencode models` = static catalog, no OpenAPI availability route) | `dsh-opencode-v2@0.7.0` drops the sweep: availability is the plan (`opencode-go` subscription / `opencode` Zen) chosen in the tab, ordering uses the public `opencode.ai/data` ranking (one cached GET), and backend refusals are recorded free from real turns |
 | 2026-10-31 | DSH `0.2.2-alpha.2` | Settings-tab usability: 49 rows in catalog order after every open, sweep results lost on close, tab labelled `OpenCode v2`, and Notification's hardcoded Korean label leaked into an English UI | `dsh-opencode-v2@0.6.2` sorts usable → unchecked → rejected, puts the verdict beside the checkbox, persists the sweep to `opencode-model-verdicts.json` and only refreshes on the button; `dsh-notify-web@0.1.7` moves to order 50 (below 에이전트 프리셋) and localizes its label (`알림` / `Notifications`) |
+| 2026-11-08 | DSH `0.2.2-rc.1` | Owner re-enabled `llm-pi-ai` and ordered Antigravity/DeepInfra absorbed into the Custom Router as vendored providers | profile vendor dependencies/links removed; `dsh-custom-router@0.0.1-rc.8` mounts the internal `vendor/antigravity` and `vendor/deepinfra` rows; `llm-pi-ai` row active |
 | 2026-10-30 | DSH `0.2.2-alpha.2` | `llm-pi-ai` deprecated; autonomous native router policy adopted; `@nolit/dsh-subrouter` decommissioned | `dsh-opencode-v2@0.4.0` mounts `@nolit/dsh-opencode-v2/http` natively; profile repointed to `opencode-http-agent` |
 | 2026-10-30 | DSH `0.2.2-alpha.2` | Live 400 `MissingSessionID` (no `x-opencode-session`) and 401 from a revoked `key` credential preferred over the web OAuth login | `dsh-opencode-v2@0.5.1` sends the session header and ranks oauth over key; see [plan](../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md) §5.1 |
 | 2026-10-30 | DSH `0.2.2-alpha.2` | Prompt picker offered all 49 catalog routes; only 35 usable on this account | `dsh-opencode-v2@0.6.0` adds `enabledModels` (empty = unrestricted) plus an OpenCode v2 settings tab and an explicit entitlement sweep; see [plan](../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md) §5.2 |

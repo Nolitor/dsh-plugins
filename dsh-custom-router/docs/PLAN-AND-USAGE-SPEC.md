@@ -78,7 +78,7 @@ A preset must label these separately and never collapse them into "plan mismatch
 **DeepInfra:** there is **no subscription plan at all** — it is per-token billing.
 | Step | Logic | Measured ground |
 | :--- | :--- | :--- |
-| L2-D1 | `GET /v1/me` → account **identity only**; no balance/plan field | [dsh-deepinfra/UPSTREAM-APIS.md](../../dsh-deepinfra/UPSTREAM-APIS.md) §1 |
+| L2-D1 | `GET /v1/me` → account **identity only**; no balance/plan field | [dsh-deepinfra/UPSTREAM-APIS.md](../vendor/deepinfra/UPSTREAM-APIS.md) §1 |
 | L2-D2 | `POST /v1/request-costs` → **404 for this credential** (documented, not deployed); degrade to `null`, never fake 0 | `catalog.js:41–51`, UPSTREAM-APIS §3 |
 | L2-D3 | plan/promotion = `metadata.discount` on the catalog row (8 of 91 chat routes, 0.10–0.75) → `promotionOf()` → `percentOff` | `catalog.js:245–266` |
 | L2-D4 | exact per-request cost = wire `usage.estimated_cost` (USD, discounted price), used verbatim | `cost.js:4–22` |
@@ -240,5 +240,5 @@ generation turn, no browser boot of the new surface, no version/rc change.
 
 
 - [CUSTOM-ROUTER-SERVICE-SPEC.md](./CUSTOM-ROUTER-SERVICE-SPEC.md), [CUSTOM-ROUTER-PROTOCOL-STANDARD.md](./CUSTOM-ROUTER-PROTOCOL-STANDARD.md), [CUSTOM-ROUTER-PRESET-SURFACE.md](./CUSTOM-ROUTER-PRESET-SURFACE.md), [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md)
-- [dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md](../../dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md), [dsh-deepinfra/UPSTREAM-APIS.md](../../dsh-deepinfra/UPSTREAM-APIS.md), [dsh-antigravity/README.md](../../dsh-antigravity/README.md)
+- [dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md](../../dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md), [dsh-deepinfra/UPSTREAM-APIS.md](../vendor/deepinfra/UPSTREAM-APIS.md), [dsh-antigravity/README.md](../vendor/antigravity/README.md)
 - [docs/RULES.md](../../docs/RULES.md), [docs/DSH-HARNESS-POLICY.md](../../docs/DSH-HARNESS-POLICY.md)

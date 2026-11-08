@@ -1,18 +1,18 @@
 # @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.7
+version: 0.0.1-rc.8
 kind: readme
 status: active
 updated: 2026-11-08
-summary: Custom Router track: the single-owner OpenCodex bridge library, the multi-row preset router, and the single browser dashboard that owns provider usage, per-layer switches and credentials.
+summary: Custom Router track: the single installed plugin for the multi-row preset router, vendor dashboard, OpenCodex bridge, and the vendored Antigravity/DeepInfra adapters.
 -->
 
 | | |
 | :--- | :--- |
 | Package | `@nolit/dsh-custom-router` |
-| Version | `0.0.1-rc.7` (numeric part owner-gated; `rc#` is the agent history marker) |
-| Status | **implemented bundle + browser dashboard.** `lib/index.js` mounts the enabled preset rows; one `settings.section` (`custom-router`) owns usage/billing, per-layer switches and write-only credentials |
+| Version | `0.0.1-rc.8` (numeric part owner-gated; `rc#` is the agent history marker) |
+| Status | **implemented bundle + browser dashboard + vendored providers.** `lib/index.js` mounts the enabled preset rows; one `settings.section` (`custom-router`) owns usage/billing, per-layer switches and write-only credentials. Antigravity and DeepInfra no longer exist as separate profile plugins. |
 | Docs | [`docs/`](./docs) — measured specs plus the bridge contract and runbook; document skeleton versions follow the `rc.#` history scheme (separate from the plugin version) |
 | History | [`CHANGELOG.md`](./CHANGELOG.md) |
 | Parent workspace | [`docs/RULES.md`](../docs/RULES.md) |
@@ -183,8 +183,12 @@ Ownership: [docs/README-OWNERSHIP.md](./docs/README-OWNERSHIP.md)
 
 A **Custom Router** is a separate service class (agent/model API routing + model serving) that
 registers inside the DSH `LlmRuntime` with `ctx.llm.registerAdapter`, not beside it. This track
-owns the **specification and the future plugin-owned surface**, not the three existing vendor
-packages (`@nolit/dsh-opencode-v2`, `@nolit/dsh-antigravity`, `@nolit/dsh-deepinfra`).
+owns the single settings/dashboard surface, the OpenCodex bridge, the shared stream pipe, and the
+**vendored Antigravity and DeepInfra adapters** under `vendor/`. OpenCode remains a separate active
+track because it is still independently installed and versioned.
+
+The 2026-11-08 integration record is
+[`docs/PROVIDER-INTEGRATION.md`](./docs/PROVIDER-INTEGRATION.md).
 
 The owner's decisions encoded here:
 
@@ -200,6 +204,7 @@ The owner's decisions encoded here:
 
 | File | Answers |
 | :--- | :--- |
+| [`docs/PROVIDER-INTEGRATION.md`](./docs/PROVIDER-INTEGRATION.md) | 2026-11-08 move of Antigravity/DeepInfra into `vendor/`, profile cleanup, and the llm-pi-ai re-enable decision |
 | [`docs/CUSTOM-ROUTER-SERVICE-SPEC.md`](./docs/CUSTOM-ROUTER-SERVICE-SPEC.md) | standard baseline, coexistence verdict, tool-preset activation |
 | [`docs/CUSTOM-ROUTER-PROTOCOL-STANDARD.md`](./docs/CUSTOM-ROUTER-PROTOCOL-STANDARD.md) | per-service wire/auth/catalog differences → `StreamChunk` mapping |
 | [`docs/CUSTOM-ROUTER-PRESET-SURFACE.md`](./docs/CUSTOM-ROUTER-PRESET-SURFACE.md) | the new surface, credential modes, readiness/plan checks |

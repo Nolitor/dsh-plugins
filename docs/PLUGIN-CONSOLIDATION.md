@@ -1,11 +1,11 @@
 # Plugin Consolidation Record
 
 <!-- skeleton:
-version: 1.1
+version: 1.2
 kind: report
 status: active
-updated: 2026-11-05
-summary: Why the per-surface plugins were folded into one package per vendor, which packages are superseded (and that one is now archived under archive/), and what a future agent must check before reinstalling any of them.
+updated: 2026-11-08
+summary: Why the per-surface plugins were folded into one package per vendor, then how Antigravity and DeepInfra were absorbed into @nolit/dsh-custom-router on 2026-11-08, and what a future agent must check before reinstalling any of them.
 -->
 
 > **Read this before touching, reinstalling, or "cleaning up" any plugin named here.**
@@ -74,6 +74,25 @@ source was **not deleted** and its tests still pass — it is superseded, not br
 > The chronological chain of merges, version ladders and archived tracks is
 > [HISTORY.md](../HISTORY.md); this file is the per-package authority it links to.
 
+
+### 2.2 The Custom Router integration (2026-11-08)
+
+Owner instruction superseded the three-package shape for two vendors:
+
+> *"커스텀라우터 플러그인 통합으로 인하여 플러그인 중에 안티그래비티, 딥인프라 플러그인 삭제 및
+> 관련 서브 프로젝트 해당 플러그인 사용하지 않고 커스텀라우터 플러그인으로 통합되었다고 관련
+> 문서 커밋하고, 설정-모델 pi-ai 사용 가능으로 활성화해줘"*
+
+| Vendor | Was | Now |
+| :--- | :--- | :--- |
+| Antigravity | `@nolit/dsh-antigravity`, profile `link:` dependency, active `dsh-antigravity/` track | `dsh-custom-router/vendor/antigravity/`; mounted by the router; no profile dependency or link |
+| DeepInfra | `@nolit/dsh-deepinfra`, profile `link:` dependency, active `dsh-deepinfra/` track | `dsh-custom-router/vendor/deepinfra/`; mounted by the router; no profile dependency or link |
+
+This is **not** an `archive/` move: the code is still active, but its ownership moved into the
+Custom Router package. `llm-pi-ai` is enabled again by the same owner instruction and is available
+in Settings → Models; its previous "deprecated" wording is superseded. The measured integration
+record lives at [dsh-custom-router/docs/PROVIDER-INTEGRATION.md](../dsh-custom-router/docs/PROVIDER-INTEGRATION.md).
+
 ## 3. What a future agent must do
 
 ### Before installing anything vendor-related
@@ -122,7 +141,7 @@ and the tool list do not show a surface that cannot serve.
 | Question | Where |
 | :--- | :--- |
 | Why was my package merged away? | its own README/CHANGELOG `SUPERSEDED` banner |
-| What changed in the replacement? | `dsh-antigravity/CHANGELOG.md`, `dsh-opencode-v2/CHANGELOG.md` |
+| What changed in the replacement? | `dsh-custom-router/CHANGELOG.md`, `dsh-opencode-v2/CHANGELOG.md` |
 | What went wrong and what rule came from it? | `docs/FAILURE-LEDGER.md` |
 | Typography contract | `docs/PLUGIN-STYLE-STANDARD.md` (v2.0) |
 | Runtime/manifest contract | `docs/dsh-plugin-runtime-spec.md` |

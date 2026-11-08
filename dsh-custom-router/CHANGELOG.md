@@ -1,12 +1,48 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.7
+version: 0.0.1-rc.8
 kind: report
 status: active
 updated: 2026-11-08
-summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the single-owner OpenCodex bridge library, the preset declarations, and the first real multi-row mount, extended 2026-11-08 with the settings schema and the single browser dashboard (M10 UI sprint), with the Anthropic Messages protocol hooks in the shared stream pipe, and with the browser-surface redesign (single-column provider rows over DSH tokens, plus the accessibility pass).
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree.
 -->
+
+## 0.0.1-rc.8 — 2026-11-08 (Antigravity/DeepInfra absorbed; llm-pi-ai re-enabled)
+
+Owner instruction: *"커스텀라우터 플러그인 통합으로 인하여 플러그인 중에 안티그래비티, 딥인프라
+플러그인 삭제 및 관련 서브 프로젝트 해당 플러그인 사용하지 않고 커스텀라우터 플러그인으로
+통합되었다고 관련 문서 커밋하고, 설정-모델 pi-ai 사용 가능으로 활성화해줘"*
+
+**Moved, not rewritten.**
+
+| Before | After |
+| :--- | :--- |
+| `dsh-antigravity/` active track + profile `link:` dependency | `dsh-custom-router/vendor/antigravity/`; no profile dependency or `node_modules` link |
+| `dsh-deepinfra/` active track + profile `link:` dependency | `dsh-custom-router/vendor/deepinfra/`; no profile dependency or `node_modules` link |
+| preset packages resolved through the profile | internal exports `@nolit/dsh-custom-router/vendor/antigravity` and `.../vendor/deepinfra` |
+| live `llm-pi-ai` row `disabled: true` | row enabled (dormant with zero routes until a provider profile is saved) |
+
+**Code changes:** `vendor-modules.js` loads the vendored Antigravity bridge modules from
+`import.meta.url`; OpenCode remains profile-resolved. The vendored libs import the shared stream
+pipe and vendor bridge by relative path. `lib/presets.js` names the internal subpath packages, and
+`preset-schema.js` now accepts a scoped package subpath (the previous exact `@scope/name` regex
+would reject the router's own vendor export). The started-bundle guard now excludes the router's
+own package name, because `@nolit/dsh-custom-router/vendor/*` subpaths were being mistaken for a
+second mount of the router bundle; a regression test pins that case.
+
+**Profile cleanup (measured before → after).**
+
+| Check | Before | After |
+| :--- | :--- | :--- |
+| `~/.dsh/profiles/web/package.json` dependencies | included `@nolit/dsh-antigravity`, `@nolit/dsh-deepinfra` | neither present |
+| `~/.dsh/profiles/web/node_modules/@nolit/` | both links present | neither link present |
+| `dsh --profile web --dump-config` | `llm-pi-ai` `disabled: true`; router row present | `llm-pi-ai` active; router row present; no vendor dependencies |
+| Isolated real boot (`scripts/verify-mount.mjs`) | router mount ok | router mount ok; providers `antigravity`, `deepinfra`, `deepinfra-anthropic`, `deepseek-account`, `opencode-http-agent`; `did not activate` 0 |
+
+**Verification:** custom-router 332/332; vendored Antigravity 164/164; vendored DeepInfra
+205 pass / 7 skip / 0 fail. The integration record is
+[`docs/PROVIDER-INTEGRATION.md`](docs/PROVIDER-INTEGRATION.md).
 
 ## 0.0.1-rc.7 — 2026-11-08 (browser surface redesign — provider rows over DSH tokens)
 

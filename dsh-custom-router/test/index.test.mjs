@@ -91,7 +91,7 @@ test('enabling a preset plans its package as the child plugin', () => {
   assert.deepEqual(plan.errors, [])
   assert.equal(plan.active.length, 1)
   assert.equal(plan.active[0].id, 'antigravity')
-  assert.equal(plan.active[0].specifier, '@nolit/dsh-antigravity')
+  assert.equal(plan.active[0].specifier, '@nolit/dsh-custom-router/vendor/antigravity')
 })
 
 test('a package override wins over the declared package', () => {
@@ -146,7 +146,7 @@ test('a mount failure is isolated to that row', async () => {
     // The first row resolves to the fixture; the second (the shared subagent
     // row) is unresolvable, so exactly one child mounts.
     resolve: (_anchor, specifier) => {
-      if (specifier === '@nolit/dsh-antigravity') return FIXTURE
+      if (specifier === '@nolit/dsh-custom-router/vendor/antigravity') return FIXTURE
       throw new Error(`Cannot find module '${specifier}'`)
     },
     strict: false,
@@ -408,10 +408,10 @@ test('active[].config prefers the row key and falls back to the rc.2 preset-id k
 // ---- duplicate-mount guard: startedBundles (2026-11-08) -------------------
 
 test('a preset already started as a bundle is skipped with a warning; the rest mount', async () => {
-  // Measured live shape: the web profile lists '@nolit/dsh-antigravity'. A
-  // partial live-profile edit can therefore leave the vendor bundle enabled
-  // while this router also mounts it — a duplicate registration.
-  const ctx = fakeCtx({ startedBundles: ['@nolit/dsh-base', '@nolit/dsh-antigravity'] })
+  // A partial profile edit can still list the vendored Antigravity package
+  // specifier as a started bundle while this router also mounts it — a
+  // duplicate registration.
+  const ctx = fakeCtx({ startedBundles: ['@nolit/dsh-base', '@nolit/dsh-custom-router/vendor/antigravity'] })
   const dispose = await apply(ctx, {
     presets: { antigravity: true, opencode: true, deepinfra: true },
     resolve: () => FIXTURE,
@@ -423,10 +423,24 @@ test('a preset already started as a bundle is skipped with a warning; the rest m
   assert.equal(ctx.mounted.length, 5)
   const skipped = ctx.warnings.filter((line) => /already a started bundle/.test(line))
   assert.equal(skipped.length, 1)
-  assert.match(skipped[0], /"@nolit\/dsh-antigravity" is already a started bundle/)
+  assert.match(skipped[0], /"@nolit\/dsh-custom-router\/vendor\/antigravity" is already a started bundle/)
   assert.match(skipped[0], /row "dsh-antigravity"/)
   dispose()
   assert.equal(ctx.mounted.every((entry) => entry.disposed), true)
+})
+
+test('the router own bundle does not block its vendored provider rows', async () => {
+  // The live profile now starts `@nolit/dsh-custom-router`; its vendored rows
+  // use subpaths of that same package. They must mount, not be mistaken for a
+  // duplicate vendor bundle.
+  const ctx = fakeCtx({ startedBundles: ['@nolit/dsh-custom-router'] })
+  await apply(ctx, {
+    presets: { antigravity: true, deepinfra: true },
+    resolve: () => FIXTURE,
+    vendorModules: {},
+  })
+  assert.equal(ctx.mounted.length, 3)
+  assert.equal(ctx.warnings.filter((line) => /already a started bundle/.test(line)).length, 0)
 })
 
 test('a subpath specifier of a started bundle is skipped too', async () => {

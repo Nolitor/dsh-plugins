@@ -32,7 +32,7 @@ const isStub = (row) => /^> \*\*MOVED — this is a pointer stub, not the docume
 const GENERATED = new Set(['INDEX.md', 'docs/SKELETON.md', 'pending-docs/INDEX.md'])
 const SKIP_DIRS = new Set([
   'node_modules', '.git', '.runtime-measure', '.verify', 'prototype-windows', 'prototype-harness',
-  'market', 'locale', 'test', 'lib', 'scripts', 'artifacts', 'staging', 'verification', 'dist', 'build', '.cache',
+  'market', 'locale', 'test', 'lib', 'scripts', 'artifacts', 'staging', 'verification', 'dist', 'build', '.cache', 'vendor',
 ])
 
 function walk(dir, out = []) {

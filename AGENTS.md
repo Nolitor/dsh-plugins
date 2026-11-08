@@ -36,7 +36,7 @@ An undecided shared document belongs in `pending-docs/`, never in `docs/` (RULES
 ## Active plans
 
 - [dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md) — stage 1 (stabilisation) in progress; stages 2–3 gated on it. Check with `scripts/opencode-v2-stabilisation-status.sh`.
-- [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md) — next session; five keyed questions answered before any code.
+- [dsh-custom-router/vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](dsh-custom-router/vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md) — vendored integration reference; the five keyed questions are answered by the measured build.
 
 ## Latest boot card
 

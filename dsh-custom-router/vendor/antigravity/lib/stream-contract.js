@@ -24,8 +24,8 @@
  * @module @nolit/dsh-antigravity/stream-contract
  */
 
-import { finishReasonFor as sharedFinish } from '@nolit/dsh-custom-router/stream'
-import { usageFromProjection } from '@nolit/dsh-custom-router/stream'
+import { finishReasonFor as sharedFinish } from '../../../lib/stream/index.js'
+import { usageFromProjection } from '../../../lib/stream/index.js'
 
 /** Field names this provider uses that the shared writer does not assume. */
 export const STREAM_DESCRIPTOR = Object.freeze({

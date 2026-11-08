@@ -10,9 +10,10 @@
  *   - **endpoint**: `mode` (http / local-http / daemon), `protocol`, `route`
  *     (host `pi-ai` or the vendor's own adapter), `baseUrl`, `transport`.
  *
- * Measured sources (2026-11-07): `dsh-antigravity` (`lib/auth.js`,
- * `lib/backends.js`), `dsh-opencode-v2` (`lib/http.js`), `dsh-deepinfra`
- * (`lib/adapter.js`, `lib/catalog.js`), and the host's `dsh-llm-pi-ai`
+ * Measured sources (2026-11-07): the Antigravity adapter (`lib/auth.js`,
+ * `lib/backends.js`) now vendored at `vendor/antigravity/`, `dsh-opencode-v2`
+ * (`lib/http.js`), the DeepInfra adapter (`lib/adapter.js`, `lib/catalog.js`)
+ * now vendored at `vendor/deepinfra/`, and the host's `dsh-llm-pi-ai`
  * `PROTOCOLS`/`transport`.
  *
  * The module registers nothing and touches no context.
@@ -69,7 +70,7 @@ export const PRESETS = Object.freeze([
     id: 'antigravity',
     name: 'Antigravity',
     kind: 'package',
-    package: '@nolit/dsh-antigravity',
+    package: '@nolit/dsh-custom-router/vendor/antigravity',
     row: 'dsh-antigravity',
     // One preset = the rows the vendor bundle itself inserts. Measured against
     // the vendor's own bundle patch file (2 inserts) on 2026-11-07.
@@ -213,7 +214,7 @@ export const PRESETS = Object.freeze([
     id: 'deepinfra',
     name: 'DeepInfra',
     kind: 'package',
-    package: '@nolit/dsh-deepinfra',
+    package: '@nolit/dsh-custom-router/vendor/deepinfra',
     row: 'dsh-deepinfra',
     // Single-package preset: one entry, no shared rows (the vendor's own bundle
     // patch file has one insert). Kept explicit so every preset has the same shape.

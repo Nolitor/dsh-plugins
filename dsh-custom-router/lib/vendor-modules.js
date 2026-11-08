@@ -125,25 +125,31 @@ export function resolveThroughChain({ profileDir, installAnchor, anchors = [], s
 
 /**
  * Load the vendor modules the bridges need.
+ *
+ * Antigravity and DeepInfra are **vendored inside this package** (2026-11-08):
+ * their source moved under `vendor/` and their profile links were removed. They
+ * resolve from `import.meta.url`, never from the profile. OpenCode remains an
+ * external active track, so it still resolves through the profile.
  * @param {object} options - `{ profileDir, installAnchor?, anchors?, importModule?, resolvePackage? }`.
  * @returns {Promise<{modules: object, errors: {vendor: string, message: string}[], packageUrls: Record<string, string>}>} loaded modules.
  */
 export async function loadVendorModules({ profileDir, importModule = defaultImport, resolvePackage = resolveFromProfile } = {}) {
   if (typeof profileDir !== 'string' || profileDir === '') {
-    throw new TypeError('loadVendorModules requires profileDir (the DSH profile holding the @nolit links)')
+    throw new TypeError('loadVendorModules requires profileDir (the DSH profile holding the OpenCode link)')
   }
   const modules = {}
   const errors = []
   const packageUrls = {}
+  const vendorUrl = (path) => new URL(`../vendor/${path}`, import.meta.url).href
   const load = async (specifier) => importModule(pathToFileURL(resolvePackage(profileDir, specifier)).href)
 
   try {
     modules.antigravity = {
-      auth: await load('@nolit/dsh-antigravity/auth'),
-      settings: await load('@nolit/dsh-antigravity/settings'),
-      catalog: await load('@nolit/dsh-antigravity/catalog'),
+      auth: await importModule(vendorUrl('antigravity/lib/auth.js')),
+      settings: await importModule(vendorUrl('antigravity/lib/settings.js')),
+      catalog: await importModule(vendorUrl('antigravity/lib/catalog.js')),
     }
-    packageUrls.antigravity = pathToFileURL(resolvePackage(profileDir, '@nolit/dsh-antigravity')).href
+    packageUrls.antigravity = vendorUrl('antigravity/lib/index.js')
   } catch (error) {
     errors.push({ vendor: 'antigravity', message: error instanceof Error ? error.message : String(error) })
   }
@@ -161,11 +167,7 @@ export async function loadVendorModules({ profileDir, importModule = defaultImpo
     errors.push({ vendor: 'opencode', message: error instanceof Error ? error.message : String(error) })
   }
 
-  try {
-    packageUrls.deepinfra = pathToFileURL(resolvePackage(profileDir, '@nolit/dsh-deepinfra')).href
-  } catch (error) {
-    errors.push({ vendor: 'deepinfra', message: error instanceof Error ? error.message : String(error) })
-  }
+  packageUrls.deepinfra = vendorUrl('deepinfra/lib/index.js')
 
   return { modules, errors, packageUrls }
 }

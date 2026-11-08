@@ -1,11 +1,11 @@
 # Custom Router — Ownership Map
 
 <!-- skeleton:
-version: 0.0.1-rc.1
+version: 0.0.1-rc.8
 kind: reference
 status: active
-updated: 2026-11-07
-summary: One-page ownership map: which package owns which surface, what this track does NOT own yet, and the rule that keeps a fourth service from re-deriving the same bridge.
+updated: 2026-11-08
+summary: One-page ownership map after the 2026-11-08 integration: the Custom Router owns the dashboard, bridge, shared pipe and the vendored Antigravity/DeepInfra adapters; the rule that keeps a new service from re-deriving the same bridge.
 -->
 
 > Read this before adding code to any `dsh-*` track that touches OpenCodex.
@@ -15,26 +15,26 @@ summary: One-page ownership map: which package owns which surface, what this tra
 | Surface | Owner | State |
 | :--- | :--- | :--- |
 | OpenCodex bridge (URL, token, projection, scope union) | **this track** (`lib/`) | implemented, tested |
-| Shared downstream stream pipe (SSE → StreamChunk → usage → finish) | **this track** (`lib/stream/`, target) | **specified, not implemented** — [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md) |
-| OpenCode model checklist + DSH `settings.update` | `@nolit/dsh-opencode-v2` | implemented |
-| Antigravity model checklist + `agy` credential reuse | `@nolit/dsh-antigravity` | implemented |
-| DeepInfra model checklist | `@nolit/dsh-deepinfra` | implemented |
-| Settings-Models (Custom) surface | **this track** | **not implemented** — spec only |
-| Per-service preset tabs | **this track** | **not implemented** — spec only |
+| Shared downstream stream pipe (SSE → StreamChunk → usage → finish) | **this track** (`lib/stream/`) | implemented and consumed by both vendored providers |
+| OpenCode model checklist + DSH `settings.update` | `@nolit/dsh-opencode-v2` | implemented; still a separate active track |
+| Antigravity model checklist + `agy` credential reuse | **this track** (`vendor/antigravity/`) | integrated 2026-11-08; no separate profile plugin |
+| DeepInfra model checklist | **this track** (`vendor/deepinfra/`) | integrated 2026-11-08; no separate profile plugin |
+| Settings-Models (Custom) surface | **this track** | implemented browser dashboard |
+| Per-service preset tabs | **this track** | implemented in the dashboard |
 | DSH host packages (`dsh-llm`, `dsh-app-boot`, UI) | `@deepseek-ai/*` | out of scope, never edited |
 
 ## 2. What this track deliberately does NOT own
 
-- **No adapter registration.** All three vendor plugins call `ctx.llm.registerAdapter` themselves.
-  Adding a second registration path here would risk `DUPLICATE_ADAPTER`. The shared stream pipe
-  is a library the adapters call **inside** their own `stream()`; it holds no registry, no
-  provider table, no dispatch, and no retry loop (R0 intact).
-- **No request-time credentials.** The pipe never reads a token, a catalog, or a settings row.
-  It receives already-decoded provider records and emits `StreamChunk`s.
-- **No provider credentials.** Upstream keys and OAuth tokens stay in each vendor plugin.
-  This track only ever sees the OpenCodex **management** token.
-- **No UI.** The Settings-Models (Custom) section is specified but not mounted; the vendor
-  plugins keep their own settings sections until that surface exists.
+- **No second adapter registration path.** The router mounts each preset's child plugin; the child
+  still calls `ctx.llm.registerAdapter` for its own provider id. The router itself never registers
+  an adapter, so `DUPLICATE_ADAPTER` remains a host-enforced failure rather than a router policy.
+- **No request-time credentials in the pipe.** The shared pipe never reads a token, a catalog, or
+  a settings row. It receives already-decoded provider records and emits `StreamChunk`s.
+- **Provider credentials stay with their provider row.** The vendored Antigravity/DeepInfra rows
+  keep their own credential fields and write-only dashboard inputs. This track only ever sees the
+  OpenCodex **management** token in the bridge library.
+- **One UI.** The `custom-router` settings section is the only dashboard for provider usage,
+  per-layer switches, model checklists and write-only credentials.
 
 ## 3. The one rule for a fourth service
 
@@ -50,11 +50,13 @@ is in the wrong package.
 
 ## 4. Package wiring facts
 
-- All three vendor packages declare `@nolit/dsh-custom-router` in `peerDependencies`.
-- DSH resolves a linked plugin's bare imports from the **profile's** `node_modules` and only
-  for declared peers; `scripts/link-custom-router.mjs` provides the workspace link.
-- This package is `0.0.1-rc.1` and is **not** in any profile's `dsh.profile.bundles`: it is a
-  library, not a mounted plugin. Adding it to bundles would mount nothing and mislead readers.
+- OpenCode declares `@nolit/dsh-custom-router` in `peerDependencies`; DSH resolves that linked
+  plugin's bare imports from the **profile's** `node_modules`. `scripts/link-custom-router.mjs`
+  provides the workspace link.
+- Antigravity and DeepInfra are vendored at `vendor/antigravity/` and `vendor/deepinfra/`. They
+  are not separate profile dependencies and do not appear as top-level tracks.
+- This package **is** in the live profile's `dsh.profile.bundles` and is the single loader row for
+  the provider presets it mounts.
 
 ## 5. Document map
 
@@ -64,5 +66,6 @@ is in the wrong package.
 | How do I operate or roll it back? | [OPENCODEX-OPERATIONS.md](./OPENCODEX-OPERATIONS.md) |
 | How do the three routers compose? | [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md) |
 | What does each service standardise? | [CUSTOM-ROUTER-SERVICE-SPEC.md](./CUSTOM-ROUTER-SERVICE-SPEC.md) |
+| Where did the Antigravity/DeepInfra plugins go? | [PROVIDER-INTEGRATION.md](./PROVIDER-INTEGRATION.md) |
 | What exactly is shared downstream, and where are the hooks? | [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md) |
 | Retry/fallback policy | [RETRY-POLICY.md](./RETRY-POLICY.md) |

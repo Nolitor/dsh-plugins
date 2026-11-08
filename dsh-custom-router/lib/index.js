@@ -387,7 +387,10 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
    * @returns {Promise<object|undefined>} the mounted fixture, or undefined.
    */
   const mountRow = async (item) => {
-    const owner = startedBundles.find((bundle) => item.specifier === bundle || item.specifier.startsWith(`${bundle}/`))
+    // The router's own bundle owns the vendored provider subpaths
+    // (`@nolit/dsh-custom-router/vendor/...`). Those must not be mistaken for a
+    // separately started vendor bundle. Only a DIFFERENT started bundle blocks.
+    const owner = startedBundles.find((bundle) => bundle !== name && (item.specifier === bundle || item.specifier.startsWith(`${bundle}/`)))
     if (owner !== undefined) {
       warn(`dsh-custom-router: row "${item.row}" of preset "${item.preset}" skipped: "${owner}" is already a started bundle (mounting it twice would duplicate its registrations)`)
       return undefined

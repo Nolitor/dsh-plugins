@@ -98,7 +98,7 @@ test('the module registers nothing: no apply, no context, frozen data', async ()
 
 test('every preset declares its package, row and switches', () => {
   for (const preset of PRESETS) {
-    assert.match(preset.package, /^@[a-z0-9-]+\/[a-z0-9-]+$/)
+    assert.match(preset.package, /^@[a-z0-9-]+\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/)
     assert.match(preset.row, /^[a-z0-9-]+$/)
     assert.ok(Array.isArray(preset.switches))
   }

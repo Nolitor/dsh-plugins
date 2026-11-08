@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { apply, Config } from '../lib/index.js'
-import { resetSharedSelectionSync } from '@nolit/dsh-custom-router/vendor-bridge'
+import { resetSharedSelectionSync } from '../../../lib/vendor-bridge.js'
 
 test('saving the DeepInfra checklist mirrors slash-bearing ids to OpenCodex', async () => {
   resetSharedSelectionSync()

@@ -186,7 +186,7 @@ the harness and lost retry/attribution/discovery; that is the pattern this defin
 
 All three are `link:` dependencies in the live `web` profile, listed in `dsh.profile.bundles`,
 and each calls `ctx.llm.registerAdapter()` ([http.js:2408](../../dsh-opencode-v2/lib/http.js),
-[index.js:413](../../dsh-antigravity/lib/index.js), [index.js:239](../../dsh-deepinfra/lib/index.js)).
+[index.js:413](../vendor/antigravity/lib/index.js), [index.js:239](../vendor/deepinfra/lib/index.js)).
 The **service** is the specification unit; the **package** is the current packaging decision
 ([PLUGIN-CONSOLIDATION.md](../../docs/PLUGIN-CONSOLIDATION.md): one package per vendor).
 
@@ -254,7 +254,7 @@ No preset row, plugin manifest, or live profile was changed in this session.
   OpenAI-compatible service (§1.2 shows that slot is viable).
 - Any live-profile edit, service restart, real generation turn, or S6 soak confirmation.
 - Stage-2 work gated on owner instruction
-  ([dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../../dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md), [dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](../../dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md)).
+  ([dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../../dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md), [dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](../vendor/antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md)).
 
 ## 7. Reproducing the measurement
 
@@ -288,6 +288,6 @@ The repository never contained the "DeepMind" typo; it was spoken. Owner-owned
 - [CUSTOM-ROUTER-PRESET-SURFACE.md](./CUSTOM-ROUTER-PRESET-SURFACE.md) — owner-approved plan B surface
 - [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md) — composition diagrams + normative per-service module contract
 - [RULES.md](../../docs/RULES.md), [FAILURE-LEDGER.md](../../docs/FAILURE-LEDGER.md), [PLUGIN-CONSOLIDATION.md](../../docs/PLUGIN-CONSOLIDATION.md)
-- [dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md](../../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md), [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../../dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md)
+- [dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md](../../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md), [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md)
 - [dsh-plugin-runtime-spec.md](../../docs/dsh-plugin-runtime-spec.md), [DSH-RC1-PLUGIN-DELTA.md](../../docs/DSH-RC1-PLUGIN-DELTA.md)
 - Installed `@deepseek-ai/dsh-llm@0.2.2-rc.1` `lib/index.js` and `lib/types/*.d.ts`

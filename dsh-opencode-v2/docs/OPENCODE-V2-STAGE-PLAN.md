@@ -7,7 +7,7 @@ summary: Stage plan for @nolit/dsh-opencode-v2 — what "stabilised" means as a 
 -->
 
 > Status: **stage 1 (stabilisation) in progress** · Baseline: `0.0.2-rc.1` ·
-> Staged code: `staging/opencode-v2-stage2/` · Next plugin: [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../../dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md) ·
+> Staged code: `staging/opencode-v2-stage2/` · Next plugin: [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../../dsh-custom-router/vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md) ·
 > Evidence: [CHANGELOG](../CHANGELOG.md),
 > [capability delta](../RECIPE-CAPABILITY-DELTA.md)
 
@@ -47,7 +47,7 @@ first boot. **A green suite is not S6.** S6 requires time and the owner's own us
 ### Sibling track — `@nolit/dsh-antigravity`
 
 Antigravity uses the same S1–S7 gate; its status and stage-1 reinforcement are recorded in
-[dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](../../dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md). Stage 2/3 work opens for **both** tracks
+[dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](../../dsh-custom-router/vendor/antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md). Stage 2/3 work opens for **both** tracks
 together, and only after each track's S6 soak is owner-confirmed. Do not open stage 2 for one
 track alone.
 

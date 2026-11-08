@@ -189,5 +189,5 @@ last good catalog).
 ## 9. References
 
 - [CUSTOM-ROUTER-PROTOCOL-STANDARD.md](CUSTOM-ROUTER-PROTOCOL-STANDARD.md), [WEB-AUTH-PIPELINE-ENGINE.md](WEB-AUTH-PIPELINE-ENGINE.md), [PLAN-AND-USAGE-SPEC.md](PLAN-AND-USAGE-SPEC.md), [CUSTOM-ROUTER-ARCHITECTURE.md](CUSTOM-ROUTER-ARCHITECTURE.md)
-- [dsh-opencode-v2/lib/http.js](../../dsh-opencode-v2/lib/http.js), [dsh-antigravity/lib/adapter.js](../../dsh-antigravity/lib/adapter.js), [dsh-antigravity/lib/auth.js](../../dsh-antigravity/lib/auth.js), [dsh-deepinfra/lib/adapter.js](../../dsh-deepinfra/lib/adapter.js)
+- [dsh-opencode-v2/lib/http.js](../../dsh-opencode-v2/lib/http.js), [dsh-antigravity/lib/adapter.js](../vendor/antigravity/lib/adapter.js), [dsh-antigravity/lib/auth.js](../vendor/antigravity/lib/auth.js), [dsh-deepinfra/lib/adapter.js](../vendor/deepinfra/lib/adapter.js)
 - [OPENCODE-MODEL-SERVING-PLAN.md](../../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md), [docs/RULES.md](../../docs/RULES.md)

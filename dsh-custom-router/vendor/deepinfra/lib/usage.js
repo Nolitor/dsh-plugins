@@ -19,7 +19,7 @@
  *    the host double-counts cached input.
  */
 
-import { usageFrom } from '@nolit/dsh-custom-router/stream'
+import { usageFrom } from '../../../lib/stream/index.js'
 
 /** Cost currency the provider reports and the catalog prices in. */
 export const CURRENCY = 'USD'

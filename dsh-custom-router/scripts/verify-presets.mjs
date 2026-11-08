@@ -25,7 +25,7 @@ import { createRequire } from 'node:module'
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { PRESETS, validatePresets } from '../lib/presets.js'
 
@@ -80,10 +80,16 @@ function buildIsolatedHome() {
 async function booleanSwitches(profileOut, specifier) {
   const require = createRequire(join(profileOut, 'package.json'))
   let file
-  try {
-    file = require.resolve(specifier)
-  } catch {
-    fail(`cannot resolve ${specifier} from the isolated profile`)
+  if (specifier === '@nolit/dsh-custom-router/vendor/antigravity') {
+    file = fileURLToPath(new URL('../vendor/antigravity/lib/index.js', import.meta.url))
+  } else if (specifier === '@nolit/dsh-custom-router/vendor/deepinfra') {
+    file = fileURLToPath(new URL('../vendor/deepinfra/lib/index.js', import.meta.url))
+  } else {
+    try {
+      file = require.resolve(specifier)
+    } catch {
+      fail(`cannot resolve ${specifier} from the isolated profile`)
+    }
   }
   const module = await import(pathToFileURL(file).href)
   const Config = module.Config

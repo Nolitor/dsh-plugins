@@ -22,7 +22,7 @@
  * DeepInfra also allows SEVERAL calls in one response, each with its own index.
  */
 
-import { finishReasonFor } from '@nolit/dsh-custom-router/stream'
+import { finishReasonFor } from '../../../lib/stream/index.js'
 
 export const PART_TEXT = 'text'
 export const PART_REASONING = 'reasoning'

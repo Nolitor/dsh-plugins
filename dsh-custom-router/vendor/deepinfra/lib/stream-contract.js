@@ -35,7 +35,7 @@
  * @module @nolit/dsh-deepinfra/stream-contract
  */
 
-import { finishReasonFor } from '@nolit/dsh-custom-router/stream'
+import { finishReasonFor } from '../../../lib/stream/index.js'
 
 import { mapDelta } from './map.js'
 

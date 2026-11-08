@@ -38,7 +38,7 @@
  * @module @nolit/dsh-deepinfra/stream-anthropic
  */
 
-import { createAnthropicHooks } from '@nolit/dsh-custom-router/stream/anthropic'
+import { createAnthropicHooks } from '../../../lib/stream/anthropic.js'
 
 /**
  * Anthropic-compatible surface of this provider, relative to its API root.

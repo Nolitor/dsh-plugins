@@ -5,7 +5,7 @@
 set -u
 cd "$(dirname "$0")/.." || exit 2
 
-PLUGIN_DIR="dsh-antigravity"
+PLUGIN_DIR="dsh-custom-router/vendor/antigravity"
 BEACON=/tmp/antigravity-boot.jsonl
 UNIT=dsh-web.service
 

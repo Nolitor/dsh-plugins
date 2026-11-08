@@ -10,14 +10,9 @@ import {
 } from '../lib/vendor-modules.js'
 
 const FILES = new Map([
-  ['@nolit/dsh-antigravity/auth', '/v/antigravity/lib/auth.js'],
-  ['@nolit/dsh-antigravity/settings', '/v/antigravity/lib/settings.js'],
-  ['@nolit/dsh-antigravity/catalog', '/v/antigravity/lib/catalog.js'],
-  ['@nolit/dsh-antigravity', '/v/antigravity/lib/index.js'],
   ['@nolit/dsh-opencode-v2/package.json', '/v/opencode/package.json'],
   ['@nolit/dsh-opencode-v2/http', '/v/opencode/lib/http.js'],
   ['@nolit/dsh-opencode-v2', '/v/opencode/lib/index.js'],
-  ['@nolit/dsh-deepinfra', '/v/deepinfra/lib/index.js'],
 ])
 
 function fakeResolve(profileDir, specifier) {
@@ -25,7 +20,7 @@ function fakeResolve(profileDir, specifier) {
   return FILES.get(specifier)
 }
 
-test('loads every bridged vendor through the profile resolver', async () => {
+test('vendored providers load internally; OpenCode still resolves through the profile', async () => {
   const seen = []
   const { modules, packageUrls, errors } = await loadVendorModules({
     profileDir: '/profile',
@@ -33,19 +28,21 @@ test('loads every bridged vendor through the profile resolver', async () => {
     importModule: async (url) => { seen.push(url); return { url } },
   })
   assert.deepEqual(errors, [])
-  assert.equal(modules.antigravity.auth.url, 'file:///v/antigravity/lib/auth.js')
+  assert.match(modules.antigravity.auth.url, /\/vendor\/antigravity\/lib\/auth\.js$/)
+  assert.match(modules.antigravity.settings.url, /\/vendor\/antigravity\/lib\/settings\.js$/)
+  assert.match(modules.antigravity.catalog.url, /\/vendor\/antigravity\/lib\/catalog\.js$/)
   assert.equal(modules.opencode.http.url, 'file:///v/opencode/lib/http.js')
   assert.equal(modules.opencode.shared.url, 'file:///v/opencode/lib/shared.js')
-  assert.equal(packageUrls.deepinfra, 'file:///v/deepinfra/lib/index.js')
+  assert.match(packageUrls.deepinfra, /\/vendor\/deepinfra\/lib\/index\.js$/)
   assert.equal(seen.includes('file:///v/opencode/lib/shared.js'), true)
 })
 
 test('a missing vendor is reported, the others still load', async () => {
-  const resolvePackage = (profileDir, specifier) => {
-    if (specifier.startsWith('@nolit/dsh-antigravity')) throw new Error('absent')
-    return fakeResolve(profileDir, specifier)
+  const importModule = async (url) => {
+    if (url.includes('/vendor/antigravity/')) throw new Error('absent')
+    return { url }
   }
-  const { modules, errors } = await loadVendorModules({ profileDir: '/p', resolvePackage, importModule: async (url) => ({ url }) })
+  const { modules, errors } = await loadVendorModules({ profileDir: '/p', resolvePackage: fakeResolve, importModule })
   assert.equal(modules.antigravity, undefined)
   assert.equal(modules.opencode.http !== undefined, true)
   assert.deepEqual(errors.map((error) => error.vendor), ['antigravity'])
@@ -86,7 +83,7 @@ test('a host package resolves through the install anchor when the profile cannot
   assert.equal(verdict.path, '/install/dsh/node_modules/@deepseek-ai/dsh-tool-subagent/lib/index.js')
 })
 
-test('a vendor package still resolves through the profile first', () => {
+test('a profile package resolves through the profile first', () => {
   const resolve = () => '/vendor/antigravity/lib/index.js'
   const verdict = resolveThroughChain({ profileDir: '/profiles/web', specifier: '@nolit/dsh-antigravity', resolve })
   assert.equal(verdict.label, 'profile')

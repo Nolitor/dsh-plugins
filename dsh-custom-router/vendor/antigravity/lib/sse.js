@@ -14,7 +14,7 @@
  * @module @nolit/dsh-antigravity/sse
  */
 
-import { findRecordBoundary, readSseEvents } from '@nolit/dsh-custom-router/stream'
+import { findRecordBoundary, readSseEvents } from '../../../lib/stream/index.js'
 
 export const findBoundary = findRecordBoundary
 

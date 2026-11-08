@@ -51,7 +51,7 @@ metadata. So this is a **capability gap**, not a stylistic fit:
 | one `apiKeyEnv` / stored credential per profile | OpenCode ranks **oauth before key** via `GET /api/credential`; Antigravity refreshes an OAuth token file | **NO** |
 | a settings-supplied model list | DeepInfra has a **public 173-row catalog with per-model pricing**; OpenCode has a plan/ranking data index; Antigravity has an account quota summary | **PARTIAL** |
 | a single wire request shape | reasoning is `effort-field` / `model-id-suffix` / `ordered-id`; usage is `session export` / response / **trailing chunk**; cost is reported / quota / **derived** | **NO** |
-| one adapter instance for many profiles | three different control planes, credential ranks and cost semantics would make every field conditional | **no** ([DEEPINFRA-ADAPTER-BRIEF.md §6](../../dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md)) |
+| one adapter instance for many profiles | three different control planes, credential ranks and cost semantics would make every field conditional | **no** ([DEEPINFRA-ADAPTER-BRIEF.md §6](../vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md)) |
 
 **Conclusion:** the standard router supplies the *registration contract*; these services supply
 the *missing serving facts* (live catalog, promotions, disjoint usage, quota, cost). They
@@ -76,8 +76,8 @@ control, retry policy and attribution headers.
 
 | Axis | OpenCode v2 | Antigravity | DeepInfra |
 | :--- | :--- | :--- | :--- |
-| Provider id | `opencode-http-agent` ([http.js:2367](../../dsh-opencode-v2/lib/http.js)) | `antigravity` (`PROVIDER_ID`, [index.js:44](../../dsh-antigravity/lib/index.js)) | `deepinfra` (`PROVIDER_ID`, [index.js:30](../../dsh-deepinfra/lib/index.js)) |
-| Generation endpoint | `POST {baseURL}/chat/completions` (`chatPath` default `/chat/completions`) | `POST {baseUrl}/v1internal:streamGenerateContent?alt=sse` ([wire.js:21](../../dsh-antigravity/lib/wire.js)) | `POST {base}/chat/completions` ([wire.js:23](../../dsh-deepinfra/lib/wire.js)) |
+| Provider id | `opencode-http-agent` ([http.js:2367](../../dsh-opencode-v2/lib/http.js)) | `antigravity` (`PROVIDER_ID`, [index.js:44](../vendor/antigravity/lib/index.js)) | `deepinfra` (`PROVIDER_ID`, [index.js:30](../vendor/deepinfra/lib/index.js)) |
+| Generation endpoint | `POST {baseURL}/chat/completions` (`chatPath` default `/chat/completions`) | `POST {baseUrl}/v1internal:streamGenerateContent?alt=sse` ([wire.js:21](../vendor/antigravity/lib/wire.js)) | `POST {base}/chat/completions` ([wire.js:23](../vendor/deepinfra/lib/wire.js)) |
 | Wire family | OpenAI-compatible chat completions (SSE) | Google `streamGenerateContent` SSE (functionCall / functionResponse, `systemInstruction`) | OpenAI-compatible chat completions (SSE) |
 | Base URL source | `GET /api/provider/{id}` → `settings.baseURL`, with `backendBaseUrl` override | `daily-cloudcode-pa.googleapis.com` (generation) vs `cloudcode-pa.googleapis.com` (control) — **two hosts** | `https://api.deepinfra.com/v1/openai` (config/env/default precedence) |
 | Credential | `GET /api/credential` ranking: active **oauth** before **key**; fallback `OPENCODE_API_KEY` | token file `~/.gemini/antigravity-cli/{jetski-standalone-,}oauth-token` + `POST oauth2.googleapis.com/token` refresh | one bearer `DEEPINFRA_API_KEY`, or Settings `role('secret')` field |
@@ -102,7 +102,7 @@ exposes and what these three services implement.
 
 | Sharing | Verdict | Reason |
 | :--- | :--- | :--- |
-| One **adapter instance** across providers | **FORBIDDEN** | auth, catalog, plan and cost would become conditional ([DEEPINFRA-ADAPTER-BRIEF §6](../../dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md)) |
+| One **adapter instance** across providers | **FORBIDDEN** | auth, catalog, plan and cost would become conditional ([DEEPINFRA-ADAPTER-BRIEF §6](../vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md)) |
 | A second **routing table / engine** | **FORBIDDEN** (R0) | duplicates `LlmRuntime` registry, dispatch, retry, projections |
 | Shared **request builder / credential chain / catalog** | **FORBIDDEN** | genuinely different upstream halves — measured in §2 |
 | Shared **downstream stream pipe** (`readSseEvents`, block emitter, usage writer, finish table, failure shape, terminal policy) | **REQUIRED — one implementation** | measured drift: 3 finish tables, 3 `totalTokens` rules, 2 empty-response policies, 1 of 3 cut-preservation, `LlmFailure.code` missing in one track |
@@ -215,7 +215,7 @@ adapter, owns no provider table, and contains no retry loop, so R0 is untouched.
 Two services may share `wire.family = 'openai-chat'` yet **must not share an adapter instance**:
 their descriptors differ in `auth`, `catalog`, `reasoning`, `usage` and `cost`. Sharing is the
 "extend the OpenCode adapter with a second vendor" mistake rejected in
-[DEEPINFRA-ADAPTER-BRIEF.md §6](../../dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md). Sharing the
+[DEEPINFRA-ADAPTER-BRIEF.md §6](../vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md). Sharing the
 downstream pipe is the opposite case: those facts are upstream of it.
 
 ## 6. Conformance gates for a new service
@@ -260,7 +260,7 @@ exists to close; each stays a `dsh-<track>/CHANGELOG.md` entry until its migrati
   decision, not a spec change.
 - OpenCode v2 stage-2 canonical parser and Antigravity stage-2 quota UX are gated on owner
   S6 soak confirmation ([dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../../dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md),
-  [dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](../../dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md)).
+  [dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](../vendor/antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md)).
 - `@nolit/dsh-subrouter` remains an active (uninstalled) track pending the owner's P-4
   install-or-archive decision. This standard supersedes its *concept*, not its files.
 
@@ -269,7 +269,7 @@ exists to close; each stays a `dsh-<track>/CHANGELOG.md` entry until its migrati
 - [CUSTOM-ROUTER-SERVICE-SPEC.md](./CUSTOM-ROUTER-SERVICE-SPEC.md)
 - [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md) — the one downstream parser/emitter module and its hooks
 - [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md) — composition diagrams + normative per-service module contract
-- [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../../dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md), [dsh-deepinfra/UPSTREAM-COMPAT.md](../../dsh-deepinfra/UPSTREAM-COMPAT.md)
+- [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md), [dsh-deepinfra/UPSTREAM-COMPAT.md](../vendor/deepinfra/UPSTREAM-COMPAT.md)
 - [RULES.md](../../docs/RULES.md), [FAILURE-LEDGER.md](../../docs/FAILURE-LEDGER.md), [PLUGIN-CONSOLIDATION.md](../../docs/PLUGIN-CONSOLIDATION.md)
 - Installed `@deepseek-ai/dsh-llm@0.2.2-rc.1` `lib/types/index.d.ts` and `types.d.ts`
 

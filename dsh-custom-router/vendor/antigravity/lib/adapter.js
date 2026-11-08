@@ -18,7 +18,7 @@
  * @module @nolit/dsh-antigravity/adapter
  */
 import { LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
-import { normalizeStream, readSseEvents } from '@nolit/dsh-custom-router/stream'
+import { normalizeStream, readSseEvents } from '../../../lib/stream/index.js'
 
 import { GENERATION_PATH, modelForEffort, requestBody } from './wire.js'
 import { groupByBase, toModelInfo, toResolvedModelInfo } from './catalog.js'

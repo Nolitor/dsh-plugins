@@ -270,7 +270,7 @@ Three things only the integration could show:
 
 `dsh-deepinfra` is the second integrated consumer. Its descriptor is `fragmented` /
 `prompt+output` / `malformedRecord: 'fail'`; the binding is
-[`dsh-deepinfra/lib/stream-contract.js`](../../dsh-deepinfra/lib/stream-contract.js). Three things
+[`dsh-deepinfra/lib/stream-contract.js`](../vendor/deepinfra/lib/stream-contract.js). Three things
 only the integration could show:
 
 | # | Finding | Consequence for the spec |

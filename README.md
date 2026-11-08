@@ -1,9 +1,9 @@
 # DSH Plugins
 <!-- skeleton:
-version: 2.2
+version: 2.3
 kind: readme
 status: active
-updated: 2026-11-06
+updated: 2026-11-08
 summary: Workspace entry point: plugin track layout by measured lifecycle (active / spec / verify-only), per-subproject document homes, live profile wiring, agent boot chain.
 -->
 
@@ -101,14 +101,14 @@ npm run docs:moves     # pointer-stub gate: every Moved-out destination exists a
 | `dsh-korean-locale/` | `@nolit/dsh-korean-locale` (font stack + dictionaries) | Active, linked into the `web` profile — **git submodule**, owns its own docs |
 | `dsh-sidebar-manager/` | `@nolit/dsh-sidebar-manager` right-sidebar workspace/session switcher | Active, linked into the `web` profile |
 | `dsh-opencode-v2/` | `@nolit/dsh-opencode-v2` OpenCode vendor package | Active — stage plan lives in its own `docs/` |
-| `dsh-antigravity/` | `@nolit/dsh-antigravity` Antigravity vendor package | Active — stage plan lives in its own `docs/` |
-| `dsh-deepinfra/` | `@nolit/dsh-deepinfra` DeepInfra adapter | Active — build brief lives in its own `docs/` |
+| `dsh-custom-router/vendor/antigravity/` | `@nolit/dsh-antigravity` vendored into the Custom Router | **Integrated 2026-11-08** — no separate profile dependency or link |
+| `dsh-custom-router/vendor/deepinfra/` | `@nolit/dsh-deepinfra` vendored into the Custom Router | **Integrated 2026-11-08** — no separate profile dependency or link |
 | `dsh-tokeneconomizer/` | `@nolit/dsh-tokeneconomizer` TokenEconomizer bridge | Active — saving measurement lives in its own `docs/` |
 | `archive/dsh-subagent-local/` | `@nolit/dsh-subagent-local` local delegation over agy / opencode / codex / claude | **Archived 2026-11-07** — folded into `dsh-antigravity` (`agy_cli`) and `dsh-opencode-v2` (`cli_worker`) |
 | `archive/dsh-subrouter/` | `@nolit/dsh-subrouter` legacy router track | **Archived 2026-11-06** — superseded by `@nolit/dsh-opencode-v2/http`; removed from every profile |
 | `dsh-notify/` | `@nolit/dsh-notify` notification plugin | **Active** — in the `web` profile `dependencies`, `dsh.profile.bundles`, and composed rows (measured 2026-11-06) |
 | `dsh-command-skill/` | `@nolit/dsh-command-skill` interrupt/command contract authority | **Spec track** — ships documents only; registers nothing, installed nowhere |
-| `dsh-custom-router/` | `@nolit/dsh-custom-router` model-serving router | **Spec track** — documents only, no runtime surface mounted |
+| `dsh-custom-router/` | `@nolit/dsh-custom-router` model-serving router + provider dashboard | **Active** — in the `web` profile bundles; owns the vendored Antigravity/DeepInfra provider rows |
 
 ## Workspace registration
 
@@ -152,8 +152,8 @@ DSH session logs (Windows-era project trees) — see each track's
 ## Prototypes vs. active plugins
 
 - **Active in the live `web` profile:** `dsh-korean-locale`, `dsh-sidebar-manager`,
-  `dsh-notify`, `dsh-tokeneconomizer`, `dsh-deepinfra`, `dsh-opencode-v2`
-  and `dsh-antigravity` (bundle + link), plus the core DSH
+  `dsh-notify`, `dsh-tokeneconomizer`, `dsh-opencode-v2`, and `dsh-custom-router`
+  (which now owns the vendored Antigravity and DeepInfra provider rows), plus the core DSH
   sidebar plugins (`ui-sidebar`, `ui-sidebar-right`, `ui-sidebar-files`, …) that
   ship with the `@deepseek-ai/dsh-web-app` bundle. Measured with
   `node scripts/check-disposal-safety.mjs --json`, not from this list.

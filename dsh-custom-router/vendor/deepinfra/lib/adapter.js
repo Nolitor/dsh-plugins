@@ -26,7 +26,7 @@ import {
   attributionHeaders,
   isContextWindowExceededError,
 } from '@deepseek-ai/dsh-llm'
-import { normalizeStream, readSseEvents } from '@nolit/dsh-custom-router/stream'
+import { normalizeStream, readSseEvents } from '../../../lib/stream/index.js'
 
 import { COMPLETIONS_PATH, DEFAULT_BASE_URL, requestBody } from './wire.js'
 import { STREAM_DESCRIPTOR, STREAM_HOOKS } from './stream-contract.js'

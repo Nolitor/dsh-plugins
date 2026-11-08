@@ -70,7 +70,7 @@ It never reaches into another plugin's namespace unasked (RULES.md §3).
 
 | Service | Measured check chain | Where |
 | :--- | :--- | :--- |
-| Antigravity | `agy` binary must exist and `agy models` must list models ("proving the sign-in works"); the credential file `~/.gemini/antigravity-cli/{jetski-standalone-,}antigravity-oauth-token` must contain a `refresh_token`; `POST oauth2.googleapis.com/token` refreshes it; **no API-key path** (`GEMINI_API_KEY` does not authenticate). 401 on generation triggers one refresh+retry; `invalid_grant` means revoked/rotated. | [dsh-antigravity/README.md](../../dsh-antigravity/README.md) §1–2; `lib/auth.js` 27–46, 118–161; `lib/adapter.js:259` |
+| Antigravity | `agy` binary must exist and `agy models` must list models ("proving the sign-in works"); the credential file `~/.gemini/antigravity-cli/{jetski-standalone-,}antigravity-oauth-token` must contain a `refresh_token`; `POST oauth2.googleapis.com/token` refreshes it; **no API-key path** (`GEMINI_API_KEY` does not authenticate). 401 on generation triggers one refresh+retry; `invalid_grant` means revoked/rotated. | [dsh-antigravity/README.md](../vendor/antigravity/README.md) §1–2; `lib/auth.js` 27–46, 118–161; `lib/adapter.js:259` |
 | OpenCode v2 | `opencodePath` (PATH or absolute, systemctl-safe), `opencode serve` daemon reachable or spawnable; `GET /api/credential` returns stored entries; rank active `oauth` before `key`; 401 forces one refresh. | `dsh-opencode-v2/lib/http.js` 1124–1245, 1168–1191; [dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md](../../dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md) |
 
 **These checks must live in each service's preset**, not in a central place: the binary path, the
@@ -199,7 +199,7 @@ credential works without its service's own readiness probe.
 - [CUSTOM-ROUTER-SERVICE-SPEC.md](./CUSTOM-ROUTER-SERVICE-SPEC.md), [CUSTOM-ROUTER-PROTOCOL-STANDARD.md](./CUSTOM-ROUTER-PROTOCOL-STANDARD.md)
 - [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md) — composition diagrams + normative per-service module contract
 - [UI-SLOT-ARCHITECTURE.md](../../docs/UI-SLOT-ARCHITECTURE.md), [RULES.md](../../docs/RULES.md), [DSH-HARNESS-POLICY.md](../../docs/DSH-HARNESS-POLICY.md)
-- [dsh-antigravity/README.md](../../dsh-antigravity/README.md), [dsh-opencode-v2/README.md](../../dsh-opencode-v2/README.md), [dsh-deepinfra/README.md](../../dsh-deepinfra/README.md)
+- [dsh-antigravity/README.md](../vendor/antigravity/README.md), [dsh-opencode-v2/README.md](../../dsh-opencode-v2/README.md), [dsh-deepinfra/README.md](../vendor/deepinfra/README.md)
 - [dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md](../../dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md), [dsh-opencode-v2/docs/OPENCODE-V2-SURFACE-MEASUREMENT.md](../../dsh-opencode-v2/docs/OPENCODE-V2-SURFACE-MEASUREMENT.md)
 - Installed `@deepseek-ai/dsh-credentials`, `dsh-credentials-local`, `dsh-client-ui-settings*`, `dsh-llm-deepseek-api-key`
 

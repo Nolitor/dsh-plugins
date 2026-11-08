@@ -19,7 +19,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 
 UNIT=dsh-web.service
-PLUGIN=dsh-antigravity
+PLUGIN=dsh-custom-router/vendor/antigravity
 want_boot=0
 want_browser=0
 for arg in "$@"; do

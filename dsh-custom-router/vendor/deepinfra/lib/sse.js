@@ -20,7 +20,7 @@
  * @module @nolit/dsh-deepinfra/sse
  */
 
-import { readSseEvents } from '@nolit/dsh-custom-router/stream'
+import { readSseEvents } from '../../../lib/stream/index.js'
 
 /** The literal payload that ends a DeepInfra stream. */
 export const DONE = '[DONE]'

@@ -98,7 +98,7 @@ export const PLAN_VERDICTS = Object.freeze(['match', 'mismatch', 'throttled', 'u
 /** CLI worker shapes. */
 export const CLI_SHAPES = Object.freeze(['async', 'sync'])
 
-const SCOPED_PACKAGE = /^@[a-z0-9-]+\/[a-z0-9-]+$/
+const SCOPED_PACKAGE = /^@[a-z0-9-]+\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/
 const KEBAB = /^[a-z][a-z0-9-]*$/
 const CAMEL = /^[a-z][a-zA-Z0-9]*$/
 
@@ -378,7 +378,7 @@ export const PRESET_JSON_SCHEMA = Object.freeze({
     id: { type: 'string', pattern: '^[a-z][a-z0-9-]*$' },
     name: { type: 'string' },
     kind: { enum: ['package', 'declaration'] },
-    package: { type: 'string', pattern: '^@[a-z0-9-]+/[a-z0-9-]+$' },
+    package: { type: 'string', pattern: '^@[a-z0-9-]+/[a-z0-9-]+(?:/[a-z0-9-]+)*$' },
     row: { type: 'string', pattern: '^[a-z][a-z0-9-]*$' },
     entries: {
       type: 'array',

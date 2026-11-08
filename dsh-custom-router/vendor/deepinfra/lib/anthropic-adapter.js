@@ -18,8 +18,8 @@
  */
 
 import { LlmAdapter, LlmError, attributionHeaders } from '@deepseek-ai/dsh-llm'
-import { normalizeStream } from '@nolit/dsh-custom-router/stream'
-import { readAnthropicSse } from '@nolit/dsh-custom-router/stream/anthropic'
+import { normalizeStream } from '../../../lib/stream/index.js'
+import { readAnthropicSse } from '../../../lib/stream/anthropic.js'
 
 import { createAnthropicBinding } from './stream-anthropic.js'
 import { requestBodyAnthropic } from './wire.js'

@@ -20,7 +20,7 @@ const root = new URL('..', import.meta.url).pathname
 // link gate says nothing about the documents the index claims to cover. One list, one answer.
 const SKIP_DIRS = new Set([
   'node_modules', '.git', '.runtime-measure', '.verify', 'prototype-windows', 'prototype-harness',
-  'market', 'locale', 'test', 'lib', 'scripts', 'artifacts', 'staging', 'verification', 'dist', 'build', '.cache',
+  'market', 'locale', 'test', 'lib', 'scripts', 'artifacts', 'staging', 'verification', 'dist', 'build', '.cache', 'vendor',
 ])
 // A submodule is a separate repository: this workspace does not own its documents (RULES §6.1b).
 const isSubmodule = (dir) => existsSync(join(dir, '.git'))
