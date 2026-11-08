@@ -25,8 +25,16 @@ const ko = JSON.parse(readFileSync(new URL('../locale/ko.json', import.meta.url)
 function inlineI18N() {
   const marker = '    const I18N = '
   const start = source.indexOf(marker) + marker.length
-  const end = source.indexOf('\n    const STYLE_ID', start)
+  const end = source.indexOf('\n    const CSS_TAG', start)
   return eval('(' + source.slice(start, end).replace(/,\s*$/, '') + ')')
+}
+
+/** Capture the stylesheet array the loader must evaluate as plain script. */
+function inlineCSS() {
+  const marker = '    const CSS = ['
+  const start = source.indexOf(marker) + marker.length
+  const end = source.indexOf("\n    ].join('\\n')", start)
+  return eval('[' + source.slice(start, end).replace(/,\s*$/, '') + ']').join('\n')
 }
 
 test('the client is a CommonJS module-loader factory with no ES module syntax', () => {
@@ -119,4 +127,69 @@ test('the card declares the DSH font tokens and no bare element selectors', () =
   // Every class selector is namespaced, so the card cannot restyle another surface.
   const selectors = [...source.matchAll(/'(\.[^'{]+)\{/g)].map((m) => m[1].trim().split(/[\s,:]/)[0])
   assert.ok(selectors.every((sel) => sel.startsWith('.tkds')), 'unexpected selector: ' + selectors.find((s) => !s.startsWith('.tkds')))
+})
+
+test('the section uses the DSH settings read-width and centres itself', () => {
+  // Measured before this change: max-width 980px inside a ~564px settings seat, so the cap
+  // never applied and the section filled the pane edge to edge.
+  assert.match(source, /\.tkdsSection\{[^}]*max-width:720px/)
+  assert.match(source, /\.tkdsSection\{[^}]*margin:0 auto/)
+  assert.match(source, /\.tkdsSection\{[^}]*padding:0/)
+})
+
+test('the heading levels match the DSH settings section and its cards', () => {
+  // The card title is an h2, and each card title is an h3 under it.
+  assert.match(code, /h\('h2', \{ className: 'tkdsTitle' \}/)
+  assert.match(code, /h\('h3', \{ className: 'tkdsCardTitle' \}/)
+  assert.equal(code.includes("h('h4'"), false, 'no h4 remains')
+  assert.equal(code.includes("h('h5'"), false, 'no h5 remains')
+  // The heading is one step above body content, from the live token.
+  assert.match(source, /\.tkdsTitle\{[^}]*font-size:calc\(var\(--dsh-content-font-size,14px\) \+ 4px\)/)
+  assert.match(source, /\.tkdsTitle\{[^}]*font-weight:600/)
+})
+
+test('the stylesheet is keyed by data-plugin-css so the host can own it', () => {
+  assert.match(source, /const CSS_TAG = '@nolit\/dsh-tokeneconomizer'/)
+  assert.match(source, /tag\.setAttribute\('data-plugin-css', CSS_TAG\)/)
+  assert.match(source, /querySelector\('style\[data-plugin-css="'/)
+  assert.equal(source.includes("'tk-devstats-style'"), false, 'the old id-keyed tag is gone')
+})
+
+test('every control carries a visible focus ring from the DSH focus tokens', () => {
+  assert.match(source, /\.tkdsSelect:focus-visible,\.tkdsButton:focus-visible\{[^}]*--dsw-focus-ring-width/)
+  assert.match(source, /\.tkdsSelect:focus-visible,\.tkdsButton:focus-visible\{[^}]*--dsw-focus-ring-color/)
+  assert.match(source, /\.tkdsSelect:hover:not\(:disabled\)/)
+  assert.match(source, /\.tkdsButton:hover:not\(:disabled\)/)
+  assert.match(source, /\.tkdsButton:disabled\{[^}]*cursor:not-allowed/)
+})
+
+test('the motion and narrow-pane queries are present', () => {
+  assert.match(source, /@media \(prefers-reduced-motion:reduce\)\{\.tkdsButton,\.tkdsSelect\{transition:none\}\}/)
+  assert.match(source, /@media \(max-width:640px\)\{/)
+})
+
+test('the dense table scrolls in its own frame with a sticky header', () => {
+  assert.match(source, /\.tkdsScroll\{[^}]*max-height:280px/)
+  assert.match(source, /\.tkdsScroll\{[^}]*overflow:auto/)
+  assert.match(source, /\.tkdsTh\{[^}]*position:sticky/)
+  assert.match(source, /\.tkdsTh\{[^}]*background:var\(--dsw-alias-settings-card-fill\)/)
+  // Row rules are the .5px border-l2 hairline, and every cell is tabular-nums.
+  assert.match(source, /\.tkdsTh\{[^}]*border-bottom:\.5px solid var\(--dsw-alias-border-l2\)/)
+  assert.match(source, /\.tkdsTd\{[^}]*border-bottom:\.5px solid var\(--dsw-alias-border-l2\)/)
+  assert.match(source, /\.tkdsTable\{[^}]*font-variant-numeric:tabular-nums/)
+  assert.match(source, /\.tkdsTd\{[^}]*font-variant-numeric:tabular-nums/)
+})
+
+test('the session picker names its control and shows the whole session id', () => {
+  // Measured before this change: the option label was an 8-character id prefix, which
+  // identified nothing and made two sessions in one directory look identical.
+  assert.match(code, /h\('label', \{ className: 'tkdsLabel', htmlFor: 'tk-devstats-session' \}/)
+  assert.match(code, /id: 'tk-devstats-session'/)
+  assert.equal(code.includes('.slice(0, 8)'), false, 'the id is no longer truncated')
+  assert.match(source, /function sessionLabel\(entry, full\)/)
+})
+
+test('the table header cells are marked as column headers', () => {
+  const headers = [...code.matchAll(/h\('th', \{ className: 'tkdsTh', scope: 'col' \}/g)]
+  assert.equal(headers.length, 9, 'nine column headers')
 })

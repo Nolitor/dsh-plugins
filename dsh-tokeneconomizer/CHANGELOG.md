@@ -1,10 +1,10 @@
 # Changelog — @nolit/dsh-tokeneconomizer
 
 <!-- skeleton:
-version: 1.1
+version: 1.2
 kind: report
 status: active
-updated: 2026-11-05
+updated: 2026-11-08
 summary: Engineering history for @nolit/dsh-tokeneconomizer. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
 -->
 
@@ -47,6 +47,51 @@ repository history rather than rewritten:
 
 Add newest first. Each entry: what changed, why, and the measured before/after. A change with no
 entry here is not complete.
+
+### 2026-11-08 — developer-statistics card redesign (Web UI)
+
+**Why.** The statistics card added on 2026-11-05 rendered, but it did not follow the DSH settings
+surface rules: it stretched across the pane, its heading levels were wrong for its seat, the
+stylesheet was keyed by an element id the host does not own, the per-turn table had no scroll frame,
+the controls had no focus ring, and the session picker showed an 8-character id prefix. The
+English locale file also carried the Korean display title, so the English plugin inventory showed a
+Korean plugin name.
+
+**What changed** (files):
+
+- `lib/client.js` — the card's own stylesheet and markup: a `720px` centred section width, an `h2`
+  section title and `h3` card titles sized from the DSH content-font tokens, the stylesheet keyed
+  by `data-plugin-css="@nolit/dsh-tokeneconomizer"`, a `280px` scroll frame with a sticky table
+  header and `scope="col"` on every column header, a `:focus-visible` ring from the DSH focus
+  tokens on the select and the buttons, a `prefers-reduced-motion: reduce` rule that drops the
+  decorative transitions, a narrow-pane (`max-width: 640px`) density pass, and a `sessionLabel()`
+  that names a session by its working directory plus its **full** id.
+- `locale/en.json` — `meta.title` is now `TokenEconomizer (MS tokeneconomizer)`.
+- `lib/devstats-server.js` — `let` → `const` for the destructured `derived` (no behaviour change).
+- `test/client.test.mjs`, `test/package.test.mjs` — assertions for each rule above.
+
+Measured before → after:
+
+| Surface | Before | After |
+| :--- | :--- | :--- |
+| Section width | `max-width: 980px`, `padding: 16px 0` — the cap never applied in a settings pane narrower than 980px, so the card filled the pane edge to edge | `max-width: 720px`, `margin: 0 auto`, `padding: 0` — the section stops at the settings read-width and centres itself |
+| Headings | section title `h4`, card titles `h5` | section title `h2`, card titles `h3`; heading size `calc(var(--dsh-content-font-size,14px) + 4px)` from the live token, `font-weight: 600` |
+| Stylesheet ownership | `<style id="tk-devstats-style">`, inserted once per document; the host cannot claim or replace it | `<style data-plugin-css="@nolit/dsh-tokeneconomizer">`; the host reads that attribute to own the tag, and a re-mount replaces the rules instead of stacking a second copy |
+| Per-turn table | `.tkdsScroll { overflow-x: auto }` — horizontal scroll only, the header scrolled out of view, the card grew without bound | `.tkdsScroll { max-height: 280px; overflow: auto }` with `position: sticky` on the header cells; `220px` under `max-width: 640px` |
+| Column headers | no `scope` attribute | `scope="col"` on all nine headers |
+| Focus | no focus rule at all — the browser default only | `:focus-visible` outline from `--dsw-focus-ring-width` / `--dsw-focus-ring-color` on the select and the buttons |
+| Motion | no `prefers-reduced-motion` rule | transitions on the select and the buttons are removed under `prefers-reduced-motion: reduce` |
+| Hover | `:hover` rules applied on every device | hover rules wrapped in `@media (hover: hover)`; disabled controls use `cursor: not-allowed` |
+| Session picker | option label was `String(entry.id).slice(0, 8) + ' · ' + cwd` — an 8-character uuid prefix identifies nothing, and two sessions in one directory looked identical | `sessionLabel()`: the working directory plus the **full** session id; the option's `title` spells out the whole directory |
+| English display title | `locale/en.json` carried `토큰절약기(MS tokeneconomizer)` — the English inventory showed a Korean plugin name | `TokenEconomizer (MS tokeneconomizer)`; `locale/ko.json` keeps the Korean title |
+
+No feature was added and no behaviour of the statistics route or fold changed: the card renders the
+same numbers from the same route (`POST /api/local/tokeneconomizer/devstats`).
+
+Verification: `npm run check` (syntax gate over every module) passes; `npm test` reports **139
+pass / 0 fail / 1 skipped**, the same pass/fail counts as before the redesign. The suite gained
+eight new cases in `test/client.test.mjs` (one per rule above) and one rewritten case in
+`test/package.test.mjs` (the English display title).
 
 ### 2026-11-05 — developer statistics (per-turn / per-step) + `0.0.1-rc.1` normalization
 

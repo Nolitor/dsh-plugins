@@ -20,19 +20,19 @@ summary: Generated per-subproject index for @nolit/dsh-tokeneconomizer: every do
 
 | Version | Kind | Status | Updated | Document | Summary |
 |---|---|---|---|---|---|
-| 1.1 | report | active | 2026-11-05 | [CHANGELOG.md](../CHANGELOG.md) | Engineering history for @nolit/dsh-tokeneconomizer. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after. |
+| 1.2 | report | active | 2026-11-08 | [CHANGELOG.md](../CHANGELOG.md) | Engineering history for @nolit/dsh-tokeneconomizer. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after. |
 | 1.3 | spec | active | 2026-10-31 | [ARCHITECTURE.md](ARCHITECTURE.md) | Measured DSH 0.2.2 extension points, per-event lifecycle contract, tool-mask semantics, DSH trace reader schema, prior-session recall through the harness FTS5 service, the observe/apply mode split, host-local in-memory features, tiered memory, state and ledger formats, and verified limits. |
-| 1.0 | spec | active | 2026-11-05 | [DEV-STATISTICS.md](DEV-STATISTICS.md) | Read-only per-turn/per-step developer statistics for TokenEconomizer: the measured before/after surface, the DSH rc.1 ledger vocabulary it copies, the settings.section seat choice, and the derivation rules. |
+| 1.1 | spec | active | 2026-11-08 | [DEV-STATISTICS.md](DEV-STATISTICS.md) | Read-only per-turn/per-step developer statistics for TokenEconomizer: the measured before/after surface, the DSH rc.1 ledger vocabulary it copies, the settings.section seat choice, the derivation rules, and the card's DSH settings-surface rules. |
 | 1.2 | spec | active | 2026-10-31 | [IN_MEMORY_FEATURES.md](IN_MEMORY_FEATURES.md) | Architecture of the host-local features of the DSH bridge: tool-result hash deduplication, the KV-cache-safe prompt slot with its constant routing text, the loop breaker with its advisory thinking watchdog, the turn-based tiered memory, the observe/apply mode split, and the full configuration reference. |
 | 1.0 | index | active | 2026-11-08 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-tokeneconomizer: every document this track owns, one line each. |
 | 1.3 | spec | active | 2026-10-31 | [OPERATIONS.md](OPERATIONS.md) | Bootstrap with its bounded install-time migration, profile install and FTS recall activation, guarded cold start, purge, verification, rollback, the configuration reference, and the live-state rules for the DSH TokenEconomizer bridge. |
 | 1.3 | measurement | measured | 2026-11-02 | [TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md](TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md) | What the DSH TokenEconomizer bridge actually saved: the 2026-10-30 dark-lever measurement, the tiered-memory and routing fixes built from it, the 2026-11-02 re-measurement that found 1.03M chars of real tiering saving with 53% self-inflation, the toolprune lever that is real but capped near 1.2k tokens per request, and the adopted tierMinChars 3700 floor chosen from the measured maximum inflating input. |
-| 1.4 | readme | active | 2026-10-31 | [README.md](../README.md) | DSH 0.2.2 bridge for microsoft/TokenEconomizer: lifecycle mapping, in-memory tool mask, DSH trace reader, guarded migration, prior-session recall through the harness index, plus host-local in-memory features. |
+| 1.5 | readme | active | 2026-11-08 | [README.md](../README.md) | DSH 0.2.2 bridge for microsoft/TokenEconomizer: lifecycle mapping, in-memory tool mask, DSH trace reader, guarded migration, prior-session recall through the harness index, host-local in-memory features, and the Web developer-statistics card. |
 
 ## spec
 
-- **1.0** · active · 2026-11-05 · [DEV-STATISTICS.md](DEV-STATISTICS.md)
-  Read-only per-turn/per-step developer statistics for TokenEconomizer: the measured before/after surface, the DSH rc.1 ledger vocabulary it copies, the settings.section seat choice, and the derivation rules.
+- **1.1** · active · 2026-11-08 · [DEV-STATISTICS.md](DEV-STATISTICS.md)
+  Read-only per-turn/per-step developer statistics for TokenEconomizer: the measured before/after surface, the DSH rc.1 ledger vocabulary it copies, the settings.section seat choice, the derivation rules, and the card's DSH settings-surface rules.
 - **1.3** · active · 2026-10-31 · [ARCHITECTURE.md](ARCHITECTURE.md)
   Measured DSH 0.2.2 extension points, per-event lifecycle contract, tool-mask semantics, DSH trace reader schema, prior-session recall through the harness FTS5 service, the observe/apply mode split, host-local in-memory features, tiered memory, state and ledger formats, and verified limits.
 - **1.2** · active · 2026-10-31 · [IN_MEMORY_FEATURES.md](IN_MEMORY_FEATURES.md)
@@ -42,7 +42,7 @@ summary: Generated per-subproject index for @nolit/dsh-tokeneconomizer: every do
 
 ## report
 
-- **1.1** · active · 2026-11-05 · [CHANGELOG.md](../CHANGELOG.md)
+- **1.2** · active · 2026-11-08 · [CHANGELOG.md](../CHANGELOG.md)
   Engineering history for @nolit/dsh-tokeneconomizer. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
 
 ## measurement
@@ -52,8 +52,8 @@ summary: Generated per-subproject index for @nolit/dsh-tokeneconomizer: every do
 
 ## readme
 
-- **1.4** · active · 2026-10-31 · [README.md](../README.md)
-  DSH 0.2.2 bridge for microsoft/TokenEconomizer: lifecycle mapping, in-memory tool mask, DSH trace reader, guarded migration, prior-session recall through the harness index, plus host-local in-memory features.
+- **1.5** · active · 2026-11-08 · [README.md](../README.md)
+  DSH 0.2.2 bridge for microsoft/TokenEconomizer: lifecycle mapping, in-memory tool mask, DSH trace reader, guarded migration, prior-session recall through the harness index, host-local in-memory features, and the Web developer-statistics card.
 
 ## index
 

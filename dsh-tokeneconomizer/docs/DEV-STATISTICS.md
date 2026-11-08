@@ -1,11 +1,11 @@
 # Developer statistics — DSH ledger shape, and how tk now exposes it
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: spec
 status: active
-updated: 2026-11-05
-summary: Read-only per-turn/per-step developer statistics for TokenEconomizer: the measured before/after surface, the DSH rc.1 ledger vocabulary it copies, the settings.section seat choice, and the derivation rules.
+updated: 2026-11-08
+summary: Read-only per-turn/per-step developer statistics for TokenEconomizer: the measured before/after surface, the DSH rc.1 ledger vocabulary it copies, the settings.section seat choice, the derivation rules, and the card's DSH settings-surface rules.
 -->
 
 > Scope: `@nolit/dsh-tokeneconomizer` only. Owner ask (2026-11-05, translated): *"the token
@@ -29,7 +29,7 @@ reference packages under
 | Slots | **zero** slot registrations. `docs/UI-SLOT-ARCHITECTURE.md` §2 says tk owns `conversation.input.activity`; that is **contradicted by the shipped `0.2.0` package** (measured: no client module at all; only `@nolit/dsh-deepinfra` registers that id in this workspace). The root doc is stale for tk and is *not* edited from this track — reported to the Lead. |
 | Local routes | none (`grep '/api/local'` → 0 hits). |
 | Exposed state | Host-side only: per-session in-memory counters (`tiered`, `requests`, dedup store size, breaker/watchdog internal state) and stderr notices; none reachable from the Web UI. |
-| Locale files | `locale/en.json` + `locale/ko.json` carried only `meta.title` (identical Korean text in both; a pre-existing packaging fact, unchanged). |
+| Locale files | `locale/en.json` + `locale/ko.json` carried only `meta.title` (identical Korean text in both; a pre-existing packaging fact). **Corrected on 2026-11-08**: `locale/en.json` now carries `TokenEconomizer (MS tokeneconomizer)` and `locale/ko.json` keeps `토큰절약기(MS tokeneconomizer)` — see §8. |
 | Session/projection reads | `ctx.get('sessionQuery')` for prior-session recall; **no** read of the session event ledger for statistics, and no use of `ctx.sessionProjections`. |
 
 ### 1.1 Measured reference shape (rc.1)
@@ -117,7 +117,30 @@ grows (invalidated by the last `seq` + event count).
 - **The 3080 service is not restarted by this change.** it is *applied pending restart*; the owner
   restarts.
 
-## 7. Related
+## 7. Card surface rules (2026-11-08)
+
+The card added on 2026-11-05 rendered but did not follow the DSH settings surface rules. The rules
+now in force, each pinned by a case in `test/client.test.mjs`:
+
+| Rule | Value | Why |
+| :--- | :--- | :--- |
+| Read-width | `.tkdsSection { max-width: 720px; margin: 0 auto; padding: 0 }` | a settings seat is a narrow column; the earlier `980px` cap never applied, so the card filled the pane edge to edge |
+| Heading levels | section title `h2`, card titles `h3` | the seat's own title is the `h2`; the cards are one step below it. Size comes from `calc(var(--dsh-content-font-size,14px) + 4px)`, so it follows the host's content-font token |
+| Stylesheet ownership | `<style data-plugin-css="@nolit/dsh-tokeneconomizer">` | the host reads that attribute to own the tag; a reload replaces the rules instead of stacking a second copy. The earlier `id="tk-devstats-style"` was invisible to the host |
+| Table frame | `.tkdsScroll { max-height: 280px; overflow: auto }`, `position: sticky` on the header cells, `scope="col"` on all nine headers | the per-turn table is dense and unbounded in height; a sticky header keeps the columns readable inside a frame that scrolls |
+| Focus | `:focus-visible` outline from `--dsw-focus-ring-width` / `--dsw-focus-ring-color` on the select and the buttons | the earlier card had no focus rule of its own |
+| Motion | transitions removed under `prefers-reduced-motion: reduce` | the transitions are decorative |
+| Pointer | hover rules wrapped in `@media (hover: hover)`; disabled controls use `cursor: not-allowed` | hover styling is not a touch interaction |
+| Density | a `max-width: 640px` pass: `220px` table frame, tighter card padding, a `96px` minimum grid track | a narrow pane needs a shorter frame and denser cards |
+| Session identity | the option label is the working directory plus the **full** session id; the option's `title` spells out the whole directory | an 8-character uuid prefix identifies nothing, and two sessions in one directory looked identical |
+
+The display title is read per language from `locale/<language>.json`, so each file carries its own
+language's title: `locale/en.json` → `TokenEconomizer (MS tokeneconomizer)`, `locale/ko.json` →
+`토큰절약기(MS tokeneconomizer)`.
+
+No data path changed: the same route, the same fold, the same numbers.
+
+## 8. Related
 
 - [../CHANGELOG.md](../CHANGELOG.md) — entry with the measured before/after.
 - [../../docs/UI-SLOT-ARCHITECTURE.md](../../docs/UI-SLOT-ARCHITECTURE.md) — slot tiers (tk section

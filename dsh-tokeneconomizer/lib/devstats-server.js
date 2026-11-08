@@ -86,7 +86,7 @@ export function createDevStatsServer({ sessions, readProjections, log = { warn()
    * @returns {object} the session summary.
    */
   const summaryOf = (state) => {
-    let { derived } = derivedOf(state)
+    const { derived } = derivedOf(state)
     const header = state.agent?.session?.header ?? {}
     return {
       id: String(state.sid ?? header.id ?? ''),

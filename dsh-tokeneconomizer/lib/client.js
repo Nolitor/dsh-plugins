@@ -180,29 +180,46 @@ window.__ModuleLoader__.load({
       },
     }
 
-    const STYLE_ID = 'tk-devstats-style'
+    /**
+     * Style tag key. The host claims `<style data-plugin-css>` tags by this value, so a
+     * reload replaces the stylesheet instead of adding a second one.
+     */
+    const CSS_TAG = '@nolit/dsh-tokeneconomizer'
     const CSS = [
-      '.tkdsSection{box-sizing:border-box;min-width:0;max-width:980px;padding:16px 0;display:flex;flex-direction:column;gap:12px;font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      // The settings seat is a narrow column, so the section stops at the DSH settings
+      // read-width and centres itself instead of stretching across the pane.
+      '.tkdsSection{box-sizing:border-box;min-width:0;width:100%;max-width:720px;margin:0 auto;padding:0;display:flex;flex-direction:column;gap:12px;font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
       '.tkdsHead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-width:0;flex-wrap:wrap}',
-      '.tkdsTitle{margin:0;font-size:var(--dsh-content-font-size,14px);font-weight:600;line-height:calc(22px + var(--dsh-content-font-delta,0px))}',
-      '.tkdsHint{margin:0;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary)}',
-      '.tkdsMeta{font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}',
-      '.tkdsCard{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}',
-      '.tkdsCardTitle{margin:0;font-size:var(--dsh-content-font-size,14px);font-weight:500;line-height:calc(22px + var(--dsh-content-font-delta,0px))}',
+      // The section heading is one step above body content, like a DSH settings title.
+      '.tkdsTitle{margin:0;font-family:inherit;font-size:calc(var(--dsh-content-font-size,14px) + 4px);font-weight:600;line-height:calc(30px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.tkdsHint{margin:0;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);max-width:68ch}',
+      '.tkdsMeta{font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}',
+      // Card titles sit one level below the section heading.
+      '.tkdsCardTitle{margin:0;font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:600;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.tkdsCard{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-lg);padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}',
       '.tkdsGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;min-width:0}',
       '.tkdsStat{display:flex;flex-direction:column;gap:2px;min-width:0}',
       '.tkdsStatLabel{font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary)}',
       '.tkdsStatValue{font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.tkdsControls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}',
-      '.tkdsSelect{appearance:none;box-sizing:border-box;background:var(--dsw-alias-bg-layer-2);border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-primary);font:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:20px;padding:4px 8px;max-width:100%}',
-      '.tkdsButton{appearance:none;background:var(--dsw-alias-button-primary-fill,var(--dsw-alias-bg-layer-3));border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:20px;padding:5px 14px}',
-      '.tkdsButton:disabled{opacity:.6;cursor:default}',
-      '.tkdsScroll{overflow-x:auto;min-width:0}',
-      '.tkdsTable{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}',
-      '.tkdsTh{text-align:left;font-weight:500;color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));padding:4px 8px;border-bottom:.5px solid var(--dsw-alias-border-l3);white-space:nowrap}',
-      '.tkdsTd{font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));padding:4px 8px;border-bottom:.5px solid var(--dsw-alias-border-l3);white-space:nowrap}',
+      '.tkdsField{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}',
+      // A field label is visible text, not a placeholder: it names the control beside it.
+      '.tkdsLabel{font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);white-space:nowrap}',
+      '.tkdsSelect{appearance:none;box-sizing:border-box;background:var(--dsw-alias-bg-layer-1);border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-primary);font:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:20px;padding:5px 10px;max-width:100%;cursor:pointer;transition:border-color .12s ease,background .12s ease}',
+      '@media (hover:hover){.tkdsSelect:hover:not(:disabled){border-color:var(--dsw-alias-border-l4)}}',
+      '.tkdsSelect:disabled{opacity:.6;cursor:not-allowed}',
+      '.tkdsButton{appearance:none;background:var(--dsw-alias-button-primary-fill,var(--dsw-alias-bg-layer-3));border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:20px;padding:5px 14px;transition:background .12s ease,border-color .12s ease}',
+      '@media (hover:hover){.tkdsButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-solid)}}',
+      '.tkdsButton:disabled{opacity:.6;cursor:not-allowed}',
+      // One focus ring for every control, from the DSH focus tokens.
+      '.tkdsSelect:focus-visible,.tkdsButton:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}',
+      // The dense table scrolls inside its own frame, so the header stays readable.
+      '.tkdsScroll{max-height:280px;overflow:auto;min-width:0;border:.5px solid var(--dsw-alias-settings-card-stroke);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-settings-card-fill)}',
+      '.tkdsTable{width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}',
+      '.tkdsTh{position:sticky;top:0;z-index:1;background:var(--dsw-alias-settings-card-fill);text-align:left;font-weight:500;color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));padding:6px 10px;border-bottom:.5px solid var(--dsw-alias-border-l2);white-space:nowrap}',
+      '.tkdsTd{font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));padding:5px 10px;border-bottom:.5px solid var(--dsw-alias-border-l2);white-space:nowrap;font-variant-numeric:tabular-nums}',
       '.tkdsTurnRow{cursor:pointer;background:var(--dsw-alias-bg-layer-1)}',
-      '.tkdsTurnRow:hover{background:var(--dsw-alias-interactive-bg-hover-solid)}',
+      '@media (hover:hover){.tkdsTurnRow:hover{background:var(--dsw-alias-interactive-bg-hover-solid)}}',
       '.tkdsStepRow{color:var(--dsw-alias-label-secondary)}',
       '.tkdsScope{padding-left:20px}',
       '.tkdsToolRow{color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
@@ -210,6 +227,10 @@ window.__ModuleLoader__.load({
       '.tkdsBadge{display:inline-block;font-size:var(--dsh-content-font-size-secondary,13px);line-height:18px;padding:0 6px;border-radius:var(--dsw-radius-xs);border:.5px solid var(--dsw-alias-border-l3);color:var(--dsw-alias-label-secondary);margin-left:6px}',
       '.tkdsError{color:var(--dsw-alias-state-error-primary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));margin:0}',
       '.tkdsMuted{margin:0;color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
+      // Narrow panes: denser cards, a shorter table frame, and a tighter grid.
+      '@media (max-width:640px){.tkdsSection{gap:10px}.tkdsCard{padding:10px 12px}.tkdsGrid{grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}.tkdsScroll{max-height:220px}.tkdsTh,.tkdsTd{padding:4px 8px}}',
+      // Motion is decorative here, so it is dropped entirely when the user asks for less.
+      '@media (prefers-reduced-motion:reduce){.tkdsButton,.tkdsSelect{transition:none}}',
     ].join('\n')
 
     /** Active dictionary; follows the host locale. */
@@ -252,12 +273,18 @@ window.__ModuleLoader__.load({
       return text
     }
 
-    /** Insert the stylesheet once per document. */
+    /**
+     * Insert the stylesheet once per document.
+     *
+     * The tag is keyed by `data-plugin-css`, the attribute the host reads to own (and to remove
+     * on reload) a plugin's stylesheet, so a re-mount replaces the rules instead of stacking a
+     * second copy of them on the page.
+     */
     function ensureStyle() {
       if (typeof document === 'undefined') return
-      if (document.getElementById(STYLE_ID) !== null) return
+      if (document.head.querySelector('style[data-plugin-css="' + CSS_TAG + '"]') !== null) return
       const tag = document.createElement('style')
-      tag.id = STYLE_ID
+      tag.setAttribute('data-plugin-css', CSS_TAG)
       tag.textContent = CSS
       document.head.appendChild(tag)
     }
@@ -341,6 +368,25 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Label one session in the picker.
+     *
+     * The host route exposes an id and a working directory, never a title: a session title can
+     * be derived from prompt text, and this payload carries counts and names only. So the
+     * label is the directory the session ran in plus the FULL id — an 8-character prefix of a
+     * uuid identifies nothing, and two sessions in one directory would look identical.
+     * @param {object} entry - one session summary from the route.
+     * @param {boolean} full - when true, spell out the whole working directory.
+     * @returns {string} the label.
+     */
+    function sessionLabel(entry, full) {
+      const id = String(entry?.id ?? '')
+      const cwd = typeof entry?.cwd === 'string' ? entry.cwd : ''
+      const directory = full ? cwd : (cwd === '' ? '' : cwd.split('/').filter(Boolean).pop() ?? '')
+      if (directory === '') return id
+      return id === '' ? directory : directory + ' · ' + id
+    }
+
+    /**
      * The card component.
      * @returns {object} the rendered section.
      */
@@ -389,7 +435,7 @@ window.__ModuleLoader__.load({
 
       const header = h('div', { className: 'tkdsHead' },
         h('div', { style: { minWidth: 0 } },
-          h('h4', { className: 'tkdsTitle' }, t('devstats.title')),
+          h('h2', { className: 'tkdsTitle' }, t('devstats.title')),
           h('p', { className: 'tkdsHint' }, t('devstats.hint'))),
         h('div', { className: 'tkdsControls' },
           h('button', {
@@ -417,23 +463,27 @@ window.__ModuleLoader__.load({
       }
 
       const selector = h('div', { className: 'tkdsControls' },
-        h('label', { className: 'tkdsMeta', htmlFor: 'tk-devstats-session' }, t('devstats.session')),
-        h('select', {
-          id: 'tk-devstats-session',
-          className: 'tkdsSelect',
-          value: sessionId,
-          onChange: (event) => {
-            const next = String(event.target.value ?? '')
-            setSessionId(next)
-            void load(next)
-          },
-        }, sessions.map((entry) => h('option', { key: entry.id, value: entry.id },
-          String(entry.id).slice(0, 8) + (entry.cwd ? ' · ' + String(entry.cwd).split('/').pop() : '')))),
+        h('div', { className: 'tkdsField' },
+          h('label', { className: 'tkdsLabel', htmlFor: 'tk-devstats-session' }, t('devstats.session')),
+          h('select', {
+            id: 'tk-devstats-session',
+            className: 'tkdsSelect',
+            value: sessionId,
+            onChange: (event) => {
+              const next = String(event.target.value ?? '')
+              setSessionId(next)
+              void load(next)
+            },
+          }, sessions.map((entry) => h('option', {
+            key: entry.id,
+            value: entry.id,
+            title: sessionLabel(entry, true),
+          }, sessionLabel(entry, false))))),
         h('span', { className: 'tkdsMeta' }, t('devstats.source')))
 
       const totals = detail?.totals ?? payload?.sessions?.find((entry) => entry.id === sessionId)?.totals
       const totalsGrid = totals === undefined ? null : h('div', { className: 'tkdsCard' },
-        h('h5', { className: 'tkdsCardTitle' }, t('devstats.totals')),
+        h('h3', { className: 'tkdsCardTitle' }, t('devstats.totals')),
         h('div', { className: 'tkdsGrid' },
           stat(t('devstats.turns'), fmtInt(totals.turns)),
           stat(t('devstats.steps'), fmtInt(totals.steps)),
@@ -450,7 +500,7 @@ window.__ModuleLoader__.load({
       const projectionCard = projections === null || projections === undefined ? null
         : h('div', { className: 'tkdsCard' },
           h('div', { className: 'tkdsHead' },
-            h('h5', { className: 'tkdsCardTitle' }, t('devstats.dshProjections')),
+            h('h3', { className: 'tkdsCardTitle' }, t('devstats.dshProjections')),
             h('span', { className: 'tkdsMeta' }, t('devstats.asOf', { seq: projections.asOfSeq ?? '—' }))),
           h('div', { className: 'tkdsGrid' },
             stat(t('devstats.surface'), fmtInt(projections.values?.contextPressure?.projectedTokens)),
@@ -468,7 +518,7 @@ window.__ModuleLoader__.load({
       const ledger = detail?.ledger
       const ledgerCard = ledger === null || ledger === undefined ? null
         : h('div', { className: 'tkdsCard' },
-          h('h5', { className: 'tkdsCardTitle' }, t('devstats.tkLedger')),
+          h('h3', { className: 'tkdsCardTitle' }, t('devstats.tkLedger')),
           h('div', { className: 'tkdsGrid' }, ledgerPairs(ledger).map((pair) => stat(pair.label, pair.value))))
 
       const truncation = detail?.truncated === true
@@ -480,15 +530,15 @@ window.__ModuleLoader__.load({
         : h('div', { className: 'tkdsScroll' },
           h('table', { className: 'tkdsTable' },
             h('thead', null, h('tr', null,
-              h('th', { className: 'tkdsTh' }, t('devstats.scope')),
-              h('th', { className: 'tkdsTh' }, t('devstats.context')),
-              h('th', { className: 'tkdsTh' }, t('devstats.cache')),
-              h('th', { className: 'tkdsTh' }, t('devstats.input')),
-              h('th', { className: 'tkdsTh' }, t('devstats.output')),
-              h('th', { className: 'tkdsTh' }, t('devstats.reasoning')),
-              h('th', { className: 'tkdsTh' }, t('devstats.model')),
-              h('th', { className: 'tkdsTh' }, t('devstats.tools')),
-              h('th', { className: 'tkdsTh' }, t('devstats.wall')))),
+              h('th', { className: 'tkdsTh', scope: 'col' }, t('devstats.scope')),
+              h('th', { className: 'tkdsTh', scope: 'col' }, t('devstats.context')),
+              h('th', { className: 'tkdsTh', scope: 'col' }, t('devstats.cache')),
+              h('th', { className: 'tkdsTh', scope: 'col' }, t('devstats.input')),
+              h('th', { className: 'tkdsTh', scope: 'col' }, t('devstats.output')),
+              h('th', { className: 'tkdsTh', scope: 'col' }, t('devstats.reasoning')),
+              h('th', { className: 'tkdsTh', scope: 'col' }, t('devstats.model')),
+              h('th', { className: 'tkdsTh', scope: 'col' }, t('devstats.tools')),
+              h('th', { className: 'tkdsTh', scope: 'col' }, t('devstats.wall')))),
             h('tbody', null, renderTurns(detail.turns, openTurns, toggleTurn))))
 
       return h('section', { className: 'tkdsSection', 'data-tk-devstats': '1' },

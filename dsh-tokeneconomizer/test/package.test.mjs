@@ -58,11 +58,16 @@ test('every hook call hands the bridge its launcher pair, not a bare path', () =
   assert.doesNotMatch(index, /\bhook\(bins\.te/)
 })
 
-test('the display title the DSH plugin inventory reads is the Korean title', () => {
+test('the display title the DSH plugin inventory reads is English in en.json', () => {
   const en = JSON.parse(readFileSync(`${root}locale/en.json`, 'utf8'))
   const ko = JSON.parse(readFileSync(`${root}locale/ko.json`, 'utf8'))
-  assert.equal(en.meta.title, '토큰절약기(MS tokeneconomizer)')
-  assert.equal(ko.meta.title, en.meta.title)
+  // The host reads locale/<language>.json per language, so the English file must carry an
+  // English title; the Korean file keeps the Korean one. Measured before this change: en.json
+  // carried the Korean title, so the English inventory showed a Korean plugin name.
+  assert.equal(en.meta.title, 'TokenEconomizer (MS tokeneconomizer)')
+  assert.equal(ko.meta.title, '토큰절약기(MS tokeneconomizer)')
+  assert.equal(/[가-힣]/.test(en.meta.title), false, 'the English title must not be Korean')
+  assert.equal(/[가-힣]/.test(ko.meta.title), true, 'the Korean title must be Korean')
   assert.equal(pkg.exports['./locale/en.json'], './locale/en.json')
   assert.equal(pkg.exports['./locale/ko.json'], './locale/ko.json')
   assert.ok(pkg.files.includes('locale/'))
