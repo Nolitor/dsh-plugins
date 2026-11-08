@@ -50,18 +50,36 @@ repository has no `docs/` directory.
 
 ## 4. Known documentation contradictions
 
-0. **"Pending restart" is stale.** Measured 2026-11-08: `dsh-web.service` started 11:53:42; the
-   notify client (11:30:26) and tokeneconomizer client (11:28:51) are older, so they are loaded.
-   The CHANGELOG lines are historical, not a current blocker.
-1. **`llm-pi-ai` status.** [DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md) §1.1 records the owner
+Each item states **which track owns the fix**. This file only points; the work happens in the track
+document named below. Nothing here has been fixed.
+
+1. **"Pending restart" is stale.** Measured 2026-11-08: `dsh-web.service` started 11:53:42;
+   the notify client (11:30:26) and tokeneconomizer client (11:28:51) are older, so they are loaded.
+   The CHANGELOG lines are historical, not a current blocker. **Owner: none** — already resolved by
+   measurement.
+2. **`llm-pi-ai` status.** [DSH-HARNESS-POLICY.md](DSH-HARNESS-POLICY.md) §1.1 records the owner
    re-enabling it on 2026-11-08; [CUSTOM-ROUTER-SURFACE-CONTRACT.md](../dsh-custom-router/docs/CUSTOM-ROUTER-SURFACE-CONTRACT.md)
-   still says it stays disabled. One of the two must change; that is an owner call, not an agent's.
-2. **Boot-card paths.** [bootcards/2026-11-08T0902+0900.md](../bootcards/2026-11-08T0902+0900.md)
+   D4 still says it stays disabled. **Owner: `dsh-custom-router`** — see
+   [C1 in its handoff](../dsh-custom-router/docs/HANDOFF.md). The policy is the newer statement, so
+   the contract is the side expected to change.
+3. **Boot-card paths.** [bootcards/2026-11-08T0902+0900.md](../bootcards/2026-11-08T0902+0900.md)
    §3–§4 still names `dsh-antigravity/lib/*` and `dsh-deepinfra/lib/wire.js`, which moved to
    `dsh-custom-router/vendor/` in `a772058`. The findings are live; the paths are stale.
-3. **Submodule docs claim.** [docs/SKELETON.md](SKELETON.md) lists `dsh-korean-locale` as
+   **Owner: `dsh-custom-router`** — the moved files are its vendors. Cards are historical evidence,
+   so the fix is a path note in the new card rather than an edit to the old one.
+4. **Submodule docs claim.** [docs/SKELETON.md](SKELETON.md) lists `dsh-korean-locale` as
    "separate repository — read `dsh-korean-locale/README.md`", while [README.md](../README.md) says
    the track "owns its own docs". There is no `docs/` directory in that repository.
+   **Owner: `dsh-korean-locale`** — this workspace must not write there (RULES §6.1b), so the fix
+   has to be made inside that repository, not here.
+5. **`CHANGELOG.md` missing from `files[]`** in `dsh-sidebar-manager` and
+   `dsh-tokeneconomizer`. Measured with `npm pack`: the tarballs carry 51 and 27 files and contain
+   no CHANGELOG. `npm run check:publish` passes and does **not** cover this. **Owner: each track** —
+   see the S1 section of [Sidebar Manager](../dsh-sidebar-manager/docs/HANDOFF.md) and
+   [TokenEconomizer](../dsh-tokeneconomizer/docs/HANDOFF.md).
+6. **No `rc` bump** for the 2026-11-08 changes in `dsh-notify`, `dsh-sidebar-manager` and
+   `dsh-tokeneconomizer`. **Owner: each track**, with the bump decision reserved to the owner —
+   agents must not change the numeric part.
 
 ## 5. What is not measured here
 

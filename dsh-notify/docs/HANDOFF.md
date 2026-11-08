@@ -34,7 +34,13 @@ summary: Stage-by-stage handoff for @nolit/dsh-notify at 0.0.1-rc.4 — the ship
 `d9d0d47` changed `lib/client.js` + `lib/client.src.js` (26 insertions / 22 deletions) but
 `CHANGELOG.md` was last written at `79ad144` (2026-11-07). Under RULES §6.1 a change is not
 complete until the measured before/after is in the track CHANGELOG.
-Also: the version was **not** bumped for this change.
+
+**Work item:** add a `0.0.1-rc.4` (or the owner-chosen) entry directly under the existing
+`### 2026-11-07 — `0.0.1-rc.4` — the chip actually renders` section, describing the settings-card
+and peak-chip alignment against the DSH plugin tab surface and naming the two files. The version was
+**not** bumped for this change, so a new `rc` is the owner's call — the entry itself is not.
+
+Reported, not fixed.
 
 ### S2 — live visual verification
 

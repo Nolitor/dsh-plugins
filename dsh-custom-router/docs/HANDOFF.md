@@ -63,9 +63,22 @@ no real mount, no generation turn. **Requires owner implementation approval.**
 
 ## 3. Open contradictions (report only, not acted on)
 
-- [CUSTOM-ROUTER-SURFACE-CONTRACT.md](CUSTOM-ROUTER-SURFACE-CONTRACT.md) D4/§:23 still reads
-  "`llm-pi-ai` stays disabled", while [DSH-HARNESS-POLICY.md](../../docs/DSH-HARNESS-POLICY.md) §1.1
-  records the owner re-enabling it on 2026-11-08. Two documents now disagree about the same row.
+### C1 — `llm-pi-ai` status disagrees between two documents
+
+| Document | Line | Says |
+| :--- | :--- | :--- |
+| [CUSTOM-ROUTER-SURFACE-CONTRACT.md](CUSTOM-ROUTER-SURFACE-CONTRACT.md) | D4 table row, §1 | "`llm-pi-ai` stays disabled; its adapter is imported" (owner decision 2026-11-07) |
+| [DSH-HARNESS-POLICY.md](../../docs/DSH-HARNESS-POLICY.md) | §1.1 | the owner **re-enabled** `llm-pi-ai` on 2026-11-08; it starts dormant with zero routes |
+
+The live profile agrees with the policy: the bridge overlay sets `llm-pi-ai.providers: {}`, which is
+an enabled-but-empty row, not a disabled one.
+
+**Fix belongs to this track**, because D4 is this track's contract: re-word D4 so it separates the
+two ideas it currently merges — (a) *do not build a second parser when DSH supports the protocol*,
+which still holds, and (b) *the `llm-pi-ai` row is disabled*, which stopped being true on 2026-11-08.
+Lines that repeat the stale claim: §1 D4, §2.1 note, §5 lane rules.
+
+Reported, not fixed.
 
 ## 4. Verification
 

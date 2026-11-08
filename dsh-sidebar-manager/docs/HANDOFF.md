@@ -40,9 +40,19 @@ summary: Stage-by-stage handoff for @nolit/dsh-sidebar-manager at 0.0.1-rc.1 —
 | `CHANGELOG.md` in `package.json#files` | **absent** |
 
 The 11-08 change is recorded in the CHANGELOG, but the version was not bumped and the CHANGELOG is
-not in the published file list. Owner decision needed for the `rc`; the `files` omission is a
-packaging defect of the same class as FAILURE-LEDGER F-55 — the rule is satisfied in the working
-tree and violated in the artifact. `npm run check:publish` fails on it. Reported, not fixed.
+not in the published file list.
+
+Measured on 2026-11-08: `npm pack` on this track produces a **51-file** tarball and
+`tar -tzf … | grep CHANGELOG` returns **nothing** — the file is genuinely absent from the artifact.
+This is the F-55 class (rule satisfied in the working tree, violated in the shipped package).
+
+**Note:** `npm run check:publish` does **not** catch this; it passes today. The gate that failed
+earlier in this session was the tarball **link** check, caused by a relative link to
+`../CHANGELOG.md` inside this document, and it was cleared by writing the path as inline code. Do
+not read a green `check:publish` as proof that `files[]` is complete.
+
+Owner decision needed for the `rc`; the `files[]` fix is a one-line change this track can make
+when told to. Reported, not fixed.
 
 ### S2 — drift gate before any version-up
 

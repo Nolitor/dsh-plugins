@@ -42,6 +42,12 @@ Two measurements that disagree with the rc convention (global `AGENTS.md` §6):
 Owner decision needed: bump `rc` for the 11-08 change, or state that this track's `rc` counts
 differently. Agents must not bump the numeric part.
 
+**Also measured — `CHANGELOG.md` is absent from `files[]`.** `npm pack` produces a 27-file
+tarball, and `tar -tzf … | grep CHANGELOG` returns nothing. Same F-55 class as Sidebar Manager: the
+history rule is satisfied in the working tree and violated in the published artifact.
+`npm run check:publish` passes today and does **not** cover this. The fix is a one-line `files[]`
+addition; reported, not fixed.
+
 ### S2 — live visual verification
 
 The code is loaded (mtime precedes the service start). The settings card has only been proven in an
