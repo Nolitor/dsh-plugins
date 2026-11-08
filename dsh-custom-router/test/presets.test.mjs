@@ -315,12 +315,15 @@ test('the measured presets claim disjoint rows', () => {
   assert.deepEqual(validatePresets(PRESETS).errors, [])
 })
 
-test('the OpenCode CLI surface is declared gated-off for migration Step 1', () => {
-  // Owner-approved 2026-11-08. The vendor gates the `opencode` tool, `/ocode` and
-  // `cli_worker` with ONE switch (`cliOn`); declaring only `toolName` would have
-  // forced the drift gate to loosen. `gates` names the rest.
+test('the OpenCode CLI surface is declared LIVE (the profile ships it on)', () => {
+  // Corrected 2026-11-08. An earlier revision of this test asserted `default:
+  // false` on the strength of a migration step that switched the surface off;
+  // the switch was withdrawn because it also removed `/ocode` and the
+  // `opencode` tool that users call. The declaration now matches the shipping
+  // profile, and `gates` still names the extra tools the ONE vendor switch
+  // (`cliOn`) takes down, so a profile that DOES set `cli: false` stays honest.
   const opencode = findPreset('opencode')
-  assert.equal(opencode.surfaces.cli.default, false, 'the CLI surface ships OFF')
+  assert.equal(opencode.surfaces.cli.default, undefined, 'the CLI surface ships ON')
   assert.deepEqual([...opencode.surfaces.cli.gates], ['opencode'])
   assert.equal(opencode.surfaces.cli.toolName, 'cli_worker')
   assert.equal(opencode.surfaces.cli.commandName, 'ocode')

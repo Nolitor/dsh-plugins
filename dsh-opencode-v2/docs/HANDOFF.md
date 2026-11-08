@@ -66,9 +66,15 @@ OFF in the live profile. Peer on `@nolit/dsh-custom-router` moved `rc.2` → `rc
 | Item | State |
 | :--- | :--- |
 | `peerDependencies['@nolit/dsh-custom-router']` | `0.0.1-rc.9` (was `rc.2`) |
-| CLI surface in the live profile | `cli: false` — `opencode` tool, `/ocode`, `cli_worker` unmounted |
+| CLI surface in the live profile | **live** — `cli: false` was applied and then withdrawn the same day |
 | Model serving (`opencode-http-agent`) | **unchanged and mounted** |
 | Subagent surface (`subagent_opencode`) | **unchanged and mounted** |
+
+**Correction (2026-11-08).** An earlier revision of this HANDOFF recorded the CLI surface as
+`cli: false`/unmounted. That is no longer true: the switch was withdrawn because it also removed
+`/ocode` and the `opencode` tool. Note the vendor's own `cordis.patch.yml` never disabled the
+surface — `cli` defaults to `true` — so the "unmounted" state was created by a profile edit and
+reverted the same way.
 
 **Recorded, not fixed:** this plugin installs no `app-boot/config-reload` reconcile, so a `cli`
 flip needs a `dsh-web.service` restart (ledger F-46 class). `vendor/antigravity` does have

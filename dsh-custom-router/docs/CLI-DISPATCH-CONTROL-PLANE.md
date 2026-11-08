@@ -148,7 +148,7 @@ deferred and is **not** implemented here.
 | :--- | :--- | :--- |
 | `dsh-opencode-v2` peer on this package | `0.0.1-rc.2` | `0.0.1-rc.9` |
 | `vendor/antigravity` peer on this package | `0.0.1-rc.2` | `0.0.1-rc.9` |
-| OpenCode CLI surface | mounted | **OFF** via `vendorConfig['dsh-opencode-v2'].cli: false` |
+| OpenCode CLI surface | mounted | mounted (**the `cli: false` switch was applied and withdrawn the same day** — see §8.5) |
 | `surfaces.cli` declaration | `toolName` only | `default: false` + `gates: ['opencode']` |
 
 The declaration follows the VENDOR, not the gate: `dsh-opencode-v2/lib/index.js` gates the
@@ -181,3 +181,34 @@ install trigger. Fixing it is a code change outside the approved scope.
   mount path. The remaining work is a regression guard, not a removal.
 - **Step 3** (full slot migration): needs the M9 readiness probe to decide activation from
   capability instead of a manual boolean. Deferred by owner decision.
+
+### 8.5 Correction — Step 1 was withdrawn the same day
+
+The `cli: false` switch described above was reverted within the hour. Two measured facts made the
+original step wrong:
+
+1. **The surface was never disabled at the source.** `dsh-opencode-v2` declares
+   `cli: Schema.boolean().default(true)`, and its own `cordis.patch.yml` carries no `cli` key. A
+   booted profile built from the pre-change backup shows `subagent_opencode`, `cli_worker`,
+   `opencode` and `/ocode` all mounted. The migration was already complete; the router had been
+   mounting these surfaces since the vendoring work.
+2. **One switch withdraws three surfaces.** `cliOn` guards the `opencode` delegation tool, the
+   `/ocode` command and the `cli_worker` batch together. There is no supported way to keep
+   `/ocode` while dropping only the batch, which is why "CLI toggle" was never a surgical step.
+
+**Consequence for Step 1's successor.** A future step that withdraws a surface must either
+(a) split the vendor switch per surface first, or (b) accept removing all three and say so in the
+report. Removing all three silently is what produced the owner-visible "`/ocode` is not loading"
+defect.
+
+**Verified after the withdrawal** (real mount, isolated `DSH_HOME`):
+
+```
+tools     working_directory, agy_worker, subagent_antigravity, opencode, cli_worker, subagent_opencode
+commands  agy, export, feedback, interrupt, ocode, permission
+providers deepseek-account, antigravity, deepinfra, deepinfra-anthropic, opencode-http-agent
+```
+
+`verify-presets` reports OK against the live profile. The running `dsh-web.service` process still
+reflects the pre-withdrawal config until it restarts, because this vendor has no
+`app-boot/config-reload` reconcile (§8.3).

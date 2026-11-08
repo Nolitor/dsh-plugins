@@ -22,9 +22,13 @@ OpenCode CLI toggle. This entry records the half that lives in this package.
   inside a `deepEqual`, so a router release turned this package's test red and the drift looked like
   a test defect. The assertion now compares against `dsh-custom-router/package.json`, so the check
   is an alignment test, not a copy of the current value.
-- **No behavioural change here.** The CLI toggle is a profile edit plus the router's declaration;
+- **No behavioural change here.** The CLI toggle was a profile edit plus the router's declaration;
   this package's `cli` switch already existed and already gated the `opencode` tool, `/ocode` and
   `cli_worker` together.
+- **The profile toggle was WITHDRAWN the same day** (2026-11-08). It removed `/ocode`, which the
+  owner reported as "not loading". Nothing in this package was disabled at the source: `cli`
+  defaults to `true` and this package's own `cordis.patch.yml` carries no `cli` key. Corrected
+  because an earlier revision of this entry implied the surface shipped off.
 
 Recorded, not fixed: this plugin does **not** reconcile its surfaces on
 `app-boot/config-reload`, so a `cli` switch flipped in the profile takes effect only on the next

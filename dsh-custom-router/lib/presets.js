@@ -209,20 +209,16 @@ export const PRESETS = Object.freeze([
       // dsh-opencode-v2/lib/index.js guards the tool, `/ocode`, `cli_worker`),
       // so declaring it here keeps the declaration equal to what the vendor does.
       // Model serving is untouched: `opencode-http-agent` remains mounted.
+      // The vendor gates this surface with ONE switch (`cliOn` in
+      // dsh-opencode-v2/lib/index.js guards the `opencode` tool, `/ocode` and
+      // `cli_worker` together). Declared as a live surface: the profile ships it
+      // ON. A profile may still set `cli: false` to withdraw all three, and
+      // `verify-presets.mjs` understands the `default: false` + `gates` markers
+      // for that case (the AGY batch row uses them).
       cli: Object.freeze({
         shape: 'sync',
         toolName: 'cli_worker',
         commandName: 'ocode',
-        // Owner-approved 2026-11-08 (migration Step 1): the OpenCode CLI surface
-        // ships OFF. `default: false` is this router's existing gated-surface
-        // marker (the AGY batch row uses it), so absence is parity, not drift.
-        default: false,
-        // The vendor gates MORE than `cli.toolName` with one switch: measured in
-        // dsh-opencode-v2/lib/index.js, `cliOn` guards the `opencode` delegation
-        // tool, `/ocode`, and the `cli_worker` batch. Naming those here keeps the
-        // declaration equal to what the vendor actually does, instead of
-        // loosening the drift gate to hide the difference. Model serving is
-        // untouched: `opencode-http-agent` stays mounted.
         gates: Object.freeze(['opencode']),
       }),
       batch: null,

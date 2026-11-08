@@ -27,29 +27,30 @@ The `opencode-v2` suite asserted the literal `rc.2`, so it pinned the drift inst
 it. That assertion now compares against the router's own `package.json` version, and this track
 gained the same check.
 
-**2. OpenCode CLI surface shipped OFF (migration Step 1).** `vendorConfig['dsh-opencode-v2'].cli
-= false` in the live profile removes the `opencode` tool, `/ocode`, and `cli_worker`. Model serving
-on `opencode-http-agent` is untouched — that is the `/http` row, with its own config, and it is the
-route this session's model arrives on.
+**2. OpenCode CLI surface — switched off, then WITHDRAWN (same day).**
 
-The declaration followed the vendor, not the drift gate: the vendor gates all three surfaces with
-ONE switch (`cliOn`), so `surfaces.cli` gained an explicit `gates: ['opencode']` list plus
-`default: false`. `scripts/verify-presets.mjs` now understands both markers — a gated-off surface
-expects its tools and its command to be ABSENT, and reports drift if they are present.
+`vendorConfig['dsh-opencode-v2'].cli: false` was applied as "migration Step 1" and reverted within
+the hour. Measured reason: that ONE vendor switch (`cliOn`) withdraws the `opencode` delegation
+tool, `/ocode` and `cli_worker` together, so the step removed surfaces users call — including the
+`/ocode` command the owner reported as "not loading". The owner's later instruction was that the
+migration itself was already complete; the router had been mounting these surfaces all along.
 
-**Measured (real mount, isolated `DSH_HOME`, not `--dump-config`):**
-
-| Check | Result |
+| Item | State |
 | :--- | :--- |
-| `verify:presets` (live profile) | OK — tools `working_directory, agy_worker, subagent_antigravity, subagent_opencode` |
-| providers | `deepseek-account, antigravity, deepinfra, deepinfra-anthropic, opencode-http-agent` — model serving survives |
-| commands | `agy, export, feedback, interrupt, permission` — `/ocode` gone |
+| `cli: false` in the live profile | **withdrawn** (backup `cordis.patch.yml.bak.before-ocode-restore-*`) |
+| `surfaces.cli` declaration | live (no `default: false`); `gates: ['opencode']` retained |
+| `/ocode`, `opencode`, `cli_worker` | mounted again on the next `dsh-web.service` restart |
 
-**Latent defect recorded, not fixed.** `dsh-opencode-v2` has no
-`app-boot/config-reload` reconciliation (measured 2026-11-08), so `cli: false` takes effect on the
-next `dsh-web.service` restart. Until then the three CLI surfaces stay mounted. This is the same
-class as ledger F-46 (volatile config is live data, not an install trigger); fixing it is a code
-change the owner has not approved, so it is recorded here and in the profile comment.
+**Correction to an earlier claim in this file.** A previous revision said the surfaces "ship OFF".
+They do not: `dsh-opencode-v2` declares `cli: Schema.boolean().default(true)`, its own
+`cordis.patch.yml` carries no `cli` key, and a booted pre-change profile shows all four surfaces
+mounted. The drift gate now reports OK against the live profile.
+
+**Latent defect (still real, still unfixed).** `dsh-opencode-v2` installs no
+`app-boot/config-reload` reconcile (measured 2026-11-08; `vendor/antigravity` does), so ANY
+`cli` flip — on or off — needs a `dsh-web.service` restart. This is why the withdrawal is not
+visible in the running process yet. Ledger F-46 class; fixing it is a code change the owner has
+not approved.
 
 ## 0.0.1-rc.9 — 2026-11-08 (CLI dispatch control plane: admission + reclamation)
 
