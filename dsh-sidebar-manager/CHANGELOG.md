@@ -4,7 +4,7 @@
 version: 1.0
 kind: report
 status: active
-updated: 2026-11-04
+updated: 2026-11-08
 summary: Engineering history for @nolit/dsh-sidebar-manager. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
 -->
 
@@ -12,6 +12,42 @@ summary: Engineering history for @nolit/dsh-sidebar-manager. Seeded from git his
 > the owner's unfinished asks; they are not a changelog. See [docs/RULES.md](../docs/RULES.md) §6.1.
 
 Current version: `0.0.1-rc.1`
+
+## client UI — DSH design-token stylesheet — 2026-11-08
+
+The panel and the sidebar rows were hand-written as an inline React style object with fixed pixel
+sizes. That made three things impossible: the user's font-size preference could not reach the
+surface, no control could carry a `:hover` / `:focus-visible` state, and no rule could respond to a
+media query. The UI now lives in one scoped stylesheet, in the style of
+[`dsh-custom-router`](../dsh-custom-router/lib/client.src.js).
+
+Measured before and after, from the source (`lib/client.js`) and a headless render of every
+registered slot:
+
+| Surface | Before | After |
+| :--- | :--- | :--- |
+| Stylesheet | inline `styles` object, 73 entries | one `<style data-plugin-css="@nolit/dsh-sidebar-manager">` tag, 86 rules, all `.sm*`-scoped |
+| Typography | fixed `fontSize: 14 / 13 / 12 / 11 / 10` px | `--dsh-content-font-size` / `--dsh-content-font-size-secondary` / `--dsh-content-font-delta`; page title `calc(20px + var(--dsh-content-font-delta,0px))` |
+| Colours | 13 literal hex fallbacks (`#444`, `#555`, `#1f1f1f`, `#161616`, `#ff7b72`, `#4f7cff`, `#fff`, …) | 0 hex; every colour is a `--dsw-*` token |
+| Borders | `1px solid var(--dsw-alias-border-l2, #444)` | `.5px solid var(--dsw-alias-border-l2)` |
+| Cards | `border-radius: var(--dsw-radius-lg)` + `var(--dsw-alias-bg-layer-1)` | `--dsw-alias-settings-card-fill` / `--dsw-alias-settings-card-stroke` + `var(--dsw-radius-lg)` |
+| Page width | `max-width: 820px`, padding `24px 28px 40px` | `max-width: 960px` centred (the manager renders in `main`, not in the 760px settings dialog), responsive below 640px |
+| Section title | `fontSize: 14 / fontWeight: 500` | `calc(18px + var(--dsh-content-font-delta,0px))` / `font-weight: 600`, matching the native settings section title |
+| Hover / selected | none possible | `@media (hover:hover)` block; `.smGroupItem:hover` and the selected `.smGroupItemHq` both use `--dsw-alias-interactive-bg-hover` |
+| Focus ring | none | `--dsw-focus-ring-width` / `--dsw-focus-ring-color` on every interactive control (buttons, icon button, menu rows, More row, tabs, fields, checkboxes, the archived summary) |
+| Reduced motion | none | `@media (prefers-reduced-motion:reduce)` removes the surface transitions |
+| Dialog | `role="dialog"` with no accessible name | `aria-labelledby` pointing at the title, `tabIndex: -1`, focus moved into the dialog on open |
+| Slot registrations | 8 slots | 8 slots, unchanged (`sidebar.panellist.actions`, `main`, the three session row/menu slots, two `shell.overlay` hosts) |
+| Tests | 145 passing | **162 passing** |
+
+Measured: `npm test` → 162/162 pass. `npm run docs:check` → up to date. The workspace
+`npm run docs:check` (36 workspace docs, 12 pending, 8 subproject indexes, 1396 relative links) and
+`npm run check:publish` (3 publishable tracks, `dsh-sidebar-manager` tarball of 50 files) pass.
+
+The `styles` map still exists, but each entry is now a class name instead of a style object, so a
+surface is changed in one place (the stylesheet) rather than in the component that renders it. The
+inline I18N dictionary and the `locale/*.json` metadata were not touched.
+
 
 ## classifier — linked child sessions get their own label — 2026-11-05
 

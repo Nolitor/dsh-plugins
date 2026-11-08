@@ -13,6 +13,17 @@ import { readFileSync } from 'node:fs'
 
 const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
 
+const cssStart = source.indexOf('const CSS = [')
+const cssEnd = source.indexOf("].join('')", cssStart)
+const css = source.slice(cssStart, cssEnd)
+
+/** The declaration block of one `.sm*` class. */
+function block(selector) {
+  const at = css.indexOf(selector + '{')
+  assert.ok(at > 0, 'missing rule ' + selector)
+  return css.slice(at, css.indexOf('}', at))
+}
+
 test('the page title is used for the heading and the section aria-label only', () => {
   const uses = source.match(/t\('workspaceManager\.title'\)/g) ?? []
   assert.equal(uses.length, 2, 'one aria-label + one <h1>; a third use means a duplicated heading')
@@ -26,7 +37,7 @@ test('the workspace list has its own section heading', () => {
 })
 
 test('the page description renders on its own, without the inline hint appended', () => {
-  assert.ok(source.includes("h('p', { style: styles.panelDescription }, t('workspaceManager.description'))"), 'description renders alone')
+  assert.ok(source.includes("h('p', { className: styles.panelDescription }, t('workspaceManager.description'))"), 'description renders alone')
   assert.ok(!source.includes("t('workspaceManager.inlineHint')}`"), 'the inline hint no longer rides in the description')
 })
 
@@ -87,21 +98,16 @@ test('the More row opens the panel through ctx.layout, not the panel list', () =
 
 test('page title uses the native title spec 20px/500/28px', () => {
   // Native pageTitle/detailTitle: font-size:20px;font-weight:500;line-height:28px
-  const at = source.indexOf('panelHeading: {')
-  assert.ok(at > 0, 'panelHeading must exist')
-  const rule = source.slice(at, source.indexOf('},', at))
-  assert.match(rule, /fontSize: 20/)
-  assert.match(rule, /fontWeight: 500/)
-  assert.match(rule, /lineHeight: '28px'/)
+  const rule = block('.smPageTitle')
+  assert.match(rule, /font-weight:500/)
+  assert.match(rule, /font-size:calc\(20px \+ var\(--dsh-content-font-delta,0px\)\)/)
+  assert.match(rule, /line-height:calc\(28px \+ var\(--dsh-content-font-delta,0px\)\)/)
 })
 
-test('section heading uses the native section spec 14px/500/22px', () => {
-  const at = source.indexOf('panelSectionTitle: {')
-  assert.ok(at > 0, 'panelSectionTitle must exist')
-  const rule = source.slice(at, source.indexOf('},', at))
-  assert.match(rule, /fontSize: 14/)
-  assert.match(rule, /fontWeight: 500/)
-  assert.match(rule, /lineHeight: '22px'/)
+test('section heading uses the native section spec 18px/600', () => {
+  const rule = block('.smSectionTitle')
+  assert.match(rule, /font-weight:600/)
+  assert.match(rule, /font-size:calc\(18px \+ var\(--dsh-content-font-delta,0px\)\)/)
 })
 
 // --- session context menu: typography and grouping -------------------------
@@ -110,12 +116,10 @@ test('session menu rows use the native 13px/400/20px spec', () => {
   // Measured live 2026-11-03: these rows computed to 16px while every native row
   // in the same menu was 13px, because `font: inherit` took the body default and
   // the menu container sets no size.
-  const at = source.indexOf('menuItem: {')
-  assert.ok(at > 0, 'menuItem style must exist')
-  const rule = source.slice(at, source.indexOf('},', at))
-  assert.match(rule, /fontSize: 13/, 'must state the native 13px')
-  assert.match(rule, /fontWeight: 400/, 'must state the native 400 weight')
-  assert.match(rule, /lineHeight: '20px'/, 'must state the native 20px line height')
+  const rule = block('.smMenuItem')
+  assert.match(rule, /font-size:var\(--dsh-content-font-size-secondary,13px\)/, 'must state the native 13px')
+  assert.match(rule, /font-weight:400/, 'must state the native 400 weight')
+  assert.match(rule, /line-height:calc\(20px \+ var\(--dsh-content-font-delta-secondary,0px\)\)/, 'must state the native 20px line height')
   assert.ok(!/font: 'inherit'/.test(rule), "font: 'inherit' is what produced 16px")
 })
 
@@ -134,4 +138,83 @@ test('session menu rows sit after every native row and before the pinned archive
   }
   const sorted = [...orders].sort((a, b) => a.order - b.order).map((o) => o.order)
   assert.deepEqual(sorted, [510, 520, 530], 'the three rows stay contiguous as one group')
+})
+
+// --- page geometry ----------------------------------------------------------
+
+test('the page centres its content at a 960px max width', () => {
+  // The manager renders in `main`, not in the 760px settings dialog, so it uses
+  // the wider page measure.
+  const rule = block('.smPageInner')
+  assert.match(rule, /max-width:960px/)
+  assert.match(rule, /margin:0 auto/)
+})
+
+test('the page is responsive below 640px', () => {
+  assert.ok(css.includes('@media (max-width:640px)'), 'the stylesheet needs a narrow breakpoint')
+})
+
+// --- focus and motion -------------------------------------------------------
+
+test('every interactive control carries a focus-visible ring', () => {
+  const ring = css.slice(css.indexOf('--- focus rings ---'))
+  assert.ok(ring.includes(':focus-visible'), 'focus rules are missing')
+  for (const selector of [
+    '.smPlainButton:focus-visible',
+    '.smPrimaryButton:focus-visible',
+    '.smIconButton:focus-visible',
+    '.smMenuItem:focus-visible',
+    '.smMoreItem:focus-visible',
+    '.smTab:focus-visible',
+    '.smField:focus-visible',
+    '.smCheckInput:focus-visible',
+  ]) {
+    assert.ok(ring.includes(selector), 'missing focus ring for ' + selector)
+  }
+  assert.match(ring, /--dsw-focus-ring-width/)
+  assert.match(ring, /--dsw-focus-ring-color/)
+})
+
+test('a reduced-motion preference removes the surface transitions', () => {
+  assert.ok(css.includes('@media (prefers-reduced-motion:reduce)'), 'reduced motion block is missing')
+  const at = css.indexOf('@media (prefers-reduced-motion:reduce)')
+  const rule = css.slice(at, css.indexOf('}', at))
+  assert.match(rule, /transition:none/)
+})
+
+// --- tokens -----------------------------------------------------------------
+
+test('cards use the settings-card material, not a hand-rolled border', () => {
+  for (const selector of ['.smRow', '.smGroupCard']) {
+    const rule = block(selector)
+    assert.match(rule, /var\(--dsw-alias-settings-card-fill\)/, selector + ' must use the card fill token')
+    assert.match(rule, /var\(--dsw-alias-settings-card-stroke\)/, selector + ' must use the card stroke token')
+    assert.match(rule, /var\(--dsw-radius-lg\)/, selector + ' must use the large radius')
+  }
+})
+
+test('list rows use the sidebar row geometry', () => {
+  const rule = block('.smGroupItem')
+  assert.match(rule, /min-height:36px/)
+  assert.match(rule, /var\(--dsw-radius-md\)/)
+})
+
+test('hover and selected states use the interactive tokens', () => {
+  assert.match(css, /@media \(hover:hover\)/, 'hover states belong behind a hover-capable pointer')
+  assert.match(css, /\.smGroupItem:hover\{background:var\(--dsw-alias-interactive-bg-hover\)\}/)
+  assert.match(css, /\.smGroupItemHq\{background:var\(--dsw-alias-interactive-bg-hover\)\}/)
+})
+
+// --- dialog and notice accessibility ---------------------------------------
+
+test('the dialog names itself and takes focus when it opens', () => {
+  assert.ok(source.includes("'aria-modal': 'true'"), 'the dialog is modal')
+  assert.ok(source.includes("'aria-labelledby': titleId"), 'the dialog is named by its title')
+  assert.ok(source.includes('h(\'h2\', { id: titleId'), 'the title element carries that id')
+  assert.ok(source.includes('tabIndex: -1'), 'the dialog container is focusable')
+  assert.ok(source.includes('panelRef.current'), 'the dialog container is focused on open')
+})
+
+test('the notice is a live region', () => {
+  assert.ok(source.includes("role: 'status'"), 'the notice announces itself politely')
 })

@@ -20,7 +20,7 @@ summary: Generated per-subproject index for @nolit/dsh-sidebar-manager: every do
 
 | Version | Kind | Status | Updated | Document | Summary |
 |---|---|---|---|---|---|
-| 1.0 | report | active | 2026-11-04 | [CHANGELOG.md](../CHANGELOG.md) | Engineering history for @nolit/dsh-sidebar-manager. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after. |
+| 1.0 | report | active | 2026-11-08 | [CHANGELOG.md](../CHANGELOG.md) | Engineering history for @nolit/dsh-sidebar-manager. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after. |
 | 1.0 | reference | historical | 2026-10-25 | [COMMITS-PENDING.md](../COMMITS-PENDING.md) | Commits left pending at the end of the 2026-10-25 session: what was staged, what was withheld, and why. |
 | 1.0 | measurement | measured | 2026-10-29 | [BASELINE-2026-10-29.md](BASELINE-2026-10-29.md) | Measured v0.1.1 baseline of the installed tree: SHA-256, test count, and the drift reference before any version-up. |
 | 1.0 | measurement | measured | 2026-10-29 | [FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md](FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md) | Change-requests/worktrees bundle measured against Sidebar Manager and UTM policy; overlap and risk. |
@@ -35,8 +35,8 @@ summary: Generated per-subproject index for @nolit/dsh-sidebar-manager: every do
 | 1.0 | report | reference | 2026-10-29 | [UTM-REVIEW-FORGE-VS-SIDEBAR.md](UTM-REVIEW-FORGE-VS-SIDEBAR.md) | Read-only review of the Forge/Worktrees vs Sidebar/UTM measurement against UTM authority docs. |
 | 1.0 | measurement | measured | 2026-10-29 | [V0.1.2-MEASUREMENT.md](V0.1.2-MEASUREMENT.md) | Post-version-up measurement of v0.1.2 against the recorded v0.1.1 baseline, including what changed in the tree. |
 | 1.0 | report | historical | 2026-10-24 | [INCIDENT-2026-10-24-workspace-json.md](../INCIDENT-2026-10-24-workspace-json.md) | Incident record: a test overwrote the live workspace.json, the blast radius, and the guard that prevents a repeat. |
-| 1.0 | readme | reference | 2026-11-05 | [README.ko.md](../README.ko.md) | Korean translation of the Sidebar Manager operator entry; kept for parity with README.md. |
-| 1.0 | readme | active | 2026-11-05 | [README.md](../README.md) | Operator entry for @nolit/dsh-sidebar-manager: what the right-sidebar switcher does, how to install it, and how to verify it. |
+| 1.0 | readme | reference | 2026-11-08 | [README.ko.md](../README.ko.md) | Korean translation of the Sidebar Manager operator entry; kept for parity with README.md. |
+| 1.0 | readme | active | 2026-11-08 | [README.md](../README.md) | Operator entry for @nolit/dsh-sidebar-manager: what the right-sidebar switcher does, how to install it, and how to verify it. |
 | 1.0 | reference | reference | 2026-10-24 | [RECOVERY-NOTES.md](../RECOVERY-NOTES.md) | What was recovered into this track from historical session logs, how, and which pieces remain missing. |
 
 ## spec
@@ -46,7 +46,7 @@ summary: Generated per-subproject index for @nolit/dsh-sidebar-manager: every do
 
 ## report
 
-- **1.0** · active · 2026-11-04 · [CHANGELOG.md](../CHANGELOG.md)
+- **1.0** · active · 2026-11-08 · [CHANGELOG.md](../CHANGELOG.md)
   Engineering history for @nolit/dsh-sidebar-manager. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
 - **1.0** · reference · 2026-10-29 · [UTM-REVIEW-FORGE-VS-SIDEBAR.md](UTM-REVIEW-FORGE-VS-SIDEBAR.md)
   Read-only review of the Forge/Worktrees vs Sidebar/UTM measurement against UTM authority docs.
@@ -83,9 +83,9 @@ summary: Generated per-subproject index for @nolit/dsh-sidebar-manager: every do
 
 ## readme
 
-- **1.0** · reference · 2026-11-05 · [README.ko.md](../README.ko.md)
+- **1.0** · reference · 2026-11-08 · [README.ko.md](../README.ko.md)
   Korean translation of the Sidebar Manager operator entry; kept for parity with README.md.
-- **1.0** · active · 2026-11-05 · [README.md](../README.md)
+- **1.0** · active · 2026-11-08 · [README.md](../README.md)
   Operator entry for @nolit/dsh-sidebar-manager: what the right-sidebar switcher does, how to install it, and how to verify it.
 
 ## index

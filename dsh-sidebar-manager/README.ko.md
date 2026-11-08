@@ -4,7 +4,7 @@
 version: 1.0
 kind: readme
 status: reference
-updated: 2026-11-05
+updated: 2026-11-08
 summary: Korean translation of the Sidebar Manager operator entry; kept for parity with README.md.
 -->
 
@@ -53,6 +53,23 @@ Move · Fork · 폴더 연동 Rename 실행 전 다이얼로그에서 아래를 
 체크 전·live 세션 존재·기본 워크스페이스 폴더 변경·경로 충돌 시 **실행 버튼 비활성화**.
 `preflight.preview`는 파일을 쓰지 않고 `affectedSessionCount`, `liveSessionCount`,
 `oldPath`, `newPath`, `isDefaultWorkspace`, `blockers`를 반환합니다.
+
+## UI 스타일 (design tokens)
+
+UI는 인라인 style 객체가 아니라 **하나의 스코프된 스타일시트**로 그립니다. `lib/client.js`의 `CSS`
+배열이 `<style data-plugin-css="@nolit/dsh-sidebar-manager">` 태그 하나로 주입됩니다.
+
+- 모든 규칙은 `.sm*` 클래스만 타깃으로 삼고, 요소 셀렉터가 없습니다.
+- 색상은 전부 `--dsw-*` 토큰이며 리터럴 hex 값이 없습니다. 테두리는 `.5px` 헤어라인입니다.
+- 글자 크기는 `--dsh-content-font-size` / `--dsh-content-font-size-secondary` /
+  `--dsh-content-font-delta` 토큰으로만 표기합니다. 페이지 제목은
+  `calc(20px + var(--dsh-content-font-delta,0px))`, 섹션 제목은
+  `calc(18px + var(--dsh-content-font-delta,0px))` / `font-weight: 600`입니다.
+- 카드는 `--dsw-alias-settings-card-fill` / `--dsw-alias-settings-card-stroke` +
+  `var(--dsw-radius-lg)`, 목록 행은 `min-height: 36px` + `var(--dsw-radius-md)`.
+- 페이지 폭은 `max-width: 960px`로 가운데 정렬하고 640px 이하에서 반응형으로 접힙니다.
+- 모든 조작 요소에 `:focus-visible` 링이 있고, hover/선택 상태는 `@media (hover:hover)` 안에서만
+  켜집니다. `prefers-reduced-motion: reduce`이면 이 표면의 transition이 제거됩니다.
 
 ## UI 문구(i18n)
 

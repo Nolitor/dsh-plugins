@@ -541,7 +541,8 @@ window.__ModuleLoader__.load({
      * `groups.json` may carry an explicit `color`, but a bare hex ignores the theme
      * (audit F: dark/light contrast). Spec §4.1/§4.2 seat variables are the durable
      * source: we prefer a declared color, then fall back to theme seats so the UI
-     * adapts to the active palette without any DOM/CSS injection.
+     * adapts to the active palette. The accent is the only value this plugin
+     * paints inline; every other colour comes from the stylesheet tokens.
      */
     const GROUP_ACCENT_FALLBACKS = [
       'var(--dsw-alias-state-business-primary, currentColor)',
@@ -554,290 +555,217 @@ window.__ModuleLoader__.load({
       return GROUP_ACCENT_FALLBACKS[ordinal % GROUP_ACCENT_FALLBACKS.length]
     }
 
+    // ===== STYLESHEET START =====
+    // One scoped stylesheet, keyed by this package, so a reload replaces it
+    // instead of duplicating it. Every rule targets a `.sm*` class, so nothing
+    // leaks into the host UI, and every colour, border, radius and size is a
+    // `--dsw-*` / `--dsh-content-*` design token or inherited. There is no bare
+    // element selector and no literal hex colour.
+    const CSS_TAG = '@nolit/dsh-sidebar-manager'
+    const CSS_TAG_ID = 'dsh-sidebar-manager-css'
+
+    const CSS = [
+      // --- page shell ---------------------------------------------------------
+      '.smPage{height:100%;min-height:0;overflow:auto;box-sizing:border-box;padding:24px 28px 40px;width:100%;font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.smPageInner{width:100%;max-width:960px;margin:0 auto;min-width:0}',
+      '.smPageTitle{margin:0;font-weight:500;font-size:calc(20px + var(--dsh-content-font-delta,0px));line-height:calc(28px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.smPageDescription{margin:6px 0 18px;color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
+      // --- sections -----------------------------------------------------------
+      '.smSectionHead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:18px 0 8px;min-width:0}',
+      '.smSectionTitle{margin:0;font-weight:600;font-size:calc(18px + var(--dsh-content-font-delta,0px));line-height:calc(24px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.smSectionHint{color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
+      // --- cards and list rows ------------------------------------------------
+      '.smRows{display:flex;flex-direction:column;gap:8px;min-width:0}',
+      '.smRow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;border:.5px solid var(--dsw-alias-settings-card-stroke);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-settings-card-fill);min-width:0}',
+      '.smRowName{flex:1 1 260px;min-width:0}',
+      '.smRowActions{display:flex;flex:0 0 auto;gap:6px;align-items:center}',
+      '.smInlineFolder{flex-basis:100%;padding-left:24px;display:flex;flex-direction:column;gap:4px;min-width:0}',
+      '.smInlineHint{color:var(--dsw-alias-label-tertiary);font-size:calc(var(--dsh-content-font-size-secondary,13px) - 2px);line-height:calc(18px + var(--dsh-content-font-delta-secondary,0px))}',
+      '.smArchivedHeading{margin:22px 0 8px;font-weight:600;font-size:calc(18px + var(--dsh-content-font-delta,0px));line-height:calc(24px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);cursor:pointer}',
+      '.smArchivedBlock{margin-top:22px}',
+      // --- tab strip ----------------------------------------------------------
+      '.smTabs{display:flex;align-items:flex-end;gap:22px;margin-top:2px;border-bottom:.5px solid var(--dsw-alias-border-l2);min-width:0}',
+      '.smTab{position:relative;appearance:none;background:0 0;border:0;padding:7px 1px 9px;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));cursor:pointer;color:var(--dsw-alias-label-tertiary)}',
+      '.smTabActive{color:var(--dsw-alias-label-primary)}',
+      '.smTabUnderline{position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px 2px 0 0;background:var(--dsw-alias-label-primary)}',
+      '.smTabPanel{min-width:0;padding-top:2px}',
+      // --- sidebar and menu rows ---------------------------------------------
+      '.smMoreItem{display:flex;align-items:center;gap:8px;width:100%;min-height:36px;padding:8px 10px;border:0;border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));text-align:left;cursor:pointer}',
+      '.smMoreItemGlyph{display:inline-flex;flex:0 0 auto;align-items:center}',
+      '.smMoreItemLabel{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.smMenuItem{display:block;width:100%;padding:7px 10px;border:0;background:transparent;color:var(--dsw-alias-label-primary);text-align:left;cursor:pointer;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);font-weight:400;line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
+      '.smMenuSeparator{height:.5px;margin:3px 2px;background:var(--dsw-alias-border-l2)}',
+      '.smIconButton{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:24px;padding:2px 5px;border:0;border-radius:var(--dsw-radius-md);background:transparent;color:inherit;cursor:pointer;font-family:inherit}',
+      // --- group tree ---------------------------------------------------------
+      '.smGroupSection{margin-top:8px;padding-top:12px;border-top:.5px solid var(--dsw-alias-border-l2)}',
+      '.smGroupHeader{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}',
+      '.smGroupHeading{margin:0;font-weight:600;font-size:calc(18px + var(--dsh-content-font-delta,0px));line-height:calc(24px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.smGroupActions{display:inline-flex;gap:4px;flex-wrap:wrap}',
+      '.smGroupNotice{margin-top:6px;padding:6px 8px;border-radius:var(--dsw-radius-md);font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);line-height:calc(18px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2)}',
+      '.smGroupList{display:flex;flex-direction:column;gap:8px;margin-top:8px;min-width:0}',
+      '.smGroupCard{border:.5px solid var(--dsw-alias-settings-card-stroke);border-radius:var(--dsw-radius-lg);padding:12px 14px;background:var(--dsw-alias-settings-card-fill);min-width:0}',
+      '.smGroupCardHeader{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}',
+      '.smGroupCardTitle{font-weight:500;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.smGroupKind{font-size:calc(var(--dsh-content-font-size-secondary,13px) - 3px);text-transform:uppercase;letter-spacing:.4px;padding:1px 5px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-secondary)}',
+      '.smGroupPin{font-size:calc(var(--dsh-content-font-size-secondary,13px) - 2px);color:var(--dsw-alias-label-secondary)}',
+      '.smGroupModules{display:flex;flex-direction:column;gap:2px;margin-top:4px;min-width:0}',
+      '.smGroupItem{display:flex;align-items:center;gap:8px;min-height:36px;padding:4px 8px;border-radius:var(--dsw-radius-md);min-width:0;line-height:calc(22px + var(--dsh-content-font-delta,0px));transition:background-color var(--ds-transition-duration-fast) ease}',
+      '.smGroupItemHq{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.smGroupBadge{min-width:26px;text-align:center;font-size:calc(var(--dsh-content-font-size-secondary,13px) - 3px);font-weight:600;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}',
+      '.smGroupLabel{font-weight:500;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-primary)}',
+      '.smGroupHint{margin-top:4px;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--dsh-content-font-size-secondary,13px) - 2px);line-height:calc(18px + var(--dsh-content-font-delta-secondary,0px))}',
+      '.smPath{color:var(--dsw-alias-label-tertiary);font-size:calc(var(--dsh-content-font-size-secondary,13px) - 2px);line-height:calc(18px + var(--dsh-content-font-delta-secondary,0px));overflow-wrap:anywhere}',
+      '.smGroupFormRow{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;align-items:center}',
+      '.smGroupConfirm{margin-top:8px;padding:10px 12px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-state-business-primary);background:var(--dsw-alias-interactive-bg-hover)}',
+      '.smGroupConfirmTitle{font-weight:500;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.smGroupConfirmBody{font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);margin-top:4px}',
+      '.smGroupConfirmCheck{display:flex;gap:6px;align-items:flex-start;margin-top:8px;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-primary)}',
+      // --- forms ---------------------------------------------------------------
+      '.smField{width:100%;box-sizing:border-box;margin-top:4px;padding:7px 9px;border-radius:var(--dsw-radius-sm);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
+      '.smLabel{display:block;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);margin-top:10px}',
+      '.smLabelFlush{margin-top:0}',
+      '.smCheckbox{display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-primary)}',
+      '.smCheckboxRow{flex-basis:100%;margin-top:0}',
+      '.smCheckInput{accent-color:var(--dsw-alias-state-business-primary);margin:0}',
+      '.smGate{margin-top:12px;padding:10px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-primary)}',
+      '.smGateLine{margin-top:8px}',
+      '.smGateStrong{font-weight:600}',
+      '.smGateStrongSpaced{margin-top:6px;font-weight:600}',
+      '.smGatePending{margin-top:8px;color:var(--dsw-alias-label-tertiary)}',
+      '.smBlocker{color:var(--dsw-alias-state-error-primary);white-space:pre-wrap}',
+      '.smBody{font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-primary)}',
+      '.smMeta{color:var(--dsw-alias-label-tertiary);font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);line-height:calc(18px + var(--dsh-content-font-delta-secondary,0px))}',
+      '.smMuted{opacity:.75}',
+      // --- buttons -------------------------------------------------------------
+      '.smFooter{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}',
+      '.smPrimaryButton{padding:7px 12px;border-radius:var(--dsw-radius-sm);border:0;background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-label-primary-foreground);cursor:pointer;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));transition:opacity var(--ds-transition-duration-fast) ease}',
+      '.smPlainButton{padding:7px 12px;border-radius:var(--dsw-radius-sm);border:.5px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));transition:background-color var(--ds-transition-duration-fast) ease}',
+      '.smPlainButton:disabled,.smPrimaryButton:disabled{cursor:default;opacity:.55}',
+      // --- dialogs and notices -------------------------------------------------
+      '.smBackdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:var(--dsw-alias-bg-mask-1);padding:16px}',
+      '.smDialog{width:min(560px,100%);max-height:min(720px,calc(100vh - 32px));overflow:auto;border-radius:var(--dsw-radius-lg);border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);color:var(--dsw-alias-label-primary);padding:16px;box-sizing:border-box;box-shadow:var(--dsw-shadow-lv3);font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px))}',
+      // The dialog container is a focus TARGET, not an interactive control: it
+      // takes programmatic focus on open and must not draw a ring around the
+      // whole surface (the native settings panel does the same).
+      '.smDialog:focus{outline:none}',
+      '.smDialogHead{display:flex;align-items:center;justify-content:space-between;gap:8px}',
+      '.smDialogTitle{margin:0 0 12px;font-weight:500;font-size:calc(20px + var(--dsh-content-font-delta,0px));line-height:calc(28px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.smNotice{position:fixed;right:16px;bottom:16px;z-index:1100;max-width:420px;padding:10px 12px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);box-shadow:var(--dsw-shadow-lv2);color:var(--dsw-alias-label-primary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:pre-wrap}',
+      '.smEmpty{color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));padding:12px 0}',
+      // --- hover states --------------------------------------------------------
+      '@media (hover:hover){.smGroupItem:hover{background:var(--dsw-alias-interactive-bg-hover)}.smPlainButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.smPrimaryButton:hover:not(:disabled){opacity:.9}.smIconButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.smMenuItem:hover:not(:disabled),.smMoreItem:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.smArchivedHeading:hover{color:var(--dsw-alias-label-secondary)}}',
+      // --- focus rings ---------------------------------------------------------
+      // Every interactive control of this surface carries the host focus ring.
+      // The selectors name the classes, not an ancestor, because the sidebar
+      // menu rows render outside the panel page.
+      '.smPlainButton:focus-visible,.smPrimaryButton:focus-visible,.smIconButton:focus-visible,.smMenuItem:focus-visible,.smMoreItem:focus-visible,.smTab:focus-visible,.smField:focus-visible,.smCheckInput:focus-visible,.smArchivedHeading:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}',
+      // --- responsive ----------------------------------------------------------
+      '@media (max-width:640px){.smPage{padding:16px 16px 32px}.smRowActions{flex:1 1 100%}.smInlineFolder{padding-left:0}.smTabs{gap:14px}}',
+      // --- reduced motion ------------------------------------------------------
+      '@media (prefers-reduced-motion:reduce){.smGroupItem,.smPrimaryButton,.smPlainButton{transition:none}}',
+    ].join('')
+
+    /**
+     * Inject the stylesheet once, keyed so a reload replaces it.
+     */
+    function ensureStyle() {
+      if (typeof document === 'undefined' || !document.head) return
+      if (document.getElementById(CSS_TAG_ID) !== null) return
+      const style = document.createElement('style')
+      style.id = CSS_TAG_ID
+      style.setAttribute('data-plugin-css', CSS_TAG)
+      style.textContent = CSS
+      document.head.appendChild(style)
+    }
+    // ===== STYLESHEET END =====
+
+    /**
+     * Class names for every surface this plugin renders. The values are the
+     * `.sm*` selectors of the stylesheet above, so a rule can only be changed
+     * in one place.
+     */
     const styles = {
-      // --- Virtual grouping (HQ tree) -------------------------------------------
-      groupSection: {
-        marginTop: 8,
-        paddingTop: 12,
-        borderTop: '1px solid var(--dsw-alias-border-l2)',
-      },
-      groupHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-      groupHeading: { margin: 0, fontSize: 14, fontWeight: 500, lineHeight: '22px' },
-      groupHeaderActions: { display: 'inline-flex', gap: 4, flexWrap: 'wrap' },
-      groupNotice: {
-        marginTop: 6,
-        padding: '6px 8px',
-        borderRadius: "var(--dsw-radius-md)",
-        fontSize: 12,
-        background: 'var(--dsw-alias-bg-layer-2)',
-      },
-      groupList: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 },
-      groupCard: {
-        border: '0.5px solid var(--dsw-alias-border-l3)',
-        borderRadius: "var(--dsw-radius-md)",
-        padding: '8px 10px',
-      },
-      groupCardHeader: { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-      groupCardTitle: { fontSize: 14, fontWeight: 500, lineHeight: '22px' },
-      groupKind: {
-        fontSize: 10,
-        textTransform: 'uppercase',
-        letterSpacing: 0.4,
-        padding: '1px 5px',
-        borderRadius: "var(--dsw-radius-sm)",
-        background: 'var(--dsw-alias-bg-layer-3)',
-      },
-      groupPin: { fontSize: 11, opacity: 0.85 },
-      groupModules: { display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 },
-      groupItem: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '4px 2px',
-        borderRadius: "var(--dsw-radius-md)",
-      },
-      groupItemHq: { background: 'var(--dsw-alias-interactive-bg-hover)' },
-      groupBadgeIndex: {
-        minWidth: 26,
-        textAlign: 'center',
-        fontSize: 10,
-        fontWeight: 600,
-        opacity: 0.8,
-        fontVariantNumeric: 'tabular-nums',
-      },
-      groupLabel: { fontSize: 13, fontWeight: 500 },
-      groupHint: { marginTop: 4, fontSize: 11, opacity: 0.7 },
-      groupFormRow: { display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' },
-      groupConfirm: {
-        marginTop: 8,
-        padding: '10px 12px',
-        borderRadius: "var(--dsw-radius-md)",
-        border: '1px solid var(--dsw-alias-state-business-primary, currentColor)',
-        background: 'var(--dsw-alias-interactive-bg-hover)',
-      },
-      groupConfirmTitle: { fontSize: 14, fontWeight: 500, lineHeight: '22px' },
-      groupConfirmBody: { fontSize: 12, marginTop: 4, lineHeight: 1.5 },
-      groupConfirmCheck: { display: 'flex', gap: 6, alignItems: 'flex-start', marginTop: 8, fontSize: 12 },
-      iconButton: {
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 5,
-        minHeight: 24,
-        padding: '2px 5px',
-        border: 0,
-        borderRadius: "var(--dsw-radius-md)",
-        background: 'transparent',
-        color: 'inherit',
-        cursor: 'pointer',
-        font: 'inherit',
-      },
-      menuSeparator: {
-        height: '0.5px',
-        margin: '3px 2px',
-        background: 'var(--dsw-alias-border-l2)',
-      },
-      menuItem: {
-        display: 'block',
-        width: '100%',
-        padding: '7px 10px',
-        border: 0,
-        background: 'transparent',
-        color: 'inherit',
-        textAlign: 'left',
-        cursor: 'pointer',
-        // Native context-menu rows measure 13px/400/20px. `font: inherit` alone
-        // took the body default (16px) because the menu container sets no size,
-        // so these rows rendered visibly larger than the native rows beside them.
-        fontFamily: 'inherit',
-        fontSize: 13,
-        fontWeight: 400,
-        lineHeight: '20px',
-      },
-      backdrop: {
-        position: 'fixed',
-        inset: 0,
-        zIndex: 1000,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'rgba(0, 0, 0, 0.36)',
-        padding: 16,
-      },
-      panel: {
-        width: 'min(560px, 100%)',
-        maxHeight: 'min(720px, calc(100vh - 32px))',
-        overflow: 'auto',
-        borderRadius: 12,
-        border: '1px solid var(--dsw-alias-border-l2, #444)',
-        background: 'var(--dsw-alias-bg-layer-2, #1f1f1f)',
-        color: 'inherit',
-        padding: 16,
-        boxSizing: 'border-box',
-        boxShadow: '0 18px 50px rgba(0, 0, 0, 0.45)',
-      },
-      title: { margin: '0 0 12px', fontSize: 14, fontWeight: 500, lineHeight: '22px' },
-      row: { display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' },
-      field: {
-        width: '100%',
-        boxSizing: 'border-box',
-        marginTop: 4,
-        padding: '7px 9px',
-        borderRadius: 7,
-        border: '1px solid var(--dsw-alias-border-l2, #555)',
-        background: 'var(--dsw-alias-bg-layer-1, #161616)',
-        color: 'inherit',
-        font: 'inherit',
-        fontSize: 13,
-        lineHeight: '20px',
-      },
-      label: { display: 'block', fontSize: 12, opacity: 0.85, marginTop: 10 },
-      gateBox: {
-        marginTop: 12,
-        padding: 10,
-        borderRadius: "var(--dsw-radius-md)",
-        border: '1px solid var(--dsw-alias-border-l2, #555)',
-        background: 'var(--dsw-alias-bg-layer-1, #161616)',
-        fontSize: 12,
-        lineHeight: 1.5,
-      },
-      blocker: { color: 'var(--dsw-alias-state-error-primary, #ff7b72)', whiteSpace: 'pre-wrap' },
-      checkbox: { display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 12, fontSize: 12, lineHeight: 1.5 },
-      footer: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 },
-      primary: {
-        padding: '7px 12px',
-        borderRadius: 7,
-        border: 0,
-        background: 'var(--dsw-alias-state-business-primary, #4f7cff)',
-        color: '#fff',
-        cursor: 'pointer',
-        font: 'inherit',
-      },
-      plain: {
-        padding: '7px 12px',
-        borderRadius: 7,
-        border: '1px solid var(--dsw-alias-border-l2, #555)',
-        background: 'transparent',
-        color: 'inherit',
-        cursor: 'pointer',
-        font: 'inherit',
-        fontSize: 13,
-        lineHeight: '20px',
-      },
-      list: { display: 'flex', flexDirection: 'column', gap: 6 },
-      listRow: {
-        display: 'flex',
-        gap: 8,
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '8px 10px',
-        border: '1px solid var(--dsw-alias-border-l2, #444)',
-        borderRadius: "var(--dsw-radius-md)",
-      },
-      listText: { minWidth: 0 },
-      path: { fontSize: 11, opacity: 0.7, overflowWrap: 'anywhere' },
-      panelPage: {
-        height: '100%',
-        overflow: 'auto',
-        boxSizing: 'border-box',
-        padding: '24px 28px 40px',
-        width: '100%',
-        // DSH defines no font-size token and sets none on body (the UA default is
-        // 16px); every native surface states 14px. A panel that omits it renders
-        // 2px larger than the rest of the UI, so the baseline is pinned here and
-        // inherited by everything inside.
-        fontSize: 14,
-        lineHeight: '22px',
-        color: 'var(--dsw-alias-label-primary)',
-      },
-      panelInner: { width: '100%', maxWidth: 820, margin: '0 auto' },
-      panelHeading: { margin: 0, fontSize: 20, fontWeight: 500, lineHeight: '28px' },
-      panelDescription: { margin: '6px 0 18px', fontSize: 12, opacity: 0.75, lineHeight: 1.5 },
-      panelSectionHead: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, margin: '18px 0 8px' },
-      panelSectionTitle: { margin: 0, fontSize: 14, fontWeight: 500, lineHeight: '22px' },
-      panelSectionHint: { fontSize: 11, opacity: 0.62 },
-      panelRows: { display: 'flex', flexDirection: 'column', gap: 8 },
-      panelRow: {
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        gap: 10,
-        padding: '12px 14px',
-        border: '1px solid var(--dsw-alias-border-l2, #444)',
-        borderRadius: "var(--dsw-radius-lg)",
-        background: 'var(--dsw-alias-bg-layer-1, rgba(0,0,0,0.04))',
-      },
-      panelName: { flex: '1 1 260px', minWidth: 0 },
-      panelActions: { display: 'flex', flex: '0 0 auto', gap: 6, alignItems: 'center' },
-      inlineFolder: { flexBasis: '100%', paddingLeft: 24, display: 'flex', flexDirection: 'column', gap: 4 },
-      inlineHint: { fontSize: 11, opacity: 0.62 },
-      archivedHeading: { margin: '22px 0 8px', fontSize: 14, fontWeight: 500, lineHeight: '22px' },
-      archivedBlock: { marginTop: 22 },
-      // --- Tab strip (mirrors the native settings tabs) --------------------
-      tabs: {
-        display: 'flex',
-        alignItems: 'flex-end',
-        gap: 22,
-        marginTop: 2,
-        borderBottom: '0.5px solid var(--dsw-alias-border-l2)',
-      },
-      tab: {
-        position: 'relative',
-        appearance: 'none',
-        background: '0 0',
-        border: 0,
-        padding: '7px 1px 9px',
-        font: 'inherit',
-        fontSize: 13,
-        lineHeight: '20px',
-        cursor: 'pointer',
-        color: 'var(--dsw-alias-label-tertiary)',
-      },
-      tabActive: { color: 'var(--dsw-alias-label-primary)' },
-      tabUnderline: {
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: -1,
-        height: 2,
-        borderRadius: '2px 2px 0 0',
-        background: 'var(--dsw-alias-label-primary)',
-      },
-      tabPanel: { minWidth: 0, paddingTop: 2 },
-      // --- More-menu row (matches the native menu item metrics) -------------
-      moreItem: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        width: '100%',
-        padding: '8px 10px',
-        border: 0,
-        borderRadius: 'var(--dsw-radius-sm)',
-        background: 'transparent',
-        color: 'var(--dsw-alias-label-primary)',
-        font: 'inherit',
-        fontSize: 13,
-        lineHeight: '20px',
-        textAlign: 'left',
-        cursor: 'pointer',
-      },
-      moreItemGlyph: { display: 'inline-flex', flex: '0 0 auto', alignItems: 'center' },
-      moreItemLabel: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-      empty: { opacity: 0.7, fontSize: 12, padding: '12px 0' },
-      notice: {
-        position: 'fixed',
-        right: 16,
-        bottom: 16,
-        zIndex: 1100,
-        maxWidth: 420,
-        padding: '10px 12px',
-        borderRadius: "var(--dsw-radius-md)",
-        border: '1px solid var(--dsw-alias-border-l2, #555)',
-        background: 'var(--dsw-alias-bg-layer-2, #1f1f1f)',
-        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.35)',
-        fontSize: 12,
-        whiteSpace: 'pre-wrap',
-      },
+      groupSection: 'smGroupSection',
+      groupHeader: 'smGroupHeader',
+      groupHeading: 'smGroupHeading',
+      groupHeaderActions: 'smGroupActions',
+      groupNotice: 'smGroupNotice',
+      groupList: 'smGroupList',
+      groupCard: 'smGroupCard',
+      groupCardHeader: 'smGroupCardHeader',
+      groupCardTitle: 'smGroupCardTitle',
+      groupKind: 'smGroupKind',
+      groupPin: 'smGroupPin',
+      groupModules: 'smGroupModules',
+      groupItem: 'smGroupItem',
+      groupItemHq: 'smGroupItemHq',
+      groupBadgeIndex: 'smGroupBadge',
+      groupLabel: 'smGroupLabel',
+      groupHint: 'smGroupHint',
+      groupFormRow: 'smGroupFormRow',
+      groupConfirm: 'smGroupConfirm',
+      groupConfirmTitle: 'smGroupConfirmTitle',
+      groupConfirmBody: 'smGroupConfirmBody',
+      groupConfirmCheck: 'smGroupConfirmCheck',
+      iconButton: 'smIconButton',
+      menuSeparator: 'smMenuSeparator',
+      menuItem: 'smMenuItem',
+      backdrop: 'smBackdrop',
+      panel: 'smDialog',
+      dialogHead: 'smDialogHead',
+      title: 'smDialogTitle',
+      field: 'smField',
+      label: 'smLabel',
+      labelFlush: 'smLabelFlush',
+      gateBox: 'smGate',
+      gateLine: 'smGateLine',
+      gateStrong: 'smGateStrong',
+      gateStrongSpaced: 'smGateStrongSpaced',
+      gatePending: 'smGatePending',
+      blocker: 'smBlocker',
+      body: 'smBody',
+      meta: 'smMeta',
+      muted: 'smMuted',
+      checkbox: 'smCheckbox',
+      checkboxRow: 'smCheckboxRow',
+      checkInput: 'smCheckInput',
+      footer: 'smFooter',
+      primary: 'smPrimaryButton',
+      plain: 'smPlainButton',
+      path: 'smPath',
+      panelPage: 'smPage',
+      panelInner: 'smPageInner',
+      panelHeading: 'smPageTitle',
+      panelDescription: 'smPageDescription',
+      panelSectionHead: 'smSectionHead',
+      panelSectionTitle: 'smSectionTitle',
+      panelSectionHint: 'smSectionHint',
+      panelRows: 'smRows',
+      panelRow: 'smRow',
+      panelName: 'smRowName',
+      panelActions: 'smRowActions',
+      inlineFolder: 'smInlineFolder',
+      inlineHint: 'smInlineHint',
+      archivedHeading: 'smArchivedHeading',
+      archivedBlock: 'smArchivedBlock',
+      tabs: 'smTabs',
+      tab: 'smTab',
+      tabActive: 'smTabActive',
+      tabUnderline: 'smTabUnderline',
+      tabPanel: 'smTabPanel',
+      moreItem: 'smMoreItem',
+      moreItemGlyph: 'smMoreItemGlyph',
+      moreItemLabel: 'smMoreItemLabel',
+      empty: 'smEmpty',
+      notice: 'smNotice',
+    }
+
+    /**
+     * Join class names, dropping the falsy ones. A conditional class is a
+     * plain argument, so a caller never concatenates class names by hand.
+     */
+    function cx(...names) {
+      return names.filter(Boolean).join(' ')
     }
 
     // ----- shared gate -----------------------------------------------------------
@@ -852,29 +780,30 @@ window.__ModuleLoader__.load({
       const title = value?.workspaceTitle
       return h(
         'div',
-        { style: styles.gateBox },
+        { className: styles.gateBox },
         h('div', null, t('gate.affected', { count: affected ?? '—' })),
         title !== undefined ? h('div', null, t('gate.workspace', { title })) : null,
         oldPath !== undefined || newPath !== undefined
           ? h('div', null, t('gate.path', { oldPath: oldPath ?? '—', newPath: newPath ?? '—' }))
           : null,
-        h('div', { style: { marginTop: 8 } }, t('common.cwdWarning')),
-        h('div', { style: { marginTop: 6, fontWeight: 600 } }, t('gate.restart')),
+        h('div', { className: styles.gateLine }, t('common.cwdWarning')),
+        h('div', { className: styles.gateStrongSpaced }, t('gate.restart')),
         blockers.length > 0
           ? h(
               'div',
-              { style: { marginTop: 8 } },
-              h('div', { style: { fontWeight: 600 } }, t('gate.blockers')),
-              h('div', { style: styles.blocker }, blockers.join('\n')),
+              { className: styles.gateLine },
+              h('div', { className: styles.gateStrong }, t('gate.blockers')),
+              h('div', { className: styles.blocker }, blockers.join('\n')),
             )
           : value?.pending === true || value === undefined
-            ? h('div', { style: { marginTop: 8, opacity: 0.8 } }, t('gate.previewPending'))
+            ? h('div', { className: styles.gatePending }, t('gate.previewPending'))
             : null,
         h(
           'label',
-          { style: styles.checkbox },
+          { className: styles.checkbox },
           h('input', {
             type: 'checkbox',
+            className: styles.checkInput,
             checked: ack,
             disabled: !ready || busy,
             onChange: (event) => setAck(event.target.checked),
@@ -883,12 +812,12 @@ window.__ModuleLoader__.load({
         ),
         h(
           'div',
-          { style: styles.footer },
+          { className: styles.footer },
           h(
             'button',
             {
               type: 'button',
-              style: styles.primary,
+              className: styles.primary,
               disabled: !ready || !ack || busy,
               onClick: onSubmit,
             },
@@ -900,6 +829,8 @@ window.__ModuleLoader__.load({
 
     // ----- dialogs ---------------------------------------------------------------
     function Modal({ title, onClose, children }) {
+      const titleId = React.useId()
+      const panelRef = React.useRef(null)
       React.useEffect(() => {
         const onKey = (event) => {
           if (event.key === 'Escape') onClose()
@@ -907,24 +838,37 @@ window.__ModuleLoader__.load({
         window.addEventListener('keydown', onKey)
         return () => window.removeEventListener('keydown', onKey)
       }, [onClose])
+      // Move focus into the dialog when it opens, so a keyboard user is not
+      // left on the control that opened it behind the backdrop.
+      React.useEffect(() => {
+        const element = panelRef.current
+        if (element && typeof element.focus === 'function') element.focus()
+      }, [])
       return h(
         'div',
         {
-          style: styles.backdrop,
+          className: styles.backdrop,
           onMouseDown: (event) => {
             if (event.target === event.currentTarget) onClose()
           },
         },
         h(
           'div',
-          { role: 'dialog', 'aria-modal': 'true', style: styles.panel },
+          {
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-labelledby': titleId,
+            tabIndex: -1,
+            ref: panelRef,
+            className: styles.panel,
+          },
           h(
             'div',
-            { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
-            h('h2', { style: styles.title }, title),
+            { className: styles.dialogHead },
+            h('h2', { id: titleId, className: styles.title }, title),
             h(
               'button',
-              { type: 'button', style: styles.iconButton, onClick: onClose, 'aria-label': t('common.close') },
+              { type: 'button', className: styles.iconButton, onClick: onClose, 'aria-label': t('common.close') },
               h(Icon, { kind: 'close' }),
             ),
           ),
@@ -1044,23 +988,23 @@ window.__ModuleLoader__.load({
           'div',
           {
             key: workspaceId,
-            style: { ...styles.groupItem, ...(isHq ? styles.groupItemHq : null), ...(muted ? { opacity: 0.75 } : null) },
+            className: cx(styles.groupItem, isHq && styles.groupItemHq, muted && styles.muted),
             'data-workspace-id': workspaceId,
           },
-          h('span', { style: styles.groupBadgeIndex }, isHq ? t('groups.hq') : (entry.index ?? '—')),
+          h('span', { className: styles.groupBadgeIndex }, isHq ? t('groups.hq') : (entry.index ?? '—')),
           h(
             'div',
-            { style: styles.panelName },
-            h('div', { style: styles.groupLabel }, label),
+            { className: styles.panelName },
+            h('div', { className: styles.groupLabel }, label),
             h(
               'div',
-              { style: styles.path },
+              { className: styles.path },
               `${workspace.title} · ${t('groups.sessions', { count: workspace.sessionCount ?? 0 })}`,
             ),
           ),
           h(
             'button',
-            { type: 'button', style: styles.plain, disabled: orderBusy, onClick: () => openWorkspace(workspaceId) },
+            { type: 'button', className: styles.plain, disabled: orderBusy, onClick: () => openWorkspace(workspaceId) },
             t('groups.open'),
           ),
         )
@@ -1068,44 +1012,45 @@ window.__ModuleLoader__.load({
 
       return h(
         'section',
-        { style: styles.groupSection, 'aria-label': t('groups.title') },
+        { className: styles.groupSection, 'aria-label': t('groups.title') },
         h(
           'div',
-          { style: styles.groupHeader },
-          h('div', { style: styles.groupHeading }, t('groups.summary')),
+          { className: styles.groupHeader },
+          h('div', { className: styles.groupHeading }, t('groups.summary')),
           h(
             'div',
-            { style: styles.groupHeaderActions },
-            h('button', { type: 'button', style: styles.plain, disabled: orderBusy, onClick: previewOrder }, t('groups.alignPreview')),
-            h('button', { type: 'button', style: styles.plain, disabled: orderBusy, onClick: requestOrderConfirm }, t('groups.align')),
-            h('button', { type: 'button', style: styles.plain, disabled: orderBusy, onClick: () => load() }, t('groups.refresh')),
+            { className: styles.groupHeaderActions },
+            h('button', { type: 'button', className: styles.plain, disabled: orderBusy, onClick: previewOrder }, t('groups.alignPreview')),
+            h('button', { type: 'button', className: styles.plain, disabled: orderBusy, onClick: requestOrderConfirm }, t('groups.align')),
+            h('button', { type: 'button', className: styles.plain, disabled: orderBusy, onClick: () => load() }, t('groups.refresh')),
           ),
         ),
-        h('p', { style: styles.panelDescription }, t('groups.description')),
+        h('p', { className: styles.panelDescription }, t('groups.description')),
         // --- order confirmation dialog -------------------------------------
         confirmOpen
           ? h(
               'div',
-              { style: styles.groupConfirm, role: 'dialog', 'aria-modal': 'true', 'aria-label': t('groups.confirmOrderTitle') },
-              h('div', { style: styles.groupConfirmTitle }, t('groups.confirmOrderTitle')),
-              h('div', { style: styles.groupConfirmBody }, t('groups.confirmOrderBody')),
+              { className: styles.groupConfirm, role: 'dialog', 'aria-modal': 'true', 'aria-label': t('groups.confirmOrderTitle') },
+              h('div', { className: styles.groupConfirmTitle }, t('groups.confirmOrderTitle')),
+              h('div', { className: styles.groupConfirmBody }, t('groups.confirmOrderBody')),
               h(
                 'div',
-                { style: styles.groupConfirmBody },
+                { className: styles.groupConfirmBody },
                 orderInfo?.unchanged
                   ? t('groups.confirmOrderNoop')
                   : t('groups.confirmOrderMoves', { count: orderInfo?.moves?.length ?? 0 }),
               ),
               h(
                 'div',
-                { style: styles.groupConfirmBody },
+                { className: styles.groupConfirmBody },
                 [t('groups.manageOnly')],
               ),
               h(
                 'label',
-                { style: styles.groupConfirmCheck },
+                { className: styles.groupConfirmCheck },
                 h('input', {
                   type: 'checkbox',
+                  className: styles.checkInput,
                   checked: confirmChecked,
                   disabled: orderBusy || orderInfo?.unchanged === true,
                   onChange: (event) => setConfirmChecked(event.target.checked),
@@ -1114,72 +1059,72 @@ window.__ModuleLoader__.load({
               ),
               h(
                 'div',
-                { style: styles.groupHeaderActions },
+                { className: styles.groupHeaderActions },
                 h(
                   'button',
                   {
                     type: 'button',
-                    style: styles.plain,
+                    className: styles.plain,
                     disabled: !confirmChecked || orderBusy,
                     onClick: applyOrder,
                   },
                   t('groups.confirmOrderApply'),
                 ),
-                h('button', { type: 'button', style: styles.plain, onClick: () => setConfirmOpen(false) }, t('groups.confirmOrderCancel')),
+                h('button', { type: 'button', className: styles.plain, onClick: () => setConfirmOpen(false) }, t('groups.confirmOrderCancel')),
               ),
             )
           : null,
         orderInfo !== null
           ? h(
               'div',
-              { style: styles.groupNotice },
+              { className: styles.groupNotice },
               orderInfo.kind === 'preview'
                 ? `${t('groups.alignPreview')}: ${t('groups.moveCount', { count: orderInfo.moves?.length ?? 0 })}${orderInfo.unchanged ? ` · ${t('groups.alignNoop')}` : ''}`
                 : `${t('groups.align')}: ${t('groups.moveCount', { count: orderInfo.moves ?? 0 })}${orderInfo.matchesTarget === false ? ' ⚠' : ''}`,
             )
           : null,
         state.loading
-          ? h('div', { style: styles.empty }, t('common.loading'))
+          ? h('div', { className: styles.empty }, t('common.loading'))
           : state.error !== null
-            ? h('div', { style: styles.blocker }, state.error)
+            ? h('div', { className: styles.blocker }, state.error)
             : groups.length === 0
-              ? h('div', { style: styles.empty }, t('groups.empty'))
+              ? h('div', { className: styles.empty }, t('groups.empty'))
               : h(
                   'div',
-                  { style: styles.groupList },
+                  { className: styles.groupList },
                   groups.map((group, index) =>
                     h(
                       'div',
-                      { key: group.groupId, style: styles.groupCard, 'data-group-id': group.groupId },
+                      { key: group.groupId, className: styles.groupCard, 'data-group-id': group.groupId },
                       h(
                         'div',
-                        { style: styles.groupCardHeader },
+                        { className: styles.groupCardHeader },
                         h(
                           'span',
-                          { style: { ...styles.groupKind, color: groupAccent(group, index) } },
+                          { className: styles.groupKind, style: { color: groupAccent(group, index) } },
                           group.kind === 'system' ? t('groups.system') : group.proposed ? t('groups.proposed') : t('groups.project'),
                         ),
-                        h('span', { style: styles.groupCardTitle }, group.label),
-                        group.pinTop ? h('span', { style: styles.groupPin }, '★') : null,
-                        h('span', { style: styles.path }, t('groups.sessions', { count: group.sessionCount ?? 0 })),
+                        h('span', { className: styles.groupCardTitle }, group.label),
+                        group.pinTop ? h('span', { className: styles.groupPin }, '★') : null,
+                        h('span', { className: styles.path }, t('groups.sessions', { count: group.sessionCount ?? 0 })),
                       ),
                       group.hq !== null
                         ? renderWorkspaceRow(group.hq, { isHq: true })
-                        : h('div', { style: styles.groupHint }, t('groups.hqMissing')),
+                        : h('div', { className: styles.groupHint }, t('groups.hqMissing')),
                       group.modules.length > 0
-                        ? h('div', { style: styles.groupModules }, group.modules.map((entry) => renderWorkspaceRow(entry, { isHq: false })))
+                        ? h('div', { className: styles.groupModules }, group.modules.map((entry) => renderWorkspaceRow(entry, { isHq: false })))
                         : null,
                       group.loose.length > 0
-                        ? h('div', { style: styles.groupModules }, group.loose.map((entry) => renderWorkspaceRow(entry, { isHq: false, muted: true })))
+                        ? h('div', { className: styles.groupModules }, group.loose.map((entry) => renderWorkspaceRow(entry, { isHq: false, muted: true })))
                         : null,
                     ),
                   ),
                   tree?.ungrouped?.length > 0
                     ? h(
                         'div',
-                        { style: { ...styles.groupCard, opacity: 0.85 } },
-                        h('div', { style: styles.groupCardHeader }, h('span', { style: styles.groupCardTitle }, t('groups.ungrouped'))),
-                        h('div', { style: styles.groupModules }, tree.ungrouped.map((workspace) => renderWorkspaceRow({ workspace }, { isHq: false, muted: true }))),
+                        { className: cx(styles.groupCard, styles.muted) },
+                        h('div', { className: styles.groupCardHeader }, h('span', { className: styles.groupCardTitle }, t('groups.ungrouped'))),
+                        h('div', { className: styles.groupModules }, tree.ungrouped.map((workspace) => renderWorkspaceRow({ workspace }, { isHq: false, muted: true }))),
                       )
                     : null,
                 ),
@@ -1338,40 +1283,40 @@ window.__ModuleLoader__.load({
 
       return h(
         'section',
-        { style: styles.tabPanel, 'aria-label': t('tabs.workspaces') },
+        { className: styles.tabPanel, 'aria-label': t('tabs.workspaces') },
         h(
           'div',
-          { style: styles.panelInner },
-          h('p', { style: styles.panelDescription }, t('workspaceManager.description')),
+          { className: styles.panelInner },
+          h('p', { className: styles.panelDescription }, t('workspaceManager.description')),
           h(
             'div',
-            { style: styles.panelSectionHead },
-            h('h2', { style: styles.panelSectionTitle }, t('workspaceManager.listTitle')),
-            h('span', { style: styles.panelSectionHint }, t('workspaceManager.inlineHint')),
+            { className: styles.panelSectionHead },
+            h('h2', { className: styles.panelSectionTitle }, t('workspaceManager.listTitle')),
+            h('span', { className: styles.panelSectionHint }, t('workspaceManager.inlineHint')),
           ),
           state.loading
-            ? h('div', { style: styles.empty }, t('common.loading'))
+            ? h('div', { className: styles.empty }, t('common.loading'))
             : state.error !== null
-              ? h('div', { style: styles.blocker }, state.error)
+              ? h('div', { className: styles.blocker }, state.error)
               : h(
                   React.Fragment,
                   null,
                   h(
                     'div',
-                    { style: styles.panelRows },
+                    { className: styles.panelRows },
                     state.items.length === 0
-                      ? h('div', { style: styles.empty }, t('workspaceManager.empty'))
+                      ? h('div', { className: styles.empty }, t('workspaceManager.empty'))
                       : state.items.map((workspace) => {
                           const draft = drafts[workspace.workspaceId] || draftFor(workspace)
                           const newPath = joinPath(parentPath(workspace.path), draft.folderName.trim())
                           return h(
                             'div',
-                            { key: workspace.workspaceId, style: styles.panelRow, 'data-workspace-id': workspace.workspaceId },
+                            { key: workspace.workspaceId, className: styles.panelRow, 'data-workspace-id': workspace.workspaceId },
                             h(
                               'div',
-                              { style: styles.panelName },
+                              { className: styles.panelName },
                               h('input', {
-                                style: styles.field,
+                                className: styles.field,
                                 value: draft.title,
                                 'aria-label': `${t('rename.displayName')}: ${workspace.title}`,
                                 disabled: busyId !== null,
@@ -1379,16 +1324,16 @@ window.__ModuleLoader__.load({
                                 onKeyDown: (event) => onKeyDown(event, workspace),
                                 onFocus: (event) => event.currentTarget.select(),
                               }),
-                              h('div', { style: styles.path }, workspace.path),
+                              h('div', { className: styles.path }, workspace.path),
                             ),
                             h(
                               'div',
-                              { style: styles.panelActions },
+                              { className: styles.panelActions },
                               h(
                                 'button',
                                 {
                                   type: 'button',
-                                  style: styles.plain,
+                                  className: styles.plain,
                                   disabled: busyId !== null,
                                   title: t('workspaceManager.folderRenameHint'),
                                   onClick: () => saveTitle(workspace),
@@ -1401,7 +1346,7 @@ window.__ModuleLoader__.load({
                                 'button',
                                 {
                                   type: 'button',
-                                  style: styles.plain,
+                                  className: styles.plain,
                                   disabled: busyId !== null,
                                   onClick: () => archive(workspace),
                                 },
@@ -1410,9 +1355,10 @@ window.__ModuleLoader__.load({
                             ),
                             h(
                               'label',
-                              { style: { ...styles.checkbox, flexBasis: '100%', marginTop: 0 } },
+                              { className: cx(styles.checkbox, styles.checkboxRow) },
                               h('input', {
                                 type: 'checkbox',
+                                className: styles.checkInput,
                                 checked: draft.includeFolder,
                                 disabled: busyId !== null,
                                 onChange: (event) =>
@@ -1423,13 +1369,13 @@ window.__ModuleLoader__.load({
                             draft.includeFolder
                               ? h(
                                   'div',
-                                  { style: styles.inlineFolder },
+                                  { className: styles.inlineFolder },
                                   h(
                                     'label',
-                                    { style: { ...styles.label, marginTop: 0 } },
+                                    { className: cx(styles.label, styles.labelFlush) },
                                     t('workspaceManager.folderName'),
                                     h('input', {
-                                      style: styles.field,
+                                      className: styles.field,
                                       value: draft.folderName,
                                       'aria-label': t('workspaceManager.folderName'),
                                       disabled: busyId !== null,
@@ -1441,10 +1387,10 @@ window.__ModuleLoader__.load({
                                       onKeyDown: (event) => onKeyDown(event, workspace),
                                     }),
                                   ),
-                                  h('div', { style: styles.inlineHint }, t('workspaceManager.folderHint')),
+                                  h('div', { className: styles.inlineHint }, t('workspaceManager.folderHint')),
                                   h(
                                     'div',
-                                    { style: styles.inlineHint },
+                                    { className: styles.inlineHint },
                                     t('workspaceManager.pathPreview', { oldPath: workspace.path, newPath }),
                                   ),
                                 )
@@ -1455,33 +1401,33 @@ window.__ModuleLoader__.load({
                   state.archived.length > 0
                     ? h(
                         'details',
-                        { style: styles.archivedBlock },
+                        { className: styles.archivedBlock },
                         h(
                           'summary',
-                          { style: styles.archivedHeading },
+                          { className: styles.archivedHeading },
                           `${t('workspaceManager.archived')} (${state.archived.length})`,
                         ),
                         h(
                           'div',
-                          { style: styles.panelRows },
+                          { className: styles.panelRows },
                           state.archived.map((workspace) =>
                             h(
                               'div',
-                              { key: workspace.workspaceId, style: styles.panelRow, 'data-workspace-id': workspace.workspaceId },
+                              { key: workspace.workspaceId, className: styles.panelRow, 'data-workspace-id': workspace.workspaceId },
                               h(
                                 'div',
-                                { style: styles.panelName },
+                                { className: styles.panelName },
                                 h('div', null, workspace.title),
-                                h('div', { style: styles.path }, workspace.path),
+                                h('div', { className: styles.path }, workspace.path),
                               ),
                               h(
                                 'div',
-                                { style: styles.panelActions },
+                                { className: styles.panelActions },
                                 h(
                                   'button',
                                   {
                                     type: 'button',
-                                    style: styles.plain,
+                                    className: styles.plain,
                                     disabled: busyId !== null,
                                     onClick: () => restore(workspace.workspaceId),
                                   },
@@ -1591,33 +1537,33 @@ window.__ModuleLoader__.load({
 
       return h(
         'section',
-        { style: styles.tabPanel, 'aria-label': t('tabs.diagnostics') },
-        h('p', { style: styles.panelDescription }, t('diagnostics.description')),
+        { className: styles.tabPanel, 'aria-label': t('tabs.diagnostics') },
+        h('p', { className: styles.panelDescription }, t('diagnostics.description')),
         advisory !== null
           ? h(
               'div',
-              { style: styles.groupCard, 'aria-label': t('groups.advisoryTitle') },
+              { className: styles.groupCard, 'aria-label': t('groups.advisoryTitle') },
               h(
                 'div',
-                { style: styles.groupCardHeader },
-                h('span', { style: styles.groupCardTitle }, t('groups.advisoryTitle')),
-                h('span', { style: styles.groupHint }, `${advisory.observations?.length ?? 0}`),
+                { className: styles.groupCardHeader },
+                h('span', { className: styles.groupCardTitle }, t('groups.advisoryTitle')),
+                h('span', { className: styles.groupHint }, `${advisory.observations?.length ?? 0}`),
               ),
               (advisory.observations?.length ?? 0) === 0
-                ? h('div', { style: styles.groupHint }, t('groups.advisoryNone'))
+                ? h('div', { className: styles.groupHint }, t('groups.advisoryNone'))
                 : h(
                     'div',
-                    { style: styles.groupModules },
+                    { className: styles.groupModules },
                     advisory.observations.map((observation) =>
                       h(
                         'div',
-                        { key: `${observation.code}:${observation.workspaceId ?? ''}`, style: styles.groupItem },
-                        h('span', { style: styles.groupBadgeIndex }, observation.level),
+                        { key: `${observation.code}:${observation.workspaceId ?? ''}`, className: styles.groupItem },
+                        h('span', { className: styles.groupBadgeIndex }, observation.level),
                         h(
                           'div',
-                          { style: styles.panelName },
-                          h('div', { style: styles.groupLabel }, observation.title ?? observation.workspaceId ?? ''),
-                          h('div', { style: styles.path }, observation.detail ?? ''),
+                          { className: styles.panelName },
+                          h('div', { className: styles.groupLabel }, observation.title ?? observation.workspaceId ?? ''),
+                          h('div', { className: styles.path }, observation.detail ?? ''),
                         ),
                       ),
                     ),
@@ -1626,43 +1572,43 @@ window.__ModuleLoader__.load({
           : null,
         h(
           'div',
-          { style: styles.groupCard },
-          h('div', { style: styles.groupCardHeader }, h('span', { style: styles.groupCardTitle }, t('groups.hqTitle'))),
+          { className: styles.groupCard },
+          h('div', { className: styles.groupCardHeader }, h('span', { className: styles.groupCardTitle }, t('groups.hqTitle'))),
           h(
             'div',
-            { style: styles.groupFormRow },
-            h('input', { style: styles.field, placeholder: t('groups.hqGroup'), value: hqGroup, disabled: busy, onChange: (e) => setHqGroup(e.target.value), 'aria-label': t('groups.hqGroup') }),
-            h('input', { style: styles.field, placeholder: t('groups.hqMain'), value: hqMain, disabled: busy, onChange: (e) => setHqMain(e.target.value), 'aria-label': t('groups.hqMain') }),
-            h('button', { type: 'button', style: styles.plain, disabled: busy, onClick: createHq }, t('groups.hqCreate')),
+            { className: styles.groupFormRow },
+            h('input', { className: styles.field, placeholder: t('groups.hqGroup'), value: hqGroup, disabled: busy, onChange: (e) => setHqGroup(e.target.value), 'aria-label': t('groups.hqGroup') }),
+            h('input', { className: styles.field, placeholder: t('groups.hqMain'), value: hqMain, disabled: busy, onChange: (e) => setHqMain(e.target.value), 'aria-label': t('groups.hqMain') }),
+            h('button', { type: 'button', className: styles.plain, disabled: busy, onClick: createHq }, t('groups.hqCreate')),
           ),
         ),
         h(
           'div',
-          { style: styles.groupCard },
-          h('div', { style: styles.groupCardHeader }, h('span', { style: styles.groupCardTitle }, t('groups.promoteTitle'))),
+          { className: styles.groupCard },
+          h('div', { className: styles.groupCardHeader }, h('span', { className: styles.groupCardTitle }, t('groups.promoteTitle'))),
           h(
             'div',
-            { style: styles.groupFormRow },
-            h('input', { style: styles.field, placeholder: t('groups.promotePath'), value: promotePath, disabled: busy, onChange: (e) => setPromotePath(e.target.value), 'aria-label': t('groups.promotePath') }),
-            h('input', { style: styles.field, placeholder: t('groups.promoteTitleField'), value: promoteTitle, disabled: busy, onChange: (e) => setPromoteTitle(e.target.value), 'aria-label': t('groups.promoteTitleField') }),
-            h('button', { type: 'button', style: styles.plain, disabled: busy, onClick: previewPromotion }, t('groups.promotePreview')),
-            h('button', { type: 'button', style: styles.plain, disabled: busy, onClick: runPromotion }, t('groups.promoteAction')),
+            { className: styles.groupFormRow },
+            h('input', { className: styles.field, placeholder: t('groups.promotePath'), value: promotePath, disabled: busy, onChange: (e) => setPromotePath(e.target.value), 'aria-label': t('groups.promotePath') }),
+            h('input', { className: styles.field, placeholder: t('groups.promoteTitleField'), value: promoteTitle, disabled: busy, onChange: (e) => setPromoteTitle(e.target.value), 'aria-label': t('groups.promoteTitleField') }),
+            h('button', { type: 'button', className: styles.plain, disabled: busy, onClick: previewPromotion }, t('groups.promotePreview')),
+            h('button', { type: 'button', className: styles.plain, disabled: busy, onClick: runPromotion }, t('groups.promoteAction')),
           ),
         ),
         h(
           'div',
-          { style: styles.groupCard },
+          { className: styles.groupCard },
           h(
             'div',
-            { style: styles.groupCardHeader },
-            h('span', { style: styles.groupCardTitle }, t('groups.orphansTitle')),
-            h('button', { type: 'button', style: styles.plain, disabled: busy, onClick: scanOrphans }, t('groups.orphansScan')),
+            { className: styles.groupCardHeader },
+            h('span', { className: styles.groupCardTitle }, t('groups.orphansTitle')),
+            h('button', { type: 'button', className: styles.plain, disabled: busy, onClick: scanOrphans }, t('groups.orphansScan')),
           ),
-          h('div', { style: styles.groupHint }, t('groups.orphansNote')),
+          h('div', { className: styles.groupHint }, t('groups.orphansNote')),
           orphans !== null
             ? h(
                 'div',
-                { style: styles.groupHint },
+                { className: styles.groupHint },
                 t('groups.orphansTotal', { total: orphans.total ?? 0, count: orphans.disconnected?.length ?? 0 }),
               )
             : null,
@@ -1676,6 +1622,7 @@ window.__ModuleLoader__.load({
      * panel behaves like every other DSH surface instead of one long page.
      */
     function WorkspaceManagerPanel() {
+      ensureStyle()
       const tabs = React.useMemo(
         () => [
           { id: 'workspaces', label: t('tabs.workspaces') },
@@ -1721,14 +1668,14 @@ window.__ModuleLoader__.load({
 
       return h(
         'section',
-        { style: styles.panelPage, 'aria-label': t('workspaceManager.title') },
+        { className: styles.panelPage, 'aria-label': t('workspaceManager.title') },
         h(
           'div',
-          { style: styles.panelInner },
-          h('h1', { style: styles.panelHeading }, t('workspaceManager.title')),
+          { className: styles.panelInner },
+          h('h1', { className: styles.panelHeading }, t('workspaceManager.title')),
           h(
             'div',
-            { style: styles.tabs, role: 'tablist', 'aria-label': t('tabs.label') },
+            { className: styles.tabs, role: 'tablist', 'aria-label': t('tabs.label') },
             tabs.map((row, rowIndex) => {
               const selected = row.id === activeId
               return h(
@@ -1741,7 +1688,7 @@ window.__ModuleLoader__.load({
                   id: `${baseId}-tab-${row.id}`,
                   type: 'button',
                   role: 'tab',
-                  style: selected ? { ...styles.tab, ...styles.tabActive } : styles.tab,
+                  className: cx(styles.tab, selected && styles.tabActive),
                   'aria-selected': selected,
                   'aria-controls': `${baseId}-panel-${row.id}`,
                   'data-active': selected ? 'true' : undefined,
@@ -1750,7 +1697,7 @@ window.__ModuleLoader__.load({
                   onKeyDown: (event) => onKeyDown(event, rowIndex),
                 },
                 row.label,
-                selected ? h('span', { style: styles.tabUnderline, 'aria-hidden': 'true' }) : null,
+                selected ? h('span', { className: styles.tabUnderline, 'aria-hidden': 'true' }) : null,
               )
             }),
           ),
@@ -1761,7 +1708,7 @@ window.__ModuleLoader__.load({
               id: `${baseId}-panel-${activeId}`,
               role: 'tabpanel',
               'aria-labelledby': `${baseId}-tab-${activeId}`,
-              style: styles.tabPanel,
+              className: styles.tabPanel,
             },
             activeId === 'workspaces'
               ? h(WorkspacesTab, { key: revision })
@@ -1817,7 +1764,7 @@ window.__ModuleLoader__.load({
       return h(
         Modal,
         { title: t('rename.title'), onClose },
-        h('div', { style: { fontSize: 12, opacity: 0.8 } }, data.title),
+        h('div', { className: styles.meta }, data.title),
         h(Gate, {
           preview: previewState,
           ack,
@@ -1880,11 +1827,11 @@ window.__ModuleLoader__.load({
       return h(
         Modal,
         { title: t('move.title'), onClose },
-        h('div', { style: { fontSize: 12, opacity: 0.8 } }, data.displayTitle),
-        h('label', { style: styles.label }, t('move.select'), h(
+        h('div', { className: styles.meta }, data.displayTitle),
+        h('label', { className: styles.label }, t('move.select'), h(
           'select',
           {
-            style: styles.field,
+            className: styles.field,
             value: targetId,
             onChange: (event) => setTargetId(event.target.value),
           },
@@ -1938,19 +1885,19 @@ window.__ModuleLoader__.load({
       return h(
         Modal,
         { title: t('fork.title'), onClose },
-        h('div', { style: { fontSize: 12, opacity: 0.8 } }, data.displayTitle),
-        h('label', { style: styles.label }, t('fork.name'), h('input', {
-          style: styles.field,
+        h('div', { className: styles.meta }, data.displayTitle),
+        h('label', { className: styles.label }, t('fork.name'), h('input', {
+          className: styles.field,
           value: title,
           onChange: (event) => setTitle(event.target.value),
         })),
-        h('label', { style: styles.label }, t('fork.path'), h('input', {
-          style: styles.field,
+        h('label', { className: styles.label }, t('fork.path'), h('input', {
+          className: styles.field,
           value: targetPath,
           placeholder: t('fork.pathHint'),
           onChange: (event) => setTargetPath(event.target.value),
         })),
-        h('div', { style: { fontSize: 11, opacity: 0.7, marginTop: 4 } }, t('fork.pathHint')),
+        h('div', { className: styles.meta }, t('fork.pathHint')),
         h(Gate, {
           preview: previewState,
           ack,
@@ -1990,16 +1937,17 @@ window.__ModuleLoader__.load({
       return h(
         Modal,
         { title: t('purge.title'), onClose },
-        h('div', { style: { fontSize: 12 } }, data.displayTitle),
-        h('p', { style: { fontSize: 12, lineHeight: 1.5 } }, t('purge.desc')),
+        h('div', { className: styles.body }, data.displayTitle),
+        h('p', { className: styles.body }, t('purge.desc')),
         archived === false
-          ? h('div', { style: styles.blocker }, t('purge.notArchived'))
+          ? h('div', { className: styles.blocker }, t('purge.notArchived'))
           : null,
         h(
           'label',
-          { style: styles.checkbox },
+          { className: styles.checkbox },
           h('input', {
             type: 'checkbox',
+            className: styles.checkInput,
             checked: ack,
             disabled: blocked,
             onChange: (event) => setAck(event.target.checked),
@@ -2008,13 +1956,13 @@ window.__ModuleLoader__.load({
         ),
         h(
           'div',
-          { style: styles.footer },
-          h('button', { type: 'button', style: styles.plain, onClick: onClose }, t('common.cancel')),
+          { className: styles.footer },
+          h('button', { type: 'button', className: styles.plain, onClick: onClose }, t('common.cancel')),
           h(
             'button',
             {
               type: 'button',
-              style: styles.primary,
+              className: styles.primary,
               disabled: blocked || !ack || busy,
               onClick: submit,
             },
@@ -2025,6 +1973,7 @@ window.__ModuleLoader__.load({
     }
 
     function DialogHost() {
+      ensureStyle()
       const state = useUi()
       if (state.dialog === null) return null
       const dialog = state.dialog
@@ -2037,11 +1986,12 @@ window.__ModuleLoader__.load({
 
     // ----- slot components -------------------------------------------------------
     function TrashButton({ sessionId, displayTitle }) {
+      ensureStyle()
       return h(
         'button',
         {
           type: 'button',
-          style: styles.iconButton,
+          className: styles.iconButton,
           title: t('session.trash.aria'),
           'aria-label': t('session.trash.aria'),
           onClick: (event) => {
@@ -2054,10 +2004,11 @@ window.__ModuleLoader__.load({
     }
 
     function MenuAction({ label, onClick, separatorBefore = false }) {
-      const row = h('button', { type: 'button', role: 'menuitem', style: styles.menuItem, onClick }, label)
+      ensureStyle()
+      const row = h('button', { type: 'button', role: 'menuitem', className: styles.menuItem, onClick }, label)
       if (!separatorBefore) return row
       // Native context-menu separator: .5px border-l2 line, 3px 2px margins.
-      return h(React.Fragment, null, h('div', { style: styles.menuSeparator, 'aria-hidden': 'true' }), row)
+      return h(React.Fragment, null, h('div', { className: styles.menuSeparator, 'aria-hidden': 'true' }), row)
     }
 
     function PurgeMenuItem({ sessionId, displayTitle, useMenuOpenState }) {
@@ -2101,9 +2052,10 @@ window.__ModuleLoader__.load({
     const PANEL_ID = 'workspace-manager'
 
     function NoticeHost() {
+      ensureStyle()
       const state = useUi()
       if (state.notice === null) return null
-      return h('div', { role: 'status', style: styles.notice }, state.notice)
+      return h('div', { role: 'status', className: styles.notice }, state.notice)
     }
 
     // ----- small path helpers ----------------------------------------------------
@@ -2183,7 +2135,7 @@ window.__ModuleLoader__.load({
             label: () => t('workspaceManager.aria'),
           },
           function WorkspaceManagerMenuRow(props) {
-
+            ensureStyle()
             const onOpen = props?.onOpen
             const onDismiss = props?.onDismiss
             const label = t('workspaceManager.aria')
@@ -2195,7 +2147,7 @@ window.__ModuleLoader__.load({
               {
                 type: 'button',
                 role: 'menuitem',
-                style: styles.moreItem,
+                className: styles.moreItem,
                 'aria-label': label,
                 onClick: () => {
                   if (typeof onDismiss === 'function') onDismiss()
@@ -2214,8 +2166,8 @@ window.__ModuleLoader__.load({
                   if (typeof onOpen === 'function') onOpen(PANEL_ID)
                 },
               },
-              h('span', { style: styles.moreItemGlyph, 'aria-hidden': 'true' }, h(WorkspaceManagerIcon, { size: 16 })),
-              h('span', { style: styles.moreItemLabel }, label),
+              h('span', { className: styles.moreItemGlyph, 'aria-hidden': 'true' }, h(WorkspaceManagerIcon, { size: 16 })),
+              h('span', { className: styles.moreItemLabel }, label),
             )
           },
         ),

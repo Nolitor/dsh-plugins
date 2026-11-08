@@ -4,12 +4,12 @@
 version: 1.0
 kind: readme
 status: active
-updated: 2026-11-05
+updated: 2026-11-08
 summary: Operator entry for @nolit/dsh-sidebar-manager: what the right-sidebar switcher does, how to install it, and how to verify it.
 -->
 
 
-> 상태: active (P3 panel UI) · 최종 갱신: 2026-11-05 · Repository: [linuxsung/dsh-sidebar-manager](https://github.com/linuxsung/dsh-sidebar-manager)
+> 상태: active (P3 panel UI) · 최종 갱신: 2026-11-08 · Repository: [linuxsung/dsh-sidebar-manager](https://github.com/linuxsung/dsh-sidebar-manager)
 
 ## 인덱스
 
@@ -20,6 +20,7 @@ summary: Operator entry for @nolit/dsh-sidebar-manager: what the right-sidebar s
 | 구조 | 패키지 파일 역할 |
 | 설치 | 로컬/마켓 설치 방법 |
 | 안전 규칙 | Move/Fork/Delete 트랜잭션 원칙 |
+| UI 스타일 | design token 스타일시트 규칙 |
 
 ## 구현 상태
 
@@ -135,6 +136,29 @@ preflight.preview.ok === true
 - 언어는 **DSH locale 서비스의 active 언어가 `ko`일 때만** 한국어이고, 그 외(서비스 없음 포함)는 영어입니다. `navigator.language`는 근거로 쓰지 않습니다(오너 규칙 2026-11-05).
 - `{count}`, `{oldPath}`, `{newPath}` 같은 자리표시자는 `t(key, vars)`에서 치환됩니다.
 - 플러그인 목록에 표시되는 제목/설명은 별도로 `locale/{en,ko}.json`의 `meta`가 담당합니다.
+
+## UI 스타일 (design tokens)
+
+패널·사이드바 UI는 인라인 style 객체가 아니라 **하나의 스코프된 스타일시트**로 그립니다:
+`lib/client.js`의 `CSS` 배열이 `<style data-plugin-css="@nolit/dsh-sidebar-manager">` 태그 하나로
+주입됩니다(`ensureStyle()`).
+
+- 모든 규칙은 `.sm*` 클래스만 타깃으로 삼습니다. 요소 셀렉터가 없으니 호스트 UI에 새지 않습니다.
+- 색상은 전부 `--dsw-*` 토큰입니다. 리터럴 hex 값은 0개이고, 테두리는 `.5px` 헤어라인입니다.
+- 글자 크기는 `--dsh-content-font-size` / `--dsh-content-font-size-secondary` /
+  `--dsh-content-font-delta` 토큰으로만 표기합니다. 페이지 제목은
+  `calc(20px + var(--dsh-content-font-delta,0px))`, 섹션 제목은
+  `calc(18px + var(--dsh-content-font-delta,0px))` / `font-weight: 600`입니다.
+- 카드는 `--dsw-alias-settings-card-fill` / `--dsw-alias-settings-card-stroke` +
+  `var(--dsw-radius-lg)`, 목록 행은 사이드바 행 규격(`min-height: 36px`, `var(--dsw-radius-md)`)을
+  따릅니다.
+- 페이지 폭은 `max-width: 960px`로 가운데 정렬하고 640px 이하에서 반응형으로 접힙니다.
+- 모든 조작 요소에 `:focus-visible` 링(`--dsw-focus-ring-width` / `--dsw-focus-ring-color`)이 있고,
+  hover/선택 상태는 `@media (hover:hover)` 안에서만 켜집니다.
+- `prefers-reduced-motion: reduce`이면 이 표면의 transition이 모두 제거됩니다.
+
+`styles` 맵은 남아 있지만 각 항목이 style 객체가 아니라 클래스 이름입니다. 표면을 바꾸는 곳은
+스타일시트 한 곳뿐입니다.
 
 
 ## Session-log labels (read-only orphan scan)

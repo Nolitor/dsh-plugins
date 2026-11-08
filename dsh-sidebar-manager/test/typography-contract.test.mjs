@@ -1,13 +1,10 @@
 /**
  * Typography contract for plugin surfaces.
  *
- * DSH ships no font-size token and sets none on <body>, so the UA default (16px)
- * is what any surface that omits font-size inherits. Every native surface states
- * its size explicitly (measured: Settings dialog = 14px x20 / 12px x11), so a
- * plugin that leaves it unset renders visibly larger than the rest of the UI.
- *
- * Measured 2026-11-03 before the fix: the sidebar panel root and its inputs
- * computed to 16px, and the notify section root to 16px with 12px buttons.
+ * The UI used to live in an inline style object with fixed pixel sizes, so the
+ * user's font-size preference (--dsh-content-font-size / --dsh-content-font-delta)
+ * could not reach it. Every rule now lives in one scoped stylesheet and states
+ * its size through the content tokens.
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -15,23 +12,98 @@ import { readFileSync } from 'node:fs'
 
 const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
 
-test('the panel root pins the native UI baseline instead of inheriting 16px', () => {
-  const at = source.indexOf('panelPage: {')
-  assert.ok(at > 0, 'panelPage style must exist')
-  const block = source.slice(at, source.indexOf('},', at))
-  assert.match(block, /fontSize: 14/, 'panel root must state 14px like native surfaces')
-  assert.match(block, /lineHeight: '22px'/, 'panel root must state the native 22px line height')
+const cssStart = source.indexOf('const CSS = [')
+const cssEnd = source.indexOf("].join('')", cssStart)
+const css = source.slice(cssStart, cssEnd)
+
+/** The declaration block of one `.sm*` class. */
+function block(selector) {
+  const at = css.indexOf(selector + '{')
+  assert.ok(at > 0, 'missing rule ' + selector)
+  return css.slice(at, css.indexOf('}', at))
+}
+
+test('the stylesheet is one scoped tag keyed by this package', () => {
+  assert.ok(source.includes("const CSS_TAG = '@nolit/dsh-sidebar-manager'"), 'the tag key names this package')
+  assert.ok(source.includes("style.setAttribute('data-plugin-css', CSS_TAG)"), 'the tag carries data-plugin-css')
+  assert.ok(source.includes('function ensureStyle()'), 'the stylesheet is injected once')
 })
 
-test('form controls state their own font size', () => {
-  for (const key of ['plain: {', 'field: {']) {
-    const at = source.indexOf(key)
-    assert.ok(at > 0, key + ' must exist')
-    const block = source.slice(at, source.indexOf('},', at))
-    assert.match(block, /fontSize: 13/, key + ' must not inherit the 16px default')
+test('no rule targets a bare element selector', () => {
+  // A rule that starts with a tag name would leak into the host UI.
+  const entries = [...css.matchAll(/^\s*'(.*)',?\s*$/gm)].map((match) => match[1])
+  assert.ok(entries.length > 20, 'the stylesheet is a list of rule strings, got ' + entries.length)
+  for (const entry of entries) {
+    const selectors = entry.split('{')[0]
+    assert.ok(selectors.length > 0, 'empty selector in: ' + entry)
+    for (const part of selectors.split(',')) {
+      const trimmed = part.trim()
+      assert.ok(
+        trimmed.startsWith('.sm') || trimmed.startsWith('@media'),
+        'selector must start with a .sm class or a media query, got: ' + trimmed,
+      )
+    }
   }
 })
 
-test('no literal 16px leaks into the panel', () => {
-  assert.ok(!/fontSize: 16/.test(source), 'a 16px rule would reintroduce the mismatch')
+test('the panel root states the content token size, not a fixed pixel', () => {
+  const rule = block('.smPage')
+  assert.match(rule, /font-size:var\(--dsh-content-font-size,14px\)/)
+  assert.match(rule, /line-height:calc\(22px \+ var\(--dsh-content-font-delta,0px\)\)/)
+})
+
+test('form controls state their own size through the secondary token', () => {
+  for (const selector of ['.smPlainButton', '.smPrimaryButton', '.smField']) {
+    const rule = block(selector)
+    assert.match(rule, /font-size:var\(--dsh-content-font-size-secondary,13px\)/, selector + ' must not inherit the root size')
+  }
+})
+
+test('no fixed font-size remains in the stylesheet', () => {
+  // Every size is either a content token or a deliberate delta on one.
+  for (const match of css.matchAll(/font-size:([^;}]+)/g)) {
+    const value = match[1]
+    assert.ok(
+      value.includes('--dsh-content-font-size') || value.includes('calc('),
+      'font-size must be token-based, got: ' + value,
+    )
+  }
+})
+
+test('no fixed font-size remains in an inline style object', () => {
+  assert.ok(!/fontSize:/.test(source), 'the inline style object must not state a pixel size')
+})
+
+test('no literal hex colour remains in the stylesheet', () => {
+  const hexes = css.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []
+  assert.deepEqual(hexes, [], 'every colour must be a --dsw-* token')
+})
+
+test('borders are .5px hairlines on a token colour', () => {
+  for (const match of css.matchAll(/border:\s*([^;}]+)/g)) {
+    const value = match[1]
+    if (value === '0' || value === '0 0') continue
+    assert.match(value, /^\.5px solid var\(--dsw-/, 'border must be a .5px hairline on a token, got: ' + value)
+  }
+})
+
+test('the page title keeps the native 20px/500/28px spec on the content delta', () => {
+  const rule = block('.smPageTitle')
+  assert.match(rule, /font-weight:500/)
+  assert.match(rule, /font-size:calc\(20px \+ var\(--dsh-content-font-delta,0px\)\)/)
+  assert.match(rule, /line-height:calc\(28px \+ var\(--dsh-content-font-delta,0px\)\)/)
+})
+
+test('the section title is 18px/600 on the content delta', () => {
+  const rule = block('.smSectionTitle')
+  assert.match(rule, /font-weight:600/)
+  assert.match(rule, /font-size:calc\(18px \+ var\(--dsh-content-font-delta,0px\)\)/)
+})
+
+test('session menu rows keep the native 13px/400/20px spec on the secondary token', () => {
+  const rule = block('.smMenuItem')
+  assert.match(rule, /font-size:var\(--dsh-content-font-size-secondary,13px\)/)
+  assert.match(rule, /font-weight:400/)
+  assert.match(rule, /line-height:calc\(20px \+ var\(--dsh-content-font-delta-secondary,0px\)\)/)
+  assert.ok(!/font: 'inherit'/.test(rule), "font: 'inherit' is what produced 16px")
 })

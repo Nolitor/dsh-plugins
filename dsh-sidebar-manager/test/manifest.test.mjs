@@ -77,8 +77,19 @@ test('client: group accent falls back to theme seats instead of a bare hex', () 
     !/style:\s*\{[^}]*color:\s*'#[0-9a-fA-F]{6}'/.test(source),
     'no inline hardcoded hex colors in style objects',
   )
-  // No DOM/CSS injection hacks (directive: native sidebar stays vanilla).
+  // The native sidebar stays vanilla: the plugin never scans, mutates or
+  // reaches into the host's sidebar DOM. Its own stylesheet is one scoped
+  // <style> tag in the document head, keyed by this package.
   for (const banned of ['MutationObserver', 'querySelector', 'injectStylesheet', 'data-row-key', 'YDXeBa']) {
     assert.ok(!source.includes(banned), `client must not use "${banned}"`)
   }
+  assert.match(
+    source,
+    /style\.setAttribute\('data-plugin-css', CSS_TAG\)/,
+    'the stylesheet tag is keyed by the package id',
+  )
+  assert.ok(
+    !/document\.(body|head)\.(append|insert)[^(]*\((?!style)/.test(source),
+    'only a <style> tag may be added to the document',
+  )
 })
