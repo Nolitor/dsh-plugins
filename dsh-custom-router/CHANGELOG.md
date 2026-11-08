@@ -1,12 +1,152 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.6
+version: 0.0.1-rc.7
 kind: report
 status: active
 updated: 2026-11-08
-summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the single-owner OpenCodex bridge library, the preset declarations, and the first real multi-row mount, extended 2026-11-08 with the settings schema and the single browser dashboard (M10 UI sprint), and with the Anthropic Messages protocol hooks in the shared stream pipe.
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the single-owner OpenCodex bridge library, the preset declarations, and the first real multi-row mount, extended 2026-11-08 with the settings schema and the single browser dashboard (M10 UI sprint), with the Anthropic Messages protocol hooks in the shared stream pipe, and with the browser-surface redesign (single-column provider rows over DSH tokens, plus the accessibility pass).
 -->
+
+## 0.0.1-rc.7 — 2026-11-08 (browser surface redesign — provider rows over DSH tokens)
+
+Owner instruction: *"오늘 만든 커스텀라우터 플러그인 이 스킬 주입을 이용해서 다시 레이아웃 짜 물론 전체
+스타일이랑 폰트 타이틀 모두 dsh 스타일 따르고 ui 디자인만 적용할 수 있도록 해"* — re-lay out the
+custom-router browser surface with the injected `/ui` skill's component hierarchy, keep DSH's own
+style, typography tokens and title conventions, change design only.
+
+**Scope: the browser surface only.** No write path, settings path, i18n key, registration id,
+locale value or data path changed. Every measurement below is a CSS value or a DOM structure read
+out of `lib/client.src.js`; the router behaviour is untouched.
+
+**Component selection (the `/ui` hierarchy, adapted).** The skill names shadcn/ui as the default
+for standard dashboard surfaces. This bundle is a plain CommonJS factory evaluated by
+`window.__ModuleLoader__` and may only `require('react')`, so the shadcn/ui **composition and
+visual language** are reproduced locally over the DSH design tokens instead of adding packages:
+row / card / form-section / field / toolbar / footer-bar / tab patterns, a segmented action style,
+and one inline SVG icon set. No dependency was added, and no marketing effect (Magic UI /
+Aceternity) was used.
+
+**Layout: one column of provider rows, one full-width detail panel.** The 3-up vendor grid was
+the defect. Every card was stretched to the width of its widest sibling, so a form with one
+credential field got the same 380 px column as a card with three, and the measurement of one
+provider sat next to the measurement of another. The surface is now a **single column of compact
+provider rows** (`.crProviderList` → `.crProviderItem` → `.crProviderRow`), and the detail of the
+open provider renders **below the list, full width** (`.crProviderDetail`), not inside a column of
+its own.
+
+| Complaint | Measured before | Now |
+| :--- | :--- | :--- |
+| The provider wall was flat: three cards in one row, no hierarchy | `.crVendorGrid{grid-template-columns:repeat(3,minmax(0,1fr))}` — every card stretched to the widest sibling | `.crProviderList` is one column (`.crProviderItem` per provider); the opened provider's detail (`.crProviderDetail`) is a full-width sibling of the row, not a column of a grid |
+| Each card carried the whole measurement, so scanning meant reading | `.crVendorCard` mixed identity, measurement and switches in one stack | the row carries a **mini usage summary** (`.crMiniUsage`): the tightest window's label, percent and reset time — or the spend and balance for a pay-per-token provider — with a decorative bar (`aria-hidden`) |
+| The detail had no frame of its own | the measurement was a bare list inside the card | the full measurement sits in one compact inset (`.crUsageInset`) inside the detail panel, beside the settings form |
+| The page was wider than a readable dashboard | `.crPage{width:100%;max-width:1180px;margin:0 auto;padding:16px 20px}` | `.crPage{width:100%;max-width:1120px;margin:0 auto;padding:20px 24px;box-sizing:border-box}` — measured 1120 px at a 1600 px viewport |
+| The settings trigger was an emoji | `.crGear` rendered the text node `'⚙'` (platform emoji font, ignores the colour tokens) | an inline 16 px SVG (stroke `currentColor`, `aria-hidden`), still `aria-expanded` + `aria-controls` |
+| Keyboard focus was invisible | no `:focus-visible` rule existed | one rule for `.crButton` / `.crTab` / `.crGear` / `.crJump` / `.crSearchInput` / `.crInput` / `.crSwitch` / `.crRowCheck`, using `--dsw-focus-ring-width` and `--dsw-focus-ring-color` (the same tokens DSH's own theme uses) |
+| A literal pixel size survived on the icon button | `.crGear{font-size:14px}` | removed; **every** `font-size` in the stylesheet is a `var()`/`calc()` on the DSH content tokens (measured: 0 literal sizes) |
+| Credentials were one dense inline row | `.crCredentialRow` = name + input + state + two buttons on one line | `.crField` form blocks under a labelled `.crFormSection` (title + write-only hint): field name, set/unset state, masked input, primary save + ghost clear |
+| The model manager chrome scrolled away | static `.crToolbar` and `.crFooterBar` | the toolbar sticks to the top (`position:sticky;top:0`), the action bar sticks to the bottom (`position:sticky;bottom:0`) |
+| A dense table could widen the page | `.crPage` declared no overflow rule | `.crPage.crPageScroll{overflow-x:hidden}`; the plan table keeps its own scroll (`.crPlanTableWrap{overflow:auto}`) |
+| The picker was four identical tiles | `crPickerCard` with one anonymous button | a head row (name + added badge), description, auth hint and one primary action (`data-picker-action="add"`), disabled for `custom-json` and for an already added provider |
+| Empty and loading states looked identical | `.crEmpty` for both | `.crEmpty[data-state=loading|empty|error]` with the error copy in the error colour |
+
+**Accessibility contract (the final pass).** The redesign was audited against the browser
+contract, and the surface now states the following in the DOM, not only in the stylesheet:
+
+- **Real plan table semantics.** The plan ledger was a grid of `<div>`s (`.crPlanRow`); it is now
+  a `<table class="crPlanTable">` with a `<thead>`, `<th scope="col">` on every column, a `<tbody>`
+  and an `aria-label`. The table keeps its own scroll (`.crPlanTableWrap`).
+- **Keyboard tabs.** Both tab strips (the dashboard's usage/add strip and the model manager's
+  per-preset strip) carry `role="tablist"` with an accessible name, a roving `tabIndex`
+  (`0` on the selected tab, `-1` on the rest), and one `keydown` handler on the strip:
+  `ArrowRight` / `ArrowLeft` move the selection and wrap, `Home` / `End` jump to the first and last
+  tab. The handler moves the DOM focus with the selection, so a keyboard user follows the tab
+  instead of losing the strip.
+- **Collapsed settings leave the tab order and the accessibility tree.** A closed settings panel
+  keeps its DOM (the reveal animates it open), so its inner box carries `inert` **and**
+  `aria-hidden="true"` while collapsed. Without both, `aria-expanded="false"` on the trigger would
+  be a lie.
+- **Live regions.** Every write result is announced through a `role="status"` region with
+  `aria-live="polite"`, and the region is **always mounted** — a region that appears together with
+  its text is not announced. One per provider panel (3) plus the model manager's footer.
+- **Credential labels.** Each write-only credential input is named by a real `<label htmlFor>`
+  pointing at a unique input id, so the field name is visible and is the accessible name (no
+  `aria-label` shadows it). The input is `type="password"` with `autoComplete="new-password"`, so a
+  stored secret is never offered to the browser's autofill.
+- **Progress bars carry a readable value.** Every `role="progressbar"` — the usage windows in the
+  detail and the plan windows in the model manager — carries `aria-valuenow` / `aria-valuemin` /
+  `aria-valuemax`, an `aria-label`, and an `aria-valuetext` that names the window and its percent
+  (or the limit reached). The mini bar in the provider row is decoration and is `aria-hidden`.
+- **Reduced motion.** `@media (prefers-reduced-motion: reduce)` removes every transition this
+  surface owns (`.crButton`, `.crGear`, `.crTab`, `.crReveal`, `.crSwitch`).
+
+**Typography and colour contract.** The surface root still reads
+`font-size:var(--dsh-content-font-size,14px)` with
+`line-height:calc(22px + var(--dsh-content-font-delta,0px))`, hints and meta use the derived
+secondary token, `font-family` is `inherit` (the code seat is the only exception, for model ids
+and rates), and no colour is a literal: every fill, border, radius and focus ring is a `--dsw-*`
+token or `transparent` (measured: 0 hex, 0 `rgb()`/`hsl()`; the only non-token colour keyword in the
+stylesheet is `transparent`). The DSH title text and the title hierarchy are unchanged.
+
+**The settings section now matches the built-in plugin tab menu (measured).** The settings surface
+(`settings.section`, id `custom-router`) was aligned to DSH's own
+`packages/client/ui-settings-plugins/src/client/PluginsSettingsSection.module.css`: it is a
+760 px column instead of the dashboard's full-bleed `.crPage` container, and its heading, intro and
+tab strip use the built-in geometry.
+
+| | Before | Now (measured from the built-in section) |
+| :--- | :--- | :--- |
+| Section width | `.crPage.crPageNarrow` — a 920 px page with `padding:20px 24px` | `.crSettingsSection{display:flex;flex-direction:column;gap:12px;max-width:760px;min-width:0}` |
+| Heading | `h2.crTitle` (`.crTitle` is shared with the dashboard) | `h2.crSettingsTitle` — `calc(var(--dsh-content-font-size,14px) + 4px)` / `600` |
+| Intro | `p.crSubtitle` | `p.crSettingsIntro` — the secondary content token in the tertiary label colour |
+| Tab strip | `.crTabs` (dashboard chrome: `gap:2px`, `border-l3`, 14 px tabs) | `.crSettingsTabs{display:flex;align-items:flex-end;gap:22px;border-bottom:.5px solid var(--dsw-alias-border-l2);margin-top:2px}` |
+| Tab | `.crTab` (14 px, `padding:10px 14px`, 2 px business-primary border) | `.crSettingsTab` — `padding:7px 1px 9px`, the secondary content token, tertiary label colour, and a 2 px `--dsw-alias-label-primary` underline (`bottom:-1px`, `border-radius:2px 2px 0 0`) on the active tab, with the host focus ring on `:focus-visible` |
+
+The heading and intro are direct children of the section (the built-in section has no header
+wrapper), so the hierarchy is `section > h2 + p + tablist + tabpanel`. The dashboard keeps its own
+`.crPage` / `.crTabs` chrome and is untouched. The model data attributes, the tab ids
+(`cr-models-tab-<preset>`), the panel id (`cr-models-panel-<preset>`), the `tablist` role and
+accessible name, the roving `tabIndex`, the arrow-key handler, the save path and every locale
+string are unchanged. Group cards keep the settings-card tokens
+(`--dsw-alias-settings-card-fill` / `--dsw-alias-settings-card-stroke`, `.5px` hairline,
+`--dsw-radius-lg`).
+
+**Class names.** Removed (12): `crCredential`, `crCredentialField`, `crCredentialHead`,
+`crCredentialName`, `crCredentialRow`, `crCredentialTitle`, `crPlanRow`, `crPlanRowHead`,
+`crTitleBlock`, `crVendorCard`, `crVendorGrid`, `crVendorHead`. Added (27): `crField`,
+`crFieldActions`, `crFieldHead`, `crFieldLabel`, `crFormSection`, `crFormSectionBody`,
+`crFormSectionHead`, `crFormSectionHint`, `crFormSectionTitle`, `crMiniBar`, `crMiniBarFill`,
+`crMiniLabel`, `crMiniPct`, `crMiniReset`, `crMiniRow`, `crMiniUsage`, `crPickerHead`,
+`crPlanTableWrap`, `crProviderDetail`, `crProviderHead`, `crProviderItem`, `crProviderList`,
+`crProviderRow`, `crProviderUsage`, `crSettingsIntro`, `crSettingsSection`, `crSettingsTab`,
+`crSettingsTabs`, `crSettingsTitle`, `crStatusLive`, `crUsageInset`, `crUsageWindows`. The
+stylesheet grew from 127 to 142 `.cr*` classes (23 593 → 28 813 bytes of emitted CSS) and no rule
+targets a bare element selector.
+
+**Tests:** 313 → 332 (`npm test`), all green; `npm run check` and `npm run verify:stream` green
+(7/7 dispatch, 0 vendor loads). The client suite went 48 → 67 tests. New: the typography-token
+form (no literal size, no literal colour, `inherit` family only), the SVG icon trigger (and the
+emoji must not come back), one measurement inset per provider, the focus-visible ring on every
+interactive control, the credential form blocks, the picker action contract, the responsive rules,
+the provider-row / full-width-detail layout, the accessible name on every tab strip, the keyboard
+tab strip on both surfaces, the inert + `aria-hidden` collapsed panel, the live regions, the real
+credential labels, the `aria-valuetext` on both progress-bar families, and the reduced-motion
+block. Updated for the intentional layout change: the pinned width container (1180 → 1120 px), the
+provider-grid assertion (`.crVendorGrid` → `.crProviderList` / `.crProviderItem`), and the picker
+action selector (`className === 'crButton'` → `data-picker-action="add"`, because the action is now
+a primary button). No behaviour or accessibility assertion was weakened.
+
+The settings-section alignment adds one test (`the settings section follows the built-in plugin
+section spec`): the 760 px column, the `h2` heading class, the intro class, the tab strip class and
+its three tabs, and the pinned built-in tab geometry (gap 22 px, `padding:7px 1px 9px`, the
+secondary font token, the 2 px label-primary underline, the focus ring). The two heading assertions
+were retargeted from the shared `.crTitle` / `.crSubtitle` classes to the section's own
+`.crSettingsTitle` / `.crSettingsIntro`; the copy they assert is unchanged.
+
+**Not verified.** The redesign was not checked in a live browser (no DSH boot in this session):
+the sticky offsets, the inset contrast in both themes, the 1120 px measure and the rendered
+contrast of the mini bars are read from the stylesheet and the DOM structure, not measured on
+screen.
 
 ## 0.0.1-rc.6 — 2026-11-08 (Anthropic Messages protocol hooks in the shared pipe)
 

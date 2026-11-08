@@ -64,48 +64,87 @@ window.__ModuleLoader__.load({
     const CSS_TAG = '@nolit/dsh-custom-router'
 
     const CSS = [
-      '.crSection{min-width:0;display:flex;flex-direction:column;gap:12px;font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      // ------------------------------------------------------------ page shell
+      '.crSection{min-width:0;display:flex;flex-direction:column;gap:20px;font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
       // The dashboard is a PAGE inside the main slot, not a full-bleed surface:
       // it centres itself and stops growing past a readable width instead of
       // stretching across the window.
-      '.crPage{width:100%;max-width:1180px;margin:0 auto;padding:16px 20px;box-sizing:border-box}',
-      '.crPage.crPageScroll{height:100%;max-height:100%;min-height:0;overflow-y:auto;padding:12px 16px;overflow-x:hidden}',
+      '.crPage{width:100%;max-width:1120px;margin:0 auto;padding:20px 24px;box-sizing:border-box}',
+      '.crPage.crPageScroll{height:100%;max-height:100%;min-height:0;overflow-y:auto;overflow-x:hidden;padding:20px 24px 40px}',
       '.crPageNarrow{max-width:920px}',
-      '.crHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;min-width:0}',
-      '.crTitleBlock{display:flex;flex-direction:column;gap:2px;min-width:0}',
-      '.crHeaderText{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}',
-      '.crTitle{margin:0;font-family:inherit;font-size:calc(var(--dsh-content-font-size,14px) + 4px);font-weight:500;line-height:28px;color:var(--dsw-alias-label-primary)}',
-      '.crSubtitle{margin:0;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary)}',
-      '.crHeaderSide{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
+      // A label that only assistive technology reads: the control it names is
+      // visible, the label text is not.
+      // --------------------------------------------------------------- header
+      '.crHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;min-width:0}',
+      '.crHeaderText{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 320px}',
+      '.crHeaderSide{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:0 0 auto}',
+      '.crTitle{margin:0;font-family:inherit;font-size:calc(var(--dsh-content-font-size,14px) + 4px);font-weight:600;line-height:calc(30px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.crSubtitle{margin:0;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);max-width:60ch}',
       '.crUpdatedAt{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
-      '.crButton{appearance:none;border:.5px solid var(--dsw-alias-border-l4);background:0 0;border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:20px;padding:5px 12px;cursor:pointer;white-space:nowrap}',
+      // -------------------------------------------------------------- buttons
+      '.crButton{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-1);border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));padding:6px 12px;cursor:pointer;white-space:nowrap;transition:background .12s ease,border-color .12s ease,color .12s ease}',
       '@media (hover:hover){.crButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-solid)}}',
-      '.crButton:disabled{opacity:.55;cursor:default}',
-      '.crTabs{display:flex;gap:4px;border-bottom:.5px solid var(--dsw-alias-border-l3);min-width:0}',
-      '.crTab{appearance:none;background:0 0;border:0;border-bottom:2px solid transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));padding:8px 10px;margin-bottom:-.5px;white-space:nowrap}',
-      '.crTab[aria-selected=true]{color:var(--dsw-alias-label-primary);font-weight:500;border-bottom-color:var(--dsw-alias-state-business-primary)}',
-      '.crKpiGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:stretch}',
-      '.crKpiCard{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);padding:10px 12px;display:flex;flex-direction:column;gap:4px;min-width:0}',
+      '.crButton:disabled{opacity:.5;cursor:not-allowed}',
+      '.crButtonGhost{background:transparent;border-color:transparent;color:var(--dsw-alias-label-secondary)}',
+      '.crButtonPrimary{border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-state-business-primary);background:transparent}',
+      '@media (hover:hover){.crButtonPrimary:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-accent)}}',
+      // ----------------------------------------------------------------- tabs
+      // The strip scrolls sideways on a narrow surface instead of clipping a
+      // control: every tab keeps its own hit area.
+      '.crTabs{display:flex;gap:2px;border-bottom:.5px solid var(--dsw-alias-border-l3);min-width:0;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:thin}',
+      '.crTab{appearance:none;background:0 0;border:0;border-bottom:2px solid transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:500;line-height:calc(22px + var(--dsh-content-font-delta,0px));padding:10px 14px;margin-bottom:-.5px;white-space:nowrap;flex:0 0 auto}',
+      '.crTab:hover{color:var(--dsw-alias-label-primary)}',
+      '.crTab[aria-selected=true]{color:var(--dsw-alias-label-primary);border-bottom-color:var(--dsw-alias-state-business-primary)}',
+      // ------------------------------------------------------------- kpi cards
+      '.crKpiGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:16px;align-items:stretch}',
+      '.crKpiCard{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-lg);padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-width:0}',
       '.crKpiLabelRow{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}',
       '.crKpiLabel{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.crJump{appearance:none;background:0 0;border:0;padding:0;cursor:pointer;color:var(--dsw-alias-link);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:nowrap}',
-      '.crKpiValue{font-family:inherit;font-size:calc(var(--dsh-content-font-size,14px) + 8px);font-weight:500;line-height:32px;color:var(--dsw-alias-label-primary);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.crJump{appearance:none;background:0 0;border:0;padding:2px 4px;cursor:pointer;color:var(--dsw-alias-link);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:nowrap;border-radius:var(--dsw-radius-xs)}',
+      '.crKpiValue{font-family:inherit;font-size:calc(var(--dsh-content-font-size,14px) + 10px);font-weight:600;line-height:calc(34px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.crKpiMeta{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.crVendorGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}',
-      '.crVendorCard{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}',
-      '.crVendorHead{display:flex;align-items:center;gap:12px;min-width:0}',
-      '.crAvatar{width:40px;height:40px;border-radius:12px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--dsw-alias-interactive-bg-hover-solid);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:500;line-height:1}',
-      '.crIdentity{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}',
-      '.crVendorName{font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:500;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      // ------------------------------------------------------- provider rows
+      // ONE column of compact provider rows: a 3-up grid stretched every row to
+      // the width of the widest sibling and squeezed the forms. The detail of
+      // one provider renders BELOW the list, full width.
+      '.crProviderList{display:flex;flex-direction:column;gap:12px;min-width:0}',
+      // One provider: the compact row plus the full-width detail below it.
+      '.crProviderItem{display:flex;flex-direction:column;gap:12px;min-width:0}',
+      '.crProviderRow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;padding:12px 14px;border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-lg);min-width:0}',
+      '.crProviderHead{display:flex;align-items:center;gap:10px;min-width:0}',
+      '.crProviderUsage{display:flex;align-items:center;gap:16px;flex-wrap:wrap;min-width:0}',
+      // One inline usage window: label, percent and a slim bar.
+      '.crMiniUsage{display:flex;flex-direction:column;gap:4px;flex:1 1 140px;max-width:220px;min-width:0}',
+      '.crMiniRow{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0}',
+      '.crMiniLabel{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.crMiniPct{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-primary);font-variant-numeric:tabular-nums;white-space:nowrap}',
+      '.crMiniReset{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.crMiniBar{height:4px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover-solid);overflow:hidden}',
+      '.crMiniBarFill{height:100%;border-radius:inherit;background:var(--dsw-alias-state-business-primary)}',
+      '.crMiniBarFill[data-level=high]{background:var(--dsw-alias-state-error-primary)}',
+      '.crProviderDetail{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-lg);padding:16px;display:flex;flex-direction:column;gap:16px;min-width:0}',
+      // The reveal: a grid-rows animation that needs no fixed height.
+      '.crReveal{display:grid;grid-template-rows:0fr;transition:grid-template-rows 180ms ease;min-width:0}',
+      '.crReveal[data-open=true]{grid-template-rows:1fr}',
+      '.crRevealInner{min-height:0;overflow:hidden;min-width:0}',
+      '.crAvatar{width:36px;height:36px;border-radius:var(--dsw-radius-sm);flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--dsw-alias-interactive-bg-hover-solid);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:600;line-height:1}',
+      '.crIdentity{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}',
+      '.crVendorName{font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:600;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.crPlan{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.crBadge{flex:0 0 auto;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-xs);padding:2px 8px;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);white-space:nowrap}',
+      '.crBadge{flex:0 0 auto;border:.5px solid var(--dsw-alias-border-l3);border-radius:999px;padding:1px 8px;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);white-space:nowrap}',
       '.crBadge[data-state=active]{border-color:var(--dsw-alias-state-success-primary);color:var(--dsw-alias-state-success-primary)}',
       '.crBadge[data-state=inactive]{border-color:var(--dsw-alias-border-l3);color:var(--dsw-alias-label-tertiary)}',
-      '.crGear{flex:0 0 auto;appearance:none;background:0 0;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-secondary);cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-family:inherit;font-size:14px;line-height:1;padding:0}',
-      '@media (hover:hover){.crGear:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-solid)}}',
+      // The icon button that opens one provider's settings.
+      '.crGear{flex:0 0 auto;appearance:none;background:transparent;border:.5px solid transparent;border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-secondary);cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;padding:0;transition:background .12s ease,color .12s ease}',
+      '@media (hover:hover){.crGear:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-solid);color:var(--dsw-alias-label-primary)}}',
+      // The compact measurement inset inside one provider detail.
+      '.crUsageInset{border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-1);padding:12px;display:flex;flex-direction:column;gap:12px;min-width:0}',
+      // The usage windows sit INLINE in one provider row: three slim bars
+      // side by side, not a stacked column.
+      '.crUsageWindows{display:flex;flex-direction:row;flex-wrap:wrap;gap:16px;min-width:0}',
       '.crBody{display:flex;flex-direction:column;gap:12px;min-width:0;flex:1}',
       '.crPanel{display:flex;flex-direction:column;gap:16px;min-width:0}',
-      '.crSettingsPanelBody{display:flex;flex-direction:column;gap:12px;min-width:0}',
+      '.crSettingsPanelBody{display:flex;flex-direction:column;gap:16px;min-width:0}',
       '.crUsageWindow{display:flex;flex-direction:column;gap:4px;min-width:0}',
       '.crUsageRow{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}',
       '.crUsageLabel{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
@@ -117,66 +156,88 @@ window.__ModuleLoader__.load({
       '.crServing{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:.5px solid var(--dsw-alias-border-l3);padding-top:8px;min-width:0}',
       '.crServingTitle{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
       '.crServingMeta{display:flex;align-items:center;gap:8px;min-width:0}',
+      // -------------------------------------------------------------- billing
       '.crBillingHero{display:flex;flex-direction:column;gap:2px;min-width:0}',
       '.crBillingHeroLabel{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary)}',
-      '.crBillingHeroValue{font-family:inherit;font-size:calc(var(--dsh-content-font-size,14px) + 8px);font-weight:500;line-height:32px;color:var(--dsw-alias-label-primary);font-variant-numeric:tabular-nums}',
-      '.crBillingGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}',
+      '.crBillingHeroValue{font-family:inherit;font-size:calc(var(--dsh-content-font-size,14px) + 8px);font-weight:600;line-height:calc(32px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);font-variant-numeric:tabular-nums}',
+      '.crBillingGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(160px,100%),1fr));gap:12px}',
       '.crBillingStat{display:flex;flex-direction:column;gap:2px;min-width:0}',
       '.crBillingStatLabel{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.crBillingStatValue{font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.crBillingRow{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}',
+      '.crBillingRow{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:.5px solid var(--dsw-alias-border-l3);padding-top:8px;min-width:0}',
       '.crBillingRowLabel{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
       '.crBillingRowValue{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.crReveal{display:grid;grid-template-rows:0fr;transition:grid-template-rows 180ms ease;min-width:0}',
-      '.crReveal[data-open=true]{grid-template-rows:1fr}',
-      '.crRevealInner{min-height:0;overflow:hidden;min-width:0}',
-      '.crSettingsPanel{display:flex;flex-direction:column;gap:12px;border-top:.5px solid var(--dsw-alias-border-l3);padding-top:12px;min-width:0}',
-      '.crSettingsTitle{font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:500;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);margin:0}',
-      '.crMaster{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}',
+      // ------------------------------------------------------- settings panel
+      '.crSettingsPanel{display:flex;flex-direction:column;gap:16px;min-width:0}',
+      '.crSettingsTitle{font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:600;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);margin:0}',
+      // A form section: a labelled block with an optional hint line.
+      '.crFormSection{display:flex;flex-direction:column;gap:10px;min-width:0}',
+      '.crFormSectionHead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;min-width:0}',
+      '.crFormSectionTitle{font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:600;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);margin:0}',
+      '.crFormSectionHint{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);min-width:0}',
+      '.crFormSectionBody{display:flex;flex-direction:column;gap:12px;min-width:0}',
+      '.crMaster{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;padding:10px 12px;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-md)}',
       '.crMasterText{display:flex;flex-direction:column;gap:2px;min-width:0}',
-      '.crMasterLabel{font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.crMasterLabel{font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:500;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
       '.crMasterHint{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);margin:0}',
       '.crSwitch{appearance:none;border:.5px solid var(--dsw-alias-border-l4);background:0 0;border-radius:999px;width:36px;height:20px;position:relative;cursor:pointer;flex:0 0 auto;padding:0}',
       '.crSwitch::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--dsw-alias-label-tertiary);transition:transform .15s ease}',
       '.crSwitch[aria-checked=true]{background:var(--dsw-alias-button-ghost-active-fill);border-color:var(--dsw-alias-state-success-primary)}',
       '.crSwitch[aria-checked=true]::after{transform:translateX(16px);background:var(--dsw-alias-state-success-primary)}',
       '.crSwitch:disabled{opacity:.55;cursor:default}',
-      '.crLayerGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}',
-      '.crLayerCell{display:flex;flex-direction:column;gap:6px;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-lg);padding:10px;min-width:0}',
+      '.crLayerGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:12px}',
+      '.crLayerCell{display:flex;align-items:center;justify-content:space-between;gap:8px;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-md);padding:10px 12px;min-width:0}',
       '.crLayerCell[data-unsupported=true]{opacity:.7}',
       '.crLayerName{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.crLayerState{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.crCredential{display:flex;flex-direction:column;gap:8px;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-lg);padding:10px;min-width:0}',
-      '.crCredentialHead{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}',
-      '.crCredentialTitle{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary)}',
-      '.crCredentialRow{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}',
-      '.crCredentialField{display:flex;align-items:center;gap:8px;min-width:0;flex:1}',
-      '.crCredentialName{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
-      '.crInput{appearance:none;flex:1;min-width:0;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:0 0;color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:20px;padding:4px 8px}',
+      '.crLayerState{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}',
+      // One write-only credential field: label, state, input and its actions.
+      '.crField{display:flex;flex-direction:column;gap:6px;min-width:0}',
+      '.crFieldHead{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}',
+      '.crFieldLabel{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.crFieldActions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
+      '.crInput{appearance:none;width:100%;min-width:0;box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));padding:6px 10px}',
       '.crState{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
       '.crState[data-state=set]{color:var(--dsw-alias-state-success-primary)}',
+      '.crState[data-state=error]{color:var(--dsw-alias-state-error-primary)}',
       '.crHint{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);margin:0;min-width:0}',
       '.crFooter{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}',
       '.crFooterNote{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);min-width:0}',
       '.crFooterNote[data-state=error]{color:var(--dsw-alias-state-error-primary)}',
       '.crFooterNote[data-state=applied]{color:var(--dsw-alias-state-success-primary)}',
-      '.crPickerGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-items:stretch}',
-      '.crPickerCard{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}',
-      '.crPickerTitle{font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:500;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      // The live region that carries a write result to assistive technology.
+      '.crStatusLive{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
+      // ------------------------------------------------------- provider picker
+      '.crPickerGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:16px;align-items:stretch}',
+      '.crPickerCard{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-lg);padding:16px;display:flex;flex-direction:column;gap:8px;min-width:0}',
+      '.crPickerHead{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}',
+      '.crPickerTitle{font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:600;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
       '.crPickerDesc{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);margin:0;min-width:0}',
       '.crPickerAuth{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);margin:0}',
-      '.crPickerActions{display:flex;align-items:center;gap:8px;margin-top:auto;min-width:0}',
+      '.crPickerActions{display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:8px;min-width:0}',
+      // --------------------------------------------------- settings section
+      // The settings section mirrors the built-in plugin section: a readable
+      // 760 px column, a heading and a compact tab strip, never a full-bleed
+      // page. These classes belong to the settings surface alone; the
+      // dashboard keeps its own `.crPage` / `.crTabs` chrome.
+      '.crSettingsSection{display:flex;flex-direction:column;gap:12px;max-width:760px;min-width:0}',
+      '.crSettingsTitle{margin:0;font-family:inherit;font-size:calc(var(--dsh-content-font-size,14px) + 4px);font-weight:600;line-height:calc(26px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.crSettingsIntro{margin:0;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary)}',
+      '.crSettingsTabs{display:flex;align-items:flex-end;gap:22px;border-bottom:.5px solid var(--dsw-alias-border-l2);margin-top:2px;min-width:0;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:thin}',
+      '.crSettingsTab{position:relative;appearance:none;background:0 0;border:0;padding:7px 1px 9px;cursor:pointer;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:nowrap;flex:0 0 auto}',
+      '@media (hover:hover){.crSettingsTab:hover{color:var(--dsw-alias-label-primary)}}',
+      '.crSettingsTab[aria-selected=true]{color:var(--dsw-alias-label-primary)}',
+      '.crSettingsTab[aria-selected=true]::after,.crSettingsTab:focus-visible::after{position:absolute;right:0;bottom:-1px;left:0;height:2px;border-radius:2px 2px 0 0;background:var(--dsw-alias-label-primary);content:""}',
+      '.crSettingsTab:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px;border-radius:2px;color:var(--dsw-alias-label-primary)}',
+      // ------------------------------------------------------- model catalogs
       '.crModels{display:flex;flex-direction:column;gap:12px;min-width:0}',
       // One toolbar / card / row layout shared by every preset: the vendor data
       // differs, the list geometry does not.
-      '.crToolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
-      '.crSearchInput{flex:1 1 180px;min-width:120px;height:28px;box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:20px;padding:0 8px}',
-      '.crButtonGhost{border-color:transparent;color:var(--dsw-alias-label-secondary)}',
-      '.crButtonPrimary{border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-state-business-primary)}',
+      '.crToolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;position:sticky;top:0;z-index:1;padding:10px 12px;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-settings-card-fill)}',
+      '.crSearchInput{flex:1 1 180px;min-width:120px;height:calc(30px + var(--dsh-content-font-delta,0px));box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));padding:0 10px}',
       '.crCards{display:flex;flex-direction:column;gap:12px;min-width:0}',
-      '.crGroup{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);display:flex;flex-direction:column;min-width:0;overflow:hidden}',
-      '.crGroupHead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:.5px solid var(--dsw-alias-border-l3);min-width:0}',
-      '.crGroupTitle{margin:0;font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:500;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.crGroup{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-lg);display:flex;flex-direction:column;min-width:0;overflow:hidden}',
+      '.crGroupHead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:.5px solid var(--dsw-alias-border-l3);min-width:0}',
+      '.crGroupTitle{margin:0;font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:600;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.crGroupMeta{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}',
       '.crGroupSide{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;min-width:0}',
       // The panel body carries the tabpanel role; it is the ONLY panel rendered,
@@ -184,8 +245,8 @@ window.__ModuleLoader__.load({
       '.crPanelBody{display:flex;flex-direction:column;gap:12px;min-width:0}',
       '.crGroupBody{display:flex;flex-direction:column;min-width:0}',
       '.crList{margin:0;padding:6px;list-style:none;display:flex;flex-direction:column;gap:2px;max-height:420px;overflow:auto;min-width:0}',
-      '.crRow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:6px 8px;border-radius:var(--dsw-radius-md);min-width:0;cursor:pointer}',
-      '@media (hover:hover){.crRow:hover{background:var(--dsw-alias-interactive-bg-hover-solid)}}',
+      '.crRow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px;border-radius:var(--dsw-radius-sm);min-width:0;cursor:pointer;border:.5px solid transparent}',
+      '@media (hover:hover){.crRow:hover{background:var(--dsw-alias-interactive-bg-hover)}}',
       '.crRowCheck{width:14px;height:14px;accent-color:var(--dsw-alias-state-business-primary);margin:0;flex:0 0 auto}',
       '.crRowMain{display:flex;flex-direction:column;gap:1px;min-width:0}',
       '.crRowName{font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}',
@@ -199,27 +260,40 @@ window.__ModuleLoader__.load({
       '.crBadgeMeta[data-tone=promo]{border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-state-business-primary)}',
       '.crBadgeMeta[data-tone=positive]{border-color:var(--dsw-alias-state-success-primary);color:var(--dsw-alias-state-success-primary)}',
       '.crBadgeMeta[data-tone=muted]{color:var(--dsw-alias-label-tertiary)}',
-      '.crEmpty{padding:16px 14px;margin:0;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
-      '.crFooterBar{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:.5px solid var(--dsw-alias-border-l3);min-width:0;flex-wrap:wrap}',
-      '.crPlanCard{display:flex;flex-direction:column;gap:10px;border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-xl);padding:12px 14px;min-width:0}',
+      '.crEmpty{padding:24px 16px;margin:0;text-align:center;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
+      '.crEmpty[data-state=loading]{color:var(--dsw-alias-label-secondary)}',
+      '.crEmpty[data-state=error]{color:var(--dsw-alias-state-error-primary)}',
+      // The action bar: it sticks to the bottom of the scroll area so the save
+      // button stays reachable in a long model list.
+      '.crFooterBar{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 14px;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-settings-card-fill);min-width:0;flex-wrap:wrap;position:sticky;bottom:0;z-index:1}',
+      '.crPlanCard{display:flex;flex-direction:column;gap:10px;border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-lg);padding:12px 14px;min-width:0}',
       '.crPlanHead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
-      '.crPlanTitle{font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:600;color:var(--dsw-alias-label-primary);margin:0}',
-      '.crPlanTier{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-secondary)}',
-      '.crPlanBadge{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-tertiary);border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);padding:0 6px}',
-      '.crPlanWindows{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;min-width:0}',
+      '.crPlanTitle{margin:0;font-family:inherit;font-size:var(--dsh-content-font-size,14px);font-weight:600;line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
+      '.crPlanTier{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary)}',
+      '.crPlanBadge{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);padding:0 6px}',
+      '.crPlanWindows{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(140px,100%),1fr));gap:10px;min-width:0}',
       '.crPlanWindow{display:flex;flex-direction:column;gap:4px;min-width:0}',
-      '.crPlanWindowHead{display:flex;align-items:center;justify-content:space-between;gap:6px;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-secondary)}',
+      '.crPlanWindowHead{display:flex;align-items:center;justify-content:space-between;gap:6px;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary)}',
       '.crPlanBar{height:6px;border-radius:999px;background:var(--dsw-alias-border-l2);overflow:hidden;min-width:0}',
       '.crPlanBarFill{height:100%;border-radius:999px;background:var(--dsw-alias-state-business-primary)}',
-      '.crPlanMeta{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-tertiary);display:flex;gap:10px;flex-wrap:wrap}',
-      '.crPlanTable{display:flex;flex-direction:column;max-height:280px;overflow:auto;border-top:.5px solid var(--dsw-alias-border-l2)}',
-      '.crPlanRow{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto auto;align-items:center;gap:10px;padding:6px 2px;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-primary);min-width:0}',
-      '.crPlanRowHead{color:var(--dsw-alias-label-tertiary);position:sticky;top:0;background:var(--dsw-alias-settings-card-fill)}',
-      '.crPlanModel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}',
-      '.crPlanCell{text-align:right;white-space:nowrap;font-family:var(--ds-font-family-code,monospace)}',
-      '.crPlanNote{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);color:var(--dsw-alias-label-tertiary);margin:0}',
-      '@media (max-width:960px){.crKpiGrid,.crVendorGrid,.crBillingGrid,.crLayerGrid,.crPickerGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}',
-      '@media (max-width:640px){.crKpiGrid,.crVendorGrid,.crBillingGrid,.crLayerGrid,.crPickerGrid{grid-template-columns:minmax(0,1fr)}}',
+      '.crPlanMeta{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);display:flex;gap:10px;flex-wrap:wrap}',
+      // A dense data table: it keeps its own scroll instead of stretching the
+      // page, so the page itself never scrolls sideways.
+      '.crPlanTableWrap{max-height:280px;overflow:auto;border-top:.5px solid var(--dsw-alias-border-l2);min-width:0}',
+      '.crPlanTable{width:100%;border-collapse:collapse;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-primary);min-width:0}',
+      '.crPlanTable th,.crPlanTable td{padding:6px 6px;text-align:right;white-space:nowrap;border-bottom:.5px solid var(--dsw-alias-border-l2);font-weight:inherit}',
+      '.crPlanTable th:first-child,.crPlanTable td:first-child{text-align:left}',
+      '.crPlanTable thead th{color:var(--dsw-alias-label-tertiary);position:sticky;top:0;background:var(--dsw-alias-settings-card-fill);font-weight:600}',
+      '.crPlanCell{font-family:var(--ds-font-family-code,monospace);font-variant-numeric:tabular-nums}',
+      '.crPlanModel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}',
+      '.crPlanNote{font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);margin:0}',
+      // ------------------------------------------------------- focus and a11y
+      // Every interactive control of this surface carries the host focus ring.
+      '.crButton:focus-visible,.crTab:focus-visible,.crGear:focus-visible,.crJump:focus-visible,.crSearchInput:focus-visible,.crInput:focus-visible,.crSwitch:focus-visible,.crRowCheck:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}',
+      // ---------------------------------------------------------- responsive
+      '@media (max-width:640px){.crPage{padding:16px}.crPage.crPageScroll{padding:16px 16px 32px}.crProviderRow{grid-template-columns:minmax(0,1fr)}.crProviderUsage{gap:12px}}',
+      // A reduced-motion preference removes every transition this surface owns.
+      '@media (prefers-reduced-motion: reduce){.crButton,.crGear,.crTab,.crReveal,.crSwitch,.crSwitch::after{transition:none}}',
     ].join('')
 
     /** Inject the stylesheet once, keyed so a reload replaces it. */
@@ -277,8 +351,8 @@ window.__ModuleLoader__.load({
         masterPath: Object.freeze(['presets', 'antigravity']),
         credentialRow: 'dsh-antigravity',
         credentials: Object.freeze([
-          Object.freeze({ field: 'refreshToken' }),
-          Object.freeze({ field: 'clientSecret' }),
+          Object.freeze({ field: 'refreshToken', labelKey: 'credentialRefreshToken' }),
+          Object.freeze({ field: 'clientSecret', labelKey: 'credentialClientSecret' }),
         ]),
         layers: Object.freeze([
           Object.freeze({ id: 'modelServing', labelKey: 'layerModelServing', switchName: 'modelServing', path: Object.freeze(['vendorConfig', 'dsh-antigravity', 'modelServing']) }),
@@ -300,8 +374,8 @@ window.__ModuleLoader__.load({
         masterPath: Object.freeze(['presets', 'opencode']),
         credentialRow: 'dsh-opencode-v2',
         credentials: Object.freeze([
-          Object.freeze({ field: 'apiKey' }),
-          Object.freeze({ field: 'password' }),
+          Object.freeze({ field: 'apiKey', labelKey: 'credentialApiKey' }),
+          Object.freeze({ field: 'password', labelKey: 'credentialPassword' }),
         ]),
         layers: Object.freeze([
           Object.freeze({ id: 'modelServing', labelKey: 'layerModelServing', switchName: 'modelServing', path: Object.freeze(['vendorConfig', 'dsh-opencode-v2-http', 'modelServing']) }),
@@ -327,7 +401,7 @@ window.__ModuleLoader__.load({
         masterIsModelServing: true,
         credentialRow: 'dsh-deepinfra',
         credentials: Object.freeze([
-          Object.freeze({ field: 'apiKey' }),
+          Object.freeze({ field: 'apiKey', labelKey: 'credentialApiKey' }),
         ]),
         // DeepInfra declares no subagent and no CLI surface: the preset master
         // IS the model router. The layer grid renders those two cells as
@@ -342,6 +416,15 @@ window.__ModuleLoader__.load({
       Object.freeze({ id: 'opencode', nameKey: 'vendorOpenCode', descKey: 'pickerOpenCodeDesc', authKey: 'pickerAuthWebAuth', presetId: 'opencode' }),
       Object.freeze({ id: 'deepinfra', nameKey: 'vendorDeepInfra', descKey: 'pickerDeepInfraDesc', authKey: 'pickerAuthApiKey', presetId: 'deepinfra' }),
       Object.freeze({ id: 'custom-json', nameKey: 'customJson', descKey: 'pickerCustomDesc', authKey: 'pickerAuthJson', presetId: null }),
+    ])
+
+    /**
+     * The dashboard's two tabs: the id, the selected value, the label key and
+     * the id of the panel the active tab owns.
+     */
+    const DASHBOARD_TABS = Object.freeze([
+      Object.freeze({ id: 'cr-tab-usage', value: 'usage', labelKey: 'tabUsage', panelId: 'cr-panel-usage' }),
+      Object.freeze({ id: 'cr-tab-add', value: 'add', labelKey: 'tabAddProvider', panelId: 'cr-panel-add' }),
     ])
 
     // --------------------------------------------------------------- helpers
@@ -731,6 +814,57 @@ window.__ModuleLoader__.load({
       return String(id)
     }
 
+    /**
+     * The tab a keyboard event selects in one tab strip.
+     *
+     * Arrow keys move to the next/previous tab (wrapping around), Home and
+     * End move to the first/last tab. Any other key selects nothing.
+     * @param {string} key - the pressed key.
+     * @param {Array<{id: string, value: string}>} tabs - the tabs in order.
+     * @param {string} currentId - the id of the selected tab.
+     * @returns {{id: string, value: string}|null} the next tab, or null.
+     */
+    function nextTab(key, tabs, currentId) {
+      const index = tabs.findIndex((tab) => tab.id === currentId)
+      if (index < 0 || tabs.length === 0) return null
+      if (key === 'ArrowRight') return tabs[(index + 1) % tabs.length]
+      if (key === 'ArrowLeft') return tabs[(index - 1 + tabs.length) % tabs.length]
+      if (key === 'Home') return tabs[0]
+      if (key === 'End') return tabs[tabs.length - 1]
+      return null
+    }
+
+    /**
+     * Move the DOM focus onto one tab element.
+     * @param {string} id - the tab element id.
+     * @returns {void}
+     */
+    function focusTabElement(id) {
+      if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return
+      const element = document.getElementById(id)
+      if (element && typeof element.focus === 'function') element.focus()
+    }
+
+    /**
+     * The keyboard handler of one tab strip.
+     *
+     * The handler lives on the tablist, so the keys work from whichever tab
+     * holds the focus. It moves the selection AND the focus, so a keyboard
+     * user follows the selection instead of losing the tab strip.
+     * @param {object} options - `{ tabs, currentId, onSelect }`.
+     * @returns {(event: object) => void} the keydown handler.
+     */
+    function tabStripKeyHandler(options) {
+      return (event) => {
+        const key = event && typeof event.key === 'string' ? event.key : ''
+        const next = nextTab(key, options.tabs, options.currentId)
+        if (next === null) return
+        if (typeof event.preventDefault === 'function') event.preventDefault()
+        options.onSelect(next.value)
+        focusTabElement(next.id)
+      }
+    }
+
     // ------------------------------------------------------------ view model
 
     /**
@@ -956,7 +1090,11 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The settings trigger: the gear button that opens one card's panel.
+     * The settings trigger: the icon button that opens one card's panel.
+     *
+     * The glyph is an inline SVG, not an emoji: an emoji renders with the
+     * platform emoji font, ignores the DSH colour tokens and looks different
+     * on every host.
      * @param {object} props - component props.
      * @returns {object} the element.
      */
@@ -968,7 +1106,21 @@ window.__ModuleLoader__.load({
         'aria-controls': props.controlsId,
         'aria-label': props.label ?? t('settingsTitle'),
         onClick: props.onToggle,
-      }, '⚙')
+      }, h('svg', {
+        width: 16,
+        height: 16,
+        viewBox: '0 0 16 16',
+        fill: 'none',
+        'aria-hidden': 'true',
+        focusable: 'false',
+      },
+      h('circle', { cx: 8, cy: 8, r: 2.2, stroke: 'currentColor', 'stroke-width': 1.2 }),
+      h('path', {
+        d: 'M13.3 8c0-.36-.04-.71-.12-1.04l1.32-.92-1.3-2.25-1.55.58a5.2 5.2 0 0 0-1.8-1.04L9.6 1.9H6.4l-.25 1.43a5.2 5.2 0 0 0-1.8 1.04l-1.55-.58L1.5 6.04l1.32.92a5.2 5.2 0 0 0 0 2.08L1.5 9.96l1.3 2.25 1.55-.58c.52.46 1.13.82 1.8 1.04l.25 1.43h3.2l.25-1.43a5.2 5.2 0 0 0 1.8-1.04l1.55.58 1.3-2.25-1.32-.92c.08-.33.12-.68.12-1.04Z',
+        stroke: 'currentColor',
+        'stroke-width': 1.2,
+        'stroke-linejoin': 'round',
+      })))
     }
 
     /**
@@ -996,6 +1148,7 @@ window.__ModuleLoader__.load({
             'aria-valuemin': 0,
             'aria-valuemax': 100,
             'aria-label': t('windowLabel', { window: window.label }),
+            'aria-valuetext': t('windowLabel', { window: window.label }) + ' ' + (percent >= 100 ? t('planLimited') : Math.round(percent) + '%'),
           }, h('div', {
             className: 'crBarFill',
             'data-level': percent >= 90 ? 'high' : 'normal',
@@ -1066,60 +1219,134 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * One vendor card: header, usage body and the collapsible settings panel.
+     * The compact measurement of one provider: the tightest window of a
+     * quota provider, the spend of a pay-per-token provider.
+     *
+     * The full measurement lives in the detail below the row; the row carries
+     * the one number a reader scans for.
+     * @param {object} props - component props.
+     * @returns {object} the element.
+     */
+    function MiniUsage(props) {
+      const provider = props.provider
+      if (provider.usageKind === 'billing') {
+        const billing = provider.billing
+        return h('div', { className: 'crMiniUsage' },
+          h('div', { className: 'crMiniRow' },
+            h('span', { className: 'crMiniLabel' }, t('billingSpend')),
+            h('span', { className: 'crMiniPct' }, billing && billing.spend !== null ? formatAmount(billing.spend) : t('kpiUnavailable'))),
+          billing && billing.balanceKnown
+            ? h('div', { className: 'crMiniRow' },
+              h('span', { className: 'crMiniLabel' }, t('billingBalance')),
+              h('span', { className: 'crMiniReset' }, formatAmount(billing.balance)))
+            : null)
+      }
+      const measured = provider.windows.filter((window) => typeof window.percent === 'number')
+      if (measured.length === 0) {
+        return h('div', { className: 'crMiniUsage' },
+          h('div', { className: 'crMiniRow' },
+            provider.windows.length > 0
+              ? h('span', { className: 'crMiniLabel' }, provider.windows[0].label)
+              : null,
+            h('span', { className: 'crMiniReset' }, t('usageUnavailable'))))
+      }
+      const tightest = measured.reduce((worst, window) => (window.percent > worst.percent ? window : worst))
+      const percent = Math.max(0, Math.min(100, tightest.percent))
+      return h('div', { className: 'crMiniUsage' },
+        h('div', { className: 'crMiniRow' },
+          h('span', { className: 'crMiniLabel' }, tightest.label),
+          h('span', { className: 'crMiniPct' }, Math.round(percent) + '%')),
+        h('div', {
+          className: 'crMiniBar',
+          // The bar repeats the percentage printed above it: it is decoration,
+          // and the window bar in the detail below carries the accessible
+          // value.
+          'aria-hidden': 'true',
+        }, h('div', {
+          className: 'crMiniBarFill',
+          'data-level': percent >= 90 ? 'high' : 'normal',
+          style: { width: percent + '%' },
+        })),
+        h('div', { className: 'crMiniReset', title: tightest.resetsText || undefined },
+          tightest.resetsCompact || tightest.resetsText
+            ? t('resetAt', { at: tightest.resetsCompact || tightest.resetsText }) + (tightest.relative ? ' · ' + tightest.relative : '')
+            : t('usageNoData')))
+    }
+
+    /**
+     * One provider: a compact row, and the full-width detail below it.
+     *
+     * The row carries the identity, the compact measurement and the settings
+     * trigger. The detail carries the full measurement and the settings form,
+     * and it spans the whole width of the list instead of one column of it.
      * @param {object} props - component props.
      * @returns {object} the element.
      */
     function VendorCard(props) {
       const provider = props.provider
       const panelId = 'cr-settings-' + provider.id
-      return h('article', {
-        className: 'crVendorCard',
+      return h('div', {
+        className: 'crProviderItem',
         id: 'cr-vendor-' + provider.id,
         'data-preset': provider.id,
         'data-connection': provider.connection,
       },
-      h('header', { className: 'crVendorHead' },
-        h(ProviderAvatar, { name: provider.name }),
-        h(ProviderIdentity, { name: provider.name, plan: provider.plan }),
-        h(ConnectionBadge, { state: provider.connection }),
+      h('div', { className: 'crProviderRow' },
+        h('div', { className: 'crProviderHead' },
+          h(ProviderAvatar, { name: provider.name }),
+          h(ProviderIdentity, { name: provider.name, plan: provider.plan }),
+          h(ConnectionBadge, { state: provider.connection })),
+        h('div', { className: 'crProviderUsage' },
+          h(MiniUsage, { provider })),
         h(SettingsTrigger, {
           open: props.open === true,
           controlsId: panelId,
           label: t('settingsTitle'),
           onToggle: () => props.onToggle(provider.id),
         })),
-      provider.usageKind === 'billing'
-        ? h(BillingUsage, { billing: provider.billing })
-        : h('div', { className: 'crBody' },
-          provider.windows.length === 0
-            ? h('p', { className: 'crHint' }, t('usageNoData'))
-            : provider.windows.map((window) => h(UsageWindow, { key: window.id, window })),
-          h(ServingSummary, { serving: provider.serving })),
       h(SettingsReveal, { open: props.open === true, id: panelId },
-        h(SettingsPanel, {
-          provider,
-          status: props.status,
-          drafts: props.drafts ?? {},
-          onMaster: (next) => props.onMaster(provider, next),
-          onLayer: (layer, next) => props.onLayer(provider, layer, next),
-          onDraft: (credential, value) => props.onDraft(provider, credential, value),
-          onCredential: (credential) => props.onCredential(provider, credential),
-          onClearCredential: (credential) => props.onClearCredential(provider, credential),
-          onApplyDrafts: () => props.onApplyDrafts(provider),
-        })))
+        h('div', { className: 'crProviderDetail' },
+          h('div', { className: 'crUsageInset' },
+            provider.usageKind === 'billing'
+              ? h(BillingUsage, { billing: provider.billing })
+              : h('div', { className: 'crBody' },
+                provider.windows.length === 0
+                  ? h('p', { className: 'crHint' }, t('usageNoData'))
+                  : h('div', { className: 'crUsageWindows' }, provider.windows.map((window) => h(UsageWindow, { key: window.id, window }))),
+                h(ServingSummary, { serving: provider.serving }))),
+          h(SettingsPanel, {
+            provider,
+            status: props.status,
+            drafts: props.drafts ?? {},
+            onMaster: (next) => props.onMaster(provider, next),
+            onLayer: (layer, next) => props.onLayer(provider, layer, next),
+            onDraft: (credential, value) => props.onDraft(provider, credential, value),
+            onCredential: (credential) => props.onCredential(provider, credential),
+            onClearCredential: (credential) => props.onClearCredential(provider, credential),
+            onApplyDrafts: () => props.onApplyDrafts(provider),
+          }))))
     }
 
     /**
      * The collapsible settings shell: a grid-rows reveal with an overflow-hidden
      * inner box, so the panel animates without a fixed height.
+     *
+     * A COLLAPSED panel keeps its DOM (the reveal animates), so the controls it
+     * hides must leave the tab order and the accessibility tree: `inert` makes
+     * them unfocusable and `aria-hidden` hides them from the reader. Without
+     * both, `aria-expanded="false"` on the trigger would be a lie.
      * @param {object} props - component props.
      * @returns {object} the element.
      */
     function SettingsReveal(props) {
-      return h('div', { className: 'crReveal', 'data-open': props.open ? 'true' : 'false' },
-        h('div', { className: 'crRevealInner' },
-          h('div', { className: 'crSettingsPanel', id: props.id }, props.children)))
+      const open = props.open === true
+      return h('div', { className: 'crReveal', 'data-open': open ? 'true' : 'false' },
+        h('div', {
+          className: 'crRevealInner',
+          inert: open ? undefined : true,
+          'aria-hidden': open ? undefined : 'true',
+        },
+        h('div', { className: 'crSettingsPanel', id: props.id }, props.children)))
     }
 
     /**
@@ -1186,54 +1413,69 @@ window.__ModuleLoader__.load({
     /**
      * The credential section: write-only masked inputs plus the set/unset state
      * read from the redacted sidecar. No secret value is ever in the DOM.
+     *
+     * One field per credential, laid out as a form row: the field name and its
+     * state on one line, the masked input below it, the actions beside it.
      * @param {object} props - component props.
      * @returns {object} the element.
      */
     function CredentialSection(props) {
-      const rows = props.provider.credentials.map((credential) => h('div', { className: 'crCredentialRow', key: credential.field },
-        h('div', { className: 'crCredentialField' },
-          h('span', { className: 'crCredentialName' }, credential.field),
+      const rows = props.provider.credentials.map((credential) => {
+        const inputId = 'cr-cred-' + props.provider.id + '-' + credential.field
+        return h('div', { className: 'crField', key: credential.field, 'data-credential': credential.field },
+          h('div', { className: 'crFieldHead' },
+            // A REAL label: the input is named by this element, not by an
+            // aria-label that would hide the field name from the reader.
+            h('label', { className: 'crFieldLabel', htmlFor: inputId }, credential.field),
+            h('span', { className: 'crState', 'data-state': credential.set ? 'set' : 'unset', 'data-secret-set': credential.set ? 'true' : 'false' },
+              credential.set ? t('credentialSet') : t('credentialUnset'))),
           h('input', {
+            id: inputId,
             type: 'password',
             className: 'crInput',
             value: props.draft ?? '',
             placeholder: t('credentialPlaceholder'),
-            'aria-label': credential.field,
+            // A stored secret is never offered to the browser's autofill.
+            autoComplete: 'new-password',
             'data-secret-field': credential.field,
             onChange: (event) => props.onDraft(credential, event && event.target ? event.target.value : ''),
-          })),
-        h('span', { className: 'crState', 'data-state': credential.set ? 'set' : 'unset', 'data-secret-set': credential.set ? 'true' : 'false' },
-          credential.set ? t('credentialSet') : t('credentialUnset')),
-        h('button', {
-          type: 'button',
-          className: 'crButton',
-          onClick: () => props.onCredential(credential),
-        }, t('credentialSave')),
-        h('button', {
-          type: 'button',
-          className: 'crButton',
-          disabled: !credential.set,
-          onClick: () => props.onClearCredential(credential),
-        }, t('credentialClear'))))
-      return h('div', { className: 'crCredential' },
-        h('div', { className: 'crCredentialHead' },
-          h('span', { className: 'crCredentialTitle' }, t('credentialTitle')),
-          h('span', { className: 'crState' }, t('credentialHint'))),
-        rows)
+          }),
+          h('div', { className: 'crFieldActions' },
+            h('button', {
+              type: 'button',
+              className: 'crButton crButtonPrimary',
+              'data-credential-action': 'save',
+              onClick: () => props.onCredential(credential),
+            }, t('credentialSave')),
+            h('button', {
+              type: 'button',
+              className: 'crButton crButtonGhost',
+              'data-credential-action': 'clear',
+              disabled: !credential.set,
+              onClick: () => props.onClearCredential(credential),
+            }, t('credentialClear'))))
+      })
+      return h('div', { className: 'crFormSection' },
+        h('div', { className: 'crFormSectionHead' },
+          h('span', { className: 'crFormSectionTitle' }, t('credentialTitle')),
+          h('span', { className: 'crFormSectionHint' }, t('credentialHint'))),
+        h('div', { className: 'crFormSectionBody' }, rows))
     }
 
     /**
-     * The settings panel: master switch, layer grid, credentials and the
-     * save/applied/error footer.
+     * The settings panel: the master switch, the layer grid, the credentials
+     * and the save/applied/error footer.
      * @param {object} props - component props.
      * @returns {object} the element.
      */
     function SettingsPanel(props) {
       const status = props.status ?? {}
       return h('div', { className: 'crSettingsPanelBody' },
-        h('h4', { className: 'crSettingsTitle' }, t('settingsTitle')),
-        h(MasterSwitchRow, { provider: props.provider, onMaster: props.onMaster }),
-        h(LayerSwitchGrid, { provider: props.provider, onLayer: props.onLayer }),
+        h('div', { className: 'crFormSection' },
+          h('div', { className: 'crFormSectionHead' },
+            h('h4', { className: 'crFormSectionTitle' }, t('settingsTitle'))),
+          h(MasterSwitchRow, { provider: props.provider, onMaster: props.onMaster }),
+          h(LayerSwitchGrid, { provider: props.provider, onLayer: props.onLayer })),
         h(CredentialSection, {
           provider: props.provider,
           drafts: props.drafts ?? {},
@@ -1245,15 +1487,20 @@ window.__ModuleLoader__.load({
         h('div', { className: 'crFooter' },
           h('button', {
             type: 'button',
-            className: 'crButton',
+            className: 'crButton crButtonPrimary',
+            'data-credential-action': 'apply-all',
             disabled: status.saving === true,
             onClick: () => props.onApplyDrafts(props.provider),
           }, status.saving === true ? t('credentialSaving') : t('credentialSave')),
-          status.error
-            ? h('span', { className: 'crFooterNote', 'data-state': 'error' }, t('saveError') + ': ' + status.error)
-            : status.applied
+          // The live region is ALWAYS mounted: a region that appears together
+          // with its text is not announced.
+          h('span', { className: 'crStatusLive', role: 'status', 'aria-live': 'polite' },
+            status.error
+              ? h('span', { className: 'crFooterNote', 'data-state': 'error' }, t('saveError') + ': ' + status.error)
+              : null,
+            status.applied
               ? h('span', { className: 'crFooterNote', 'data-state': 'applied' }, t('applied'))
-              : null))
+              : null)))
     }
 
     /**
@@ -1262,21 +1509,27 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function ProviderPickerGrid(props) {
-      return h('div', { className: 'crPickerGrid' }, props.items.map((item) => h('div', {
-        className: 'crPickerCard',
-        key: item.id,
-        'data-picker': item.id,
-      },
-      h('span', { className: 'crPickerTitle' }, t(item.nameKey)),
-      h('p', { className: 'crPickerDesc' }, t(item.descKey)),
-      h('p', { className: 'crPickerAuth' }, t(item.authKey)),
-      h('div', { className: 'crPickerActions' },
-        h('button', {
-          type: 'button',
-          className: 'crButton',
-          disabled: item.presetId === null || props.enabled[item.presetId] === true,
-          onClick: () => props.onAdd(item),
-        }, props.enabled[item.presetId] === true ? t('pickerAdded') : item.presetId === null ? t('pickerUnsupported') : t('pickerAdd'))))))
+      return h('div', { className: 'crPickerGrid' }, props.items.map((item) => {
+        const added = item.presetId !== null && props.enabled[item.presetId] === true
+        return h('div', {
+          className: 'crPickerCard',
+          key: item.id,
+          'data-picker': item.id,
+        },
+        h('div', { className: 'crPickerHead' },
+          h('span', { className: 'crPickerTitle' }, t(item.nameKey)),
+          added ? h('span', { className: 'crBadge', 'data-state': 'active' }, t('pickerAdded')) : null),
+        h('p', { className: 'crPickerDesc' }, t(item.descKey)),
+        h('p', { className: 'crPickerAuth' }, t(item.authKey)),
+        h('div', { className: 'crPickerActions' },
+          h('button', {
+            type: 'button',
+            className: 'crButton crButtonPrimary',
+            'data-picker-action': 'add',
+            disabled: item.presetId === null || added,
+            onClick: () => props.onAdd(item),
+          }, added ? t('pickerAdded') : item.presetId === null ? t('pickerUnsupported') : t('pickerAdd'))))
+      }))
     }
 
     // ------------------------------------------------------- model catalogs
@@ -1352,6 +1605,11 @@ window.__ModuleLoader__.load({
         renderRowExtras: (row, ctx) => h(PriceBlock, { price: row.price, note: ctx.note }),
       }),
     ])
+
+    /**
+     * The models tab strip: one tab per preset, in descriptor order.
+     */
+    const MODEL_TABS = Object.freeze(MODEL_PRESETS.map((preset) => Object.freeze({ id: 'cr-models-tab-' + preset.id, value: preset.id })))
 
     /**
      * Format a context window for a model meta chip.
@@ -1877,6 +2135,7 @@ window.__ModuleLoader__.load({
                   'aria-valuemin': 0,
                   'aria-valuemax': 100,
                   'aria-label': item.label,
+                  'aria-valuetext': item.label + ' ' + (item.entry.limited === true || percent >= 100 ? t('planLimited') : percent + '%'),
                 }, h('div', { className: 'crPlanBarFill', style: { width: percent + '%' } }))
             )
           }))
@@ -1887,19 +2146,22 @@ window.__ModuleLoader__.load({
             : h('span', null, t('planAllowanceUnknown')),
           h('span', null, t('planRequests', { n: formatNumber(cost?.requests ?? 0) }))),
         rows.length > 0
-          ? h('div', { className: 'crPlanTable' },
-            h('div', { className: 'crPlanRow crPlanRowHead' },
-              h('span', null, t('planModel')),
-              h('span', { className: 'crPlanCell' }, t('planRequestsShort')),
-              h('span', { className: 'crPlanCell' }, t('planSpentShort')),
-              h('span', { className: 'crPlanCell' }, t('planAllowanceShort')),
-              h('span', { className: 'crPlanCell' }, t('planDocLimit'))),
-            rows.map((row) => h('div', { className: 'crPlanRow', key: row.route },
-              h('span', { className: 'crPlanModel', title: row.route }, row.route.replace(/^opencode-(go|zen)\//, '')),
-              h('span', { className: 'crPlanCell' }, formatNumber(row.requests)),
-              h('span', { className: 'crPlanCell' }, '$' + formatAmount(row.listCostUsd)),
-              h('span', { className: 'crPlanCell' }, row.allowanceUsd > 0 ? '$' + formatAmount(row.allowanceUsd) : '—'),
-              h('span', { className: 'crPlanCell' }, documentedLimit(row.route, tier.tier) === null ? '—' : '$' + documentedLimit(row.route, tier.tier)))))
+          ? h('div', { className: 'crPlanTableWrap' },
+            h('table', { className: 'crPlanTable', 'aria-label': t('planTitle') },
+              h('thead', null,
+                h('tr', null,
+                  h('th', { scope: 'col' }, t('planModel')),
+                  h('th', { scope: 'col', className: 'crPlanCell' }, t('planRequestsShort')),
+                  h('th', { scope: 'col', className: 'crPlanCell' }, t('planSpentShort')),
+                  h('th', { scope: 'col', className: 'crPlanCell' }, t('planAllowanceShort')),
+                  h('th', { scope: 'col', className: 'crPlanCell' }, t('planDocLimit')))),
+              h('tbody', null,
+                rows.map((row) => h('tr', { key: row.route },
+                  h('td', { className: 'crPlanModel', title: row.route }, row.route.replace(/^opencode-(go|zen)\//, '')),
+                  h('td', { className: 'crPlanCell' }, formatNumber(row.requests)),
+                  h('td', { className: 'crPlanCell' }, '$' + formatAmount(row.listCostUsd)),
+                  h('td', { className: 'crPlanCell' }, row.allowanceUsd > 0 ? '$' + formatAmount(row.allowanceUsd) : '—'),
+                  h('td', { className: 'crPlanCell' }, documentedLimit(row.route, tier.tier) === null ? '—' : '$' + documentedLimit(row.route, tier.tier)))))))
           : h('p', { className: 'crPlanNote' }, t('planNoUsage')),
         h('p', { className: 'crPlanNote' }, t('planLocalNote')))
     }
@@ -2020,16 +2282,19 @@ window.__ModuleLoader__.load({
       const promoCount = groups.reduce((sum, group) => sum + group.rows.filter((row) => row.price !== null && row.price.promoPercent !== null && Number.isFinite(row.price.promoPercent)).length, 0)
       const emptyGroups = groups.length === 0 || visibleGroups.length === 0
 
-      return h('div', { className: 'crSection crPage crPageNarrow crModels', 'data-models-tab': active.id },
-        h('div', { className: 'crHeader' },
-          h('div', { className: 'crTitleBlock' },
-            h('h2', { className: 'crTitle' }, t('modelsTitle')),
-            h('p', { className: 'crSubtitle' }, t('modelsHint')))),
-        h('div', { className: 'crTabs', role: 'tablist' },
+      return h('div', { className: 'crSection crSettingsSection crModels', 'data-models-tab': active.id },
+        h('h2', { className: 'crSettingsTitle' }, t('modelsTitle')),
+        h('p', { className: 'crSettingsIntro' }, t('modelsHint')),
+        h('div', {
+          className: 'crSettingsTabs',
+          role: 'tablist',
+          'aria-label': t('modelsTitle'),
+          onKeyDown: tabStripKeyHandler({ tabs: MODEL_TABS, currentId: 'cr-models-tab-' + active.id, onSelect: setTab }),
+        },
           MODEL_PRESETS.map((preset) => h('button', {
             key: preset.id,
             type: 'button',
-            className: 'crTab',
+            className: 'crSettingsTab',
             role: 'tab',
             id: 'cr-models-tab-' + preset.id,
             // Only the active panel exists, so only the active tab points at it:
@@ -2061,11 +2326,11 @@ window.__ModuleLoader__.load({
           h('button', { type: 'button', className: 'crButton', onClick: () => setAll(active.id, true) }, t('modelsSelectAll')),
           h('button', { type: 'button', className: 'crButton crButtonGhost', onClick: () => setAll(active.id, false) }, t('modelsClear'))),
         state === 'error'
-          ? h('p', { className: 'crEmpty' }, t('modelsLoadFailed'))
+          ? h('p', { className: 'crEmpty', 'data-state': 'error' }, t('modelsLoadFailed'))
           : state === 'loading'
-            ? h('p', { className: 'crEmpty' }, t('loading'))
+            ? h('p', { className: 'crEmpty', 'data-state': 'loading' }, t('loading'))
             : emptyGroups
-              ? h('p', { className: 'crEmpty' }, t('modelsEmpty'))
+              ? h('p', { className: 'crEmpty', 'data-state': 'empty' }, t('modelsEmpty'))
               : h('div', { className: 'crCards' }, visibleGroups.map((group) => h(ModelGroup, {
                 key: active.id + ':' + group.key,
                 groupId: active.id + ':' + group.key,
@@ -2079,17 +2344,21 @@ window.__ModuleLoader__.load({
                   if (row) toggle(active.id, row.variants, next)
                 },
               }))),
+        h('p', { className: 'crHint' }, t('modelsSavedHint')),
         h('div', { className: 'crFooterBar' },
           h('span', { className: 'crState' }, t('modelsSelectedTotal', { enabled: selectedRows, total: groups.reduce((sum, group) => sum + group.rows.length, 0) })),
           active.metered === true && promoCount > 0
             ? h('span', { className: 'crBadgeMeta', 'data-tone': 'promo' }, t('promoCount', { n: promoCount }))
             : null,
-          errors[active.id] ? h('span', { className: 'crState', 'data-state': 'error' }, t('saveError')) : null,
-          chosen.size === 0
-            ? h('span', { className: 'crState', 'data-state': 'empty' }, t('modelsNeedOne'))
-            : dirty
-              ? h('span', { className: 'crState' }, t('modelsDirty'))
-              : h('span', { className: 'crState', 'data-state': 'set', 'data-saved': 'true' }, t('modelsSaved')),
+          // The write result lives in a live region, so a screen reader hears
+          // "Saved" / "Unsaved changes" / the failure.
+          h('span', { className: 'crStatusLive', role: 'status', 'aria-live': 'polite' },
+            errors[active.id] ? h('span', { className: 'crState', 'data-state': 'error' }, t('saveError')) : null,
+            chosen.size === 0
+              ? h('span', { className: 'crState', 'data-state': 'empty' }, t('modelsNeedOne'))
+              : dirty
+                ? h('span', { className: 'crState' }, t('modelsDirty'))
+                : h('span', { className: 'crState', 'data-state': 'set', 'data-saved': 'true' }, t('modelsSaved'))),
           h('button', {
             type: 'button',
             className: 'crButton crButtonPrimary',
@@ -2098,8 +2367,8 @@ window.__ModuleLoader__.load({
             // silently turning "clear" into "select everything".
             disabled: !dirty || chosen.size === 0 || saving[active.id] === true,
             onClick: () => save(active),
-          }, saving[active.id] === true ? t('modelsSaving') : t('modelsSave')))),
-        h('p', { className: 'crHint' }, t('modelsSavedHint')))
+          }, saving[active.id] === true ? t('modelsSaving') : t('modelsSave'))))
+      )
     }
 
     /**
@@ -2378,28 +2647,24 @@ window.__ModuleLoader__.load({
                 setRefreshTick((previous) => Number(previous || 0) + 1)
               },
             }, t('refresh')))),
-        h('div', { className: 'crTabs', role: 'tablist' },
-          h('button', {
+        h('div', {
+          className: 'crTabs',
+          role: 'tablist',
+          'aria-label': t('sectionTitle'),
+          onKeyDown: tabStripKeyHandler({ tabs: DASHBOARD_TABS, currentId: 'cr-tab-' + tab, onSelect: setTab }),
+        },
+          DASHBOARD_TABS.map((entry) => h('button', {
+            key: entry.value,
             type: 'button',
             className: 'crTab',
             role: 'tab',
-            id: 'cr-tab-usage',
+            id: entry.id,
             // Only the active panel is mounted, so only the active tab names it.
-            'aria-controls': tab === 'usage' ? 'cr-panel-usage' : undefined,
-            'aria-selected': tab === 'usage' ? 'true' : 'false',
-            tabIndex: tab === 'usage' ? 0 : -1,
-            onClick: () => setTab('usage'),
-          }, t('tabUsage')),
-          h('button', {
-            type: 'button',
-            className: 'crTab',
-            role: 'tab',
-            id: 'cr-tab-add',
-            'aria-controls': tab === 'add' ? 'cr-panel-add' : undefined,
-            'aria-selected': tab === 'add' ? 'true' : 'false',
-            tabIndex: tab === 'add' ? 0 : -1,
-            onClick: () => setTab('add'),
-          }, t('tabAddProvider'))),
+            'aria-controls': tab === entry.value ? entry.panelId : undefined,
+            'aria-selected': tab === entry.value ? 'true' : 'false',
+            tabIndex: tab === entry.value ? 0 : -1,
+            onClick: () => setTab(entry.value),
+          }, t(entry.labelKey)))),
         // ONLY the active panel is rendered. Previously both panels were in the
         // DOM and the `hidden` attribute was overridden by `.crPanel{display:flex}`,
         // so the add-provider content rendered underneath the dashboard
@@ -2413,7 +2678,7 @@ window.__ModuleLoader__.load({
             tabIndex: 0,
           },
           error
-            ? h('p', { className: 'crFooterNote', 'data-state': 'error' }, t('loadError') + ': ' + error)
+            ? h('p', { className: 'crFooterNote', 'data-state': 'error', role: 'status', 'aria-live': 'polite' }, t('loadError') + ': ' + error)
             : null,
           h('div', { className: 'crKpiGrid' },
             h(KpiCard, {
@@ -2433,7 +2698,7 @@ window.__ModuleLoader__.load({
               meta: view.nextReset ? t('kpiNextResetMeta', { provider: view.nextReset.provider, window: view.nextReset.window }) + (view.nextReset.relative ? ' · ' + view.nextReset.relative : '') : t('usageUnavailable'),
               jumpHref: view.nextReset ? '#cr-vendor-' + view.nextReset.providerId : undefined,
             })),
-          h('div', { className: 'crVendorGrid' },
+          h('div', { className: 'crProviderList' },
             view.providers.map((provider) => h(VendorCard, {
               key: provider.id,
               provider,

@@ -1,7 +1,7 @@
 # @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.5
+version: 0.0.1-rc.7
 kind: readme
 status: active
 updated: 2026-11-08
@@ -11,7 +11,7 @@ summary: Custom Router track: the single-owner OpenCodex bridge library, the mul
 | | |
 | :--- | :--- |
 | Package | `@nolit/dsh-custom-router` |
-| Version | `0.0.1-rc.5` (numeric part owner-gated; `rc#` is the agent history marker) |
+| Version | `0.0.1-rc.7` (numeric part owner-gated; `rc#` is the agent history marker) |
 | Status | **implemented bundle + browser dashboard.** `lib/index.js` mounts the enabled preset rows; one `settings.section` (`custom-router`) owns usage/billing, per-layer switches and write-only credentials |
 | Docs | [`docs/`](./docs) — measured specs plus the bridge contract and runbook; document skeleton versions follow the `rc.#` history scheme (separate from the plugin version) |
 | History | [`CHANGELOG.md`](./CHANGELOG.md) |
@@ -22,10 +22,31 @@ summary: Custom Router track: the single-owner OpenCodex bridge library, the mul
 `package.json` now declares `dsh.client` and `lib/client.js` registers exactly one
 `settings.section` named `custom-router`. The dashboard is a **sidebar panel** (`sidebar.panellist`
 plus the `main` page keyed `custom-router`) inside a single centred width container
-(`.crPage`: `width:100%; max-width:1180px; margin:0 auto; padding:16px 20px`). It renders three KPI
-cards, three equal-width vendor cards, real DOM progress bars, card-local settings reveals, and a
-DeepInfra pay-per-token billing variant. Provider usage is read from the same local routes the
-vendor panels use; a missing reading stays unavailable instead of becoming zero.
+(`.crPage`: `width:100%; max-width:1120px; margin:0 auto; padding:20px 24px`). It renders a DSH
+page header (title, description, refresh), a KPI band of three cards, and **one column of compact
+provider rows** (`.crProviderList`): each row carries the provider identity, the connection badge,
+a mini usage summary (the tightest window's label, percent and reset time — or the spend and
+balance for a pay-per-token provider) and the settings trigger. The **detail of the open provider
+renders below the list at full width** (`.crProviderDetail`), holding the full measurement in a
+compact inset and the settings form. Provider usage is read from the same local routes the vendor
+panels use; a missing reading stays unavailable instead of becoming zero.
+
+The browser surface follows the DSH design tokens: sizes come from `--dsh-content-font-size` and
+its derived secondary, the family is inherited, every colour is a `--dsw-*` token (or
+`transparent`), and the component language (rows, cards, form sections, toolbar, sticky action bar,
+underline tabs) is the shadcn/ui composition rebuilt locally — this bundle loads through
+`window.__ModuleLoader__` and may only require React, so no UI package is added. The settings
+trigger is an inline SVG, and every interactive control carries a `:focus-visible` ring from
+`--dsw-focus-ring-*`.
+
+The surface carries its accessibility contract in the DOM, not only in the stylesheet: the plan
+ledger is a real `<table>` with `<th scope="col">`; both tab strips are keyboard-operable
+(`ArrowRight` / `ArrowLeft` / `Home` / `End` move the selection and the focus) and named; a
+collapsed settings panel is `inert` and `aria-hidden`, so it leaves both the tab order and the
+accessibility tree; every write result is announced through an always-mounted
+`role="status" aria-live="polite"` region; every credential input is named by a real `<label>` and
+is `autoComplete="new-password"`; every progress bar carries `aria-valuetext`; and
+`prefers-reduced-motion: reduce` removes the transitions this surface owns.
 
 Only the ACTIVE tab panel is rendered — the tabs are not `hidden`, they do not exist — so a
 `display:flex` rule can never resurrect a second panel underneath the first. Each tab carries

@@ -383,7 +383,7 @@ The router's OpenCode tab is the **models tab** — the preset descriptor
 planKey:'planOpenCode'}` in `lib/client.src.js` (the descriptor list was named `MODEL_SOURCES`
 when this was measured and is being renamed to `MODEL_PRESETS` in a parallel change — match on
 the `id:'opencode'` entry, not on the list's name), rendered with the shared
-`crTabs` / `crPanelBody` / `crGroup` / `crRow` chrome and one active `role="tabpanel"`.
+`crSettingsTabs` / `crPanelBody` / `crGroup` / `crRow` chrome and one active `role="tabpanel"`.
 The **usage** surface (`normalizeOpencodeUsage` in `lib/client.src.js`) already feeds
 `UsageWindow` progress bars into the provider card.
 

@@ -121,10 +121,21 @@ function createDocument() {
     querySelector: () => null,
     appendChild: (node) => { head.children.push(node) },
   }
+  // The tab strip moves the DOM focus onto the next tab; the stub records
+  // which element was focused.
+  const elements = new Map()
+  const focused = []
   return {
     head,
+    focused,
     createElement: () => ({ setAttribute: () => {}, textContent: '' }),
     querySelector: () => null,
+    getElementById: (id) => {
+      if (!elements.has(id)) {
+        elements.set(id, { id, focus: () => { focused.push(id) } })
+      }
+      return elements.get(id)
+    },
   }
 }
 
@@ -223,7 +234,7 @@ function loadClient(options = {}) {
     },
   }
   const dispose = exports.apply(ctx)
-  return { exports, registrations, writes, dispose, React, renderRoot }
+  return { exports, registrations, writes, dispose, React, renderRoot, document }
 }
 
 const NAMESPACE_WITH_USAGE = {
@@ -318,7 +329,7 @@ test('the dashboard renders inside one centred width container, not full-bleed',
   // The page container is what constrains the width; the section alone does not.
   assert.ok(sections[0].props.className.split(' ').includes('crPage'), 'the dashboard must carry the crPage container')
   const css = exports.CSS
-  assert.match(css, /\.crPage\{width:100%;max-width:1180px;margin:0 auto;padding:16px 20px;box-sizing:border-box\}/)
+  assert.match(css, /\.crPage\{width:100%;max-width:1120px;margin:0 auto;padding:20px 24px;box-sizing:border-box\}/)
   dispose()
 })
 
@@ -336,9 +347,9 @@ test('the rendered dashboard has a KPI grid of three cards and a provider grid o
     assert.equal(byClass(card, 'crKpiMeta').length, 1)
   }
 
-  const vendorGrid = byClass(tree, 'crVendorGrid')
-  assert.equal(vendorGrid.length, 1)
-  assert.equal(byClass(vendorGrid[0], 'crVendorCard').length, 3)
+  const providerList = byClass(tree, 'crProviderList')
+  assert.equal(providerList.length, 1)
+  assert.equal(byClass(providerList[0], 'crProviderItem').length, 3)
   dispose()
 })
 
@@ -830,14 +841,52 @@ test('the section heading is the short "Models", in every locale', async () => {
   const loaded = await loadModels()
   const tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
   const panel = activeModelsPanel(tree)
-  const heading = findAll(tree, (node) => node.props?.className === 'crTitle')[0]
+  const heading = findAll(tree, (node) => node.props?.className === 'crSettingsTitle')[0]
   assert.equal(heading.props.children, 'Models')
   // The hint is NOT shortened with it.
-  const hint = findAll(tree, (node) => node.props?.className === 'crSubtitle')[0]
+  const hint = findAll(tree, (node) => node.props?.className === 'crSettingsIntro')[0]
   assert.match(hint.props.children, /prompt picker/)
   assert.equal(loaded.exports.I18N.en.modelsTitle, 'Models')
   assert.equal(loaded.exports.I18N.ko.modelsTitle, '모델')
   assert.equal(loaded.exports.I18N.zh.modelsTitle, '模型')
+  loaded.dispose()
+})
+
+test('the settings section follows the built-in plugin section spec', async () => {
+  const loaded = await loadModels()
+  const tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  const section = findAll(tree, (node) => node.props?.className?.split(' ').includes('crSettingsSection'))[0]
+  assert.ok(section, 'the settings section must carry the crSettingsSection container')
+  // A settings section is not a page: it must not claim the dashboard's
+  // full-bleed width container.
+  assert.equal(section.props.className.split(' ').includes('crPage'), false, 'the settings section must not be a full-bleed page')
+  // The heading is an h2 in the heading class, the intro a secondary paragraph.
+  const heading = findAll(section, (node) => node.type === 'h2')[0]
+  assert.equal(heading.props.className, 'crSettingsTitle')
+  const intro = findAll(section, (node) => node.type === 'p' && node.props?.className === 'crSettingsIntro')[0]
+  assert.ok(intro, 'the section needs its intro paragraph')
+  // The tab strip keeps its tablist role, its accessible name and its tabs.
+  const tablist = findAll(section, (node) => node.props?.role === 'tablist')[0]
+  assert.equal(tablist.props.className, 'crSettingsTabs')
+  assert.equal(tablist.props['aria-label'], 'Models')
+  assert.equal(typeof tablist.props.onKeyDown, 'function')
+  const tabs = findAll(tablist, (node) => node.props?.role === 'tab')
+  assert.equal(tabs.length, 3)
+  for (const tab of tabs) assert.equal(tab.props.className, 'crSettingsTab')
+
+  // The measured built-in spec, pinned.
+  const css = loaded.exports.CSS
+  assert.ok(css.includes('.crSettingsSection{display:flex;flex-direction:column;gap:12px;max-width:760px;min-width:0}'), 'the settings column is 760px wide')
+  assert.ok(css.includes('font-size:calc(var(--dsh-content-font-size,14px) + 4px);font-weight:600'), 'the heading is the content size +4px, weight 600')
+  assert.ok(css.includes('.crSettingsIntro{margin:0;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary)}'), 'the intro is the secondary token in the tertiary label colour')
+  assert.ok(css.includes('.crSettingsTabs{display:flex;align-items:flex-end;gap:22px;border-bottom:.5px solid var(--dsw-alias-border-l2);margin-top:2px;'), 'the tab strip is the built-in geometry')
+  assert.ok(css.includes('padding:7px 1px 9px;'), 'the tab padding is the built-in padding')
+  assert.ok(css.includes('font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:nowrap;flex:0 0 auto}'), 'the tab label is the secondary token')
+  assert.ok(css.includes('.crSettingsTab[aria-selected=true]{color:var(--dsw-alias-label-primary)}'), 'the active tab is the primary label colour')
+  assert.ok(css.includes('.crSettingsTab[aria-selected=true]::after,.crSettingsTab:focus-visible::after{position:absolute;right:0;bottom:-1px;left:0;height:2px;border-radius:2px 2px 0 0;background:var(--dsw-alias-label-primary);content:""}'), 'the active tab carries a 2px label-primary underline')
+  assert.ok(css.includes('.crSettingsTab:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px;border-radius:2px;color:var(--dsw-alias-label-primary)}'), 'the focused tab carries the host focus ring')
+  // The group cards keep the settings-card tokens and the large radius.
+  assert.ok(css.includes('.crGroup{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-lg);'), 'a group card is a hairline settings card')
   loaded.dispose()
 })
 
@@ -983,7 +1032,7 @@ test('no block characters are used for progress', () => {
 test('the DeepInfra card renders the pay-per-token billing body, never an unsupported notice', () => {
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
-  const cards = byClass(tree, 'crVendorCard')
+  const cards = byClass(tree, 'crProviderItem')
   const deepinfra = cards.find((card) => card.props['data-preset'] === 'deepinfra')
   assert.ok(deepinfra)
   assert.equal(byClass(deepinfra, 'crBillingHero').length, 1)
@@ -997,7 +1046,7 @@ test('the DeepInfra card renders the pay-per-token billing body, never an unsupp
 test('an unknown balance is reported as unavailable, never as zero', () => {
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
-  const cards = byClass(tree, 'crVendorCard')
+  const cards = byClass(tree, 'crProviderItem')
   const deepinfra = cards.find((card) => card.props['data-preset'] === 'deepinfra')
   const texts = findAll(deepinfra, (node) => node.type === '#text').map((node) => node.text).join(' ')
   assert.match(texts, /Balance lookup unavailable/)
@@ -1008,7 +1057,7 @@ test('an unknown balance is reported as unavailable, never as zero', () => {
 test('each card carries its own settings panel and gear trigger', () => {
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
-  const cards = byClass(tree, 'crVendorCard')
+  const cards = byClass(tree, 'crProviderItem')
   for (const card of cards) {
     const gears = findAll(card, (node) => node.props?.className === 'crGear')
     assert.equal(gears.length, 1)
@@ -1024,13 +1073,13 @@ test('each card carries its own settings panel and gear trigger', () => {
 test('the gear toggles one card only', () => {
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
-  const cards = byClass(tree, 'crVendorCard')
+  const cards = byClass(tree, 'crProviderItem')
   const antigravity = cards.find((card) => card.props['data-preset'] === 'antigravity')
   const gear = findAll(antigravity, (node) => node.props?.className === 'crGear')[0]
   assert.equal(gear.props['aria-expanded'], 'false')
   gear.props.onClick()
   const after = renderRoot(exports.CustomRouterDashboard, {})
-  const cardsAfter = byClass(after, 'crVendorCard')
+  const cardsAfter = byClass(after, 'crProviderItem')
   const opened = cardsAfter.filter((card) => findAll(card, (node) => node.props?.className === 'crGear')[0].props['aria-expanded'] === 'true')
   assert.equal(opened.length >= 1, true)
   dispose()
@@ -1039,7 +1088,7 @@ test('the gear toggles one card only', () => {
 test('the DeepInfra layer grid marks subagent and CLI worker as unsupported capabilities', () => {
   const { exports, React, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
-  const cards = byClass(tree, 'crVendorCard')
+  const cards = byClass(tree, 'crProviderItem')
   const deepinfra = cards.find((card) => card.props['data-preset'] === 'deepinfra')
   const cells = byClass(deepinfra, 'crLayerCell')
   const unsupported = cells.filter((cell) => cell.props['data-unsupported'] === 'true')
@@ -1051,7 +1100,7 @@ test('the DeepInfra layer grid marks subagent and CLI worker as unsupported capa
 test('the model serving switch writes the frozen vendorConfig path', () => {
   const { exports, React, renderRoot, writes, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
-  const cards = byClass(tree, 'crVendorCard')
+  const cards = byClass(tree, 'crProviderItem')
   const antigravity = cards.find((card) => card.props['data-preset'] === 'antigravity')
   const cell = byClass(antigravity, 'crLayerCell').find((entry) => entry.props['data-layer'] === 'modelServing')
   const toggle = findAll(cell, (node) => node.props?.role === 'switch')[0]
@@ -1063,7 +1112,7 @@ test('the model serving switch writes the frozen vendorConfig path', () => {
 test('the CLI worker switch writes the atomic pair in one mutation', () => {
   const { exports, React, renderRoot, writes, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
-  const cards = byClass(tree, 'crVendorCard')
+  const cards = byClass(tree, 'crProviderItem')
   const antigravity = cards.find((card) => card.props['data-preset'] === 'antigravity')
   const cell = byClass(antigravity, 'crLayerCell').find((entry) => entry.props['data-layer'] === 'cliWorker')
   const toggle = findAll(cell, (node) => node.props?.role === 'switch')[0]
@@ -1078,7 +1127,7 @@ test('the CLI worker switch writes the atomic pair in one mutation', () => {
 test('the OpenCode switches write their own row paths', () => {
   const { exports, React, renderRoot, writes, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
-  const cards = byClass(tree, 'crVendorCard')
+  const cards = byClass(tree, 'crProviderItem')
   const opencode = cards.find((card) => card.props['data-preset'] === 'opencode')
   const serving = byClass(opencode, 'crLayerCell').find((entry) => entry.props['data-layer'] === 'modelServing')
   findAll(serving, (node) => node.props?.role === 'switch')[0].props.onClick()
@@ -1100,7 +1149,7 @@ test('the OpenCode switches write their own row paths', () => {
 test('the master switch writes the preset path', () => {
   const { exports, React, renderRoot, writes, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
-  const cards = byClass(tree, 'crVendorCard')
+  const cards = byClass(tree, 'crProviderItem')
   const deepinfra = cards.find((card) => card.props['data-preset'] === 'deepinfra')
   const master = byClass(deepinfra, 'crMaster')[0]
   const toggle = findAll(master, (node) => node.props?.role === 'switch')[0]
@@ -1117,7 +1166,7 @@ test('no secret value ever reaches the DOM', () => {
   const secrets = [{ path: ['vendorConfig', 'dsh-deepinfra', 'apiKey'], set: true }]
   const { exports, React, renderRoot, dispose } = loadClient({ namespace, secrets })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
-  const cards = byClass(tree, 'crVendorCard')
+  const cards = byClass(tree, 'crProviderItem')
   const deepinfra = cards.find((card) => card.props['data-preset'] === 'deepinfra')
   const inputs = findAll(deepinfra, (node) => node.props?.type === 'password')
   assert.ok(inputs.length >= 1)
@@ -1142,7 +1191,7 @@ test('the credential state comes from the redacted sidecar, not from a value', (
   ]
   const { exports, React, renderRoot, dispose } = loadClient({ namespace, secrets })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
-  const cards = byClass(tree, 'crVendorCard')
+  const cards = byClass(tree, 'crProviderItem')
   const deepinfra = cards.find((card) => card.props['data-preset'] === 'deepinfra')
   const states = findAll(deepinfra, (node) => node.props?.className === 'crState')
   const secretState = states.find((state) => state.props['data-secret-set'] !== undefined)
@@ -1182,7 +1231,7 @@ test('adding a provider enables its preset, returns to the usage tab and opens i
   const tree = openAddTab(loaded)
   const panel = findAll(tree, (node) => node.props?.id === 'cr-panel-add')[0]
   const card = byClass(panel, 'crPickerCard').find((entry) => entry.props['data-picker'] === 'deepinfra')
-  const button = findAll(card, (node) => node.props?.className === 'crButton')[0]
+  const button = findAll(card, (node) => node.props?.['data-picker-action'] === 'add')[0]
   button.props.onClick()
 
   assertOps(loaded.writes.at(-1), [{ op: 'set', path: ['presets', 'deepinfra'], value: true }])
@@ -1191,7 +1240,7 @@ test('adding a provider enables its preset, returns to the usage tab and opens i
   // The usage tab is active again and it is the ONLY panel in the tree.
   const usagePanels = findAll(after, (node) => node.props?.role === 'tabpanel')
   assert.deepEqual(usagePanels.map((entry) => entry.props.id), ['cr-panel-usage'])
-  const cards = byClass(after, 'crVendorCard')
+  const cards = byClass(after, 'crProviderItem')
   const deepinfra = cards.find((entry) => entry.props['data-preset'] === 'deepinfra')
   const gear = findAll(deepinfra, (node) => node.props?.className === 'crGear')[0]
   assert.equal(gear.props['aria-expanded'], 'true')
@@ -1202,14 +1251,17 @@ test('the stylesheet uses the token grid and never a bare element selector', () 
   const { exports, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const css = exports.CSS
   dispose()
-  assert.match(css, /\.crKpiGrid\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/)
-  assert.match(css, /\.crVendorGrid\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/)
-  assert.match(css, /\.crLayerGrid\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/)
+  assert.match(css, /\.crKpiGrid\{display:grid;grid-template-columns:repeat\(auto-fit,minmax\(min\(240px,100%\),1fr\)\)/)
+  assert.match(css, /\.crProviderList\{display:flex;flex-direction:column/)
+  assert.match(css, /\.crProviderItem\{display:flex;flex-direction:column/)
+  assert.match(css, /\.crProviderRow\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto/)
+  assert.match(css, /\.crProviderDetail\{[^}]*border:\.[0-9]px solid var\(--dsw-alias-settings-card-stroke\)/)
+  assert.match(css, /\.crLayerGrid\{display:grid;grid-template-columns:repeat\(auto-fit,minmax\(min\(240px,100%\),1fr\)\)/)
   assert.match(css, /\.crReveal\{display:grid;grid-template-rows:0fr/)
   assert.match(css, /\.crReveal\[data-open=true\]\{grid-template-rows:1fr\}/)
   assert.match(css, /\.crRevealInner\{min-height:0;overflow:hidden/)
   // The width container and the shared model-list geometry are pinned here.
-  assert.match(css, /\.crPage\{width:100%;max-width:1180px;margin:0 auto;padding:16px 20px;box-sizing:border-box\}/)
+  assert.match(css, /\.crPage\{width:100%;max-width:1120px;margin:0 auto;padding:20px 24px;box-sizing:border-box\}/)
   assert.match(css, /\.crToolbar\{display:flex/)
   assert.match(css, /\.crGroup\{border:\.[0-9]px solid var\(--dsw-alias-settings-card-stroke\)/)
   assert.match(css, /\.crRow\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto/)
@@ -1282,8 +1334,7 @@ test('runtime usage overrides settings fallback without mutating saved state', (
   assert.equal(section.usage.antigravity.windows[0].percent, 1)
 })
 
-test('the usage feeder uses the vendor panel routes, not a synthetic zero', async () => {
-  const { exports, dispose } = loadClient()
+test('the usage feeder uses the vendor panel routes, not a synthetic zero', async () => {  const { exports, dispose } = loadClient()
   const calls = []
   const fetchImpl = async (path) => {
     calls.push(path)
@@ -1306,4 +1357,335 @@ test('the usage feeder uses the vendor panel routes, not a synthetic zero', asyn
   assert.equal(result.antigravity.windows[0].percent, 50)
   assert.equal(result.opencode.windows[0].percent, 5)
   assert.equal(result.deepinfra.spend, 0)
+})
+
+test('every size stays on the DSH typography tokens and every colour on a --dsw token', () => {
+  const { exports, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const css = exports.CSS
+  dispose()
+  const literals = [...css.matchAll(/font-size:(?!var\(|calc\()([^;}]+)/g)].map((match) => match[1])
+  assert.deepEqual(literals, [], 'every font-size must be a var()/calc() with the DSH fallback')
+  const families = [...css.matchAll(/font-family:([^;}]+)/g)].map((match) => match[1])
+  for (const family of families) {
+    assert.ok(
+      family === 'inherit' || family.startsWith('var(--ds-font-family-code'),
+      'a plugin surface may only inherit the family or borrow the code seat: ' + family,
+    )
+  }
+  assert.deepEqual([...css.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]), [], 'no literal colour')
+  // The content size token drives the surface root, exactly as the style
+  // standard demands.
+  assert.match(css, /\.crSection\{[^}]*font-size:var\(--dsh-content-font-size,14px\)/)
+})
+
+test('the settings trigger is an inline SVG icon, never an emoji glyph', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
+  const cards = byClass(tree, 'crProviderItem')
+  for (const card of cards) {
+    const trigger = findAll(card, (node) => node.props?.className === 'crGear')[0]
+    const icons = findAll(trigger, (node) => node.type === 'svg')
+    assert.equal(icons.length, 1, 'the trigger carries one inline svg')
+    assert.equal(icons[0].props['aria-hidden'], 'true', 'the decorative glyph is hidden from the reader')
+  }
+  assert.equal(clientSource.includes('⚙'), false, 'the emoji gear must not come back')
+  dispose()
+})
+
+test('each provider card frames its measurement in one compact usage inset', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
+  const cards = byClass(tree, 'crProviderItem')
+  for (const card of cards) {
+    const insets = byClass(card, 'crUsageInset')
+    assert.equal(insets.length, 1, 'one measurement inset per card')
+    // A pay-per-token provider measures money, not windows: it renders the
+    // billing body inside the same inset.
+    const windows = byClass(insets[0], 'crUsageWindow').length
+    const billing = byClass(insets[0], 'crBillingHero').length
+    assert.ok(windows > 0 !== billing > 0, 'the inset carries either windows or a billing body, never both')
+  }
+  dispose()
+})
+
+test('every interactive control has a focus-visible ring from the DSH tokens', () => {
+  const { exports, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const css = exports.CSS
+  dispose()
+  assert.match(
+    css, /:focus-visible\{outline:var\(--dsw-focus-ring-width,2px\) solid var\(--dsw-focus-ring-color,var\(--dsw-alias-state-business-primary\)\)/,
+  )
+  for (const control of ['.crButton', '.crTab', '.crGear', '.crJump', '.crSearchInput', '.crInput', '.crSwitch']) {
+    assert.ok(css.includes(control + ':focus-visible'), 'no focus ring on ' + control)
+  }
+})
+
+test('the credential form labels every write-only field and shows its set state', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
+  const cards = byClass(tree, 'crProviderItem')
+  for (const card of cards) {
+    const fields = byClass(card, 'crField')
+    const credentials = card.props['data-preset'] === 'deepinfra' ? 1 : 2
+    assert.equal(fields.length, credentials)
+    for (const field of fields) {
+      assert.equal(byClass(field, 'crFieldLabel').length, 1)
+      assert.equal(byClass(field, 'crFieldActions').length, 1)
+      const input = findAll(field, (node) => node.props?.type === 'password')[0]
+      assert.ok(input, 'every credential field carries one masked input')
+      assert.equal(input.props.value, '')
+      const state = findAll(field, (node) => node.props?.className === 'crState')[0]
+      assert.ok(state.props['data-secret-set'] !== undefined)
+    }
+  }
+  dispose()
+})
+
+test('the picker card states its action and disables what cannot be added', () => {
+  const loaded = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = openAddTab(loaded)
+  const panel = findAll(tree, (node) => node.props?.id === 'cr-panel-add')[0]
+  const cards = byClass(panel, 'crPickerCard')
+  for (const card of cards) {
+    assert.equal(byClass(card, 'crPickerHead').length, 1)
+    const action = findAll(card, (node) => node.props?.['data-picker-action'] === 'add')[0]
+    assert.ok(action, 'every picker card offers exactly one action')
+    assert.equal(action.props.className, 'crButton crButtonPrimary')
+  }
+  // The custom JSON entry has no preset id: it cannot be added from here.
+  const custom = cards.find((card) => card.props['data-picker'] === 'custom-json')
+  const customAction = findAll(custom, (node) => node.props?.['data-picker-action'] === 'add')[0]
+  assert.equal(customAction.props.disabled, true)
+  loaded.dispose()
+})
+
+test('the provider list renders one compact row per provider and a full-width detail below it', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
+  const list = byClass(tree, 'crProviderList')
+  assert.equal(list.length, 1)
+  const items = byClass(list[0], 'crProviderItem')
+  assert.equal(items.length, 3)
+  for (const item of items) {
+    // One row per provider: the identity, the compact measurement and the
+    // settings trigger, and nothing else.
+    const rows = byClass(item, 'crProviderRow')
+    assert.equal(rows.length, 1)
+    assert.equal(byClass(rows[0], 'crProviderHead').length, 1)
+    assert.equal(byClass(rows[0], 'crProviderUsage').length, 1)
+    assert.equal(byClass(rows[0], 'crMiniUsage').length, 1)
+    assert.equal(findAll(rows[0], (node) => node.props?.className === 'crGear').length, 1)
+    // The detail is a sibling of the row, not a column of it: it spans the
+    // whole width of the list.
+    const details = byClass(item, 'crProviderDetail')
+    assert.equal(details.length, 1)
+    assert.equal(byClass(rows[0], 'crProviderDetail').length, 0)
+    assert.equal(byClass(details[0], 'crUsageInset').length, 1)
+    assert.equal(byClass(details[0], 'crSettingsPanelBody').length, 1)
+  }
+  dispose()
+})
+
+test('the responsive rules collapse the grids instead of scrolling sideways', () => {
+  const { exports, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const css = exports.CSS
+  dispose()
+  // Every grid wraps on its own: the auto-fit track count shrinks with the
+  // width, so no breakpoint has to name a column count.
+  for (const grid of ['.crKpiGrid', '.crBillingGrid', '.crLayerGrid', '.crPickerGrid']) {
+    assert.match(css, new RegExp(grid + '\\{display:grid;grid-template-columns:repeat\\(auto-(fit|fill)'), grid + ' must wrap on its own')
+  }
+  // The provider row collapses to one column on a narrow surface.
+  assert.match(css, /@media \(max-width:640px\)\{.*\.crProviderRow\{grid-template-columns:minmax\(0,1fr\)\}/)
+  // The page itself never scrolls sideways.
+  assert.match(css, /\.crPage\.crPageScroll\{[^}]*overflow-x:hidden/)
+})
+
+
+// ------------------------------------------------- accessibility repairs
+
+/**
+ * Press one key on a tab strip and re-render.
+ * @param {object} loaded - the loaded client.
+ * @param {object} tree - the current tree.
+ * @param {string} key - the pressed key.
+ * @param {string} [component] - the component to re-render.
+ * @returns {{tree: object, prevented: boolean, selected: string[]}} the outcome.
+ */
+function pressTabKey(loaded, tree, key, component = 'CustomRouterDashboard') {
+  const tablist = findAll(tree, (node) => node.props?.role === 'tablist')[0]
+  assert.ok(tablist, 'the tab strip must render a tablist')
+  assert.equal(typeof tablist.props.onKeyDown, 'function', 'the tab strip must handle the keyboard')
+  let prevented = false
+  tablist.props.onKeyDown({ key, preventDefault: () => { prevented = true } })
+  const next = loaded.renderRoot(loaded.exports[component], {})
+  const selected = findAll(next, (node) => node.props?.role === 'tab')
+    .filter((tab) => tab.props['aria-selected'] === 'true')
+    .map((tab) => tab.props.id)
+  return { tree: next, prevented, selected }
+}
+
+test('every tab strip carries an accessible name', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
+  const tablist = findAll(tree, (node) => node.props?.role === 'tablist')[0]
+  assert.equal(typeof tablist.props['aria-label'], 'string')
+  assert.ok(tablist.props['aria-label'].length > 0, 'the tab strip needs a name')
+  dispose()
+})
+
+test('the dashboard tab strip moves the selection with ArrowRight, ArrowLeft, Home and End', () => {
+  const loaded = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  let tree = loaded.renderRoot(loaded.exports.CustomRouterDashboard, {})
+
+  let outcome = pressTabKey(loaded, tree, 'ArrowRight')
+  assert.equal(outcome.prevented, true, 'a tab key consumes the event')
+  assert.deepEqual(outcome.selected, ['cr-tab-add'], 'ArrowRight selects the next tab')
+  assert.ok(loaded.document.focused.includes('cr-tab-add'), 'the focus follows the selection')
+
+  tree = outcome.tree
+  outcome = pressTabKey(loaded, tree, 'ArrowLeft')
+  assert.deepEqual(outcome.selected, ['cr-tab-usage'], 'ArrowLeft selects the previous tab')
+
+  tree = outcome.tree
+  outcome = pressTabKey(loaded, tree, 'End')
+  assert.deepEqual(outcome.selected, ['cr-tab-add'], 'End selects the last tab')
+
+  tree = outcome.tree
+  outcome = pressTabKey(loaded, tree, 'Home')
+  assert.deepEqual(outcome.selected, ['cr-tab-usage'], 'Home selects the first tab')
+
+  // A key that is not a tab key changes nothing and is not consumed.
+  tree = outcome.tree
+  outcome = pressTabKey(loaded, tree, 'a')
+  assert.equal(outcome.prevented, false)
+  assert.deepEqual(outcome.selected, ['cr-tab-usage'])
+  loaded.dispose()
+})
+
+test('the models tab strip moves the selection with the keyboard', async () => {
+  const loaded = await loadModels()
+  let tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+
+  const outcome = pressTabKey(loaded, tree, 'ArrowRight', 'CustomRouterModels')
+  assert.equal(outcome.prevented, true)
+  assert.deepEqual(outcome.selected, ['cr-models-tab-opencode'])
+  assert.ok(loaded.document.focused.includes('cr-models-tab-opencode'), 'the focus follows the selection')
+
+  const panels = findAll(outcome.tree, (node) => node.props?.role === 'tabpanel')
+  assert.deepEqual(panels.map((panel) => panel.props.id), ['cr-models-panel-opencode'])
+  assert.equal(panels[0].props['aria-labelledby'], 'cr-models-tab-opencode')
+
+  const end = pressTabKey(loaded, outcome.tree, 'End', 'CustomRouterModels')
+  assert.deepEqual(end.selected, ['cr-models-tab-deepinfra'])
+  loaded.dispose()
+})
+
+test('a collapsed settings panel leaves the tab order and the accessibility tree', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
+  const cards = byClass(tree, 'crProviderItem')
+  assert.equal(cards.length, 3)
+  for (const card of cards) {
+    const gear = findAll(card, (node) => node.props?.className === 'crGear')[0]
+    assert.equal(gear.props['aria-expanded'], 'false')
+    const inner = byClass(card, 'crRevealInner')[0]
+    assert.ok(inner, 'the reveal keeps its inner box')
+    assert.equal(inner.props.inert, true, 'the collapsed controls are not tabbable')
+    assert.equal(inner.props['aria-hidden'], 'true', 'the collapsed controls are not announced')
+    // The panel content itself is still there: the reveal animates it open.
+    assert.equal(byClass(card, 'crSettingsPanel').length, 1)
+  }
+
+  // Opening one panel removes both flags from that panel only.
+  const gear = findAll(cards[0], (node) => node.props?.className === 'crGear')[0]
+  gear.props.onClick()
+  const after = renderRoot(exports.CustomRouterDashboard, {})
+  const opened = byClass(after, 'crProviderItem')[0]
+  const openedInner = byClass(opened, 'crRevealInner')[0]
+  assert.equal(openedInner.props.inert, undefined)
+  assert.equal(openedInner.props['aria-hidden'], undefined)
+  const closed = byClass(after, 'crProviderItem')[1]
+  assert.equal(byClass(closed, 'crRevealInner')[0].props.inert, true)
+  dispose()
+})
+
+test('the write results are announced through live regions', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
+  const live = findAll(tree, (node) => node.props?.role === 'status')
+  assert.ok(live.length >= 3, 'every provider panel carries a status region')
+  for (const region of live) {
+    assert.equal(region.props['aria-live'], 'polite')
+  }
+  dispose()
+})
+
+test('the models footer announces the dirty, saved and error state', async () => {
+  const loaded = await loadModels()
+  const tree = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  const live = findAll(tree, (node) => node.props?.role === 'status')
+  assert.equal(live.length, 1, 'the models footer carries one status region')
+  assert.equal(live[0].props['aria-live'], 'polite')
+  const texts = findAll(live[0], (node) => node.type === '#text').map((node) => node.text).join(' ')
+  assert.match(texts, /Saved/)
+  loaded.dispose()
+})
+
+test('every credential input is named by a real label element', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
+  const cards = byClass(tree, 'crProviderItem')
+  const ids = new Set()
+  for (const card of cards) {
+    for (const field of byClass(card, 'crField')) {
+      const label = findAll(field, (node) => node.type === 'label')[0]
+      assert.ok(label, 'a credential field carries a label element')
+      const input = findAll(field, (node) => node.props?.type === 'password')[0]
+      assert.ok(input, 'a credential field carries one masked input')
+      assert.equal(typeof input.props.id, 'string')
+      assert.equal(label.props.htmlFor, input.props.id, 'the label names the input')
+      assert.equal(ids.has(input.props.id), false, 'the input ids are unique')
+      ids.add(input.props.id)
+      // The label is the accessible name: no aria-label may shadow it.
+      assert.equal(input.props['aria-label'], undefined)
+      // The field stays write-only and is never autofilled.
+      assert.equal(input.props.value, '')
+      assert.equal(input.props.autoComplete, 'new-password')
+    }
+  }
+  dispose()
+})
+
+test('the progress bars carry a readable value text', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = renderRoot(exports.CustomRouterDashboard, {})
+  const bars = findAll(tree, (node) => node.props?.role === 'progressbar')
+  assert.equal(bars.length, 3)
+  for (const bar of bars) {
+    assert.equal(typeof bar.props['aria-valuetext'], 'string')
+    assert.ok(bar.props['aria-valuetext'].length > 0)
+    assert.match(bar.props['aria-valuetext'], /%/)
+  }
+  dispose()
+})
+
+test('the plan window progress bars carry a readable value text', () => {
+  const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const tree = renderRoot(exports.PlanUsageCard, { usage: { status: 'ready', windows: { rolling: { percent: 30 } } } })
+  const bars = findAll(tree, (node) => node.props?.role === 'progressbar')
+  assert.equal(bars.length, 1)
+  assert.match(bars[0].props['aria-valuetext'], /30%/)
+  dispose()
+})
+
+test('a reduced-motion preference disables the reveal and the switch transitions', () => {
+  const { exports, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const css = exports.CSS
+  dispose()
+  const block = /@media \(prefers-reduced-motion: reduce\)\{([\s\S]*?)\}\}/.exec(css)
+  assert.ok(block, 'the stylesheet owns a reduced-motion block')
+  assert.match(block[1], /\.crReveal/)
+  assert.match(block[1], /\.crSwitch::after/)
+  assert.match(block[1], /transition:none/)
 })
