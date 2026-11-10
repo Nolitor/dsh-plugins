@@ -173,9 +173,9 @@ test('the dense table scrolls in its own frame with a sticky header', () => {
   assert.match(source, /\.tkdsScroll\{[^}]*overflow:auto/)
   assert.match(source, /\.tkdsTh\{[^}]*position:sticky/)
   assert.match(source, /\.tkdsTh\{[^}]*background:var\(--dsw-alias-settings-card-fill\)/)
-  // Row rules are the .5px border-l2 hairline, and every cell is tabular-nums.
-  assert.match(source, /\.tkdsTh\{[^}]*border-bottom:\.5px solid var\(--dsw-alias-border-l2\)/)
-  assert.match(source, /\.tkdsTd\{[^}]*border-bottom:\.5px solid var\(--dsw-alias-border-l2\)/)
+  // Row rules are the host hairline token on border-l2, and every cell is tabular-nums.
+  assert.match(source, /\.tkdsTh\{[^}]*border-bottom:var\(--dsh-hairline-width,1px\) solid var\(--dsw-alias-border-l2\)/)
+  assert.match(source, /\.tkdsTd\{[^}]*border-bottom:var\(--dsh-hairline-width,1px\) solid var\(--dsw-alias-border-l2\)/)
   assert.match(source, /\.tkdsTable\{[^}]*font-variant-numeric:tabular-nums/)
   assert.match(source, /\.tkdsTd\{[^}]*font-variant-numeric:tabular-nums/)
 })
@@ -192,4 +192,23 @@ test('the session picker names its control and shows the whole session id', () =
 test('the table header cells are marked as column headers', () => {
   const headers = [...code.matchAll(/h\('th', \{ className: 'tkdsTh', scope: 'col' \}/g)]
   assert.equal(headers.length, 9, 'nine column headers')
+})
+
+// --- 2026-11-11 regression gate ------------------------------------------------
+// The 2026-11-08 redesign (2b668ad) shipped the hairline as a `.5px` literal,
+// which ignores the host's device-pixel-ratio correction. These checks fail the
+// build the moment a literal or a missing CJK wrap rule comes back.
+
+test('REGRESSION GATE: no .5px hairline literal exists in the stylesheet', () => {
+  const literals = source.match(/\.5px/g) ?? []
+  assert.deepEqual(
+    literals,
+    [],
+    'hairline width must come from var(--dsh-hairline-width,1px), never a .5px literal',
+  )
+})
+
+test('REGRESSION GATE: the root container keeps Korean words together', () => {
+  assert.match(source, /\.tkdsSection\{[^}]*word-break:keep-all/, 'the root must wrap on word boundaries (CJK)')
+  assert.match(source, /\.tkdsSection\{[^}]*overflow-wrap:break-word/, 'the root must still break a single long token')
 })

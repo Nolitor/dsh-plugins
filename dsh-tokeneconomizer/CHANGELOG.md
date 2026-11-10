@@ -4,14 +4,28 @@
 version: 1.2
 kind: report
 status: active
-updated: 2026-11-08
+updated: 2026-11-11
 summary: Engineering history for @nolit/dsh-tokeneconomizer. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
 -->
 
 > History lives here (owner instruction 2026-11-04). Boot cards and `AGENTS.md` are narrowed to
 > the owner's unfinished asks; they are not a changelog. See [docs/RULES.md](../docs/RULES.md) §6.1.
 
-Current version: `0.0.1-rc.1`
+Current version: `0.0.1-rc.2`
+
+## 0.0.1-rc.2 — hairline token, CJK wrapping — 2026-11-11
+
+Owner task: the four plugin UI surfaces must stop hardcoding the hairline and must not break
+Korean words mid-word.
+
+**Measured, from the shipped source (before → after):** `.5px` literals in `lib/client.js`
+**7 → 0**; `word-break:keep-all` on the root `.tkdsSection` absent → present.
+
+Every border now reads `var(--dsh-hairline-width,1px) solid var(--dsw-*)`, including the dense
+table's row rules. The token is published on the document root by
+`@deepseek-ai/dsh-client-ui-theme`, which resolves it to `max(1, floor(0.5 * dpr)) / dpr` —
+the literal ignored that on every display. `test/client.test.mjs` gained a regression gate that
+fails the suite if a `.5px` literal or a missing `keep-all` returns.
 
 ## test harness — integration test owns a throwaway DSH_HOME — 2026-11-05
 
