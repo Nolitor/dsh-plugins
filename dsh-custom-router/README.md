@@ -1,7 +1,7 @@
 # @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.9
+version: 0.0.1-rc.10
 kind: readme
 status: active
 updated: 2026-11-08
@@ -11,7 +11,7 @@ summary: Custom Router track: the single installed plugin for the multi-row pres
 | | |
 | :--- | :--- |
 | Package | `@nolit/dsh-custom-router` |
-| Version | `0.0.1-rc.9` (numeric part owner-gated; `rc#` is the agent history marker) |
+| Version | `0.0.1-rc.10` (numeric part owner-gated; `rc#` is the agent history marker) |
 | Status | **implemented bundle + browser dashboard + vendored providers.** `lib/index.js` mounts the enabled preset rows; one `settings.section` (`custom-router`) owns usage/billing, per-layer switches and write-only credentials. Antigravity and DeepInfra no longer exist as separate profile plugins. |
 | Docs | [`docs/`](./docs) — measured specs plus the bridge contract and runbook; document skeleton versions follow the `rc.#` history scheme (separate from the plugin version) |
 | History | [`CHANGELOG.md`](./CHANGELOG.md) |

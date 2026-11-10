@@ -1,14 +1,23 @@
 # Changelog — @nolit/dsh-antigravity
 
 <!-- skeleton:
-version: 1.2
+version: 1.3
 kind: report
 status: active
-updated: 2026-11-08
+updated: 2026-11-10
 summary: Engineering history for @nolit/dsh-antigravity, including the rc.6 fix for empty stored answers and the route-gated usage chip. Created 2026-11-05 by merging the CLI worker surface of @nolit/dsh-antigravity-cli with the HTTP model route proven in @nolit/dsh-antigravity-directsdk, plus a settings section, a usage chip and per-surface switches.
 -->
 
-Current version: `0.0.1-rc.10`
+Current version: `0.0.1-rc.11`
+
+## 0.0.1-rc.11 — 2026-11-10 (router peer rc.10)
+
+- **`peerDependencies['@nolit/dsh-custom-router']`: `0.0.1-rc.9` → `0.0.1-rc.10`**, following the
+  router's preset-based dispatch revision. No surface or provider behaviour changed.
+- The provider's `start()` gate is unchanged: it still refuses when the router reports a
+  restricted preset (`minimal`, `ptc`) or a `read-only` sandbox.
+
+Suite: 172 pass.
 
 ## 0.0.1-rc.10 (cont.) — 2026-11-08 (router peer aligned to rc.9)
 

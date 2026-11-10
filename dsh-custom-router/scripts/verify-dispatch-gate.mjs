@@ -88,10 +88,17 @@ async function probeRestricted({ preset, mode, label }) {
 }
 
 const cases = [
+  // Preset hard-blocks: external CLI and subagent dispatch are refused in both
+  // restricted presets regardless of the sandbox mode.
   { preset: 'minimal', mode: 'danger-full-access', expect: 'preset' },
-  { preset: 'minimal', mode: 'workspace-write', expect: 'both' },
-  { preset: 'standard', mode: 'workspace-write', expect: 'sandbox' },
+  { preset: 'minimal', mode: 'workspace-write', expect: 'preset' },
+  { preset: 'minimal', mode: 'read-only', expect: 'both' },
+  { preset: 'ptc', mode: 'danger-full-access', expect: 'preset' },
+  { preset: 'ptc', mode: 'workspace-write', expect: 'preset' },
+  { preset: 'ptc', mode: 'read-only', expect: 'both' },
+  // Sandbox-only block: read-only keeps the confinement even in a work preset.
   { preset: 'standard', mode: 'read-only', expect: 'sandbox' },
+  { preset: 'cordis', mode: 'read-only', expect: 'sandbox' },
 ]
 for (const testCase of cases) {
   const outcome = await probeRestricted(testCase)
@@ -104,12 +111,21 @@ for (const testCase of cases) {
   )
 }
 
-const permissive = await probeRestricted({ preset: 'standard', mode: 'danger-full-access', label: 'full' })
-record(
-  'allowed: standard preset + full access still dispatches (control)',
-  permissive.allowed.length === 4 && permissive.denied.length === 0 && permissive.bodyRuns === 4,
-  `allowed=${permissive.allowed.length}/4 bodyRuns=${permissive.bodyRuns}`,
-)
+// The owner-visible regression this matrix exists for: workspace-write is the
+// deployment default, so the ordinary work presets must dispatch on it.
+const permissive = [
+  { preset: 'standard', mode: 'workspace-write' },
+  { preset: 'cordis', mode: 'workspace-write' },
+  { preset: 'standard', mode: 'danger-full-access' },
+]
+for (const testCase of permissive) {
+  const outcome = await probeRestricted(testCase)
+  record(
+    `allowed: preset=${testCase.preset} mode=${testCase.mode}`,
+    outcome.allowed.length === 4 && outcome.denied.length === 0 && outcome.bodyRuns === 4,
+    `allowed=${outcome.allowed.length}/4 bodyRuns=${outcome.bodyRuns}`,
+  )
+}
 
 // ---------------------------------------------------------------------------
 // PART 2 -- reclamation of a REAL process

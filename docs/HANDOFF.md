@@ -1,10 +1,10 @@
 # Workspace Handoff — 전체 진척도
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: report
 status: active
-updated: 2026-11-08
+updated: 2026-11-10
 summary: Workspace-level progress roll-up — per-track state, the ordered cross-track next actions, the owner decisions that block them, and the measured gates that say whether a track is releasable.
 -->
 
@@ -15,8 +15,8 @@ summary: Workspace-level progress roll-up — per-track state, the ordered cross
 
 | Track | Version | Tests | Live | Handoff |
 | :--- | :--- | :--- | :--- | :--- |
-| `dsh-custom-router` | `0.0.1-rc.8` | 333/333, stream 7/7 | mounted | [HANDOFF](../dsh-custom-router/docs/HANDOFF.md) |
-| `dsh-opencode-v2` | `0.0.1-rc.3` | 471/471 | mounted | [HANDOFF](../dsh-opencode-v2/docs/HANDOFF.md) |
+| `dsh-custom-router` | `0.0.1-rc.10` | 372/372, stream 7/7, dispatch 17/17 | mounted | [HANDOFF](../dsh-custom-router/docs/HANDOFF.md) |
+| `dsh-opencode-v2` | `0.0.1-rc.5` | 481/481 | mounted | [HANDOFF](../dsh-opencode-v2/docs/HANDOFF.md) |
 | `dsh-notify` | `0.0.1-rc.4` | 70/70 | loaded; live visual check open | [HANDOFF](../dsh-notify/docs/HANDOFF.md) |
 | `dsh-tokeneconomizer` | `0.0.1-rc.1` | 139 pass / 1 skip | loaded; live visual check open | [HANDOFF](../dsh-tokeneconomizer/docs/HANDOFF.md) |
 | `dsh-sidebar-manager` | `0.0.1-rc.1` | 162/162 | mounted | [HANDOFF](../dsh-sidebar-manager/docs/HANDOFF.md) |
@@ -34,6 +34,7 @@ repository has no `docs/` directory.
 | :--: | :--- | :--- | :--- |
 | 1 | Live visual verification of the two client-side changes (no restart needed — modules loaded) | notify, tokeneconomizer | owner browser |
 | 2 | P4 — opencode-v2 onto the shared stream pipe, then P5 parity | custom-router + opencode-v2 | nothing technical |
+| 2b | Restart `dsh-web.service` to apply the 2026-11-10 dispatch policy (`applied pending restart`) | owner-only | owner action |
 | 3 | Decide the `rc` state for the two tracks whose version did not move on 2026-11-08 | notify, sidebar-manager, tokeneconomizer | **owner decision** |
 | 4 | Record the 2026-11-08 notify change in `CHANGELOG.md` | notify | nothing |
 | 5 | Stage-1 verdicts O1/O2/O3 | opencode-v2 | **owner decision** |
@@ -47,6 +48,7 @@ repository has no `docs/` directory.
 | Per-track history | `node scripts/check-plugin-history.mjs` | 6 tracks ok; `dsh-korean-locale` skipped (untracked in this repo) |
 | Publishability | `npm run check:publish` | 3 publishable tracks, all pass |
 | Preset parity | `npm run verify:presets` | OK |
+| Dispatch policy | `(cd dsh-custom-router && npm test && npm run verify:dispatch)` | 372/372, 17/17 — preset-based rule (2026-11-10) |
 
 ## 4. Known documentation contradictions
 

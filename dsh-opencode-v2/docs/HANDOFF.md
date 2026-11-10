@@ -1,11 +1,11 @@
 # OpenCode v2 — Handoff
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: report
 status: active
-updated: 2026-11-08
-summary: Stage-by-stage handoff for @nolit/dsh-opencode-v2 at 0.0.1-rc.3 — the delivered CLI-subagent work, the three open stage-1 observations that need an owner verdict, and the gated stage-2 parser swap.
+updated: 2026-11-10
+summary: Stage-by-stage handoff for @nolit/dsh-opencode-v2 at 0.0.1-rc.5 — the delivered CLI-subagent work, the router dispatch-policy revision, the three open stage-1 observations that need an owner verdict, and the gated stage-2 parser swap.
 -->
 
 > History lives in [CHANGELOG.md](../CHANGELOG.md). This file is the **forward** view.
@@ -15,9 +15,9 @@ summary: Stage-by-stage handoff for @nolit/dsh-opencode-v2 at 0.0.1-rc.3 — the
 
 | Item | Measured value |
 | :--- | :--- |
-| Package | `@nolit/dsh-opencode-v2@0.0.1-rc.3` |
-| Last code commit | `abd53f5` 2026-11-08 — CLI subagent model selection, absolute resolution, usage ledger |
-| Tests | `npm test` → **471/471 pass** |
+| Package | `@nolit/dsh-opencode-v2@0.0.1-rc.5` |
+| Last code commit | `56c59d6` 2026-11-08 (rc.4) + the 2026-11-10 router-peer revision (rc.5) |
+| Tests | `npm test` → **481/481 pass** |
 | Stage | **stage 1 (stabilisation) in progress** |
 
 ## 2. Done
@@ -65,7 +65,7 @@ OFF in the live profile. Peer on `@nolit/dsh-custom-router` moved `rc.2` → `rc
 
 | Item | State |
 | :--- | :--- |
-| `peerDependencies['@nolit/dsh-custom-router']` | `0.0.1-rc.9` (was `rc.2`) |
+| `peerDependencies['@nolit/dsh-custom-router']` | `0.0.1-rc.10` (rc.2 → rc.9 → rc.10) |
 | CLI surface in the live profile | **live** — `cli: false` was applied and then withdrawn the same day |
 | Model serving (`opencode-http-agent`) | **unchanged and mounted** |
 | Subagent surface (`subagent_opencode`) | **unchanged and mounted** |
@@ -85,6 +85,9 @@ flip needs a `dsh-web.service` restart (ledger F-46 class). `vendor/antigravity`
 - `modelSelection: true` arrives through the Custom Router preset; the live profile patch does
   **not** carry `modelSelection` (measured absent). Not a defect — recorded so the next reader does
   not look for it in the profile.
+- The router's dispatch policy changed on 2026-11-10: `minimal`/`ptc` hard-block this package's
+  external CLI paths, while `standard`/`cordis` allow them on `workspace-write` and only
+  `read-only` still blocks. Detail: [router CLI doc §9](../../dsh-custom-router/docs/CLI-DISPATCH-CONTROL-PLANE.md).
 - Multiple older CHANGELOG entries carry "applied pending restart"; those are historical. The
   current `rc.3` row is applied on disk.
 

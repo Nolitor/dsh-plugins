@@ -1,11 +1,11 @@
 # Custom Router — Handoff
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: report
 status: active
-updated: 2026-11-08
-summary: Stage-by-stage handoff for @nolit/dsh-custom-router at 0.0.1-rc.8 — what is done, the next ordered stages with their gates, and the owner decisions that block each one.
+updated: 2026-11-10
+summary: Stage-by-stage handoff for @nolit/dsh-custom-router at 0.0.1-rc.10 — what is done, the next ordered stages with their gates, the preset-based dispatch policy revised 2026-11-10, and the owner decisions that block each one.
 -->
 
 > History lives in [CHANGELOG.md](../CHANGELOG.md). This file is the **forward** view: stage order,
@@ -15,9 +15,9 @@ summary: Stage-by-stage handoff for @nolit/dsh-custom-router at 0.0.1-rc.8 — w
 
 | Item | Measured value |
 | :--- | :--- |
-| Package | `@nolit/dsh-custom-router@0.0.1-rc.8` |
-| Last commit | `a772058` 2026-11-08 — Antigravity/DeepInfra absorbed into `vendor/` |
-| Tests | `npm test` → **333/333 pass** |
+| Package | `@nolit/dsh-custom-router@0.0.1-rc.10` |
+| Last commit | `56c59d6` 2026-11-08 (rc.9) + the 2026-11-10 preset-policy revision (rc.10) |
+| Tests | `npm test` → **372/372 pass** |
 | Shared pipe | `npm run verify:stream` → **7/7 cases, 0 vendor loads** |
 | Preset parity | `npm run verify:presets` → OK; providers `deepseek-account, antigravity, deepinfra, deepinfra-anthropic, opencode-http-agent` |
 | Live mount | 5 providers, 6 commands, 6 tools resolved from the live profile |
@@ -59,9 +59,9 @@ no real mount, no generation turn. **Requires owner implementation approval.**
 | Field | Value |
 | :--- | :--- |
 | Entry | owner approval 2026-11-08 (M9 explicitly deferred) |
-| Work | peer alignment to the shipped router version; OpenCode CLI surface switched off; `surfaces.cli` gained `default: false` + `gates`, and the drift gate learned both |
+| Work | peer alignment to the shipped router version; the OpenCode CLI toggle was applied and **withdrawn the same day**; `surfaces.cli` kept `gates: ['opencode']` |
 | Exit gate | `verify:presets` OK on the live profile; model serving still mounted |
-| Result | **done** — tools `working_directory, agy_worker, subagent_antigravity, subagent_opencode`; providers unchanged |
+| Result | **done, then reverted** — the live profile and the current mount carry `opencode`, `cli_worker` and `/ocode` (measured 2026-11-10). An earlier revision of this table said the CLI surface was off; that was wrong. |
 | Detail | [CLI-DISPATCH-CONTROL-PLANE.md §8](./CLI-DISPATCH-CONTROL-PLANE.md) |
 
 **Open issue this step exposed:** `dsh-opencode-v2` has no `app-boot/config-reload` reconcile, so
@@ -70,6 +70,17 @@ approved a code change there.
 
 **Step 2 is already satisfied** in the live profile (`dsh-opencode-v2` is a dependency, not a
 bundle), so what remains is a regression guard. **Step 3 stays blocked on M9.**
+
+### S4c — dispatch policy: preset-based (delivered 2026-11-10)
+
+| Field | Value |
+| :--- | :--- |
+| Entry | owner instruction 2026-11-10 |
+| Work | `workspace-write` removed from the restricted sandbox set; `ptc` added to the restricted preset set |
+| Rule | `minimal`/`ptc` hard-block; `standard`/`cordis` dispatch on `workspace-write`; `read-only` still blocks |
+| Exit gate | `npm test` 372/372; `verify:dispatch` 17/17; live mount unchanged |
+| Detail | [CLI-DISPATCH-CONTROL-PLANE.md §9](./CLI-DISPATCH-CONTROL-PLANE.md#9-policy-revision--preset-based-enforcement-2026-11-10) |
+| Live state | `applied pending restart` — the running service holds the previous gate until it restarts |
 
 ### S5 — later rounds
 

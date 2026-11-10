@@ -34,11 +34,28 @@
  * @module @nolit/dsh-custom-router/dispatch-gate
  */
 
-/** Presets under which an external CLI may not be dispatched. */
-export const RESTRICTED_PRESETS = Object.freeze(['minimal'])
+/**
+ * Presets under which an external CLI may not be dispatched.
+ *
+ * The host ships four presets (`standard`, `ptc`, `minimal`, `cordis`). The
+ * owner decided on 2026-11-10 that two of them — `minimal` and `ptc` — hard-block
+ * every external CLI worker and subagent dispatch, because PTC is an
+ * interpreter-centred mode where an external-CLI escape must not be possible.
+ * `standard` and `cordis` are ordinary work modes and may dispatch.
+ */
+export const RESTRICTED_PRESETS = Object.freeze(['minimal', 'ptc'])
 
-/** Sandbox modes treated as restricted (everything except full access). */
-export const RESTRICTED_SANDBOX_MODES = Object.freeze(['read-only', 'workspace-write'])
+/**
+ * Sandbox modes treated as restricted.
+ *
+ * MEASURED 2026-11-10: the live profile's deployment default is
+ * `workspace-write` (`sandbox-policy.mode`). Treating it as restricted made the
+ * gate refuse every CLI surface in the ordinary work mode, which was the
+ * owner-visible "OpenCode is broken" symptom. Only `read-only` is a true
+ * "no writes, no outsourcing" boundary; `workspace-write` and
+ * `danger-full-access` rely on the preset rule instead.
+ */
+export const RESTRICTED_SANDBOX_MODES = Object.freeze(['read-only'])
 
 /** The exact refusal text the model and the audit log receive. */
 export const DISPATCH_DENIED_REASON =
@@ -100,8 +117,12 @@ function configValue(entry, fallback) {
 /**
  * Resolve the dispatch policy of one session from the host services that own
  * the facts. Every read is defensive: a profile that composes the router
- * without `agentPresets` or `sandboxPolicy` still answers, and an unknown
- * sandbox mode is treated as restricted (fail closed).
+ * without `agentPresets` or `sandboxPolicy` still answers.
+ *
+ * The restriction sets are explicit allow-lists of *restricted* values, so an
+ * unknown preset or mode is simply not restricted — it does not grant anything
+ * by itself, and the other rule still fires independently. Only `read-only`
+ * restricts by sandbox; `minimal`/`ptc` restrict by preset.
  * @param {object} ctx - cordis context exposing the host services.
  * @param {object} [session] - the calling session, when the caller has one.
  * @returns {{restricted: boolean, preset: string|null, sandboxMode: string|null, causes: string[]}} the decision facts.

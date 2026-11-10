@@ -1,17 +1,17 @@
 # CLI Dispatch Control Plane — Admission Gate and Process Reclamation
 
 <!-- skeleton:
-version: 0.0.1-rc.9
+version: 0.0.1-rc.10
 kind: spec
 status: active
-updated: 2026-11-08
-summary: The router's two duties over external CLI workers (AGY, OpenCode v2): refuse dispatch from a restricted preset/sandbox before any argv exists, and reclaim a dispatched process when its session is torn down or the router unloads.
+updated: 2026-11-10
+summary: The router's two duties over external CLI workers (AGY, OpenCode v2): refuse dispatch from a restricted preset/sandbox before any argv exists, and reclaim a dispatched process when its session is torn down or the router unloads. Policy revised 2026-11-10 to preset-based enforcement (minimal/ptc block; read-only blocks).
 -->
 
-> Status: **implemented and measured**. Baseline DSH `0.2.2-rc.1`, 2026-11-08.
-> Code: [`lib/dispatch-gate.js`](../lib/dispatch-gate.js). Tests:
+> Status: **implemented and measured**. Baseline DSH `0.2.2-rc.1`, 2026-11-08; policy revised
+> 2026-11-10. Code: [`lib/dispatch-gate.js`](../lib/dispatch-gate.js). Tests:
 > [`test/dispatch-gate.test.mjs`](../test/dispatch-gate.test.mjs) plus the two provider
-> suites. Live check: `npm run verify:dispatch` (10/10).
+> suites. Live check: `npm run verify:dispatch` (**17/17**).
 
 ## 1. Why the router owns this
 
@@ -52,7 +52,7 @@ tool call ──▶ tools/pre-execute ──▶ is it a CLI worker tool? ──n
                                         ▼
                           resolve preset + sandbox mode for the session
                                         │
-                    minimal preset or read-only/workspace-write?
+             minimal/ptc preset, or read-only sandbox?
                                         │yes                    │no
                                         ▼                       ▼
                        {kind:'deny', reason: …}            next()
@@ -62,9 +62,10 @@ tool call ──▶ tools/pre-execute ──▶ is it a CLI worker tool? ──n
 - **Gated tools** are derived from the preset declarations (`surfaces.tools`,
   `surfaces.cli`, `surfaces.batch`) plus the shipped names, so a renamed surface is gated
   without editing the module.
-- **`subagent_*` tools are excluded.** They start an in-process child whose own sandbox is
-  inherited and enforced, so they are already inside the boundary. The gate exists for
-  surfaces that reach an **external** binary.
+- **`subagent_*` tools are excluded from the tool-level gate, but not from the rule.** Their
+  providers (`OpenCodeSubagentProvider`, `AntigravitySubagentProvider`) repeat the same
+  decision in `start()` because a direct `ctx.subagents` caller never passes a tool, and
+  those providers do reach an external binary.
 - **The denial is an ordinary tool error.** `{kind:'deny'}` is what the host already renders
   for a policy refusal, so the model sees a normal failure and the audit log records it.
 - **`auto: true` cannot override it.** The decision lands before the tool body, so no argv —
@@ -73,8 +74,9 @@ tool call ──▶ tools/pre-execute ──▶ is it a CLI worker tool? ──n
 ### Fail-closed details
 
 - An agentless call consults the deployment default mode.
-- An unknown mode is **not** treated as full access by the mode rule, but the preset rule
-  still fires independently.
+- The restriction sets are explicit *restricted-value* lists; an unknown preset or mode is
+  simply not restricted, and the other rule still fires independently. Only `read-only`
+  restricts by sandbox — `workspace-write` is a work mode (see §9).
 - Empty restriction lists fall back to the shipped defaults: an empty list cannot mean
   "restrict nothing" for a field the operator never set. Turning the gate off requires
   `cliDispatchGate.enabled: false`, which logs a warning at load.
@@ -107,8 +109,8 @@ a long session does not accumulate one dead entry per call.
   config:
     cliDispatchGate:
       enabled: true                 # absent means ON
-      restrictedPresets: [minimal]  # empty means the shipped default
-      restrictedModes: [read-only, workspace-write]
+      restrictedPresets: [minimal, ptc]  # empty means the shipped default
+      restrictedModes: [read-only]       # only read-only; workspace-write dispatches
 ```
 
 It sits with the mount-time fields (`strict`, `packages`) rather than the `.volatile()` ones:
@@ -117,12 +119,13 @@ off is a deliberate profile edit, not a dashboard toggle that silently widens ru
 
 ## 6. Verification
 
-`npm run verify:dispatch` runs 10 checks against real processes:
+`npm run verify:dispatch` runs 17 checks against real processes:
 
-- four restricted combinations (`minimal` × full access, `minimal` × workspace-write,
-  `standard` × workspace-write, `standard` × read-only) — each denies all four CLI tools
-  with **bodyRuns = 0**;
-- the control case (`standard` × full access) allows all four;
+- eight restricted combinations — both hard-block presets (`minimal`, `ptc`) across all
+  three sandbox modes, plus `read-only` under the two work presets (`standard`, `cordis`) —
+  each denies all four CLI tools with **bodyRuns = 0**;
+- three allowed controls (`standard` × workspace-write, `cordis` × workspace-write,
+  `standard` × full access) each allow all four with **bodyRuns = 4**;
 - a real long-lived child is killed by `agent/disposed`, by `session/disposed`, and by router
   unload;
 - a sibling session's worker survives its neighbour's teardown;
@@ -155,16 +158,19 @@ The declaration follows the VENDOR, not the gate: `dsh-opencode-v2/lib/index.js`
 `opencode` tool, `/ocode` and `cli_worker` with one switch (`cliOn`). Naming only `toolName` would
 have forced `verify-presets.mjs` to loosen; `gates` keeps it strict.
 
-### 8.2 Measured effect (real mount, isolated `DSH_HOME`)
+### 8.2 Measured effect of the (withdrawn) toggle
 
-| Registry | Before | After |
+The toggle's measured effect, kept as evidence of why one switch must not be used as a
+"surgical" step. It is **not** the current state — see §8.5.
+
+| Registry | With `cli: true` | With `cli: false` |
 | :--- | :--- | :--- |
 | tools | `working_directory, agy_worker, subagent_antigravity, opencode, cli_worker, subagent_opencode` | `working_directory, agy_worker, subagent_antigravity, subagent_opencode` |
 | commands | `agy, …, ocode, permission` | `agy, export, feedback, interrupt, permission` |
 | providers | `…, opencode-http-agent` | **unchanged** — model serving survives |
 
-`opencode-http-agent` staying mounted is the point of the step: the CLI surface can be withdrawn
-without taking the route this session's model arrives on.
+`opencode-http-agent` staying mounted is why the step looked safe: the CLI surface can be
+withdrawn without taking the route a session's model arrives on.
 
 ### 8.3 Latent defect recorded, not fixed
 
@@ -209,6 +215,45 @@ commands  agy, export, feedback, interrupt, ocode, permission
 providers deepseek-account, antigravity, deepinfra, deepinfra-anthropic, opencode-http-agent
 ```
 
-`verify-presets` reports OK against the live profile. The running `dsh-web.service` process still
-reflects the pre-withdrawal config until it restarts, because this vendor has no
-`app-boot/config-reload` reconcile (§8.3).
+`verify-presets` reports OK against the live profile. The earlier claim here — that the running
+`dsh-web.service` process still reflects the pre-withdrawal config — was **already stale when it
+was written**: the service was restarted at 2026-11-08 23:35:41 KST, after both the profile restore
+(23:12) and the last source mtime (23:30:46), so the running process carries the CLI surface ON.
+A later `cli` flip would still need a restart (§8.3).
+
+## 9. Policy revision — preset-based enforcement (2026-11-10)
+
+Owner instruction: the four host presets are 최소(`minimal`), PTC(`ptc`), 표준(`standard`) and
+크리에이티브(`cordis`). `minimal` and `ptc` hard-block external CLI **and** subagent dispatch
+(PTC is interpreter-centred, so an external-CLI escape must not be possible). `standard` and
+`cordis` may dispatch even on `workspace-write`; only `read-only` keeps the sandbox restriction.
+
+### 9.1 Why the first policy was wrong
+
+| Fact | Measurement (2026-11-10) |
+| :--- | :--- |
+| The live deployment default is `workspace-write` | `dsh --profile web --dump-config` → `sandbox-policy.mode: DSH_PERMISSION_MODE ?? 'workspace-write'`; the service env carries no `DSH_PERMISSION_MODE` |
+| The first policy treated `workspace-write` as restricted | ordinary standard sessions refused every CLI tool, which reads exactly like "the OpenCode plugin is broken" |
+| `ptc` was not in the restricted set at all | the PTC escape the owner forbade was allowed |
+
+### 9.2 New rule
+
+| Preset | `read-only` | `workspace-write` | `danger-full-access` |
+| :--- | :--- | :--- | :--- |
+| `minimal` | deny (preset + sandbox) | deny (preset) | deny (preset) |
+| `ptc` | deny (preset + sandbox) | deny (preset) | deny (preset) |
+| `standard` | deny (sandbox) | **allow** | allow |
+| `cordis` | deny (sandbox) | **allow** | allow |
+
+Constants: `RESTRICTED_PRESETS = ['minimal', 'ptc']`,
+`RESTRICTED_SANDBOX_MODES = ['read-only']`. The rule is data, so a profile may still narrow it in
+`cliDispatchGate`, and an empty list still falls back to these defaults.
+
+### 9.3 Measured verification
+
+- `npm test` → **372/372** (four new policy cases).
+- `npm run verify:dispatch` → **17/17** (eight denials, three allows, plus the reclamation cases).
+- Real mount of the live profile unchanged: tools/commands/providers identical to §8.5; this
+  revision changes only *who may dispatch*, not *what is mounted*.
+- Live application: the running `dsh-web.service` still holds the pre-revision gate until it is
+  restarted — `applied pending restart` per RULES §5. Restarting is owner-only.

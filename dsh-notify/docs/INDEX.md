@@ -4,7 +4,7 @@
 version: 1.0
 kind: index
 status: active
-updated: 2026-11-08
+updated: 2026-11-10
 summary: Generated per-subproject index for @nolit/dsh-notify: every document this track owns, one line each.
 -->
 
@@ -36,7 +36,7 @@ summary: Generated per-subproject index for @nolit/dsh-notify: every document th
 | 1.0 | spec | reference | 2026-10-23 | [deepseek-peak-spec.md](deepseek-peak-spec.md) | Feature spec for the DeepSeek billing-window indicator: peak/off-peak boundaries, display, and refresh rules. |
 | 1.0 | spec | reference | 2026-10-23 | [dsh-harness-notify-spec.md](dsh-harness-notify-spec.md) | Feature spec for DSH harness notifications: which harness events notify, and how delivery is deduplicated. |
 | 1.0 | report | active | 2026-11-08 | [HANDOFF.md](HANDOFF.md) | Stage-by-stage handoff for @nolit/dsh-notify at 0.0.1-rc.4 — the shipped Chrome-notification surface, the pending-restart state, and the two recorded follow-ups (host settings, stale prototype doc). |
-| 1.0 | index | active | 2026-11-08 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-notify: every document this track owns, one line each. |
+| 1.0 | index | active | 2026-11-10 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-notify: every document this track owns, one line each. |
 | 1.0 | reference | reference | 2026-10-24 | [RECOVERY-NOTES.md](RECOVERY-NOTES.md) | What was restored into this track, how it was restored, and which pieces are still missing. |
 | 1.0 | policy | historical | 2026-10-23 | [WORK-PROTOCOL.md](WORK-PROTOCOL.md) | Track-local work protocol covering git flags and the header/skeleton index convention; now owned by workspace docs/RULES.md. |
 | 1.0 | reference | reference | 2026-10-24 | [PROVENANCE.md](../PROVENANCE.md) | Where the dsh-notify source tree came from: recovery path out of historical DSH session logs and what could not be recovered. |
@@ -108,6 +108,6 @@ summary: Generated per-subproject index for @nolit/dsh-notify: every document th
 
 ## index
 
-- **1.0** · active · 2026-11-08 · [INDEX.md](INDEX.md)
+- **1.0** · active · 2026-11-10 · [INDEX.md](INDEX.md)
   Generated per-subproject index for @nolit/dsh-notify: every document this track owns, one line each.
 

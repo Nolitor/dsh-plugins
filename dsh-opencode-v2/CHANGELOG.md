@@ -1,14 +1,26 @@
 # Changelog — @nolit/dsh-opencode-v2
 
 <!-- skeleton:
-version: 1.6
+version: 1.7
 kind: report
 status: active
-updated: 2026-11-08
+updated: 2026-11-10
 summary: Engineering history for @nolit/dsh-opencode-v2, including the completed subagent merge, the 0.0.2-rc.2 cleanup, the rc.4 cost-chip seat migration, the managed child-session delegation cutover, and the OpenCode 2.2.6 isolated compatibility measurement.
 -->
 
-Current version: `0.0.1-rc.4`
+Current version: `0.0.1-rc.5`
+
+## 0.0.1-rc.5 — 2026-11-10 (router peer rc.10; dispatch-policy revision)
+
+- **`peerDependencies['@nolit/dsh-custom-router']`: `0.0.1-rc.9` → `0.0.1-rc.10`**, following the
+  router's preset-based dispatch revision. The suite's alignment check reads the router's own
+  `package.json`, so it moved with the peer.
+- **Provider gate test wording** now pins a `read-only` denial instead of `workspace-write`, because
+  `workspace-write` is no longer a restricted mode (router CLI doc §9).
+- **No surface change here.** The router still mounts the same three rows; this entry records the
+  peer and the test contract only.
+
+Suite: 481 pass.
 
 ## 0.0.1-rc.4 (cont.) — 2026-11-08 (router peer aligned to rc.9)
 

@@ -1,12 +1,36 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.9
+version: 0.0.1-rc.10
 kind: report
 status: active
-updated: 2026-11-08
-summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree.
+updated: 2026-11-10
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy.
 -->
+
+## 0.0.1-rc.10 — 2026-11-10 (dispatch policy: preset-based, not workspace-write)
+
+Owner instruction: the four presets are minimal, ptc, standard, cordis. minimal and ptc hard-block
+external CLI and subagent dispatch; standard and cordis may dispatch on `workspace-write`; only
+`read-only` keeps the sandbox restriction.
+
+**Measured cause of the revision.** `dsh --profile web --dump-config` shows
+`sandbox-policy.mode = DSH_PERMISSION_MODE ?? 'workspace-write'`, and the service env carries no
+`DSH_PERMISSION_MODE`. The rc.9 policy listed `workspace-write` as restricted, so every ordinary
+session refused all four CLI tools while the HTTP model route kept working — the owner-visible
+"OpenCode is broken" symptom. `ptc` was not restricted at all.
+
+| Constant | rc.9 | rc.10 |
+| :--- | :--- | :--- |
+| `RESTRICTED_PRESETS` | `['minimal']` | `['minimal', 'ptc']` |
+| `RESTRICTED_SANDBOX_MODES` | `['read-only', 'workspace-write']` | `['read-only']` |
+
+Evidence: `npm test` 372/372 (four new policy cases), `verify:dispatch` 17/17 (8 denials,
+3 allows), live mount unchanged. `applied pending restart` — the running `dsh-web.service` keeps
+the rc.9 gate until it restarts (owner-only).
+
+Peer alignment completed: `dsh-opencode-v2` rc.5, `vendor/antigravity` rc.11 and
+`vendor/deepinfra` rc.12 now peer this package at `0.0.1-rc.10`; deepinfra had been left at `rc.2`.
 
 ## 0.0.1-rc.9 (cont.) — 2026-11-08 (provider-slot migration, Step 1)
 

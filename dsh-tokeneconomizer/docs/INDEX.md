@@ -4,7 +4,7 @@
 version: 1.0
 kind: index
 status: active
-updated: 2026-11-08
+updated: 2026-11-10
 summary: Generated per-subproject index for @nolit/dsh-tokeneconomizer: every document this track owns, one line each.
 -->
 
@@ -25,7 +25,7 @@ summary: Generated per-subproject index for @nolit/dsh-tokeneconomizer: every do
 | 1.1 | spec | active | 2026-11-08 | [DEV-STATISTICS.md](DEV-STATISTICS.md) | Read-only per-turn/per-step developer statistics for TokenEconomizer: the measured before/after surface, the DSH rc.1 ledger vocabulary it copies, the settings.section seat choice, the derivation rules, and the card's DSH settings-surface rules. |
 | 1.0 | report | active | 2026-11-08 | [HANDOFF.md](HANDOFF.md) | Stage-by-stage handoff for @nolit/dsh-tokeneconomizer at 0.0.1-rc.1 — the shipped devstats card, the pending-restart state, and the version/CHANGELOG mismatch that a release decision must resolve. |
 | 1.2 | spec | active | 2026-10-31 | [IN_MEMORY_FEATURES.md](IN_MEMORY_FEATURES.md) | Architecture of the host-local features of the DSH bridge: tool-result hash deduplication, the KV-cache-safe prompt slot with its constant routing text, the loop breaker with its advisory thinking watchdog, the turn-based tiered memory, the observe/apply mode split, and the full configuration reference. |
-| 1.0 | index | active | 2026-11-08 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-tokeneconomizer: every document this track owns, one line each. |
+| 1.0 | index | active | 2026-11-10 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-tokeneconomizer: every document this track owns, one line each. |
 | 1.3 | spec | active | 2026-10-31 | [OPERATIONS.md](OPERATIONS.md) | Bootstrap with its bounded install-time migration, profile install and FTS recall activation, guarded cold start, purge, verification, rollback, the configuration reference, and the live-state rules for the DSH TokenEconomizer bridge. |
 | 1.3 | measurement | measured | 2026-11-02 | [TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md](TOKEN-ECONOMIZER-SAVING-MEASUREMENT.md) | What the DSH TokenEconomizer bridge actually saved: the 2026-10-30 dark-lever measurement, the tiered-memory and routing fixes built from it, the 2026-11-02 re-measurement that found 1.03M chars of real tiering saving with 53% self-inflation, the toolprune lever that is real but capped near 1.2k tokens per request, and the adopted tierMinChars 3700 floor chosen from the measured maximum inflating input. |
 | 1.5 | readme | active | 2026-11-08 | [README.md](../README.md) | DSH 0.2.2 bridge for microsoft/TokenEconomizer: lifecycle mapping, in-memory tool mask, DSH trace reader, guarded migration, prior-session recall through the harness index, host-local in-memory features, and the Web developer-statistics card. |
@@ -60,6 +60,6 @@ summary: Generated per-subproject index for @nolit/dsh-tokeneconomizer: every do
 
 ## index
 
-- **1.0** · active · 2026-11-08 · [INDEX.md](INDEX.md)
+- **1.0** · active · 2026-11-10 · [INDEX.md](INDEX.md)
   Generated per-subproject index for @nolit/dsh-tokeneconomizer: every document this track owns, one line each.
 

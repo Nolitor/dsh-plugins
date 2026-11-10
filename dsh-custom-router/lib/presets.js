@@ -198,23 +198,18 @@ export const PRESETS = Object.freeze([
         toolName: 'subagent_opencode',
         maxDepth: 'provider-managed',
       }),
-      // Owner-approved 2026-11-08 (Step 1 of the provider-slot migration): the
-      // OpenCode CLI surface ships DISABLED. `default: false` is the router's
-      // existing gated-surface marker (the AGY batch row uses it); it tells the
-      // drift gate that these tools/commands are expected to be ABSENT from a
-      // default profile, so absence is parity rather than drift.
+      // The OpenCode CLI surface is declared LIVE. Step 1 of the provider-slot
+      // migration (2026-11-08) briefly set `cli: false` and WITHDREW it the same
+      // day: the switch removed the `opencode` tool, `/ocode` and `cli_worker`
+      // together, which the owner reported as "/ocode is not loading".
       //
-      // The `opencode` TOOL is gated with the CLI surface because the vendor
-      // itself registers it under the same `cli` switch (measured: `cliOn` in
-      // dsh-opencode-v2/lib/index.js guards the tool, `/ocode`, `cli_worker`),
-      // so declaring it here keeps the declaration equal to what the vendor does.
-      // Model serving is untouched: `opencode-http-agent` remains mounted.
       // The vendor gates this surface with ONE switch (`cliOn` in
       // dsh-opencode-v2/lib/index.js guards the `opencode` tool, `/ocode` and
-      // `cli_worker` together). Declared as a live surface: the profile ships it
-      // ON. A profile may still set `cli: false` to withdraw all three, and
-      // `verify-presets.mjs` understands the `default: false` + `gates` markers
-      // for that case (the AGY batch row uses them).
+      // `cli_worker` together), so naming only `toolName` would under-declare it.
+      // `gates: ['opencode']` records the switch that can withdraw all three;
+      // `verify-presets.mjs` uses that marker to treat an explicitly-off surface
+      // as expected-absent instead of loosening the parity check.
+      // Model serving is untouched: `opencode-http-agent` remains mounted.
       cli: Object.freeze({
         shape: 'sync',
         toolName: 'cli_worker',

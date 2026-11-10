@@ -82,22 +82,33 @@ test('the denial reason is the exact operator-facing sentence', () => {
   assert.equal(DISPATCH_DENIED_REASON, 'Disallowed: CLI worker invocation blocked under restricted sandbox/preset')
 })
 
-test('a minimal preset is restricted; the standard preset is not', () => {
-  assert.deepEqual(decideDispatch({ preset: 'minimal', sandboxMode: 'danger-full-access' }), {
-    allowed: false,
-    causes: ['preset "minimal"'],
-  })
-  assert.deepEqual(decideDispatch({ preset: 'standard', sandboxMode: 'danger-full-access' }), {
-    allowed: true,
-    causes: [],
-  })
+test('minimal and ptc presets are restricted; standard and cordis are not', () => {
+  for (const preset of ['minimal', 'ptc']) {
+    assert.deepEqual(decideDispatch({ preset, sandboxMode: 'danger-full-access' }), {
+      allowed: false,
+      causes: [`preset "${preset}"`],
+    }, `${preset} must hard-block external dispatch`)
+  }
+  for (const preset of ['standard', 'cordis']) {
+    assert.deepEqual(decideDispatch({ preset, sandboxMode: 'danger-full-access' }), {
+      allowed: true,
+      causes: [],
+    }, `${preset} must dispatch under full access`)
+  }
 })
 
-test('workspace-write and read-only are both restricted; full access is not', () => {
-  for (const mode of ['read-only', 'workspace-write']) {
-    const verdict = decideDispatch({ preset: 'standard', sandboxMode: mode })
-    assert.equal(verdict.allowed, false, `${mode} must be restricted`)
-    assert.match(verdict.causes.join(' '), new RegExp(`sandbox "${mode}"`))
+test('only read-only is restricted by sandbox; workspace-write is ordinary', () => {
+  const verdict = decideDispatch({ preset: 'standard', sandboxMode: 'read-only' })
+  assert.equal(verdict.allowed, false)
+  assert.match(verdict.causes.join(' '), /sandbox "read-only"/)
+  // MEASURED 2026-11-10: the live deployment default is workspace-write. It is a
+  // work mode, not a confinement boundary for dispatch.
+  for (const preset of ['standard', 'cordis']) {
+    assert.equal(
+      decideDispatch({ preset, sandboxMode: 'workspace-write' }).allowed,
+      true,
+      `${preset} + workspace-write must dispatch`,
+    )
   }
   assert.equal(decideDispatch({ preset: 'standard', sandboxMode: 'danger-full-access' }).allowed, true)
 })
@@ -134,10 +145,17 @@ test('session facts come from the services that own them', () => {
 
 test('a host without the preset service still enforces the sandbox rule', () => {
   const host = fakeHost()
-  host.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) })
+  host.provide('sandboxPolicy', { resolve: () => ({ mode: 'read-only' }) })
   const facts = resolveDispatchPolicy(host, fakeSession())
   assert.equal(facts.preset, null)
   assert.equal(facts.restricted, true)
+})
+
+test('a host without the preset service allows workspace-write', () => {
+  const host = fakeHost()
+  host.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) })
+  const facts = resolveDispatchPolicy(host, fakeSession())
+  assert.equal(facts.restricted, false)
 })
 
 test('a throwing projection fails closed rather than granting dispatch', () => {
@@ -171,7 +189,7 @@ test('a preset that renames its CLI tool is gated without editing this module', 
 test('the gate is ON by default and can only be turned off explicitly', () => {
   assert.equal(gateConfig({}).enabled, true)
   assert.equal(gateConfig({ cliDispatchGate: { enabled: false } }).enabled, false)
-  assert.deepEqual(gateConfig({}).restrictedModes, ['read-only', 'workspace-write'])
+  assert.deepEqual(gateConfig({}).restrictedModes, ['read-only'])
   assert.deepEqual(
     gateConfig({ cliDispatchGate: { restrictedModes: ['read-only'] } }).restrictedModes,
     ['read-only'],
@@ -206,6 +224,71 @@ test('the pre-execute gate allows the same call under full access', async () => 
   try {
     const decision = await ctx.waterfall('tools/pre-execute', { name: 'agy_worker', agent: { session } }, () => ({ kind: 'allow' }))
     assert.equal(decision.kind, 'allow')
+  } finally {
+    dispose()
+  }
+})
+
+test('the pre-execute gate denies every CLI worker under ptc, even with full access', async () => {
+  const ctx = fakeHost()
+  const session = fakeSession()
+  ctx.provide('agentPresets', { presetForSession: () => 'ptc' })
+  ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'danger-full-access' }) })
+  ctx.provide('shell', { sandboxMode: 'danger-full-access' })
+  const dispose = installDispatchGate(ctx, { presets: PRESETS })
+  try {
+    for (const tool of ['agy_worker', 'agy_cli', 'cli_worker', 'opencode']) {
+      const decision = await ctx.waterfall(
+        'tools/pre-execute',
+        { name: tool, agent: { session } },
+        () => ({ kind: 'allow' }),
+      )
+      assert.equal(decision.kind, 'deny', `${tool} must be denied under ptc`)
+      assert.match(decision.reason, /preset "ptc"/)
+    }
+  } finally {
+    dispose()
+  }
+})
+
+test('the pre-execute gate allows a standard session on workspace-write', async () => {
+  // MEASURED 2026-11-10: workspace-write is the deployment default. It must not
+  // withdraw the CLI surface from the ordinary work mode.
+  const ctx = fakeHost()
+  const session = fakeSession()
+  ctx.provide('agentPresets', { presetForSession: () => 'standard' })
+  ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) })
+  ctx.provide('shell', { sandboxMode: 'workspace-write' })
+  const dispose = installDispatchGate(ctx, { presets: PRESETS })
+  try {
+    for (const tool of ['agy_worker', 'agy_cli', 'cli_worker', 'opencode']) {
+      const decision = await ctx.waterfall(
+        'tools/pre-execute',
+        { name: tool, agent: { session } },
+        () => ({ kind: 'allow' }),
+      )
+      assert.equal(decision.kind, 'allow', `${tool} must dispatch on standard + workspace-write`)
+    }
+  } finally {
+    dispose()
+  }
+})
+
+test('the gate still denies read-only under an otherwise-allowed preset', async () => {
+  const ctx = fakeHost()
+  const session = fakeSession()
+  ctx.provide('agentPresets', { presetForSession: () => 'cordis' })
+  ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'read-only' }) })
+  ctx.provide('shell', { sandboxMode: 'read-only' })
+  const dispose = installDispatchGate(ctx, { presets: PRESETS })
+  try {
+    const decision = await ctx.waterfall(
+      'tools/pre-execute',
+      { name: 'cli_worker', agent: { session } },
+      () => ({ kind: 'allow' }),
+    )
+    assert.equal(decision.kind, 'deny')
+    assert.match(decision.reason, /sandbox "read-only"/)
   } finally {
     dispose()
   }
@@ -392,8 +475,8 @@ test('a schema-materialised empty list does not turn the gate off', () => {
   // set, or every profile written before this row existed would be unprotected.
   const gate = gateConfig({ cliDispatchGate: { restrictedPresets: [], restrictedModes: [] } })
   assert.equal(gate.enabled, true)
-  assert.deepEqual(gate.restrictedPresets, ['minimal'])
-  assert.deepEqual(gate.restrictedModes, ['read-only', 'workspace-write'])
+  assert.deepEqual(gate.restrictedPresets, ['minimal', 'ptc'])
+  assert.deepEqual(gate.restrictedModes, ['read-only'])
   assert.equal(decideDispatch({ preset: 'minimal', sandboxMode: 'read-only' }, gate).allowed, false)
 })
 

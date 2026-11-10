@@ -56,11 +56,11 @@ function startRequest(parent = { session: { id: 's1' } }) {
 
 test('a denied gate refuses in start() before any process is spawned', () => {
   const { provider, subprocess } = makeProvider({
-    gate: () => ({ allowed: false, causes: ['sandbox "workspace-write"'] }),
+    gate: () => ({ allowed: false, causes: ['sandbox "read-only"'] }),
   })
   assert.throws(
     () => provider.start(startRequest()),
-    (error) => error instanceof Error && error.message.includes(DENIED) && error.message.includes('workspace-write'),
+    (error) => error instanceof Error && error.message.includes(DENIED) && error.message.includes('read-only'),
   )
   assert.equal(subprocess.spawned.length, 0)
 })
