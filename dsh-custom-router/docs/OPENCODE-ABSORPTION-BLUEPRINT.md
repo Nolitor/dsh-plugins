@@ -357,3 +357,27 @@ fixed): id case/whitespace normalisation, intra-driver duplicate names, command-
 switch-name uniqueness, `catalogLayer` NaN/Infinity, function-value freezing. They are
 non-structural while every driver is first-party; they must be closed **before** third-party
 driver registration is opened.
+
+## 9. Phase B execution plan (started 2026-11-10)
+
+Three increments; B-2 is the only one that changes runtime behaviour, and it stays behind a
+flag with the legacy path as default.
+
+| Incr. | Work | Files | Exit gate |
+| :--- | :--- | :--- | :--- |
+| **B-1** | pipe gains an optional per-stream `createHooks({descriptor, signal})`; OpenCode gets a single lifecycle owner, an extracted pure OpenAI-mapping module, and the stream contract + hooks | `lib/stream/index.js`; `vendor/opencode/lib/{stream-lifecycle,stream-contract,openai-mapping}.js`; tests | pipe suite green (backward compatible); contract/lifecycle tests green; http.js behaviour unchanged |
+| **B-2** | rewire the opencode streaming loop onto `readSseEvents` + `normalizeStream`, with `pipe: 'legacy' \| 'shared'` (default `legacy`) | `vendor/opencode/lib/http.js` | suite green in both modes; no behaviour change in `legacy` |
+| **B-3** | replay + parity: `markerDeltas == 0`, one OpenCode descriptor case in `verify:stream`, P4 prose gate | `scripts/verify-stream.mjs`, replay check | P4 gate from the spec: suite green, `markerDeltas == 0`, prose gate, `classifyText` present |
+
+**Lifecycle rule (CP3).** Exactly one `AbortController` per stream, owned by
+`createStreamLifecycle`; `readSseEvents` cancels its reader on iterator return; `abort` and
+`dispose` are idempotent; the caller's signal listener is removed on dispose. No stream may hold
+two owners, and no listener may outlive the request.
+
+**Parser rule (owner decision D-4).** B-2 ships `parser: 'legacy'` as default; `classifyText`
+wraps the existing 679-line classifier. The canonical parser stays ported-but-off until Phase F.
+
+### B-1 dispatch
+
+- pipe `createHooks` extension → primary (DeepSeek V4.1 high)
+- lifecycle + contract + helper extraction → MiniMax 3.1 (max)
