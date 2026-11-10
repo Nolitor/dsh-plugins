@@ -243,8 +243,12 @@ export function createStreamHooks(options = {}) {
    */
   const classifyReasoning = (text) => {
     if (typeof text !== 'string' || text.length === 0) return []
-    if (!hasGate) return translateRecovered(reasoningClassifier.push(text))
-    return collectGateParts(reasoningClassifier.push(text))
+    // The classifier is channel-agnostic: it labels recovered prose `text`.
+    // This lane is the reasoning channel, so prose keeps its label; without
+    // this the pipe emits reasoning as visible text (measured in B-2b2).
+    return asReasoning(hasGate
+      ? collectGateParts(reasoningClassifier.push(text))
+      : translateRecovered(reasoningClassifier.push(text)))
   }
 
   /**
@@ -284,10 +288,17 @@ export function createStreamHooks(options = {}) {
    * @returns {object[]} the classifier's remaining parts.
    */
   const flush = () => {
-    if (!hasGate) return translateRecovered(classifier.flush())
+    if (!hasGate) {
+      // Legacy drains BOTH channels in this order; dropping the reasoning
+      // classifier here would silently lose a held-back marker at EOF.
+      return [
+        ...translateRecovered(classifier.flush()),
+        ...asReasoning(translateRecovered(reasoningClassifier.flush())),
+      ]
+    }
     const parts = [
       ...collectGateParts(classifier.flush()),
-      ...collectGateParts(reasoningClassifier.flush()),
+      ...asReasoning(collectGateParts(reasoningClassifier.flush())),
     ]
     const { promote } = gate.settle(structuredCalls)
     for (const call of promote) {
@@ -304,6 +315,10 @@ export function createStreamHooks(options = {}) {
    * @param {object[]} parts - the classifier's parts.
    * @returns {object[]} the text / reasoning parts.
    */
+  function asReasoning(parts) {
+    return parts.map((part) => (part?.kind === 'tool-call' ? part : { ...part, kind: 'reasoning' }))
+  }
+
   function collectGateParts(parts) {
     const out = []
     for (const part of parts) {

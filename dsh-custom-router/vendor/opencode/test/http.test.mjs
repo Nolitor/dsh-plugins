@@ -1583,3 +1583,76 @@ test('an unknown upstream finish_reason reaches the host as an error', async () 
   }
 })
 
+
+
+/**
+ * Canonicalise a chunk sequence for cross-pipeline comparison: block indices are
+ * renumbered by first appearance, and a run of adjacent block-end chunks is
+ * sorted by block content. Both pipelines close every block; the ORDER in which
+ * independent blocks close is not a host-visible contract, but every block's
+ * start/delta/end tuple and the terminal order are.
+ */
+function normalizeBlockIndices(chunks) {
+  const order = new Map()
+  const out = chunks.map((chunk) => {
+    if (chunk.index === undefined) return chunk
+    if (!order.has(chunk.index)) order.set(chunk.index, order.size)
+    return { ...chunk, index: order.get(chunk.index) }
+  })
+  for (let i = 0; i < out.length; i += 1) {
+    if (out[i].type !== 'block-end') continue
+    let j = i
+    while (j + 1 < out.length && out[j + 1].type === 'block-end') j += 1
+    const run = out.slice(i, j + 1).sort((a, b) => JSON.stringify(a.block).localeCompare(JSON.stringify(b.block)))
+    out.splice(i, run.length, ...run)
+    i = j
+  }
+  return out
+}
+
+test('shared pipe matches the legacy sequence for reasoning, text, usage and finish', async () => {
+  const events = [
+    { choices: [{ delta: { reasoning_content: 'think' } }] },
+    { choices: [{ delta: { content: 'Answer' } }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 7, completion_tokens: 4, total_tokens: 11, prompt_tokens_details: { cached_tokens: 4 } } },
+  ]
+  const run = async (pipe) => {
+    const { server, state, close } = await startServer({ events })
+    try {
+      const adapter = adapterFor(state, { baseUrl: controlURL(state), pipe })
+      return await collect(adapter.stream({
+        provider: 'opencode-http-agent',
+        model: 'opencode-go/minimax-m3.1-flash',
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      }))
+    } finally {
+      await close()
+    }
+  }
+  const legacy = await run('legacy')
+  const shared = await run('shared')
+  assert.deepEqual(normalizeBlockIndices(shared), normalizeBlockIndices(legacy), 'the shared pipe must be semantically identical to legacy')
+})
+
+test('shared pipe matches the legacy fragmented tool-call sequence', async () => {
+  const events = [
+    { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'bash', arguments: '{"command":' } }] } }] },
+    { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '"ls"}' } }] }, finish_reason: 'tool_calls' }] },
+  ]
+  const run = async (pipe) => {
+    const { server, state, close } = await startServer({ events })
+    try {
+      const adapter = adapterFor(state, { baseUrl: controlURL(state), pipe })
+      return await collect(adapter.stream({
+        provider: 'opencode-http-agent',
+        model: 'opencode-go/minimax-m3.1-flash',
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'list' }] }],
+      }))
+    } finally {
+      await close()
+    }
+  }
+  const legacy = await run('legacy')
+  const shared = await run('shared')
+  assert.deepEqual(normalizeBlockIndices(shared), normalizeBlockIndices(legacy), 'fragmented tool calls must not change under the shared pipe')
+})

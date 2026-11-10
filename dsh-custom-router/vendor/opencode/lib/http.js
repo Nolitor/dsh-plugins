@@ -53,6 +53,9 @@ import {
 } from './conflicts.js'
 import { createStreamClassifier } from './stream-parser.js'
 import { createDisplayGate } from './display-gate.js'
+import { createStreamHooks, OPENCODE_DESCRIPTOR } from './stream-contract.js'
+import { createStreamLifecycle } from './stream-lifecycle.js'
+import { normalizeStream, readSseEvents } from '../../../lib/stream/index.js'
 import { inferToolFromArguments, normalizeArguments } from './arguments.js'
 import { createTrace, summarizePart, summarizeRequest } from './trace.js'
 import { stripThinkingTags } from './display-clean.js'
@@ -96,6 +99,39 @@ try {
   if (typeof llm.attributionHeaders === 'function') attributionHeaders = llm.attributionHeaders
 } catch {
   /* unit tests run without the host package on the resolution path */
+}
+
+/**
+ * The host's `LlmError`, when the host package is resolvable.
+ *
+ * The shared pipe rethrows a protocol defect rather than turning it into an
+ * in-band finish. A uniform host error is preferable when it is available, but
+ * this package has no runtime dependency on `@deepseek-ai/dsh-llm` (measured: it
+ * is absent from the vendored `node_modules`), so the fallback keeps the same
+ * `{ code, cause }` shape and the stream path never depends on the import.
+ */
+let HostLlmError = null
+try {
+  const llm = await import('@deepseek-ai/dsh-llm')
+  if (typeof llm.LlmError === 'function') HostLlmError = llm.LlmError
+} catch {
+  /* no host package: the fallback below carries the same facts */
+}
+
+/**
+ * Build the error thrown out of a shared-pipe protocol defect.
+ *
+ * @param error - the defect error raised by the pipe (`code`, `message`, `raw`).
+ * @returns an `LlmError`-compatible error carrying the stable code.
+ */
+function protocolDefectError(error) {
+  const code = error?.code ?? 'PROTOCOL_DEFECT'
+  const message = error instanceof Error ? error.message : String(error)
+  if (HostLlmError !== null) return new HostLlmError(message, code, { cause: error })
+  const fallback = new Error(message, { cause: error })
+  fallback.name = 'LlmError'
+  fallback.code = code
+  return fallback
 }
 
 const FORWARD_ENV_DEFAULT = [
@@ -222,6 +258,16 @@ export const Config = Schema.object({
    * whole turn (the measured 2026-10-31 `terminated` failure).
    */
   streamCutPreserve: Schema.boolean().default(true).volatile(),
+  /**
+   * Which stream implementation serves a generation request.
+   *
+   * `legacy` is the default and is byte-identical to the pre-Phase-B loop.
+   * `shared` routes the response through the shared downstream pipe
+   * (`lib/stream/index.js`) with this provider's own hook set, so the block
+   * lifecycle, terminal policy and usage ordering come from the one core.
+   * Read per request (volatile), so a mode can be flipped without a restart.
+   */
+  pipe: Schema.union(['legacy', 'shared']).default('legacy').volatile(),
   /**
    * Adapter-level retries when the backend answers a generation request with a
    * retryable status (see `httpRetryStatuses`). Exponential backoff:
@@ -1840,6 +1886,25 @@ export class OpencodeHttpAdapter {
         // A served route clears any stale refusal recorded for it.
         if (String(options.model ?? '').includes('/')) this.observe(options.model, 'usable')
 
+        // Phase B, B-2b2: the whole downstream stream may be served by the
+        // shared pipe instead of the loop below. The legacy loop stays exactly
+        // as it was; this branch owns every difference, and the flag is read
+        // per request so a mode can be flipped without a restart.
+        if (config.pipe.get() === 'shared') {
+          yield* this.streamViaSharedPipe(options, {
+            response,
+            declaredTools,
+            declaredToolNames,
+            routeReasoningField: routeReasoningField ?? config.reasoningField.get(),
+            config,
+            signal,
+            timeout,
+            sseState,
+            jsonProbeState: { probe: '', textBlockEmpty: () => !textStarted },
+          })
+          return
+        }
+
         usage = null
         lastReasoning = reasoningAccounting(null)
         finishReason = null
@@ -2009,6 +2074,129 @@ export class OpencodeHttpAdapter {
               },
             },
       }
+    }
+  }
+  /**
+   * Serve one generation attempt through the shared downstream pipe.
+   *
+   * Everything provider-specific stays here; the block lifecycle, finish table,
+   * usage ordering and the empty/cut/abort terminal policy come from
+   * `lib/stream/index.js`. Three contracts are preserved from the legacy loop:
+   *
+   *   1. **Cost is recorded once per usage event**, on arrival, through the same
+   *      `recordCost` path.
+   *   2. **A protocol defect is thrown**, not turned into an in-band finish: the
+   *      pipe rethrows it, and it leaves this method as an `LlmError`.
+   *   3. **A transport cut stays in-band**, so partial output is preserved.
+   *
+   * @param options - the caller's request options.
+   * @param context - `{ response, declaredTools, declaredToolNames, routeReasoningField, config, signal, timeout, sseState, jsonProbeState }`.
+   * @returns async generator of `StreamChunk`s.
+   */
+  async *streamViaSharedPipe(options, context) {
+    const { response, declaredTools, declaredToolNames, routeReasoningField, config, signal, timeout, sseState } = context
+    const logger = this.ctx?.logger
+
+    // One lifecycle owner per stream (CP3): one controller, the caller's abort
+    // forwarded into it, and the listener removed on dispose.
+    const lifecycle = createStreamLifecycle(signal)
+
+    // The display gate is the same one the legacy path uses, built from the
+    // same declared names, so a recovered call is judged identically.
+    const gate = createDisplayGate({ toolNames: declaredToolNames })
+    const hooks = createStreamHooks({
+      reasoningField: routeReasoningField,
+      toolNames: declaredToolNames,
+      tools: declaredTools,
+      parser: 'legacy',
+      gate,
+    })
+
+    // The JSON probe is the one legacy behaviour the contract does not model:
+    // a body that is nothing but a JSON object may be a tool call the route
+    // failed to send structurally. Its drain must run AFTER the contract's own
+    // flush (which settles the gate), and both must reach the host in that
+    // order, so the probe is composed around `hooks.flush` rather than beside it.
+    const probeState = { buffered: '' }
+    const MAX_JSON_PROBE = 65536
+    const fencedBody = (text) => {
+      const match = /^\s```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/.exec(text)
+      return match ? match[1].trim() : null
+    }
+    /** Feed text to the probe; returns a text part to emit, or null when held. */
+    const holdJsonText = (text) => {
+      probeState.buffered += text
+      const fenced = fencedBody(probeState.buffered)
+      const candidates = fenced !== null ? [fenced] : [probeState.buffered.trim()]
+      for (const body of candidates) {
+        let value = null
+        try { value = JSON.parse(body) } catch { value = null }
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) continue
+        const name = inferToolFromArguments(value, declaredTools)
+        if (name === null) continue
+        gate.addCandidate({ kind: 'tool-call', id: '', name, arguments: JSON.stringify(value), source: 'json' })
+        probeState.buffered = ''
+        return null
+      }
+      if (probeState.buffered.length > MAX_JSON_PROBE) {
+        const released = probeState.buffered
+        probeState.buffered = ''
+        return { kind: 'text', text: released }
+      }
+      return null
+    }
+    /** Drain the probe at end of stream. */
+    const flushJsonProbe = () => {
+      if (probeState.buffered.length === 0) return []
+      const pending = probeState.buffered
+      const held = holdJsonText('')
+      if (held === null && probeState.buffered.length === 0) return []
+      probeState.buffered = ''
+      return [{ kind: 'text', text: pending }]
+    }
+
+    // Contract flush first (text -> reasoning -> gate.settle), then the probe.
+    const contractFlush = hooks.flush
+    const composedFlush = () => [...contractFlush(), ...flushJsonProbe()]
+
+    let usage = null
+    let sawVisible = false
+    // Cost is parsed from the RAW usage object, which the pipe does not hand
+    // back to `onUsage` (it passes the normalized usage). The record list keeps
+    // the last raw object so cost is written exactly once, on arrival.
+    let lastRawUsage = null
+    const rawHooks = hooks
+    const readEventWithCost = (payload) => {
+      const record = rawHooks.readEvent(payload)
+      if (record?.usage !== undefined) {
+        lastRawUsage = record.usage
+        // Once per usage event, through the same ledger path as the legacy loop.
+        this.recordCost(options.sessionId, options.model, parseCost(record.usage))
+      }
+      return record
+    }
+
+    try {
+      // `readSseEvents` yields decoded payloads; the pipe never sees bytes.
+      const events = readSseEvents(response.body, { signal: lifecycle.signal, malformed: 'fail' })
+      const stream = normalizeStream({
+        events,
+        descriptor: OPENCODE_DESCRIPTOR,
+        createHooks: () => ({ ...hooks, readEvent: readEventWithCost, flush: composedFlush }),
+        signal: lifecycle.signal,
+        onUsage: (normalized) => { usage = normalized },
+      })
+      for await (const chunk of stream) {
+        if (chunk?.type === 'block-start') sawVisible = true
+        yield chunk
+      }
+    } catch (error) {
+      // A protocol defect leaves as a thrown failure (contract rule N5); a
+      // transport cut is already in-band from the pipe's terminal policy.
+      if (error?.code === 'PROTOCOL_DEFECT') throw protocolDefectError(error)
+      throw error
+    } finally {
+      lifecycle.dispose()
     }
   }
 }

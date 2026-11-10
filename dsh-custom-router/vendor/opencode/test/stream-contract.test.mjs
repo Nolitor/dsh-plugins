@@ -430,3 +430,25 @@ test('without a gate, classifyText still returns the recovered calls', () => {
   assert.equal(calls[0].name, 'bash')
   assert.equal(calls[0].index < 0, true)
 })
+
+
+test('classifyReasoning keeps recovered prose in the reasoning channel', () => {
+  const hooks = createStreamHooks({ toolNames: [...TOOL_NAMES], tools: [] })
+  const parts = hooks.classifyReasoning('plain reasoning prose')
+  assert.ok(parts.length > 0)
+  assert.equal(parts[0].kind, 'reasoning', 'reasoning must not be relabelled as visible text')
+  assert.equal(parts[0].text, 'plain reasoning prose')
+})
+
+test('flush drains the reasoning classifier too, keeping the label', () => {
+  const hooks = createStreamHooks({ toolNames: [...TOOL_NAMES], tools: [] })
+  // A trailing partial marker is held back until EOF; its prose is reasoning.
+  const held = hooks.classifyReasoning('thinking about it:\n[tool ca')
+  for (const part of held) assert.notEqual(part.kind, 'tool-call')
+  const drained = hooks.flush()
+  assert.ok(drained.length > 0, 'the reasoning hold-back must be drained at EOF')
+  for (const part of drained) {
+    if (part.kind === 'tool-call') continue
+    assert.equal(part.kind, 'reasoning')
+  }
+})
