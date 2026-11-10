@@ -536,6 +536,100 @@ test('a malformed flush return is ignored, not thrown from the terminal path', a
   }
 })
 
+test('onPart fires exactly once per emitted part across every lane', async () => {
+  const seen = []
+  const chunks = await collect(normalizeStream({
+    events: payloads(
+      { parts: [{ kind: 'text', text: 'plain' }] },
+      { parts: [{ kind: 'reasoning', text: 'think' }] },
+      { parts: [{ kind: 'tool-call', index: 0, id: 'c1', name: 'bash', argumentsDelta: '{"a":1}' }] },
+      { finish: 'tool_calls' },
+    ),
+    descriptor: { toolCallShape: 'fragmented' },
+    createHooks: () => ({
+      readEvent: (payload) => payload,
+      onPart: (part, context) => seen.push([part.kind, part.text ?? part.name, context.descriptor.toolCallShape]),
+    }),
+  }))
+  assert.deepEqual(seen, [
+    ['text', 'plain', 'fragmented'],
+    ['reasoning', 'think', 'fragmented'],
+    ['tool-call', 'bash', 'fragmented'],
+  ])
+  // Exactly once per EMITTED part, so it cannot outnumber the emitted chunks.
+  assert.equal(chunks.filter((c) => c.type === 'text-delta' || c.type === 'reasoning-delta' || c.type === 'tool-call-delta').length, 3)
+})
+
+test('onPart also fires for parts produced by classifyText and by flush', async () => {
+  const seen = []
+  await collect(normalizeStream({
+    events: payloads({ parts: [{ kind: 'text', text: 'MARK' }] }, { finish: 'stop' }),
+    createHooks: () => ({
+      readEvent: (payload) => payload,
+      classifyText: () => [{ kind: 'text', text: 'from-classifier' }],
+      flush: () => [{ kind: 'text', text: 'from-flush' }],
+      onPart: (part) => seen.push(part.text),
+    }),
+  }))
+  assert.deepEqual(seen, ['from-classifier', 'from-flush'])
+})
+
+test('a part that classifies to nothing never reaches onPart', async () => {
+  const seen = []
+  await collect(normalizeStream({
+    events: payloads({ parts: [{ kind: 'text', text: 'swallowed' }, { kind: 'text', text: 'kept' }] }, { finish: 'stop' }),
+    createHooks: () => ({
+      readEvent: (payload) => payload,
+      classifyText: (text) => (text === 'swallowed' ? [] : undefined),
+      onPart: (part) => seen.push(part.text),
+    }),
+  }))
+  assert.deepEqual(seen, ['kept'])
+})
+
+test('classifyReasoning turns a reasoning delta into a tool call and promotes the finish', async () => {
+  const chunks = await collect(normalizeStream({
+    events: payloads(
+      { parts: [{ kind: 'reasoning', text: '[call bash]' }] },
+      { finish: 'stop' },
+    ),
+    createHooks: () => ({
+      readEvent: (payload) => payload,
+      classifyReasoning: () => [{ kind: 'tool-call', index: 0, id: 'r1', name: 'bash', argumentsDelta: '{}' }],
+    }),
+  }))
+  assert.equal(chunks.some((c) => c.type === 'reasoning-delta'), false, 'the reasoning text is replaced')
+  const tool = chunks.find((c) => c.type === 'tool-call-delta')
+  assert.equal(tool.name, 'bash')
+  assert.equal(chunks.at(-1).reason.kind, 'tool-calls')
+})
+
+test('classifyReasoning can emit reasoning text, and its absence keeps the plain delta', async () => {
+  const routed = await collect(normalizeStream({
+    events: payloads({ parts: [{ kind: 'reasoning', text: 'raw' }] }, { finish: 'stop' }),
+    createHooks: () => ({
+      readEvent: (payload) => payload,
+      classifyReasoning: () => [{ kind: 'reasoning', text: 'rewritten' }],
+    }),
+  }))
+  assert.deepEqual(routed.filter((c) => c.type === 'reasoning-delta').map((c) => c.text), ['rewritten'])
+
+  // Absent hook: byte-identical to the pre-change behaviour.
+  const plain = await collect(normalizeStream({
+    events: payloads({ parts: [{ kind: 'reasoning', text: 'raw' }] }, { finish: 'stop' }),
+    createHooks: () => ({ readEvent: (payload) => payload }),
+  }))
+  assert.deepEqual(plain.filter((c) => c.type === 'reasoning-delta').map((c) => c.text), ['raw'])
+})
+
+test('a non-array classifyReasoning return keeps the pass-through', async () => {
+  const chunks = await collect(normalizeStream({
+    events: payloads({ parts: [{ kind: 'reasoning', text: 'raw' }] }, { finish: 'stop' }),
+    createHooks: () => ({ readEvent: (payload) => payload, classifyReasoning: () => undefined }),
+  }))
+  assert.deepEqual(chunks.filter((c) => c.type === 'reasoning-delta').map((c) => c.text), ['raw'])
+})
+
 test('a pure provider that omits flush behaves exactly as before', async () => {
   const chunks = await run([{ parts: [{ kind: 'text', text: 'plain' }] }, { finish: 'stop' }])
   assert.deepEqual(shape(chunks), ['block-start:0:text', 'text-delta:0:plain', 'block-end:0:text:plain', 'finish:stop:'])

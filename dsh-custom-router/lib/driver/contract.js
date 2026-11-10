@@ -16,7 +16,10 @@ const MALFORMED_POLICIES = Object.freeze(['fail', 'skip'])
 const AUTH_MODES = Object.freeze(['web-auth', 'api-key', 'daemon'])
 const OPTIONAL_HOOKS = Object.freeze([
   'classifyText',
+  'classifyReasoning',
   'classifyBlock',
+  'onPart',
+  'flush',
   'mapFinish',
   'usageFrom',
   'onMalformed',

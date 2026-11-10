@@ -79,6 +79,30 @@ test('missing hooks.readEvent throws with the field path', () => {
   })
 })
 
+test('a driver may declare classifyReasoning, onPart and flush', () => {
+  const spec = makeSpec()
+  spec.hooks.classifyReasoning = () => []
+  spec.hooks.onPart = () => {}
+  spec.hooks.flush = () => []
+
+  const driver = defineProviderDriver(spec)
+  // Present on the BUILT driver, not just accepted by the validator: the
+  // builder copies only declared hooks, so a missing OPTIONAL_HOOKS entry
+  // would validate and then silently vanish here.
+  assert.equal(typeof driver.hooks.classifyReasoning, 'function')
+  assert.equal(typeof driver.hooks.onPart, 'function')
+  assert.equal(typeof driver.hooks.flush, 'function')
+  assert.deepEqual(driver.hooks.flush(), [])
+})
+
+test('the new stream hooks still reject a non-function value by field path', () => {
+  for (const key of ['classifyReasoning', 'onPart', 'flush']) {
+    const spec = makeSpec()
+    spec.hooks[key] = 'nope'
+    assert.throws(() => defineProviderDriver(spec), new RegExp(`hooks\\.${key}`), `${key} must name its field`)
+  }
+})
+
 test('a present but non-function hook throws with the field path', () => {
   const spec = makeSpec()
   spec.hooks.mapFinish = 'stop'
