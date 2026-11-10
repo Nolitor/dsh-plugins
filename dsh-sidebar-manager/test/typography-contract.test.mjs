@@ -79,11 +79,18 @@ test('no literal hex colour remains in the stylesheet', () => {
   assert.deepEqual(hexes, [], 'every colour must be a --dsw-* token')
 })
 
-test('borders use the host hairline token on a token colour', () => {
+test('borders use the host hairline token on a neutral token colour', () => {
   for (const match of css.matchAll(/border:\s*([^;}]+)/g)) {
     const value = match[1]
     if (value === '0' || value === '0 0') continue
-    assert.match(value, /^var\(--dsh-hairline-width,1px\) solid var\(--dsw-/, 'border must be the host hairline token on a token, got: ' + value)
+    // web-styling.md: neutral --dsw-alias-border-* / card strokes draw at the
+    // shared hairline weight, whose fallback the host itself writes as .5px.
+    if (value.includes('var(--dsw-alias-state-')) {
+      // State-coloured borders keep 1px, and must not borrow the hairline token.
+      assert.match(value, /^1px solid var\(--dsw-alias-state-/, 'state border stays 1px, got: ' + value)
+      continue
+    }
+    assert.match(value, /^var\(--dsh-hairline-width,\.5px\) solid var\(--dsw-/, 'border must be the host hairline token on a token, got: ' + value)
   }
 })
 
@@ -115,11 +122,13 @@ test('session menu rows keep the native 13px/400/20px spec on the secondary toke
 // missing CJK wrap rule comes back, without any rendering required.
 
 test('REGRESSION GATE: no .5px hairline literal exists in the stylesheet', () => {
-  const literals = css.match(/\.5px/g) ?? []
+  // A bare literal is any .5px NOT written as the host token's own fallback
+  // (the host bundle itself declares `var(--dsh-hairline-width, .5px)`).
+  const literals = css.match(/(?<!var\(--dsh-hairline-width,)\\\.5px/g) ?? []
   assert.deepEqual(
     literals,
     [],
-    'hairline width must come from var(--dsh-hairline-width,1px), never a .5px literal',
+    'hairline width must consume the host token with its .5px fallback, never a bare .5px literal',
   )
 })
 

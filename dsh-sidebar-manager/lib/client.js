@@ -576,7 +576,7 @@ window.__ModuleLoader__.load({
       '.smSectionHint{color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
       // --- cards and list rows ------------------------------------------------
       '.smRows{display:flex;flex-direction:column;gap:8px;min-width:0}',
-      '.smRow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;border:var(--dsh-hairline-width,1px) solid var(--dsw-alias-settings-card-stroke);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-settings-card-fill);min-width:0}',
+      '.smRow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;border:var(--dsh-hairline-width,.5px) solid var(--dsw-alias-settings-card-stroke);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-settings-card-fill);min-width:0}',
       '.smRowName{flex:1 1 260px;min-width:0}',
       '.smRowActions{display:flex;flex:0 0 auto;gap:6px;align-items:center}',
       '.smInlineFolder{flex-basis:100%;padding-left:24px;display:flex;flex-direction:column;gap:4px;min-width:0}',
@@ -584,7 +584,7 @@ window.__ModuleLoader__.load({
       '.smArchivedHeading{margin:22px 0 8px;font-weight:600;font-size:calc(18px + var(--dsh-content-font-delta,0px));line-height:calc(24px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary);cursor:pointer}',
       '.smArchivedBlock{margin-top:22px}',
       // --- tab strip ----------------------------------------------------------
-      '.smTabs{display:flex;align-items:flex-end;gap:22px;margin-top:2px;border-bottom:var(--dsh-hairline-width,1px) solid var(--dsw-alias-border-l2);min-width:0}',
+      '.smTabs{display:flex;align-items:flex-end;gap:22px;margin-top:2px;border-bottom:var(--dsh-hairline-width,.5px) solid var(--dsw-alias-border-l2);min-width:0}',
       '.smTab{position:relative;appearance:none;background:0 0;border:0;padding:7px 1px 9px;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));cursor:pointer;color:var(--dsw-alias-label-tertiary)}',
       '.smTabActive{color:var(--dsw-alias-label-primary)}',
       '.smTabUnderline{position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px 2px 0 0;background:var(--dsw-alias-label-primary)}',
@@ -594,10 +594,10 @@ window.__ModuleLoader__.load({
       '.smMoreItemGlyph{display:inline-flex;flex:0 0 auto;align-items:center}',
       '.smMoreItemLabel{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.smMenuItem{display:block;width:100%;padding:7px 10px;border:0;background:transparent;color:var(--dsw-alias-label-primary);text-align:left;cursor:pointer;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);font-weight:400;line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
-      '.smMenuSeparator{height:var(--dsh-hairline-width,1px);margin:3px 2px;background:var(--dsw-alias-border-l2)}',
+      '.smMenuSeparator{height:var(--dsh-hairline-width,.5px);margin:3px 2px;background:var(--dsw-alias-border-l2)}',
       '.smIconButton{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:24px;padding:2px 5px;border:0;border-radius:var(--dsw-radius-md);background:transparent;color:inherit;cursor:pointer;font-family:inherit}',
       // --- group tree ---------------------------------------------------------
-      '.smGroupSection{margin-top:8px;padding-top:12px;border-top:var(--dsh-hairline-width,1px) solid var(--dsw-alias-border-l2)}',
+      '.smGroupSection{margin-top:8px;padding-top:12px;border-top:var(--dsh-hairline-width,.5px) solid var(--dsw-alias-border-l2)}',
       '.smGroupHeader{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}',
       '.smGroupHeading{margin:0;font-weight:600;font-size:calc(18px + var(--dsh-content-font-delta,0px));line-height:calc(24px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
       '.smGroupActions{display:inline-flex;gap:4px;flex-wrap:wrap}',
@@ -608,7 +608,7 @@ window.__ModuleLoader__.load({
       // but at section separation (24px) because each card is its own task rather
       // than a member of one list.
       '.smDiagnosticsStack{display:flex;flex-direction:column;gap:24px;margin-top:16px;min-width:0}',
-      '.smGroupCard{border:var(--dsh-hairline-width,1px) solid var(--dsw-alias-settings-card-stroke);border-radius:var(--dsw-radius-lg);padding:12px 14px;background:var(--dsw-alias-settings-card-fill);min-width:0}',
+      '.smGroupCard{border:var(--dsh-hairline-width,.5px) solid var(--dsw-alias-settings-card-stroke);border-radius:var(--dsw-radius-xl);padding:12px 14px;background:var(--dsw-alias-settings-card-fill);min-width:0}',
       '.smGroupCardHeader{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}',
       '.smGroupCardTitle{font-weight:500;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
       '.smGroupKind{font-size:var(--dsh-content-font-size-secondary,13px);padding:1px 5px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-secondary)}',
@@ -621,18 +621,18 @@ window.__ModuleLoader__.load({
       '.smGroupHint{margin-top:4px;color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(18px + var(--dsh-content-font-delta-secondary,0px))}',
       '.smPath{color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(18px + var(--dsh-content-font-delta-secondary,0px));overflow-wrap:anywhere}',
       '.smGroupFormRow{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;align-items:center}',
-      '.smGroupConfirm{margin-top:8px;padding:10px 12px;border-radius:var(--dsw-radius-md);border:var(--dsh-hairline-width,1px) solid var(--dsw-alias-state-business-primary);background:var(--dsw-alias-interactive-bg-hover)}',
+      '.smGroupConfirm{margin-top:8px;padding:10px 12px;border-radius:var(--dsw-radius-md);border:1px solid var(--dsw-alias-state-business-primary);background:var(--dsw-alias-interactive-bg-hover)}',
       '.smGroupConfirmTitle{font-weight:500;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
       '.smGroupConfirmBody{font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);margin-top:4px}',
       '.smGroupConfirmCheck{display:flex;gap:6px;align-items:flex-start;margin-top:8px;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-primary)}',
       // --- forms ---------------------------------------------------------------
-      '.smField{width:100%;box-sizing:border-box;margin-top:4px;padding:7px 9px;border-radius:var(--dsw-radius-sm);border:var(--dsh-hairline-width,1px) solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
+      '.smField{width:100%;box-sizing:border-box;margin-top:4px;padding:7px 9px;border-radius:var(--dsw-radius-sm);border:var(--dsh-hairline-width,.5px) solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}',
       '.smLabel{display:block;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);margin-top:10px}',
       '.smLabelFlush{margin-top:0}',
       '.smCheckbox{display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-primary)}',
       '.smCheckboxRow{flex-basis:100%;margin-top:0}',
       '.smCheckInput{accent-color:var(--dsw-alias-state-business-primary);margin:0}',
-      '.smGate{margin-top:12px;padding:10px;border-radius:var(--dsw-radius-md);border:var(--dsh-hairline-width,1px) solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-primary)}',
+      '.smGate{margin-top:12px;padding:10px;border-radius:var(--dsw-radius-md);border:var(--dsh-hairline-width,.5px) solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-primary)}',
       '.smGateLine{margin-top:8px}',
       '.smGateStrong{font-weight:600}',
       '.smGateStrongSpaced{margin-top:6px;font-weight:600}',
@@ -644,7 +644,7 @@ window.__ModuleLoader__.load({
       // --- buttons -------------------------------------------------------------
       '.smFooter{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}',
       '.smPrimaryButton{padding:7px 12px;border-radius:var(--dsw-radius-sm);border:0;background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-label-primary-foreground);cursor:pointer;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));transition:opacity var(--ds-transition-duration-fast) ease}',
-      '.smPlainButton{padding:7px 12px;border-radius:var(--dsw-radius-sm);border:var(--dsh-hairline-width,1px) solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));transition:background-color var(--ds-transition-duration-fast) ease}',
+      '.smPlainButton{padding:7px 12px;border-radius:var(--dsw-radius-sm);border:var(--dsh-hairline-width,.5px) solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));transition:background-color var(--ds-transition-duration-fast) ease}',
       '.smPlainButton:disabled,.smPrimaryButton:disabled{cursor:default;opacity:.55}',
       // A field inside a wrapping action row keeps a sane minimum instead of the
       // 100% width it takes in a vertical form, otherwise two fields plus two
@@ -654,14 +654,14 @@ window.__ModuleLoader__.load({
       '.smGroupFormRow .smPlainButton{flex:0 0 auto}',
       // --- dialogs and notices -------------------------------------------------
       '.smBackdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:var(--dsw-alias-bg-mask-1);padding:16px}',
-      '.smDialog{width:min(560px,100%);max-height:min(720px,calc(100vh - 32px));overflow:auto;border-radius:var(--dsw-radius-lg);border:var(--dsh-hairline-width,1px) solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);color:var(--dsw-alias-label-primary);padding:16px;box-sizing:border-box;box-shadow:var(--dsw-shadow-lv3);font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px))}',
+      '.smDialog{width:min(560px,100%);max-height:min(720px,calc(100vh - 32px));overflow:auto;border-radius:var(--dsw-radius-lg);border:var(--dsh-hairline-width,.5px) solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);color:var(--dsw-alias-label-primary);padding:16px;box-sizing:border-box;box-shadow:var(--dsw-shadow-lv3);font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px))}',
       // The dialog container is a focus TARGET, not an interactive control: it
       // takes programmatic focus on open and must not draw a ring around the
       // whole surface (the native settings panel does the same).
       '.smDialog:focus{outline:none}',
       '.smDialogHead{display:flex;align-items:center;justify-content:space-between;gap:8px}',
       '.smDialogTitle{margin:0 0 12px;font-weight:500;font-size:calc(20px + var(--dsh-content-font-delta,0px));line-height:calc(28px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
-      '.smNotice{position:fixed;right:16px;bottom:16px;z-index:1100;max-width:420px;padding:10px 12px;border-radius:var(--dsw-radius-md);border:var(--dsh-hairline-width,1px) solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);box-shadow:var(--dsw-shadow-lv2);color:var(--dsw-alias-label-primary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:pre-wrap}',
+      '.smNotice{position:fixed;right:16px;bottom:16px;z-index:1100;max-width:420px;padding:10px 12px;border-radius:var(--dsw-radius-md);border:var(--dsh-hairline-width,.5px) solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);box-shadow:var(--dsw-shadow-lv2);color:var(--dsw-alias-label-primary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:pre-wrap}',
       '.smEmpty{color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));padding:12px 0}',
       // --- hover states --------------------------------------------------------
       '@media (hover:hover){.smGroupItem:hover{background:var(--dsw-alias-interactive-bg-hover)}.smPlainButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.smPrimaryButton:hover:not(:disabled){opacity:.9}.smIconButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.smMenuItem:hover:not(:disabled),.smMoreItem:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.smArchivedHeading:hover{color:var(--dsw-alias-label-secondary)}}',
@@ -2023,7 +2023,7 @@ window.__ModuleLoader__.load({
       ensureStyle()
       const row = h('button', { type: 'button', role: 'menuitem', className: styles.menuItem, onClick }, label)
       if (!separatorBefore) return row
-      // Native context-menu separator: var(--dsh-hairline-width,1px) border-l2 line, 3px 2px margins.
+      // Native context-menu separator: var(--dsh-hairline-width,.5px) border-l2 line, 3px 2px margins.
       return h(React.Fragment, null, h('div', { className: styles.menuSeparator, 'aria-hidden': 'true' }), row)
     }
 

@@ -185,12 +185,18 @@ test('a reduced-motion preference removes the surface transitions', () => {
 // --- tokens -----------------------------------------------------------------
 
 test('cards use the settings-card material, not a hand-rolled border', () => {
+  // Material is shared by both card shapes; the radius tier differs by role.
   for (const selector of ['.smRow', '.smGroupCard']) {
     const rule = block(selector)
     assert.match(rule, /var\(--dsw-alias-settings-card-fill\)/, selector + ' must use the card fill token')
     assert.match(rule, /var\(--dsw-alias-settings-card-stroke\)/, selector + ' must use the card stroke token')
-    assert.match(rule, /var\(--dsw-radius-lg\)/, selector + ' must use the large radius')
   }
+  // ui-radius.md: an independent content card (settings cards) is R20
+  // (--dsw-radius-xl). The group card is that role, so it carries R20.
+  assert.match(block('.smGroupCard'), /var\(--dsw-radius-xl\)/, '.smGroupCard must use the settings-card radius R20')
+  // .smRow is the workspace list row; it keeps its grouped-content tier (R16)
+  // until the owner decides to promote it, so it is asserted against R16 here.
+  assert.match(block('.smRow'), /var\(--dsw-radius-lg\)/, '.smRow keeps the grouped-content radius R16')
 })
 
 test('list rows use the sidebar row geometry', () => {

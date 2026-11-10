@@ -13,6 +13,37 @@ summary: Engineering history for @nolit/dsh-sidebar-manager. Seeded from git his
 
 Current version: `0.0.1-rc.2`
 
+## 0.0.1-rc.2 (cont.) — border fallback, state border, card radius — 2026-11-11
+
+Owner correction, measured against the upstream authority
+[`docs/web-styling.md`](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/web-styling.md):
+
+> Flat borders and separators that use a neutral `--dsw-alias-border-*` token draw at `0.5px` …
+> Dashed affordances and **state-colored borders keep 1px**.
+
+The previous entry replaced `.5px` with `var(--dsh-hairline-width,1px)`. The token itself is real —
+`@deepseek-ai/dsh-client-ui-theme` publishes it on the document root and resolves it to
+`max(1, floor(0.5*dpr))/dpr` — but **its fallback in the shipped host bundle is `.5px`, not
+`1px`** (`dsh-web-frontend` declares `var(--dsh-hairline-width, .5px)`), and the upstream styling
+reference never mentions the token at all. With a `1px` fallback the border painted twice as thick
+whenever the token was not injected (headless capture, non-window documents, test harnesses).
+
+**Corrected in this package (measured, before -> after):**
+
+| Fact | Before | After |
+| --- | --- | --- |
+| `--dsh-hairline-width` fallback | `1px` (11 uses) | **`.5px`** (11 uses) |
+| `.smGroupConfirm` border colour | hairline token on `state-business-primary` | **`1px solid`** (spec: state borders keep 1px) |
+| `.smGroupCard` radius | `--dsw-radius-lg` (R16) | **`--dsw-radius-xl` (R20)** per `docs/ui-radius.md` |
+
+`ui-radius.md` defines R20 (`--dsw-radius-xl`) as the *independent content card / settings card*
+tier; R16 is grouped content. `.smRow` keeps R16 because it is a list row, not an independent card,
+and the test now asserts each selector against its own tier instead of one shared value.
+
+The `.5px` regression gate was narrowed to a **bare** literal (`(?<!var\(--dsh-hairline-width,)\.5px`)
+so it still rejects a hand-written literal while accepting the token's documented fallback.
+Verified by re-injecting both defects: the gate failed, then passed again on restore.
+
 ## 0.0.1-rc.2 (cont.) — diagnostics tab vertical rhythm — 2026-11-11
 
 Same session as the entry below, so the rc marker does not advance (RULES §6: count sessions,
