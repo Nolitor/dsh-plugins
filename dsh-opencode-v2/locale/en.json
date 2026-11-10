@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Opencode v2 Agent",
+    "description": "OpenCode Go pure LLM adapter with the opencode delegation tool, /opencode command, cli_worker, opencode-http-agent route and merged subagent."
+  }
+}
