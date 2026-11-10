@@ -28,8 +28,27 @@ function fail(path, message) {
   throw new Error(`${path}: ${message}`)
 }
 
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Reject an own `__proto__`/`constructor`/`prototype` key anywhere in the spec.
+ * These keys are how a declarative object reaches the real prototype chain; the
+ * builder copies fields explicitly, but deepFreeze would otherwise descend into
+ * the caller's payload (measured: an own `__proto__` froze Object.prototype
+ * process-wide).
+ */
+function assertNoReservedKeys(value, path, seen = new Set()) {
+  if (value === null || typeof value !== 'object') return
+  if (seen.has(value)) return
+  seen.add(value)
+  for (const key of Object.getOwnPropertyNames(value)) {
+    if (DANGEROUS_KEYS.has(key)) fail(`${path}.${key}`, 'must not be a reserved object key')
+    assertNoReservedKeys(value[key], `${path}.${key}`, seen)
+  }
 }
 
 function requireObject(value, path) {
@@ -128,6 +147,7 @@ function validateDriverSpec(spec, prefix) {
   const at = (key) => (prefix ? `${prefix}.${key}` : key)
 
   if (!isPlainObject(spec)) fail(prefix || 'driver', 'must be an object')
+  assertNoReservedKeys(spec, prefix || 'driver')
   requireString(spec.id, at('id'))
 
   const { descriptor } = spec
@@ -138,8 +158,13 @@ function validateDriverSpec(spec, prefix) {
   requireEnum(descriptor.malformedRecord, at('descriptor.malformedRecord'), MALFORMED_POLICIES)
 
   const hooks = requireObject(spec.hooks, at('hooks'))
-  if (typeof hooks.readEvent !== 'function') fail(at('hooks.readEvent'), 'must be a function')
+  // OWN enumeration is required: the builder copies hooks explicitly, so an
+  // inherited function would validate and then vanish from the built driver.
+  if (!Object.prototype.hasOwnProperty.call(hooks, 'readEvent') || typeof hooks.readEvent !== 'function') {
+    fail(at('hooks.readEvent'), 'must be an own function')
+  }
   for (const key of OPTIONAL_HOOKS) {
+    if (!Object.prototype.hasOwnProperty.call(hooks, key)) continue
     if (hooks[key] === undefined) continue
     if (typeof hooks[key] !== 'function') fail(at(`hooks.${key}`), 'must be a function when present')
   }
@@ -155,8 +180,22 @@ function deepFreeze(value) {
   if (value === null || typeof value !== 'object') return value
   if (Object.isFrozen(value)) return value
   Object.freeze(value)
-  for (const key of Object.keys(value)) deepFreeze(value[key])
+  for (const key of Object.getOwnPropertyNames(value)) {
+    if (DANGEROUS_KEYS.has(key)) continue
+    deepFreeze(value[key])
+  }
   return value
+}
+
+/** Copy only the declared hooks (own keys), so a spread cannot drop one. */
+function buildHooks(hooks) {
+  const built = { readEvent: hooks.readEvent }
+  for (const key of OPTIONAL_HOOKS) {
+    if (!Object.prototype.hasOwnProperty.call(hooks, key)) continue
+    if (hooks[key] === undefined) continue
+    built[key] = hooks[key]
+  }
+  return built
 }
 
 /** Copy the validated spec into a fresh, deeply frozen driver definition. */
@@ -169,7 +208,7 @@ function buildDriver(spec) {
       usage: { totalFormula: spec.descriptor.usage.totalFormula },
       malformedRecord: spec.descriptor.malformedRecord,
     },
-    hooks: { ...spec.hooks },
+    hooks: buildHooks(spec.hooks),
     surfaces: {
       model: { adapter: true, factory: surfaces.model.factory },
       ...(surfaces.cli
