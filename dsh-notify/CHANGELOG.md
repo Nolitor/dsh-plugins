@@ -4,14 +4,14 @@
 version: 2.0
 kind: report
 status: active
-updated: 2026-11-06
+updated: 2026-11-11
 summary: Engineering history for Notify for Chrome (formerly DSH Notify Web). Seeded from git history on 2026-11-04; entries after that date record what changed, why, and the measured before/after, per docs/RULES.md 6.1.
 -->
 
 > History lives here (owner instruction 2026-11-04). Boot cards and `AGENTS.md` are narrowed to
 > the owner's unfinished asks; they are not a changelog. See `docs/RULES.md` §6.1 in the `dsh-plugins` workspace.
 
-Current version: `0.0.1-rc.4`
+Current version: `0.0.1-rc.5`
 
 ## Seeded history (from git, before this file existed)
 
@@ -26,6 +26,22 @@ repository history rather than rewritten:
 
 Add newest first. Each entry: what changed, why, and the measured before/after. A change with no
 entry here is not complete.
+
+### 2026-11-11 — `0.0.1-rc.5` — hairline token, CJK wrapping
+
+Owner task: the four plugin UI surfaces must stop hardcoding the hairline and must not break
+Korean words mid-word.
+
+**Measured, from the shipped source (before → after):** `0.5px` literals in `lib/client.src.js`
+**2 → 0**; `wordBreak: 'keep-all'` on the root `styles.section` absent → present.
+
+Both borders (the settings card and the peak chip) now read
+`var(--dsh-hairline-width,1px) solid var(--dsw-*)`. The token is published on the document root
+by `@deepseek-ai/dsh-client-ui-theme`, which resolves it to `max(1, floor(0.5 * dpr)) / dpr` —
+the literal ignored that on every display. This section still ships no stylesheet: the wrap rules
+are set on the style object, the same way every other declaration is.
+`test/typography.test.mjs` gained a regression gate that fails the suite if a `.5px` literal or a
+missing `keep-all` returns.
 
 ### 2026-11-06 — `0.0.1-rc.3` — package renamed to `@nolit/dsh-notify`
 
