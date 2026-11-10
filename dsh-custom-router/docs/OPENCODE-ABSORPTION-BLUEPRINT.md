@@ -325,3 +325,17 @@ Three changes are now part of the contract (`lib/driver/contract.js`) and D1:
 Consequence: Argon/Opus are reachable through the vendor CLI now, and through the DSH subagent
 roster after the next `dsh-web.service` restart (owner-only). CP1 was therefore executed on the
 vendor endpoint, which is the same model id the DSH path will use.
+
+### CP2 — Phase A exports/shim structural soundness (2026-11-10)
+
+Reviewer: **Argon 4.0 (medium)**, 7,867 in / 1,131 out, verdict **APPROVE-WITH-CHANGES**.
+
+| # | Finding | Disposition |
+| :--- | :--- | :--- |
+| C2-1 | The vendored `node_modules` symlinks were moved by hand; a clean `npm ci`/tarball relies on declared deps | Declared the five host packages as router `peerDependencies` (`cordis`, `dsh-llm`, `dsh-subprocess`, `dsh-tools`, `schemastery`). The in-tree symlinks remain the dev-time resolution path, matching the antigravity/deepinfra vendor layout |
+| C2-2 | The relative `../../../lib/vendor-bridge.js` crosses the nested `vendor/opencode/package.json` boundary | Nested manifest is **retained until Phase E** because the shipped track suite reads it (`test/bundle.test.mjs`); the import targets `lib/vendor-bridge.js`, which is a leaf (only re-exports `selection-sync.js`). Removing the nested manifest before the suite moves would break Phase A verification — recorded, not silently dropped |
+| C2-3 | Shim → vendor chain could cycle | **No cycle**: `vendor-bridge.js` imports no router root, no preset, and no vendor module; no vendored source self-imports `@nolit/dsh-opencode-v2` (only doc comments and the client module id) |
+
+Rollback: package-level rollback stays safe at Phase A because external callers use the seven
+`@nolit/dsh-opencode-v2` shims; it stops being safe once consumers import `./vendor/opencode/*`
+directly.
