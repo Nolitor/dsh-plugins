@@ -413,6 +413,134 @@ test('the terminal path reads the resolved per-stream hooks, not a module-level 
   assert.equal(cut.at(-1).reason.kind, 'error')
 })
 
+test('flush drains held-back text before the finish chunk, so EOF is not empty', async () => {
+  // A classifier that holds text back until it knows no more is coming: each
+  // delta is retained, and only flush() releases it. Without the pipe hook this
+  // turn would end as EMPTY_RESPONSE and the text would be lost.
+  const chunks = await collect(normalizeStream({
+    events: payloads(
+      { parts: [{ kind: 'text', text: 'hold:a' }] },
+      { parts: [{ kind: 'text', text: 'hold:b' }] },
+      { finish: 'stop' },
+    ),
+    createHooks: () => {
+      let held = ''
+      return {
+        readEvent: (payload) => payload,
+        classifyText: (text) => {
+          if (!text.startsWith('hold:')) return undefined
+          held += text.slice(5)
+          return [] // emitted nothing yet
+        },
+        flush: () => (held === '' ? [] : [{ kind: 'text', text: held }]),
+      }
+    },
+  }))
+  assert.deepEqual(shape(chunks), [
+    'block-start:0:text',
+    'text-delta:0:ab',
+    'block-end:0:text:ab',
+    'finish:stop:',
+  ])
+  const kinds = chunks.map((chunk) => chunk.type)
+  assert.ok(kinds.indexOf('text-delta') < kinds.indexOf('finish'), 'flush output precedes finish')
+  assert.ok(kinds.indexOf('block-end') < kinds.indexOf('finish'))
+  const finish = chunks.at(-1)
+  assert.equal(finish.type, 'finish')
+  assert.equal(finish.reason.kind, 'stop', 'a flushed turn must not be reported empty')
+})
+
+test('flush is called exactly once per stream', async () => {
+  let flushes = 0
+  const chunks = await collect(normalizeStream({
+    events: payloads(
+      { parts: [{ kind: 'text', text: 'x' }] },
+      { parts: [{ kind: 'text', text: 'y' }] },
+      { parts: [{ kind: 'text', text: 'z' }] },
+      { finish: 'stop' },
+    ),
+    createHooks: () => ({
+      readEvent: (payload) => payload,
+      flush: () => { flushes += 1; return [{ kind: 'text', text: 'tail' }] },
+    }),
+  }))
+  assert.equal(flushes, 1)
+  assert.equal(chunks.filter((chunk) => chunk.type === 'text-delta').map((c) => c.text).join(''), 'xyztail')
+})
+
+test('flush is not called on the cut path', async () => {
+  let flushes = 0
+  const chunks = await collect(normalizeStream({
+    events: (async function* () {
+      yield { parts: [{ kind: 'text', text: 'so far' }] }
+      throw Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })
+    })(),
+    createHooks: () => ({
+      readEvent: (payload) => payload,
+      flush: () => { flushes += 1; return [{ kind: 'text', text: 'must not appear' }] },
+    }),
+  }))
+  assert.equal(flushes, 0, 'flush must not run when the stream was cut')
+  assert.equal(chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text.includes('must not appear')), false)
+  assert.equal(chunks.at(-1).reason.kind, 'error')
+  assert.equal(chunks.at(-1).reason.failure.code, 'ECONNRESET')
+})
+
+test('flush is not called on the abort path', async () => {
+  const controller = new AbortController()
+  let flushes = 0
+  const chunks = await collect(normalizeStream({
+    events: (async function* () {
+      yield { parts: [{ kind: 'text', text: 'x' }] }
+      controller.abort()
+      yield { parts: [{ kind: 'text', text: 'y' }] }
+    })(),
+    signal: controller.signal,
+    createHooks: () => ({
+      readEvent: (payload) => payload,
+      flush: () => { flushes += 1; return [{ kind: 'text', text: 'must not appear' }] },
+    }),
+  }))
+  assert.equal(flushes, 0, 'flush must not run after an abort')
+  assert.equal(chunks.at(-1).reason.kind, 'aborted')
+})
+
+test('a flushed tool-call closes the turn as tool-calls', async () => {
+  const chunks = await collect(normalizeStream({
+    events: payloads(
+      { parts: [{ kind: 'text', text: 'thinking out loud' }] },
+      { finish: 'stop' },
+    ),
+    createHooks: () => ({
+      readEvent: (payload) => payload,
+      flush: () => [{ kind: 'tool-call', index: 0, id: 'c1', name: 'bash', argumentsDelta: '{"cmd":"ls"}' }],
+    }),
+  }))
+  const tool = chunks.find((chunk) => chunk.type === 'tool-call-delta')
+  assert.equal(tool.name, 'bash')
+  assert.equal(tool.argumentsDelta, '{"cmd":"ls"}')
+  assert.equal(chunks.at(-1).reason.kind, 'tool-calls', 'a flushed tool-call promotes stop to tool-calls')
+  assert.equal(chunks.at(-1).type, 'finish')
+})
+
+test('a malformed flush return is ignored, not thrown from the terminal path', async () => {
+  // classifyText gates on Array.isArray; flush does the same so a provider bug
+  // cannot turn a clean EOF into an unhandled crash mid-terminal.
+  for (const bad of [undefined, null, {}, 'nope', 42]) {
+    const chunks = await collect(normalizeStream({
+      events: payloads({ parts: [{ kind: 'text', text: 'x' }] }, { finish: 'stop' }),
+      createHooks: () => ({ readEvent: (payload) => payload, flush: () => bad }),
+    }))
+    assert.equal(chunks.at(-1).type, 'finish', `flush()->${String(bad)} must still terminate`)
+    assert.equal(chunks.at(-1).reason.kind, 'stop')
+  }
+})
+
+test('a pure provider that omits flush behaves exactly as before', async () => {
+  const chunks = await run([{ parts: [{ kind: 'text', text: 'plain' }] }, { finish: 'stop' }])
+  assert.deepEqual(shape(chunks), ['block-start:0:text', 'text-delta:0:plain', 'block-end:0:text:plain', 'finish:stop:'])
+})
+
 test('the abort terminal still closes blocks and uses the resolved hooks', async () => {
   const controller = new AbortController()
   const calls = []

@@ -37,6 +37,12 @@ export { count, finishReasonFor } from './wire.js'
  * @param options.descriptor - `{ toolCallShape, usage, malformedRecord }`.
  * @param options.hooks - `{ readEvent }` plus optional overrides. Shared and
  *   therefore pure; a stateful provider passes `createHooks` instead.
+ *   Optional `flush({ descriptor })` is the end-of-stream drain: it returns
+ *   parts in the same shape `classifyText` returns (`{ kind: 'text' |
+ *   'reasoning', text }` or `{ kind: 'tool-call', ... }`), which the pipe emits
+ *   through the ordinary block paths before closing them. It is per-stream,
+ *   called at most once, only on a clean end of stream — never on the cut or
+ *   abort path — and a pure provider omits it entirely.
  * @param options.createHooks - optional `({ descriptor, signal }) => hooks`.
  *   Called exactly once per stream, before any payload is read, so the returned
  *   object is that stream's own state. Takes precedence over `hooks`.
@@ -156,6 +162,24 @@ export async function* normalizeStream(options = {}) {
       message: error instanceof Error ? error.message : String(error),
       ...(error?.status === undefined ? {} : { status: error.status }),
       ...(error?.providerRetryAfterMs === undefined ? {} : { providerRetryAfterMs: error.providerRetryAfterMs }),
+    }
+  }
+
+  // The optional per-stream `flush`: a stateful classifier holds a partial
+  // marker back until it can tell whether more text completes it, so at EOF it
+  // must be given one chance to emit what it retained. Legacy http.js calls
+  // `classifier.flush()` before closing blocks; this is the pipe equivalent, and
+  // without it B-2 would silently drop held-back text at end of stream. Called
+  // at most once, and never on the cut or abort paths (both already returned).
+  if (failure === undefined && !signal?.aborted && typeof hooks.flush === 'function') {
+    const flushed = hooks.flush({ descriptor })
+    // Same gating as classifyText: only an array is a part list. A malformed
+    // return is ignored rather than allowed to blow up the terminal path.
+    for (const part of Array.isArray(flushed) ? flushed : []) {
+      if (part?.kind === 'tool-call') { sawTool = true; yield* emitToolCall(part); continue }
+      const flushedText = typeof part?.text === 'string' ? part.text : ''
+      if (flushedText.length === 0) continue
+      yield* emitText(part.kind === 'reasoning' ? 'reasoning' : 'text', flushedText)
     }
   }
 
