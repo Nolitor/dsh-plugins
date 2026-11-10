@@ -1,5 +1,5 @@
 /** Vendor seam only: @nolit/dsh-custom-router owns the OpenCodex bridge. */
-import { applySelection } from '@nolit/dsh-custom-router/vendor-bridge'
+import { applySelection } from '../../../lib/vendor-bridge.js'
 
 /** DSH's OpenCode plan decides the provider namespace, not the vendor. */
 export function syncOpenCodeSelection(enabled, { activePlan = 'go' } = {}) {

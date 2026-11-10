@@ -120,7 +120,33 @@
     },
     "./vendor/deepinfra": {
       "default": "./vendor/deepinfra/lib/index.js"
-    }
+    },
+    "./driver/contract": {
+      "default": "./lib/driver/contract.js"
+    },
+    "./vendor/opencode": {
+      "default": "./vendor/opencode/lib/index.js"
+    },
+    "./vendor/opencode/provider": {
+      "default": "./vendor/opencode/lib/provider.js"
+    },
+    "./vendor/opencode/http": {
+      "default": "./vendor/opencode/lib/http.js"
+    },
+    "./vendor/opencode/cost": {
+      "default": "./vendor/opencode/lib/cost.js"
+    },
+    "./vendor/opencode/subagent": {
+      "default": "./vendor/opencode/lib/subagent.js"
+    },
+    "./vendor/opencode/client": {
+      "default": "./vendor/opencode/lib/client.js"
+    },
+    "./vendor/opencode/lib/optional-service.js": {
+      "default": "./vendor/opencode/lib/optional-service.js"
+    },
+    "./vendor/opencode/package.json": "./vendor/opencode/package.json",
+    "./vendor/opencode/cordis.patch.yml": "./vendor/opencode/cordis.patch.yml"
   },
   "files": [
     "cordis.patch.yml",

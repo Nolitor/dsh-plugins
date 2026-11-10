@@ -1,0 +1,88 @@
+{
+  "name": "@nolit/dsh-opencode-v2",
+  "version": "0.0.1-rc.5",
+  "private": true,
+  "description": "OpenCode Go pure LLM adapter for DeepSeek Harness: an `opencode` delegation tool, /opencode command and cli_worker, plus an `opencode-http-agent` route that calls the OpenAI-compatible /chat/completions backend directly (streaming text/reasoning/tool deltas, disjoint usage, cached credentials) while the local OpenCode server is used only as a catalog/provider/credential control plane. No agent loop, persona, session prompt, or static cwd.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "cordis",
+    "opencode",
+    "subagent",
+    "delegation"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./provider": {
+      "default": "./lib/provider.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./http/locale/en.json": "./locale/en.json",
+    "./http/locale/ko.json": "./locale/ko.json",
+    "./http": {
+      "default": "./lib/http.js"
+    },
+    "./cost": {
+      "default": "./lib/cost.js"
+    },
+    "./locale/en.json": "./locale/en.json",
+    "./locale/ko.json": "./locale/ko.json",
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./lib/optional-service.js": {
+      "default": "./lib/optional-service.js"
+    },
+    "./subagent": {
+      "default": "./lib/subagent.js"
+    }
+  },
+  "files": [
+    "lib/",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "docs/",
+    "locale/"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=24.9",
+    "dsh": ">=0.2.2-alpha.2 <0.3.0"
+  },
+  "scripts": {
+    "test": "node --import ./test/setup-isolate.mjs --test test/*.test.mjs",
+    "check": "node --check lib/index.js && node --check lib/provider.js && node --check lib/http.js && node --check lib/conflicts.js && node --check lib/stream-parser.js && node --check lib/display-gate.js && node --check lib/arguments.js && node --check lib/trace.js && node --check lib/upstream-map.js && node --check lib/display-clean.js && node --check lib/shared.js && node --check lib/catalog-cache.js && node --check lib/workers/index.js && node --check lib/workers/run.js && node --check lib/workers/backends.js && node --check lib/workers/artifacts.js && node --check lib/plans.js && node --check lib/verdict-store.js && node --check lib/resilience.js && node --check lib/cost.js && node --check lib/cost-pill.js && node --check lib/request-guards.js && node --check lib/optional-service.js && node --check lib/client.js",
+    "docs:index": "node ../scripts/doc-index-track.mjs",
+    "docs:check": "node ../scripts/doc-index-track.mjs --check"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-llm": "^0.2.2-alpha.2",
+    "@deepseek-ai/dsh-subprocess": "^0.2.2-alpha.2",
+    "@deepseek-ai/dsh-tools": "^0.2.2-alpha.2",
+    "@deepseek-ai/schemastery": "~3.18.4",
+    "@nolit/dsh-custom-router": "0.0.1-rc.10"
+  },
+  "dependencies": {}
+}

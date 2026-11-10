@@ -1,0 +1,109 @@
+# Bundle config layer for @nolit/dsh-opencode-v2 — OpenCode v2.2.0 adapter.
+#
+# This is OUR layer. It is never the upstream @quonaro/dsh-plugin-opencode
+# patch file, and upstream files are never modified: the adapter wraps that
+# package as a dependency only.
+#
+# The row `id` is also the settings namespace the loader derives for volatile
+# Config fields, so each id MUST equal the plugin `name` exported by its module
+# (lib/index.js -> @nolit/dsh-opencode-v2, lib/provider.js -> .../provider).
+#
+# OPENCODE v2.2.0 NOTE: there are deliberately NO `attach` or `pure` keys here.
+# v2 removed both flags — passing either makes `opencode run` exit 1 with
+# "Unrecognized flag" and a usage dump on stdout, i.e. it would break every
+# delegation. The plugin still ACCEPTS the keys (declared in Config) so an old
+# @quonaro profile row keeps validating, but nothing ever emits them.
+- insert:
+  - id: dsh-opencode-v2
+    name: '@nolit/dsh-opencode-v2'
+    config:
+      # Path or PATH-resolved name of the opencode executable. The measured
+      # install is /home/minami/.bun/bin/opencode; 'opencode' stays the default
+      # so the bundle is portable and PATH-resolved at spawn time.
+      opencodePath: 'opencode'
+      # --auto auto-approves every permission that is not explicitly denied.
+      # Headless `opencode run` cannot answer prompts, so without this a run
+      # stalls on the first guarded action.
+      auto: true
+      # Default -m provider/model. MUST be an `opencode/...` route: v2's catalog
+      # is opencode/* and opencode-go/*, and the generic default is never
+      # assumed to resolve. The `#low` suffix selects the route's lowest
+      # advertised reasoning level; v2 rejects a variant the catalog does not
+      # advertise.
+      model: 'opencode-go/minimax-m3.1-flash#low'
+      # Default --agent (e.g. "build", "plan"); empty means the default agent.
+      agent: ''
+      # --thinking: required for v2 to emit `reasoning` events at all.
+      thinking: true
+      # Default --title for new sessions; empty means OpenCode chooses.
+      title: ''
+      # Cooperative timeout for one delegation call.
+      timeoutMs: 600000
+      # In-memory cap per output stream; overflow keeps the tail.
+      maxOutputBytes: 1048576
+      # Environment variable names forwarded to the opencode child process on
+      # top of the subprocess seam's scrubbed base. OpenCode needs HOME/XDG
+      # paths to find stored credentials (`opencode auth login`).
+      forwardEnv:
+      - PATH
+      - HOME
+      - USER
+      - XDG_CONFIG_HOME
+      - XDG_DATA_HOME
+      - XDG_CACHE_HOME
+      - OPENCODE_CONFIG
+      - OPENCODE_SERVER_USERNAME
+      - OPENCODE_SERVER_PASSWORD
+      # Extra CLI flags appended verbatim before the prompt. `--attach` and
+      # `--pure` are stripped defensively even if added here.
+      extraArgs: []
+      # Budget for the post-run `session export` usage fetch (v2 emits no
+      # step_finish, so this is the only authoritative token source).
+      exportTimeoutMs: 60000
+  # Pure native model router. The adapter registers directly into dsh-llm
+  # (`opencode-http-agent`) and calls the OpenAI-compatible backend
+  # `/chat/completions`; the local server is control-plane only (catalog,
+  # provider metadata, cached credential). No OpenCode agent/session prompt.
+  # `./provider` stays exported as a library only and is NOT mountable.
+  - id: dsh-opencode-v2-http
+    name: '@nolit/dsh-opencode-v2/http'
+    config:
+      # Absolute path: dsh-web.service's PATH has no ~/.bun/bin, so a bare
+      # `opencode` cannot be resolved by the spawn fallback.
+      opencodePath: '/home/minami/.bun/bin/opencode'
+      # Local `opencode serve` process cwd only. DSH owns the model context
+      # workspace; the adapter resolves it from the caller session
+      # (ctx.sessions.get(sessionId).header.cwd) and never pins it here.
+      cwd: '/home/minami/Workspace/projects/dsh-workspace/dsh-plugins'
+      # Attach to a live `opencode serve --service` first; own a server only
+      # when nothing is reachable. One adapter instance = one server owner.
+      attachToDaemon: true
+      spawnServer: true
+      # Conflict guard: warn when a legacy opencode-go/opencode provider is
+      # active; switch to 'stand-down' to yield the namespace instead.
+      conflictPolicy: 'warn'
+      # Route behind the `default` model id; a `#variant` suffix would become
+      # part of the model id, so levels come from reasoningEffort.
+      defaultModel: 'opencode-go/minimax-m3.1-flash'
+      autoDiscoverModels: true
+      # Durable catalog is written to <profile>/opencode-models.json.
+      catalogSyncMs: 300000
+      # Completion tokens ONE TURN reserves (the host's defaultMaxTokens). This is
+      # NOT the route capability: limit.output stays in the catalog and is what the
+      # picker reports. The reservation is subtracted from the context window before
+      # compaction decides how much room messages get, so a capability-sized value
+      # (384000) left only 55% of a 1M route usable. Measured per-step output on this
+      # profile: p50 661, p99 13077, and 0.76% of steps above 16384.
+      turnMaxTokens: 16384
+  # The delegation TOOL is a separate shipped row bound to the provider name,
+  # exactly as the codex/claude-code bundles split it (and as the Antigravity
+  # bundle does). The superseded @nolit/dsh-subagent-opencode supplied this row;
+  # the merged package now must, or removing the old bundle silently drops
+  # `subagent_opencode` while the provider still exists.
+  - id: tool-subagent-opencode
+    name: '@deepseek-ai/dsh-tool-subagent'
+    config:
+      provider: opencode
+      toolName: subagent_opencode
+      maxDepth: provider-managed
+      modelSelection: true

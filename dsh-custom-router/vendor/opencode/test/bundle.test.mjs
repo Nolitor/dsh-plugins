@@ -97,7 +97,7 @@ test('the router peer tracks the shipped router version (no silent drift)', asyn
   // makes a strict resolver refuse the install and surfaces at mount time.
   const { readFile } = await import('node:fs/promises')
   const routerPkg = JSON.parse(
-    await readFile(new URL('../../dsh-custom-router/package.json', import.meta.url), 'utf8'),
+    await readFile(new URL('../../../package.json', import.meta.url), 'utf8'),
   )
   assert.equal(
     pkg.peerDependencies['@nolit/dsh-custom-router'],
