@@ -13,6 +13,39 @@ summary: Engineering history for @nolit/dsh-sidebar-manager. Seeded from git his
 
 Current version: `0.0.1-rc.2`
 
+## 0.0.1-rc.2 (cont.) — diagnostics tab vertical rhythm — 2026-11-11
+
+Same session as the entry below, so the rc marker does not advance (RULES §6: count sessions,
+not edits). Same precedent as `dsh-custom-router/vendor/antigravity/CHANGELOG.md` `rc.10 (cont.)`.
+
+Owner task: on the [진단] tab the four maintenance cards (advisory, HQ bootstrap, project
+promotion, legacy/orphan logs) rendered flush against each other, with no vertical separation,
+while the [그룹] tab was evenly spaced. The visual hierarchy of the section collapsed.
+
+**Measured cause.** `GroupsTab` wraps its cards in `.smGroupList`
+(`display:flex;flex-direction:column;gap:8px`) and gets that rhythm from the wrapper.
+`DiagnosticsTab` returned its four `styles.groupCard` elements **directly** into
+`.smTabPanel` — and `.smTabPanel` declares only `padding-top:2px`, no gap and no column flow.
+With no gap container, adjacent block cards touch edge to edge.
+
+**Fix, mirroring the groups pattern rather than inventing a new one:**
+
+| Fact | Before | After |
+| --- | --- | --- |
+| gap container on the diagnostics cards | absent | `.smDiagnosticsStack` |
+| separation between independent cards | 0 | **24px** (`gap`) |
+| `.smField` inside `.smGroupFormRow` | `width:100%` (one field per line) | `flex:1 1 180px;width:auto` |
+
+`.smDiagnosticsStack{display:flex;flex-direction:column;gap:24px;margin-top:16px;min-width:0}`
+reuses the same mechanism as `.smGroupList`; 24px is the section separation, because each card is
+its own maintenance task rather than a row of one list. The form-row rule is declared **after**
+the base `.smField` / `.smPlainButton` rules so the higher-specificity descendant form wins in
+source order.
+
+`test/panel-presentation.test.mjs` gained three checks: the four cards share one stack, the stack
+states `gap:24px`, and a field in an action row does not claim the whole line. Verified by
+injecting `gap:0` — the gate failed, then passed again on restore.
+
 ## 0.0.1-rc.2 — hairline token, font steps, CJK wrapping — 2026-11-11
 
 Owner task: the four plugin UI surfaces must stop hardcoding the hairline and the derived font

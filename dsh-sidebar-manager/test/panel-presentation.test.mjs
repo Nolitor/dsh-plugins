@@ -218,3 +218,39 @@ test('the dialog names itself and takes focus when it opens', () => {
 test('the notice is a live region', () => {
   assert.ok(source.includes("role: 'status'"), 'the notice announces itself politely')
 })
+
+// --- vertical rhythm: the diagnostics tab is not one wall of cards ----------
+// Measured defect (2026-11-11): the diagnostics tab returned its four cards
+// straight into the tab panel with no gap container, while every other tab
+// relied on a wrapper (.smGroupList) for separation. The cards touched edge to
+// edge, so the section hierarchy collapsed. These checks pin the fix.
+
+test('the diagnostics cards share one stack, like the groups list', () => {
+  const diagnostics = source.slice(
+    source.indexOf('function DiagnosticsTab('),
+    source.indexOf('function WorkspaceManagerPanel('),
+  )
+  assert.ok(diagnostics.includes('className: styles.diagnosticsStack'), 'the cards need one gap container')
+  // Four independent maintenance cards: advisory, HQ, promotion, orphans.
+  // Exact token only: `groupCardHeader` and `groupCardTitle` also start with it.
+  assert.equal(
+    (diagnostics.match(/className: styles\.groupCard[ },]/g) ?? []).length,
+    4,
+    'all four maintenance cards render inside the stack',
+  )
+})
+
+test('the diagnostics stack states an explicit section gap', () => {
+  const rule = block('.smDiagnosticsStack')
+  assert.match(rule, /display:flex/, 'a column stack, not a naked sequence of blocks')
+  assert.match(rule, /flex-direction:column/)
+  assert.match(rule, /gap:24px/, 'section separation is 24px between independent cards')
+})
+
+test('a field inside a wrapping action row does not take the whole line', () => {
+  // Measured defect: .smField is width:100% for vertical forms, so two inputs
+  // plus two buttons in .smGroupFormRow could not sit on one line.
+  const rule = block('.smGroupFormRow .smField')
+  assert.match(rule, /flex:1 1 180px/, 'fields share the row instead of claiming it')
+  assert.match(rule, /width:auto/)
+})

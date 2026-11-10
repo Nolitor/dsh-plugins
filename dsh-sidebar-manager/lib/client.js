@@ -603,6 +603,11 @@ window.__ModuleLoader__.load({
       '.smGroupActions{display:inline-flex;gap:4px;flex-wrap:wrap}',
       '.smGroupNotice{margin-top:6px;padding:6px 8px;border-radius:var(--dsw-radius-md);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(18px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2)}',
       '.smGroupList{display:flex;flex-direction:column;gap:8px;margin-top:8px;min-width:0}',
+      // The diagnostics tab stacks independent maintenance cards, not group rows.
+      // It needs the same vertical rhythm the group tab gets from .smGroupList,
+      // but at section separation (24px) because each card is its own task rather
+      // than a member of one list.
+      '.smDiagnosticsStack{display:flex;flex-direction:column;gap:24px;margin-top:16px;min-width:0}',
       '.smGroupCard{border:var(--dsh-hairline-width,1px) solid var(--dsw-alias-settings-card-stroke);border-radius:var(--dsw-radius-lg);padding:12px 14px;background:var(--dsw-alias-settings-card-fill);min-width:0}',
       '.smGroupCardHeader{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}',
       '.smGroupCardTitle{font-weight:500;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-primary)}',
@@ -641,6 +646,12 @@ window.__ModuleLoader__.load({
       '.smPrimaryButton{padding:7px 12px;border-radius:var(--dsw-radius-sm);border:0;background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-label-primary-foreground);cursor:pointer;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));transition:opacity var(--ds-transition-duration-fast) ease}',
       '.smPlainButton{padding:7px 12px;border-radius:var(--dsw-radius-sm);border:var(--dsh-hairline-width,1px) solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));transition:background-color var(--ds-transition-duration-fast) ease}',
       '.smPlainButton:disabled,.smPrimaryButton:disabled{cursor:default;opacity:.55}',
+      // A field inside a wrapping action row keeps a sane minimum instead of the
+      // 100% width it takes in a vertical form, otherwise two fields plus two
+      // buttons cannot share one line. Declared after the base rules so the
+      // higher-specificity descendant form wins regardless of source order.
+      '.smGroupFormRow .smField{flex:1 1 180px;width:auto;min-width:0;margin-top:0}',
+      '.smGroupFormRow .smPlainButton{flex:0 0 auto}',
       // --- dialogs and notices -------------------------------------------------
       '.smBackdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:var(--dsw-alias-bg-mask-1);padding:16px}',
       '.smDialog{width:min(560px,100%);max-height:min(720px,calc(100vh - 32px));overflow:auto;border-radius:var(--dsw-radius-lg);border:var(--dsh-hairline-width,1px) solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);color:var(--dsw-alias-label-primary);padding:16px;box-sizing:border-box;box-shadow:var(--dsw-shadow-lv3);font-family:inherit;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px))}',
@@ -691,6 +702,7 @@ window.__ModuleLoader__.load({
       groupHeaderActions: 'smGroupActions',
       groupNotice: 'smGroupNotice',
       groupList: 'smGroupList',
+      diagnosticsStack: 'smDiagnosticsStack',
       groupCard: 'smGroupCard',
       groupCardHeader: 'smGroupCardHeader',
       groupCardTitle: 'smGroupCardTitle',
@@ -1539,6 +1551,9 @@ window.__ModuleLoader__.load({
         'section',
         { className: styles.tabPanel, 'aria-label': t('tabs.diagnostics') },
         h('p', { className: styles.panelDescription }, t('diagnostics.description')),
+        // One stack for every maintenance card: the same rhythm the groups tab
+        // gets from .smGroupList, so the blocks never collapse onto each other.
+        h('div', { className: styles.diagnosticsStack },
         advisory !== null
           ? h(
               'div',
@@ -1612,6 +1627,7 @@ window.__ModuleLoader__.load({
                 t('groups.orphansTotal', { total: orphans.total ?? 0, count: orphans.disconnected?.length ?? 0 }),
               )
             : null,
+        ),
         ),
       )
     }
