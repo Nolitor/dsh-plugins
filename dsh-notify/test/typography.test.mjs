@@ -91,11 +91,13 @@ test('the section never sizes body/html/:root or a bare element via a sheet', ()
 // matches both the string form and the sheet form.
 
 test('REGRESSION GATE: no .5px hairline literal exists in any style declaration', () => {
-  const literals = source.match(/\.5px/g) ?? []
+  // A bare literal is any .5px NOT written as the host token's own fallback
+  // (the host bundle itself declares `var(--dsh-hairline-width, .5px)`).
+  const literals = source.match(/(?<!var\(--dsh-hairline-width,)\\\.5px/g) ?? []
   assert.deepEqual(
     literals,
     [],
-    'hairline width must come from var(--dsh-hairline-width,1px), never a .5px literal',
+    'hairline width must consume the host token with its .5px fallback, never a bare .5px literal',
   )
 })
 

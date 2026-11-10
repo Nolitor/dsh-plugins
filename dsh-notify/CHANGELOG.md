@@ -27,6 +27,27 @@ repository history rather than rewritten:
 Add newest first. Each entry: what changed, why, and the measured before/after. A change with no
 entry here is not complete.
 
+### 2026-11-11 — `0.0.1-rc.5` (cont.) — border fallback
+
+Owner correction, measured against the upstream authority
+[`docs/web-styling.md`](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/web-styling.md):
+
+> Flat borders and separators that use a neutral `--dsw-alias-border-*` token draw at `0.5px` …
+> Dashed affordances and **state-colored borders keep 1px**.
+
+The previous entry replaced `.5px` with `var(--dsh-hairline-width,1px)`. The token itself is real —
+`@deepseek-ai/dsh-client-ui-theme` publishes it on the document root and resolves it to
+`max(1, floor(0.5*dpr))/dpr` — but **its fallback in the shipped host bundle is `.5px`, not
+`1px`** (`dsh-web-frontend` declares `var(--dsh-hairline-width, .5px)`), and the upstream styling
+reference never mentions the token at all. With a `1px` fallback the border painted twice as thick
+whenever the token was not injected (headless capture, non-window documents, test harnesses).
+
+**Corrected in this package:** both `--dsh-hairline-width` uses (the settings card and the peak
+chip) now carry the host's own `.5px` fallback instead of `1px` — **2 occurrences**.
+
+The `.5px` regression gate was narrowed to a bare literal so it still rejects a hand-written
+literal while accepting the token fallback.
+
 ### 2026-11-11 — `0.0.1-rc.5` — hairline token, CJK wrapping
 
 Owner task: the four plugin UI surfaces must stop hardcoding the hairline and must not break
