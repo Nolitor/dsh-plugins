@@ -174,8 +174,8 @@ test('the dense table scrolls in its own frame with a sticky header', () => {
   assert.match(source, /\.tkdsTh\{[^}]*position:sticky/)
   assert.match(source, /\.tkdsTh\{[^}]*background:var\(--dsw-alias-settings-card-fill\)/)
   // Row rules are the host hairline token on border-l2, and every cell is tabular-nums.
-  assert.match(source, /\.tkdsTh\{[^}]*border-bottom:var\(--dsh-hairline-width,1px\) solid var\(--dsw-alias-border-l2\)/)
-  assert.match(source, /\.tkdsTd\{[^}]*border-bottom:var\(--dsh-hairline-width,1px\) solid var\(--dsw-alias-border-l2\)/)
+  assert.match(source, /\.tkdsTh\{[^}]*border-bottom:var\(--dsh-hairline-width,\.5px\) solid var\(--dsw-alias-border-l2\)/)
+  assert.match(source, /\.tkdsTd\{[^}]*border-bottom:var\(--dsh-hairline-width,\.5px\) solid var\(--dsw-alias-border-l2\)/)
   assert.match(source, /\.tkdsTable\{[^}]*font-variant-numeric:tabular-nums/)
   assert.match(source, /\.tkdsTd\{[^}]*font-variant-numeric:tabular-nums/)
 })
@@ -200,11 +200,13 @@ test('the table header cells are marked as column headers', () => {
 // build the moment a literal or a missing CJK wrap rule comes back.
 
 test('REGRESSION GATE: no .5px hairline literal exists in the stylesheet', () => {
-  const literals = source.match(/\.5px/g) ?? []
+  // A bare literal is any .5px NOT written as the host token's own fallback
+  // (the host bundle itself declares `var(--dsh-hairline-width, .5px)`).
+  const literals = source.match(/(?<!var\(--dsh-hairline-width,)\\\.5px/g) ?? []
   assert.deepEqual(
     literals,
     [],
-    'hairline width must come from var(--dsh-hairline-width,1px), never a .5px literal',
+    'hairline width must consume the host token with its .5px fallback, never a bare .5px literal',
   )
 })
 
