@@ -61,7 +61,11 @@ export function resolveCatalogPath({ explicit, profileDir, dshHome, fileName = C
  * the picker offers and what the stream reader looks for, so a snapshot that
  * differs only there must not be treated as "unchanged".
  *
- * @param {readonly { id: string, name?: string, contextWindow?: number, maxTokens?: number, variants?: readonly string[], inputModalities?: readonly string[], reasoningField?: string }[]} models
+ * The wire identity (`package`) and the `compatibility` declaration are part of
+ * it for the same reason: the same model id can move from an OpenAI chat package
+ * to an Anthropic one, and the request builder's behaviour changes with it.
+ *
+ * @param {readonly { id: string, name?: string, contextWindow?: number, maxTokens?: number, variants?: readonly string[], inputModalities?: readonly string[], reasoningField?: string, package?: string, compatibility?: Record<string, unknown>, unverifiedWire?: boolean }[]} models
  * @returns {string} Deterministic signature.
  */
 export function catalogSignature(models) {
@@ -75,9 +79,29 @@ export function catalogSignature(models) {
         (model.variants ?? []).join('|'),
         (model.inputModalities ?? []).join('|'),
         model.reasoningField ?? '',
+        model.package ?? '',
+        stableCompatibility(model.compatibility),
+        model.unverifiedWire === true ? 'unverified' : '',
       ].join('\u0000'),
     )
     .join('\u0001')
+}
+
+/**
+ * Key-sorted serialization of a `compatibility` declaration.
+ *
+ * Sorted so a declaration that differs only in key insertion order keeps the
+ * same identity; a different value or key changes it.
+ *
+ * @param {unknown} compatibility
+ * @returns {string} Stable one-line form, empty when absent.
+ */
+function stableCompatibility(compatibility) {
+  if (!compatibility || typeof compatibility !== 'object' || Array.isArray(compatibility)) return ''
+  return Object.keys(compatibility)
+    .sort()
+    .map((key) => `${key}=${JSON.stringify(compatibility[key])}`)
+    .join(',')
 }
 
 /**

@@ -38,6 +38,9 @@ import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_MAX_OUTPUT_TOKENS,
   DEFAULT_TURN_MAX_TOKENS,
+  classifyWire,
+  compatibilityOf,
+  completionTokensField,
   modelsFromApiPayload,
   reasoningEffortsFromVariants,
   turnCompletionReservation,
@@ -131,6 +134,23 @@ function protocolDefectError(error) {
   const fallback = new Error(message, { cause: error })
   fallback.name = 'LlmError'
   fallback.code = code
+  return fallback
+}
+
+/**
+ * Build the typed refusal for a route whose catalog package is not an OpenAI
+ * chat wire.
+ *
+ * @param {string} modelId - route id as advertised (`provider/model`).
+ * @param {string} packageId - the package the catalog declared.
+ * @returns {Error} an `LlmError`-compatible error with code `UNSUPPORTED_PROTOCOL`.
+ */
+export function unsupportedProtocolError(modelId, packageId) {
+  const message = `${modelId} uses ${packageId}; this adapter speaks the OpenAI chat wire only`
+  if (HostLlmError !== null) return new HostLlmError(message, 'UNSUPPORTED_PROTOCOL')
+  const fallback = new Error(message)
+  fallback.name = 'LlmError'
+  fallback.code = 'UNSUPPORTED_PROTOCOL'
   return fallback
 }
 
@@ -343,6 +363,27 @@ export const Config = Schema.object({
    * unaffected.
    */
   enabledModels: Schema.array(Schema.string()).default([]).volatile(),
+  /**
+   * Refuse a route whose catalog `package` names a wire this adapter does not
+   * speak (anthropic, openai/responses, google, …).
+   *
+   * Default false, deliberately: the backend sits behind a facade that may
+   * translate a chat body, so the honest default is to attempt the request and
+   * let the backend answer. `true` turns the guess into a clean, typed refusal
+   * (`UNSUPPORTED_PROTOCOL`) before any fetch.
+   */
+  strictWire: Schema.boolean().default(false).volatile(),
+  /**
+   * Keep provider metadata this adapter does not interpret (`compatibility`
+   * keys outside its known set) on the catalog record instead of stripping it,
+   * so a route's own declaration survives.
+   */
+  allowDynamicPassthrough: Schema.boolean().default(true).volatile(),
+  /**
+   * Send the request exactly as built: skip the wire preflight and every body
+   * translation (`maxTokensField`, `streamUsage`, anthropic cache markers).
+   */
+  rawBypass: Schema.boolean().default(false).volatile(),
 })
 
 function joinUrl(base, path) {
@@ -789,8 +830,78 @@ export function assistantHistoryText(blocks) {
   return parts.join('\n')
 }
 
-/** Build the OpenAI-compatible request body from DSH `GenerateOptions`. */
-export function buildChatRequest(options, ref, config) {
+/**
+ * Clone one chat message with an Anthropic prompt-cache marker attached.
+ *
+ * A marker lives on a content PART, so string content is rewritten into one text
+ * part. Always a copy: the caller's objects are never mutated.
+ *
+ * @param {object} message
+ * @returns {object} the marked copy.
+ */
+function withCacheMarker(message) {
+  const marker = { type: 'ephemeral' }
+  if (typeof message.content === 'string') {
+    return { ...message, content: [{ type: 'text', text: message.content, cache_control: marker }] }
+  }
+  if (Array.isArray(message.content) && message.content.length > 0) {
+    const parts = message.content.slice()
+    const last = parts.length - 1
+    const part = parts[last]
+    parts[last] = part && typeof part === 'object'
+      ? { ...part, cache_control: marker }
+      : { type: 'text', text: String(part ?? ''), cache_control: marker }
+    return { ...message, content: parts }
+  }
+  return { ...message, cache_control: marker }
+}
+
+/**
+ * Add Anthropic prompt-cache markers to a built body (official V2 rules).
+ *
+ * Exactly three markers: the last tool definition, the system prompt, and the
+ * latest message. Everything is cloned, so the caller's objects are untouched.
+ *
+ * @param {object} body - the built chat request.
+ * @returns {object} a marked copy.
+ */
+export function withAnthropicCacheMarkers(body) {
+  const marker = { type: 'ephemeral' }
+  const out = { ...body, messages: (body.messages ?? []).map((message) => ({ ...message })) }
+  if (Array.isArray(body.tools) && body.tools.length > 0) {
+    out.tools = body.tools.map((tool) => ({ ...tool }))
+    out.tools[out.tools.length - 1] = { ...out.tools[out.tools.length - 1], cache_control: marker }
+  }
+  // The system prompt: a system-role message when the history carries one,
+  // otherwise the top-level `system` string (rewritten into a text part).
+  const systemIndex = out.messages.findIndex((message) => message?.role === 'system')
+  if (systemIndex >= 0) {
+    out.messages[systemIndex] = withCacheMarker(out.messages[systemIndex])
+  } else if (typeof out.system === 'string' && out.system.length > 0) {
+    out.system = [{ type: 'text', text: out.system, cache_control: marker }]
+  }
+  // The latest message, which is the current turn.
+  const latest = out.messages.length - 1
+  if (latest >= 0) out.messages[latest] = withCacheMarker(out.messages[latest])
+  return out
+}
+
+/**
+ * Build the OpenAI-compatible request body from DSH `GenerateOptions`.
+ *
+ * @param {object} options - `GenerateOptions`.
+ * @param {{ providerID?: string, id: string }} ref - backend model ref.
+ * @param {object} config - adapter config (`effortField`, ...).
+ * @param {{ model?: unknown, rawBypass?: boolean }} [route]
+ *   The catalog record for this route. It decides the completion-budget field
+ *   (G4), whether `stream_options` is sent (G5) and whether Anthropic cache
+ *   markers are added (G6). Absent means "unknown route", which keeps the
+ *   historical OpenAI-chat body.
+ */
+export function buildChatRequest(options, ref, config, route = {}) {
+  const rawBypass = route.rawBypass === true
+  const model = route.model ?? null
+  const compatibility = rawBypass ? {} : compatibilityOf(model)
   const messages = []
   const append = (role, content) => {
     if (content === undefined || content === null || content === '') return
@@ -834,9 +945,12 @@ export function buildChatRequest(options, ref, config) {
     model: ref.id,
     messages,
     stream: true,
-    stream_options: { include_usage: true },
   }
-  if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens
+  // G5: a route that rejects `stream_options` must not receive it. An absent
+  // usage chunk is then normal, not a defect.
+  if (compatibility.streamUsage !== false) body.stream_options = { include_usage: true }
+  // G4: the completion budget goes in the field the route declares. Never both.
+  if (options.maxTokens !== undefined) body[completionTokensField(model, { rawBypass })] = options.maxTokens
   // The clamp lives in `stream()` (it needs the live catalog window), not here:
   // buildChatRequest stays a pure translation of GenerateOptions.
   if (options.temperature !== undefined) body.temperature = options.temperature
@@ -855,6 +969,9 @@ export function buildChatRequest(options, ref, config) {
     }))
     body.tool_choice = 'auto'
   }
+  // G6: an Anthropic-format proxy needs explicit prompt-cache markers. Built on a
+  // clone, so the caller's options and messages stay untouched.
+  if (compatibility.cacheFormat === 'anthropic') return withAnthropicCacheMarkers(body)
   return body
 }
 
@@ -953,7 +1070,13 @@ export class OpencodeHttpAdapter {
   async discoverOnce() {
     try {
       const payload = await this.server.request('GET', '/api/model')
-      const result = modelsFromApiPayload(payload)
+      const result = modelsFromApiPayload(payload, {
+        allowDynamicPassthrough: this.config.allowDynamicPassthrough?.get?.() !== false,
+        // Only `strictWire` hides an unsupported-package route from the catalog.
+        // The default advertises it, marked `unverifiedWire`, because the facade
+        // in front of the backend may still translate a chat body.
+        strictWire: this.config.strictWire?.get?.() === true,
+      })
       if (result) {
         this.discoveryError = null
         return result
@@ -1410,13 +1533,46 @@ export class OpencodeHttpAdapter {
 
     // The route's own reasoning field name, when discovery declared one.
     let routeReasoningField = null
+    let routeRecord = null
     try {
-      const found = await this.lookupModel(options.model)
-      if (typeof found?.reasoningField === 'string' && found.reasoningField.length > 0) {
-        routeReasoningField = found.reasoningField
+      routeRecord = await this.lookupModel(options.model)
+      if (typeof routeRecord?.reasoningField === 'string' && routeRecord.reasoningField.length > 0) {
+        routeReasoningField = routeRecord.reasoningField
       }
     } catch {
       /* discovery unavailable: the configured field still applies */
+    }
+
+    // --- Ingress Protocol Guard (G2/G3) -----------------------------------
+    // The catalog says which wire serves this route. The default is advisory:
+    // the backend sits behind a facade that may translate a chat body, so an
+    // unsupported package is recorded (`wire: 'unverified'`) and the request is
+    // attempted. Only `strictWire` turns the guess into a refusal, and even then
+    // it happens before any fetch.
+    // A config built outside the schema (a test double, an older profile row)
+    // simply has no key: absent means the documented default.
+    const rawBypass = config.rawBypass?.get?.() === true
+    const strictWire = config.strictWire?.get?.() === true
+    let wireState = 'chat'
+    if (!rawBypass) {
+      // `classifyWire` separates a KNOWN foreign wire from an unknown package:
+      // only the former may be refused, because an unknown id is a server newer
+      // than this adapter and must keep working.
+      const wire = routeRecord === null ? 'unknown' : classifyWire(routeRecord.package)
+      if (wire === 'chat') {
+        wireState = 'chat'
+      } else {
+        wireState = 'unverified'
+        if (wire === 'unsupported' && strictWire) {
+          throw unsupportedProtocolError(String(options.model), routeRecord.package)
+        }
+        if (wire === 'unsupported') {
+          this.ctx?.logger?.warn?.(
+            `opencode-http-agent: ${options.model} uses ${routeRecord.package}; this adapter speaks the OpenAI chat wire only` +
+              ' — attempting anyway (strictWire=false)',
+          )
+        }
+      }
     }
 
     const blocks = new Map()
@@ -1776,14 +1932,14 @@ export class OpencodeHttpAdapter {
         return
       }
 
-      const body = buildChatRequest(options, ref, config)
+      const body = buildChatRequest(options, ref, config, { model: routeRecord, rawBypass })
 
       // The completion budget cannot exceed the context left. The host normally
       // supplies `maxTokens` (its reservation), but a session restored from an
       // older build, or a caller that sets its own, can still ask for more than
       // the window holds. Measured 2026-11-04: 3,140 recorded requests carried
       // >120k prompt characters and none of them was checked against the window.
-      const routeWindow = await this.lookupModel(options.model).catch(() => null)
+      const routeWindow = routeRecord ?? (await this.lookupModel(options.model).catch(() => null))
       const promptEstimate = estimatePromptTokens(body)
       const budget = resolveRequestMaxTokens({
         reservation: options.maxTokens ?? turnCompletionReservation(routeWindow?.maxTokens, config.turnMaxTokens.get()),
@@ -1803,17 +1959,22 @@ export class OpencodeHttpAdapter {
         }
         return
       }
-      body.max_tokens = budget.maxTokens
+      // G4: the clamp writes the same field the builder chose; the two must never
+      // both appear on the body.
+      const budgetField = completionTokensField(routeRecord, { rawBypass })
+      body[budgetField] = budget.maxTokens
       if (budget.clamped && options.maxTokens !== undefined) {
         this.ctx?.logger?.debug?.(
-          `opencode-http-agent: max_tokens lowered from ${options.maxTokens} to ${budget.maxTokens} (${budget.remaining} left of the window)`,
+          `opencode-http-agent: ${budgetField} lowered from ${options.maxTokens} to ${budget.maxTokens} (${budget.remaining} left of the window)`,
         )
       }
       // Real-traffic evidence (no bodies, no credentials): a short probe cannot
       // reproduce the leak because it produces almost no output. Opt out with
       // OPENCODE_V2_TRACE=0.
       const trace = createTrace()
-      trace.request({ ...summarizeRequest(body), session: options.sessionId ?? null })
+      // G3: `wire: 'unverified'` means the catalog did not confirm an OpenAI chat
+      // package (or had no record at all), so a silent wire change is visible.
+      trace.request({ ...summarizeRequest(body), session: options.sessionId ?? null, wire: wireState })
       const traceCounts = { content: 0, reasoning: 0, 'tool-call': 0, markerDeltas: 0 }
       const traceChars = { content: 0, reasoning: 0 }
       const headers = sessionHeaders(backend.headers, options, config)

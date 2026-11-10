@@ -225,3 +225,30 @@ test('the HTTP adapter serves the snapshot without the daemon, then swaps in a f
   assert.equal(saved.version, CATALOG_FILE_VERSION)
   assert.equal(saved.models[0].name, 'Renamed Model')
 })
+
+test('catalogSignature changes when the wire package or compatibility changes', () => {
+  // The same model id can move from an OpenAI chat package to an Anthropic one;
+  // a snapshot that differs only there must invalidate, because the request
+  // builder's behaviour (completion field, cache markers) changes with it.
+  const base = catalogSignature([MODEL])
+  assert.notEqual(catalogSignature([{ ...MODEL, package: '@opencode/ai/providers/anthropic' }]), base)
+  assert.notEqual(
+    catalogSignature([{ ...MODEL, package: '@opencode/ai/providers/openai-compatible' }]),
+    base,
+  )
+  const compatible = catalogSignature([{ ...MODEL, package: '@opencode/ai/providers/openai-compatible' }])
+  assert.notEqual(
+    catalogSignature([{ ...MODEL, package: '@opencode/ai/providers/openai-compatible', compatibility: { cacheFormat: 'anthropic' } }]),
+    compatible,
+  )
+  // Key order is not identity; a value change is.
+  assert.equal(
+    catalogSignature([{ ...MODEL, compatibility: { cacheFormat: 'anthropic', streamUsage: false } }]),
+    catalogSignature([{ ...MODEL, compatibility: { streamUsage: false, cacheFormat: 'anthropic' } }]),
+  )
+  assert.notEqual(
+    catalogSignature([{ ...MODEL, compatibility: { streamUsage: false } }]),
+    catalogSignature([{ ...MODEL, compatibility: { streamUsage: true } }]),
+  )
+  assert.notEqual(catalogSignature([{ ...MODEL, unverifiedWire: true }]), base)
+})

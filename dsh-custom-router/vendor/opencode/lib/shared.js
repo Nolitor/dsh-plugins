@@ -446,6 +446,160 @@ export function unsupportedEffortMessage(provider, model, effort, offered) {
 }
 
 /**
+ * Provider packages that speak the OpenAI **chat completions** wire.
+ *
+ * Measured 2026-11-10 on the live catalog: `opencode/*` and `opencode-go/*`
+ * routes are served by several different wires — `openai-compatible` (the
+ * majority), `openai`/`openai/chat`, `openai/responses` (GPT-6 Luna, Grok 4.7,
+ * Muse Spark), `anthropic` (Claude, Qwen3.8, MiniMax-M3, Mistral Large) and
+ * `google` (Gemini). This adapter only speaks chat completions, so the package
+ * decides whether a request can be served as built.
+ *
+ * @type {readonly string[]}
+ */
+export const OPENAI_CHAT_PACKAGES = Object.freeze([
+  '@opencode/ai/providers/openai',
+  '@opencode/ai/providers/openai/chat',
+  '@opencode/ai/providers/openai-compatible',
+])
+
+/**
+ * Whether a provider package id names an OpenAI chat-completions wire.
+ *
+ * An absent/empty id answers `true` on purpose: an older server that publishes
+ * no `package` must keep working, and the caller marks that case `unverified`
+ * in the trace instead of refusing it. The suffix rule covers the azure/openai
+ * chat variants (`…/azure/chat`, `…/openai/chat`) without accepting
+ * `…/openai/responses`.
+ *
+ * @param {unknown} packageId - `entry.package` from `/api/model`.
+ * @returns {boolean} true when the wire is (or is unknown to be) chat.
+ */
+export function isOpenAiChatPackage(packageId) {
+  if (typeof packageId !== 'string' || packageId.trim().length === 0) return true
+  const id = packageId.trim()
+  if (OPENAI_CHAT_PACKAGES.includes(id)) return true
+  if (!id.endsWith('/chat')) return false
+  const family = id.slice(0, -'/chat'.length)
+  const leaf = family.slice(family.lastIndexOf('/') + 1)
+  return leaf.startsWith('openai') || leaf.startsWith('azure')
+}
+
+/**
+ * Package families known to speak a wire other than OpenAI chat completions.
+ *
+ * Matched on the leaf segment, so `@opencode/ai/providers/google-vertex` and
+ * `@opencode/ai/providers/openai/responses` are both recognised. A package that
+ * matches neither this list nor {@link isOpenAiChatPackage} is UNKNOWN: a server
+ * newer than this adapter, which must not be refused (only marked).
+ *
+ * @type {readonly string[]}
+ */
+export const NON_CHAT_PACKAGE_FAMILIES = Object.freeze([
+  'anthropic',
+  'anthropic-compatible',
+  'responses',
+  'google',
+  'google-vertex',
+  'google-generative-ai',
+  'mistral',
+  'cohere',
+  'bedrock',
+  'vertex',
+])
+
+/**
+ * Classify the wire a catalog `package` names.
+ *
+ * @param {unknown} packageId - `entry.package` from `/api/model`.
+ * @returns {'chat' | 'unsupported' | 'unknown'}
+ *   `chat` is a confirmed OpenAI chat wire (or no package at all, which the
+ *   caller treats as unverified-but-allowed); `unsupported` is a KNOWN foreign
+ *   wire; `unknown` is a package this adapter has never seen.
+ */
+export function classifyWire(packageId) {
+  if (typeof packageId !== 'string' || packageId.trim().length === 0) return 'unknown'
+  const id = packageId.trim()
+  if (OPENAI_CHAT_PACKAGES.includes(id)) return 'chat'
+  // `…/openai/responses` names a Responses wire, not chat, even though its
+  // family segment is `openai`.
+  const segments = id.split('/')
+  const leaf = segments[segments.length - 1]
+  const parent = segments.length > 1 ? segments[segments.length - 2] : ''
+  if (leaf === 'chat' && (parent.startsWith('openai') || parent.startsWith('azure'))) return 'chat'
+  if (NON_CHAT_PACKAGE_FAMILIES.some((family) => leaf === family || leaf.startsWith(`${family}-`))) return 'unsupported'
+  if (parent === 'openai' && leaf === 'responses') return 'unsupported'
+  if (parent === 'google' || parent === 'azure') return leaf === 'chat' ? 'chat' : 'unsupported'
+  return 'unknown'
+}
+
+/**
+ * `compatibility` keys this adapter knows how to honour.
+ *
+ * Everything else is provider metadata it does not interpret; with
+ * `allowDynamicPassthrough` (the default) those keys are preserved untouched so
+ * a route's own declaration is never silently stripped.
+ */
+export const COMPATIBILITY_KEYS = Object.freeze([
+  'maxTokensField',
+  'streamUsage',
+  'cacheFormat',
+  'requireFinishReason',
+  'requireReasoning',
+  'supportsPromptCacheKey',
+  'requireAssistantAfterTool',
+])
+
+/**
+ * Normalize one `compatibility` object from `/api/model`.
+ *
+ * Known keys are kept only when they carry a boolean or a string (the measured
+ * shape); unknown keys pass through unchanged unless passthrough is disabled.
+ *
+ * @param {unknown} raw - `entry.compatibility`.
+ * @param {{ allowDynamicPassthrough?: boolean }} [options]
+ * @returns {Record<string, unknown> | undefined} the retained object, or undefined when empty.
+ */
+export function normalizeCompatibility(raw, { allowDynamicPassthrough = true } = {}) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const out = {}
+  for (const [key, value] of Object.entries(raw)) {
+    if (COMPATIBILITY_KEYS.includes(key)) {
+      if (typeof value === 'boolean' || typeof value === 'string') out[key] = value
+      continue
+    }
+    if (allowDynamicPassthrough) out[key] = value
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+/**
+ * The compatibility declaration of a catalog record, never null.
+ *
+ * @param {unknown} model - a record produced by {@link modelFromApiEntry}.
+ * @returns {Record<string, unknown>} the declaration, or `{}`.
+ */
+export function compatibilityOf(model) {
+  const compatibility = model && typeof model === 'object' ? model.compatibility : undefined
+  return compatibility && typeof compatibility === 'object' ? compatibility : {}
+}
+
+/**
+ * Body field that carries the completion budget for a route.
+ *
+ * A route that declares `compatibility.maxTokensField: 'max_completion_tokens'`
+ * answers HTTP 400 to `max_tokens`; the two fields must never be sent together.
+ *
+ * @param {unknown} model - catalog record.
+ * @param {{ rawBypass?: boolean }} [options] - `rawBypass` keeps the historical field.
+ * @returns {'max_tokens' | 'max_completion_tokens'} field name.
+ */
+export function completionTokensField(model, { rawBypass = false } = {}) {
+  if (rawBypass) return 'max_tokens'
+  return compatibilityOf(model).maxTokensField === 'max_completion_tokens' ? 'max_completion_tokens' : 'max_tokens'
+}
+
+/**
  * Map one `/api/model` entry from `opencode serve` onto the host catalog shape.
  *
  * Measured v2.2.0 payload: { id, modelID, providerID, name, limit:
@@ -454,11 +608,16 @@ export function unsupportedEffortMessage(provider, model, effort, offered) {
  * exactly `LlmModelContext.contextWindow`. `variants` are the route's reasoning
  * levels, selected with `-m provider/model#<variant>`.
  *
+ * `package` and `compatibility` are retained (measured 2026-11-10): without them
+ * the adapter cannot tell an OpenAI chat route from an Anthropic or Responses
+ * one, and cannot honour `maxTokensField` / `streamUsage` / `cacheFormat`.
+ *
  * @param {unknown} entry
+ * @param {{ allowDynamicPassthrough?: boolean }} [options]
  * @returns {{id: string, name: string, contextWindow: number, maxTokens: number,
- *   variants?: string[]} | null}
+ *   variants?: string[], package?: string, compatibility?: Record<string, unknown>} | null}
  */
-export function modelFromApiEntry(entry) {
+export function modelFromApiEntry(entry, options = {}) {
   if (!entry || typeof entry !== 'object') return null
   const providerID = typeof entry.providerID === 'string' ? entry.providerID : ''
   const modelID = typeof entry.id === 'string' ? entry.id : typeof entry.modelID === 'string' ? entry.modelID : ''
@@ -485,6 +644,8 @@ export function modelFromApiEntry(entry) {
   // even built (dsh-subagent: MODEL_DOES_NOT_SUPPORT_IMAGES).
   const declaredInput = Array.isArray(entry.capabilities?.input) ? entry.capabilities.input : []
   const inputModalities = declaredInput.includes('image') ? ['text', 'image'] : ['text']
+  const packageId = typeof entry.package === 'string' && entry.package.length > 0 ? entry.package : undefined
+  const compatibility = normalizeCompatibility(entry.compatibility, options)
   return {
     id: `${providerID}/${modelID}`,
     name: typeof entry.name === 'string' && entry.name ? entry.name : `${providerID}/${modelID}`,
@@ -492,6 +653,8 @@ export function modelFromApiEntry(entry) {
     ...(typeof entry.compatibility?.reasoningField === 'string' && entry.compatibility.reasoningField.length > 0
       ? { reasoningField: entry.compatibility.reasoningField }
       : {}),
+    ...(packageId ? { package: packageId } : {}),
+    ...(compatibility ? { compatibility } : {}),
     contextWindow: positive(limit.context) ?? DEFAULT_CONTEXT_WINDOW,
     maxTokens: positive(limit.output) ?? DEFAULT_MAX_OUTPUT_TOKENS,
     ...(variants.length ? { variants } : {}),
@@ -502,10 +665,17 @@ export function modelFromApiEntry(entry) {
  * Parse the `/api/model` response body: `{ location, data: [entry…] }`.
  * Returns null when the payload is not the expected shape or is empty.
  *
+ * A route whose `package` names a wire this adapter does not speak (anthropic,
+ * responses, google, …) is KEPT and marked `unverifiedWire: true`: the backend
+ * sits behind a facade that may still translate a chat body, so hiding the route
+ * would remove a model the operator can use. The mark travels with the record so
+ * the trace and `strictWire` can tell a verified chat wire from a guess.
+ *
  * @param {unknown} payload
+ * @param {{ allowDynamicPassthrough?: boolean, strictWire?: boolean }} [options]
  * @returns {{models: object[]} | null}
  */
-export function modelsFromApiPayload(payload) {
+export function modelsFromApiPayload(payload, options = {}) {
   if (!payload || typeof payload !== 'object') return null
   const data = Array.isArray(payload.data) ? payload.data : Array.isArray(payload) ? payload : null
   if (!data) return null
@@ -514,8 +684,15 @@ export function modelsFromApiPayload(payload) {
     // A route the server marks disabled cannot serve a generation; listing it
     // would offer a model that fails on the first prompt.
     if (entry?.enabled === false || entry?.status === 'disabled') continue
-    const model = modelFromApiEntry(entry)
-    if (model) models.push(model)
+    const model = modelFromApiEntry(entry, options)
+    if (!model) continue
+    if (!isOpenAiChatPackage(model.package)) {
+      // Advertising a route whose wire this adapter cannot speak is a guess, not
+      // a fact: mark it, and let `strictWire` hide it instead.
+      if (options.strictWire === true) continue
+      model.unverifiedWire = true
+    }
+    models.push(model)
   }
   return models.length ? { models: disambiguateModelNames(models) } : null
 }

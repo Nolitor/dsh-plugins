@@ -11,7 +11,7 @@ import assert from 'node:assert/strict'
 import { resetSharedCostLedgers } from '../lib/cost.js'
 import http from 'node:http'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -1655,4 +1655,363 @@ test('shared pipe matches the legacy fragmented tool-call sequence', async () =>
   const legacy = await run('legacy')
   const shared = await run('shared')
   assert.deepEqual(normalizeBlockIndices(shared), normalizeBlockIndices(legacy), 'fragmented tool calls must not change under the shared pipe')
+})
+
+// ---------------------------------------------------------------------------
+// Ingress Protocol Guard (G3-G6)
+// ---------------------------------------------------------------------------
+
+const ANTHROPIC_ENTRY = {
+  providerID: 'opencode',
+  id: 'claude-opus-5-5',
+  name: 'Claude Opus 5.5',
+  package: '@opencode/ai/providers/anthropic',
+  limit: { context: 1000000, output: 128000 },
+}
+
+/** The catalog record the guard reads, primed directly (no probe). */
+const anthropicRecord = {
+  id: 'opencode/claude-opus-5-5',
+  name: 'Claude Opus 5.5',
+  inputModalities: ['text'],
+  package: '@opencode/ai/providers/anthropic',
+  contextWindow: 1000000,
+  maxTokens: 128000,
+}
+
+test('default (strictWire false): an anthropic-package route is attempted, not refused', async () => {
+  // Advisory-first: the backend sits behind a facade that may translate a chat
+  // body, so the guard warns and records `wire: 'unverified'` instead of failing
+  // a request the backend would have served.
+  const { state, close } = await startServer({ models: [ANTHROPIC_ENTRY] })
+  const warnings = []
+  try {
+    const adapter = new OpencodeHttpAdapter(
+      { logger: { warn: (message) => warnings.push(message) } },
+      Config({
+        baseUrl: controlURL(state),
+        password: 'pw',
+        attachToDaemon: false,
+        spawnServer: false,
+        autoDiscoverModels: true,
+        catalogSyncMs: 0,
+        requestTimeoutMs: 2000,
+        timeoutMs: 5000,
+        costPath: join(mkdtempSync(join(tmpdir(), 'dsh-cost-')), 'opencode-session-cost.json'),
+      }),
+    )
+    adapter.catalog.prime({ models: [anthropicRecord] })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode/claude-opus-5-5',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      maxTokens: 64,
+    }))
+    assert.equal(state.chatRequests.length, 1, 'the request must reach the backend')
+    assert.equal(chunks.at(-1).type, 'finish')
+    assert.ok(
+      warnings.some((message) => message.includes('@opencode/ai/providers/anthropic')),
+      `the wire must be reported; warnings were ${JSON.stringify(warnings)}`,
+    )
+  } finally {
+    await close()
+  }
+})
+
+test('strictWire true throws UNSUPPORTED_PROTOCOL before any fetch', async () => {
+  const { state, close } = await startServer({ models: [ANTHROPIC_ENTRY] })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), strictWire: true })
+    adapter.catalog.prime({ models: [anthropicRecord] })
+    let calls = 0
+    const original = globalThis.fetch
+    globalThis.fetch = (...args) => {
+      calls += 1
+      return original(...args)
+    }
+    try {
+      await assert.rejects(
+        () => collect(adapter.stream({
+          provider: 'opencode-http-agent',
+          model: 'opencode/claude-opus-5-5',
+          messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+          maxTokens: 64,
+        })),
+        (error) => {
+          assert.equal(error.code, 'UNSUPPORTED_PROTOCOL')
+          assert.match(error.message, /opencode\/claude-opus-5-5/)
+          assert.match(error.message, /@opencode\/ai\/providers\/anthropic/)
+          assert.match(error.message, /OpenAI chat wire only/)
+          return true
+        },
+      )
+    } finally {
+      globalThis.fetch = original
+    }
+    assert.equal(calls, 0, 'the guard must refuse before any network call')
+    assert.equal(state.chatRequests.length, 0)
+  } finally {
+    await close()
+  }
+})
+
+test('an unknown package is allowed and the request is attempted', async () => {
+  const { state, close } = await startServer({ models: [{ ...ANTHROPIC_ENTRY, package: '@opencode/ai/providers/future-wire' }] })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), strictWire: true })
+    adapter.catalog.prime({ models: [{ ...anthropicRecord, package: '@opencode/ai/providers/future-wire' }] })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode/claude-opus-5-5',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      maxTokens: 64,
+    }))
+    // strictWire refuses an unknown wire too: it is not a confirmed chat package.
+    assert.equal(chunks.at(-1).type, 'finish')
+  } finally {
+    await close()
+  }
+})
+
+test('buildChatRequest sends max_completion_tokens when the route declares it', () => {
+  const config = Config({ reasoningField: 'reasoning_content', effortField: 'reasoning_effort' })
+  const options = {
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    maxTokens: 99,
+  }
+  const ref = { providerID: 'opencode-go', id: 'm' }
+  const declared = buildChatRequest(options, ref, config, {
+    model: { compatibility: { maxTokensField: 'max_completion_tokens' } },
+  })
+  assert.equal(declared.max_completion_tokens, 99)
+  assert.equal('max_tokens' in declared, false, 'the two fields must never both be sent')
+
+  const legacy = buildChatRequest(options, ref, config, { model: { compatibility: {} } })
+  assert.equal(legacy.max_tokens, 99)
+  assert.equal('max_completion_tokens' in legacy, false)
+
+  // No route record at all: the historical field keeps working (backward compat).
+  const unknown = buildChatRequest(options, ref, config)
+  assert.equal(unknown.max_tokens, 99)
+})
+
+test('buildChatRequest omits stream_options when the route rejects it', () => {
+  const config = Config({ reasoningField: 'reasoning_content', effortField: 'reasoning_effort' })
+  const options = { messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }
+  const ref = { id: 'm' }
+  const off = buildChatRequest(options, ref, config, { model: { compatibility: { streamUsage: false } } })
+  assert.equal('stream_options' in off, false)
+  const on = buildChatRequest(options, ref, config, { model: { compatibility: { streamUsage: true } } })
+  assert.deepEqual(on.stream_options, { include_usage: true })
+})
+
+test('a streamUsage:false route finishes normally with no usage chunk', async () => {
+  // The usage chunk may simply be absent; that is not a defect.
+  const events = [
+    { choices: [{ delta: { content: 'Hello' } }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] },
+  ]
+  const { state, close } = await startServer({
+    events,
+    models: [{ ...ANTHROPIC_ENTRY, package: '@opencode/ai/providers/openai-compatible', compatibility: { streamUsage: false } }],
+  })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    adapter.catalog.prime({
+      models: [{ ...anthropicRecord, package: '@opencode/ai/providers/openai-compatible', compatibility: { streamUsage: false } }],
+    })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode/claude-opus-5-5',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      maxTokens: 64,
+    }))
+    assert.equal('stream_options' in state.chatRequests[0], false)
+    assert.equal(chunks.at(-1).reason.kind, 'stop')
+    assert.equal(chunks.some((chunk) => chunk.type === 'usage'), false, 'no usage may be invented')
+  } finally {
+    await close()
+  }
+})
+
+test('cacheFormat anthropic adds exactly three markers and never mutates the input', () => {
+  const config = Config({ reasoningField: 'reasoning_content', effortField: 'reasoning_effort' })
+  const messages = [
+    { role: 'system', content: [{ type: 'text', text: 'SYSTEM' }] },
+    { role: 'user', content: [{ type: 'text', text: 'older' }] },
+    { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
+    { role: 'user', content: [{ type: 'text', text: 'latest' }] },
+  ]
+  const snapshot = JSON.stringify(messages)
+  const body = buildChatRequest(
+    {
+      messages,
+      tools: [
+        { name: 'bash', description: 'Run', parameters: { type: 'object' } },
+        { name: 'read', description: 'Read', parameters: { type: 'object' } },
+      ],
+      maxTokens: 10,
+    },
+    { id: 'm' },
+    config,
+    { model: { compatibility: { cacheFormat: 'anthropic' } } },
+  )
+  const markers = []
+  const scan = (value, path) => {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => scan(item, `${path}[${index}]`))
+      return
+    }
+    if (!value || typeof value !== 'object') return
+    if (value.cache_control) markers.push({ path, cache: value.cache_control })
+    for (const [key, child] of Object.entries(value)) scan(child, `${path}.${key}`)
+  }
+  scan(body, 'body')
+  assert.equal(markers.length, 3, `exactly three markers, got ${JSON.stringify(markers)}`)
+  for (const marker of markers) assert.deepEqual(marker.cache, { type: 'ephemeral' })
+  // The last tool, not the first.
+  assert.equal(body.tools.at(-1).cache_control?.type, 'ephemeral')
+  assert.equal('cache_control' in body.tools[0], false)
+  // The system prompt and the latest message.
+  assert.equal(body.messages[0].content.at(-1).cache_control?.type, 'ephemeral')
+  assert.equal(body.messages.at(-1).content.at(-1).cache_control?.type, 'ephemeral')
+  // The caller's array and its entries are untouched.
+  assert.equal(JSON.stringify(messages), snapshot)
+  assert.equal('cache_control' in messages[0], false)
+})
+
+test('cacheFormat anthropic marks a string system prompt and string message content', () => {
+  // `options.system` becomes a system-role message; a string message content is
+  // rewritten into one text part so the marker has a part to live on.
+  const config = Config({ reasoningField: 'reasoning_content', effortField: 'reasoning_effort' })
+  const body = buildChatRequest(
+    { system: 'SYSTEM', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }], maxTokens: 5 },
+    { id: 'm' },
+    config,
+    { model: { compatibility: { cacheFormat: 'anthropic' } } },
+  )
+  assert.deepEqual(body.messages[0], {
+    role: 'system',
+    content: [{ type: 'text', text: 'SYSTEM', cache_control: { type: 'ephemeral' } }],
+  })
+  assert.deepEqual(body.messages.at(-1).content, [{ type: 'text', text: 'hi', cache_control: { type: 'ephemeral' } }])
+})
+
+test('rawBypass sends the body unmodified: no field rewrite, no cache markers', () => {
+  const config = Config({ reasoningField: 'reasoning_content', effortField: 'reasoning_effort' })
+  const body = buildChatRequest(
+    {
+      system: 'SYSTEM',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      tools: [{ name: 'bash', description: 'Run', parameters: { type: 'object' } }],
+      maxTokens: 42,
+    },
+    { id: 'm' },
+    config,
+    {
+      model: { compatibility: { maxTokensField: 'max_completion_tokens', streamUsage: false, cacheFormat: 'anthropic' } },
+      rawBypass: true,
+    },
+  )
+  assert.equal(body.max_tokens, 42)
+  assert.equal('max_completion_tokens' in body, false)
+  assert.deepEqual(body.stream_options, { include_usage: true })
+  assert.equal('cache_control' in body.tools[0], false)
+  assert.equal(JSON.stringify(body).includes('cache_control'), false)
+})
+
+test('rawBypass also skips the wire preflight, so an anthropic route is sent as built', async () => {
+  const { state, close } = await startServer({ models: [ANTHROPIC_ENTRY] })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), strictWire: true, rawBypass: true })
+    adapter.catalog.prime({ models: [{ ...anthropicRecord, compatibility: { maxTokensField: 'max_completion_tokens' } }] })
+    const chunks = await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode/claude-opus-5-5',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      maxTokens: 64,
+    }))
+    assert.equal(state.chatRequests.length, 1, 'rawBypass sends despite strictWire')
+    assert.equal(state.chatRequests[0].max_tokens, 64, 'no field rewrite under rawBypass')
+    assert.equal(chunks.at(-1).type, 'finish')
+  } finally {
+    await close()
+  }
+})
+
+test('the context-budget clamp writes the declared completion field, never both', async () => {
+  const models = [{ providerID: 'opencode-go', id: 'beam-free', name: 'Beam Free', limit: { context: 4000, output: 8192 } }]
+  const { state, close } = await startServer({ models })
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    adapter.catalog.prime({
+      models: [{
+        id: 'opencode-go/beam-free',
+        name: 'Beam Free',
+        inputModalities: ['text'],
+        contextWindow: 4000,
+        maxTokens: 8192,
+        compatibility: { maxTokensField: 'max_completion_tokens' },
+      }],
+    })
+    await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode-go/beam-free',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'x'.repeat(7000) }] }],
+      maxTokens: 16384,
+    }))
+    const sent = state.chatRequests[0]
+    assert.ok(sent, 'the request was sent')
+    assert.ok(sent.max_completion_tokens >= 1 && sent.max_completion_tokens < 16384, `clamped to ${sent.max_completion_tokens}`)
+    assert.equal('max_tokens' in sent, false)
+  } finally {
+    await close()
+  }
+})
+
+test('the trace records wire unverified for an unsupported package and wire chat otherwise', async () => {
+  const tracePath = join(mkdtempSync(join(tmpdir(), 'dsh-trace-')), 'trace.jsonl')
+  const { state, close } = await startServer({ models: [ANTHROPIC_ENTRY] })
+  const previous = process.env.OPENCODE_V2_TRACE
+  process.env.OPENCODE_V2_TRACE = tracePath
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    adapter.catalog.prime({ models: [anthropicRecord] })
+    await collect(adapter.stream({
+      provider: 'opencode-http-agent',
+      model: 'opencode/claude-opus-5-5',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      maxTokens: 64,
+    }))
+    const lines = readFileSync(tracePath, 'utf8').trim().split('\n').map((line) => JSON.parse(line))
+    const request = lines.find((line) => line.kind === 'request')
+    assert.ok(request, 'a request line was written')
+    assert.equal(request.wire, 'unverified', 'an anthropic package is an unverified wire')
+
+    // A confirmed chat package records wire chat.
+    const clean = await startServer({
+      models: [{ ...ANTHROPIC_ENTRY, package: '@opencode/ai/providers/openai-compatible' }],
+    })
+    try {
+      const second = adapterFor(clean.state, { baseUrl: controlURL(clean.state) })
+      second.catalog.prime({
+        models: [{ ...anthropicRecord, package: '@opencode/ai/providers/openai-compatible' }],
+      })
+      await collect(second.stream({
+        provider: 'opencode-http-agent',
+        model: 'opencode/claude-opus-5-5',
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+        maxTokens: 64,
+      }))
+      const after = readFileSync(tracePath, 'utf8').trim().split('\n').map((line) => JSON.parse(line))
+      const last = after.filter((line) => line.kind === 'request').at(-1)
+      assert.equal(last.wire, 'chat')
+    } finally {
+      await clean.close()
+    }
+  } finally {
+    if (previous === undefined) delete process.env.OPENCODE_V2_TRACE
+    else process.env.OPENCODE_V2_TRACE = previous
+    await close()
+  }
 })

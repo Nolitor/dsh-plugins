@@ -108,7 +108,9 @@ export function summarizeRequest(body) {
     tools: Array.isArray(body?.tools) ? body.tools.length : 0,
     hasSystem: messages.some((message) => message?.role === 'system'),
     stream: body?.stream === true,
-    maxTokens: body?.max_tokens ?? null,
+    // A route may carry its completion budget in either field; report whichever
+    // the builder actually sent so a trace never reads "no budget" for one.
+    maxTokens: body?.max_tokens ?? body?.max_completion_tokens ?? null,
     toolChoice: body?.tool_choice ?? null,
     effort: body?.reasoning_effort ?? body?.reasoning ?? null,
   }

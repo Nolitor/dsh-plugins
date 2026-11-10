@@ -13,6 +13,10 @@ import {
   fetchUsage,
   forwardedEnv,
   disambiguateModelNames,
+  classifyWire,
+  completionTokensField,
+  isOpenAiChatPackage,
+  modelFromApiEntry,
   modelsFromApiPayload,
   modelsFromCliOutput,
   sendPrompt,
@@ -499,4 +503,159 @@ test('modelsFromApiPayload drops routes the server marks disabled', () => {
   }
   const { models } = modelsFromApiPayload(payload)
   assert.deepEqual(models.map((model) => model.id), ['opencode/live'])
+})
+
+// ---------------------------------------------------------------------------
+// Ingress Protocol Guard (G1/G2): package + compatibility retention
+// ---------------------------------------------------------------------------
+
+test('modelFromApiEntry keeps the package and the compatibility declaration', () => {
+  // Measured 2026-11-10 on the live catalog: `opencode/claude-opus-5-5` is served
+  // by `@opencode/ai/providers/anthropic`, not by an OpenAI chat wire.
+  const model = modelFromApiEntry({
+    id: 'claude-opus-5-5',
+    providerID: 'opencode',
+    name: 'Claude Opus 5.5',
+    package: '@opencode/ai/providers/anthropic',
+    limit: { context: 1000000, output: 128000 },
+    compatibility: {
+      reasoningField: 'reasoning_content',
+      maxTokensField: 'max_completion_tokens',
+      streamUsage: false,
+      cacheFormat: 'anthropic',
+      requireFinishReason: true,
+      requireReasoning: false,
+      supportsPromptCacheKey: true,
+      requireAssistantAfterTool: false,
+    },
+  })
+  assert.equal(model.package, '@opencode/ai/providers/anthropic')
+  assert.deepEqual(model.compatibility, {
+    reasoningField: 'reasoning_content',
+    maxTokensField: 'max_completion_tokens',
+    streamUsage: false,
+    cacheFormat: 'anthropic',
+    requireFinishReason: true,
+    requireReasoning: false,
+    supportsPromptCacheKey: true,
+    requireAssistantAfterTool: false,
+  })
+  // The legacy flat field stays for every existing reader.
+  assert.equal(model.reasoningField, 'reasoning_content')
+})
+
+test('modelFromApiEntry omits package/compatibility when the entry has none', () => {
+  const model = modelFromApiEntry({ id: 'x', providerID: 'opencode' })
+  assert.equal('package' in model, false)
+  assert.equal('compatibility' in model, false)
+})
+
+test('compatibility keeps only boolean/string values for its known keys', () => {
+  const model = modelFromApiEntry({
+    id: 'x',
+    providerID: 'opencode',
+    compatibility: { maxTokensField: 42, streamUsage: 'false', cacheFormat: null, requireReasoning: true },
+  })
+  assert.deepEqual(model.compatibility, { streamUsage: 'false', requireReasoning: true })
+})
+
+test('allowDynamicPassthrough keeps unknown compatibility keys and package families', () => {
+  const entry = {
+    id: 'x',
+    providerID: 'opencode',
+    package: '@opencode/ai/providers/some-future-wire',
+    compatibility: { cacheFormat: 'anthropic', supportsThinkingBlockBinding: true, wire: 'future' },
+  }
+  // Default: pass through.
+  const kept = modelFromApiEntry(entry)
+  assert.deepEqual(kept.compatibility, {
+    cacheFormat: 'anthropic',
+    supportsThinkingBlockBinding: true,
+    wire: 'future',
+  })
+  // Explicit opt-out: only the known keys survive.
+  const stripped = modelFromApiEntry(entry, { allowDynamicPassthrough: false })
+  assert.deepEqual(stripped.compatibility, { cacheFormat: 'anthropic' })
+})
+
+test('isOpenAiChatPackage accepts the chat wires and rejects every other family', () => {
+  for (const id of [
+    '@opencode/ai/providers/openai',
+    '@opencode/ai/providers/openai/chat',
+    '@opencode/ai/providers/openai-compatible',
+    '@opencode/ai/providers/azure/chat',
+    '@opencode/ai/providers/azure-openai/chat',
+  ]) {
+    assert.equal(isOpenAiChatPackage(id), true, id)
+  }
+  for (const id of [
+    '@opencode/ai/providers/anthropic',
+    '@opencode/ai/providers/anthropic-compatible',
+    '@opencode/ai/providers/openai/responses',
+    '@opencode/ai/providers/google',
+    '@opencode/ai/providers/google-vertex',
+    '@opencode/ai/providers/mistral',
+  ]) {
+    assert.equal(isOpenAiChatPackage(id), false, id)
+  }
+  // Unknown/absent: allowed, and the caller marks it unverified.
+  assert.equal(isOpenAiChatPackage(undefined), true)
+  assert.equal(isOpenAiChatPackage(''), true)
+  assert.equal(isOpenAiChatPackage(null), true)
+})
+
+test('completionTokensField follows the route declaration, never both', () => {
+  assert.equal(completionTokensField({ compatibility: { maxTokensField: 'max_completion_tokens' } }), 'max_completion_tokens')
+  assert.equal(completionTokensField({ compatibility: {} }), 'max_tokens')
+  assert.equal(completionTokensField(null), 'max_tokens')
+  // rawBypass keeps the historical field.
+  assert.equal(completionTokensField({ compatibility: { maxTokensField: 'max_completion_tokens' } }, { rawBypass: true }), 'max_tokens')
+})
+
+test('modelsFromApiPayload keeps an anthropic-package route and marks it unverified', () => {
+  // Advisory by default: the facade may translate a chat body, so the route is
+  // advertised with `unverifiedWire` rather than hidden.
+  const parsed = modelsFromApiPayload({
+    data: [
+      { id: 'claude-opus-5-5', providerID: 'opencode', name: 'Claude Opus 5.5', package: '@opencode/ai/providers/anthropic' },
+      { id: 'free-unknown', providerID: 'opencode', name: 'Free Unknown' },
+      { id: 'beam-free', providerID: 'opencode', name: 'Beam Free', package: '@opencode/ai/providers/openai-compatible' },
+    ],
+  })
+  assert.deepEqual(parsed.models.map((model) => model.id), [
+    'opencode/claude-opus-5-5',
+    'opencode/free-unknown',
+    'opencode/beam-free',
+  ])
+  assert.equal(parsed.models[0].unverifiedWire, true)
+  assert.equal(parsed.models[0].package, '@opencode/ai/providers/anthropic')
+  // An entry that declares no package is a known-unknown, not a verified chat wire.
+  assert.equal('unverifiedWire' in parsed.models[1], false)
+  assert.equal('unverifiedWire' in parsed.models[2], false)
+})
+
+test('modelsFromApiPayload hides an unsupported-package route only under strictWire', () => {
+  const payload = {
+    data: [
+      { id: 'claude-opus-5-5', providerID: 'opencode', name: 'Claude Opus 5.5', package: '@opencode/ai/providers/anthropic' },
+      { id: 'beam-free', providerID: 'opencode', name: 'Beam Free', package: '@opencode/ai/providers/openai-compatible' },
+    ],
+  }
+  const strict = modelsFromApiPayload(payload, { strictWire: true })
+  assert.deepEqual(strict.models.map((model) => model.id), ['opencode/beam-free'])
+})
+
+test('classifyWire separates a confirmed chat wire from a known foreign one and an unknown one', () => {
+  assert.equal(classifyWire('@opencode/ai/providers/openai-compatible'), 'chat')
+  assert.equal(classifyWire('@opencode/ai/providers/openai/chat'), 'chat')
+  assert.equal(classifyWire('@opencode/ai/providers/azure/chat'), 'chat')
+  assert.equal(classifyWire('@opencode/ai/providers/anthropic'), 'unsupported')
+  assert.equal(classifyWire('@opencode/ai/providers/anthropic-compatible'), 'unsupported')
+  assert.equal(classifyWire('@opencode/ai/providers/openai/responses'), 'unsupported')
+  assert.equal(classifyWire('@opencode/ai/providers/google'), 'unsupported')
+  assert.equal(classifyWire('@opencode/ai/providers/google-vertex'), 'unsupported')
+  // A server newer than this adapter: never refused, only marked.
+  assert.equal(classifyWire('@opencode/ai/providers/brand-new-wire'), 'unknown')
+  assert.equal(classifyWire(undefined), 'unknown')
+  assert.equal(classifyWire(''), 'unknown')
 })
