@@ -8,9 +8,10 @@ updated: 2026-11-10
 summary: Phased plan to absorb @nolit/dsh-opencode-v2 into dsh-custom-router/vendor/opencode, aligned against the three existing pipelines — DeepInfra for the shared stream pipe, Antigravity for the surface/dispatch supervisor, and the router preset slot for registry and dynamic activation — with file moves, fallback shims, per-phase verification gates, the four owner decisions recorded, and every OpenCode beta-roadmap milestone assigned to a phase.
 -->
 
-> Status: **draft, not started; owner decisions recorded 2026-11-10 (§6) and beta milestones mapped
-> in §7.** Owner instruction 2026-11-10: absorb OpenCode v2 as a native vendor slot, not in
-> isolation, by conforming to the two shipped vendor references.
+> Status: **Phase A delivered 2026-11-10** (vendor tree, shim, exports, leaf contract, first
+> conforming driver, dual-mount guard); owner decisions in §6 and beta milestones in §7; CP3
+> approved closing Phase A. Owner instruction 2026-11-10: absorb OpenCode v2 as a native vendor
+> slot, not in isolation, by conforming to the two shipped vendor references.
 > Rules: [RULES.md](../../docs/RULES.md) · Stage authority:
 > [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md) P4/P5 ·
 > [CUSTOM-ROUTER-SURFACE-CONTRACT.md](./CUSTOM-ROUTER-SURFACE-CONTRACT.md) M13/M14.
@@ -339,3 +340,20 @@ Reviewer: **Argon 4.0 (medium)**, 7,867 in / 1,131 out, verdict **APPROVE-WITH-C
 Rollback: package-level rollback stays safe at Phase A because external callers use the seven
 `@nolit/dsh-opencode-v2` shims; it stops being safe once consumers import `./vendor/opencode/*`
 directly.
+
+### CP3 — Phase A sign-off (2026-11-10)
+
+Reviewer: **Argon 4.0 (medium)**, 7,856 in / 191 out. Verdict **APPROVE**.
+
+Phase A is closed with these gates: router **464/464** (396 + 68 adversarial), deepinfra
+**223** (216 + 7 skip), vendored opencode **481/481**, `docs:check` OK.
+
+CP3's one forward risk for Phase B: **stream lifecycle ownership across the vendor boundary** —
+one canonical `AbortController`/lifecycle owner per stream, so an abort or error cannot leave a
+reader lock or listener dangling when the pipe meets the vendored consumer.
+
+Deferred validation edge cases (recorded in `test/driver-adversarial.test.mjs`, deliberately not
+fixed): id case/whitespace normalisation, intra-driver duplicate names, command-name syntax,
+switch-name uniqueness, `catalogLayer` NaN/Infinity, function-value freezing. They are
+non-structural while every driver is first-party; they must be closed **before** third-party
+driver registration is opened.
