@@ -465,16 +465,18 @@ adapter must stop discarding.
 | Step | Rule | Failure mode |
 | :--- | :--- | :--- |
 | G1 | Retain `package` and `compatibility` in the catalog record (`modelFromApiEntry`, snapshot signature) | — |
-| G2 | Allowlist the wires this adapter speaks: `@opencode/ai/providers/openai`, `…/openai/chat`, `…/openai-compatible` (and any suffix-matched azure chat variant). Anything else — `anthropic`, `anthropic-compatible`, `openai/responses`, `google*` — is **rejected** with a typed `LlmError` (code `UNSUPPORTED_PROTOCOL`) naming the model and its package | Hard, clean rejection; no request, no argv, no partial stream |
+| G2 | Classify the wire from `package`: OpenAI-chat packages are served normally. Any other package (`anthropic`, `anthropic-compatible`, `openai/responses`, `google*`) is **advisory by default** — warn + record `wire: 'unverified'` and attempt the request (the facade may translate). Only `strictWire: true` (opt-in, default false) turns it into a typed `LlmError` (`UNSUPPORTED_PROTOCOL`) before fetch | Default: no traffic is dropped. Opt-in: clean rejection with no request/argv/partial stream |
 | G3 | An unknown package (older server) is allowed but marked `unverified` in the trace, so a silent wire change is visible | Degraded, not silent |
 | G4 | `compatibility.maxTokensField` selects `max_completion_tokens` or `max_tokens` | Removes the guaranteed 400 |
 | G5 | `compatibility.streamUsage === false` omits `stream_options` and the usage expectation | No rejected body / no invented usage |
 | G6 | `compatibility.cacheFormat === 'anthropic'` adds `cache_control: {type:'ephemeral'}` to the last tool definition, the system prompt and the latest message (official V2 rules) | Restores prompt-cache reuse on OpenAI-compatible proxies serving Claude |
 | G7 | `requireFinishReason`, `requireReasoning` honoured where cheap | Fewer strict-endpoint 400s |
+| G8 | **Escape hatches.** `allowDynamicPassthrough` (default true): unknown package/compatibility fields are preserved and passed through, never stripped. `rawBypass` (default false): skip wire checks and body rewriting and send the request as built | Undocumented vendor shifts can be accommodated without an adapter patch |
 
-**Advertise only what can be served.** Either the catalog omits a rejected-package model from the
-advertised list (preferred), or the guard rejects it at request time. Today it does neither, which
-is the defect this section closes.
+**Advertise, do not amputate.** The catalog keeps every enabled model and attaches `package` plus
+`unverifiedWire: true`, so the operator can see which routes are unverified. Hiding a model is not
+a default behaviour; it is a `strictWire` consequence. The defect this section closes is the
+*silence*, not the presence of the model.
 
 **Gate.** B-3 signs off only when: the guard exists with unit tests (allowed package, anthropic
 rejection, unknown package marked, `max_completion_tokens`, `streamUsage:false`, cache markers),
@@ -488,6 +490,34 @@ The live shared-mode run remains owner-gated.
 > is not a platform capability: every new preset would need another hand-written check. This section
 > specifies the generalised engine. It is a **core capability of the router**, not part of the
 > OpenCode absorption, and it is owned independently of any one vendor.
+
+### 13.0 Advisory-first — the engine is an observer, never a runtime gatekeeper
+
+**Owner constraint (2026-11-10):** upstream APIs, web-auth handshakes and agent protocols are
+immature and moving. The engine must not become a runtime choke point.
+
+| Guarantee | Rule |
+| :--- | :--- |
+| **No live traffic is dropped** by the audit engine | Findings are warnings / `unverified` tags. `blocker` findings gate **release and CI**, never the running request path |
+| **Hard stop only when failure is certain** | A local invariant that cannot succeed (malformed request, missing model id) may still fail; a wire/contract mismatch may **not**, because the backend or facade may translate |
+| **Unknown is visible, not silent** | Every unverifiable dimension is recorded as `unverified`; a green report never means "not checked" |
+| **Observer isolation** | Worker failures are isolated; the engine cannot throw into a request, a plugin load or a service restart |
+
+Runtime enforcement stays in the **ingress guard** (§12), and even there the default is advisory
+(`strictWire: false`). The engine and the guard share findings; they do not share a kill switch.
+
+### 13.0.1 Escape hatches are first-class
+
+Every preset carries, next to its audit contract:
+
+| Knob | Default | Meaning |
+| :--- | :--- | :--- |
+| `allowDynamicPassthrough` | `true` | Unknown package/compatibility keys are preserved and forwarded untouched. The engine and adapter never silently strip a field they do not recognise |
+| `rawBypass` | `false` | Skip wire checks and body rewriting; send the caller's payload as built. The manual override for an undocumented vendor shift, before any adapter patch |
+| `strictWire` | `false` | Opt-in hard rejection of an unsupported wire, for an operator who prefers a clean early error over an attempted request |
+
+These are preset declarations, not engine code, so a future preset declares its own tolerance
+without touching the engine.
 
 ### 13.1 Principle
 
@@ -564,13 +594,19 @@ what turns "we measured it once" into a continuously checkable contract.
 audit report = { preset, at, signature, findings[], unverified[] }
 ```
 
-- `blocker` findings fail the preset's audit gate; `warn` is visible but non-blocking.
+- `blocker` findings fail the preset's **release/CI** audit gate; `warn` is visible but
+  non-blocking. Neither statement is a runtime router: a running session is never interrupted by an
+  audit finding.
 - `unverified` records what could not be checked (no spec, owner session absent) — never silently
   green.
 - The B-3 external-contract check becomes one API-worker run for the `opencode` preset; the
   §10 audit table is the expected baseline it compares against.
 
 ### 13.6 Roadmap (core track, parallel to A–F)
+
+**Sequence constraint (owner, 2026-11-10): Core-A0 does not start until the B-3a ingress guard is
+implemented and verified.** Stabilise the current OpenCode pipe first; the engine track begins
+after B-3a's tests pass, so two core changes never race on the same adapter.
 
 | Step | Work | Gate |
 | :--- | :--- | :--- |
