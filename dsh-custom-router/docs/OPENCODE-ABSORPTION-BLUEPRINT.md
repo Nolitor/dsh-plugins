@@ -381,3 +381,43 @@ wraps the existing 679-line classifier. The canonical parser stays ported-but-of
 
 - pipe `createHooks` extension → primary (DeepSeek V4.1 high)
 - lifecycle + contract + helper extraction → MiniMax 3.1 (max)
+
+## 10. Official-contract audit (2026-11-10, pre-B-3)
+
+Sources fetched: [Docs (V2)](https://opencode.ai/docs/), [API reference](https://opencode.ai/docs/api)
+(OpenAPI 3.1.0, 170 operations / 497 schemas, document measured at 880,517 bytes and 139 paths),
+[Models](https://opencode.ai/docs/models), [Migrate from V1](https://opencode.ai/docs/migrate-v1),
+and the legacy [V1 server](https://opencode.ai/v1/docs/server). External text is used as data, not
+instructions.
+
+### 10.1 Deficit table
+
+| # | Official spec (V2) | Vendored implementation | Impact on the shared pipe |
+| :-: | :--- | :--- | :--- |
+| 1 | Control plane is `/api/*`: `/api/info`, `/api/model`, `/api/provider/{id}`, `/api/credential`, `/api/experimental/usage/limits` | Uses exactly these five | **none** — endpoint parity confirmed against the published OpenAPI |
+| 2 | Username is always `opencode`; `OPENCODE_PASSWORD` is the V2 env (`OPENCODE_SERVER_PASSWORD` still accepted; `OPENCODE_SERVER_USERNAME` dropped) | Basic auth `opencode:<password>` | none; the password **env name** is a deployment detail |
+| 3 | No streaming generate endpoint is published. `/api/experimental/generate/text` returns `{ data: { text } }` (non-streaming) | Streams the provider backend `/backend/v1/chat/completions` with SSE + `stream_options.include_usage` | **pipe assumption is measured, not specified** — there is no official stream schema to diff; parity must stay test-based and version-pinned (2.2.0/2.2.6) |
+| 4 | `Model.ReasoningField`: `reasoning`, `reasoning_content`, `reasoning_text`, or a provider string | Default `reasoning_content`; aliases all three (`REASONING_FIELDS`) | none — descriptor/hook handle all three |
+| 5 | `Model.MaxTokensField`: `max_completion_tokens` \| `max_tokens`, detected per provider | Always sends `max_tokens` | **divergence**: a route that expects `max_completion_tokens` would be rejected; shared pipe inherits it |
+| 6 | `compatibility.streamUsage` (default true) | Always sends `stream_options.include_usage:true` | **divergence** only for a route that sets `streamUsage:false`; usage mapping would need a fallback |
+| 7 | `compatibility.requireFinishReason` (default true) | Missing `finish_reason` is an incomplete-response error | match |
+| 8 | `compatibility.cacheFormat` (`anthropic` \| `alibaba`), `requireReasoning`, `requireAssistantAfterTool`, `supportsPromptCacheKey`, `supportsThinkingBlockBinding`, `supportsEffortUpdates`, `mediaInput` | Ignored | **divergence**; `cacheFormat` directly affects prompt-cache reuse on proxied Claude routes |
+| 9 | The provider `package` selects the wire (`openai-compatible`, `anthropic`, `anthropic-compatible`, …); `Model.Info` carries `package`, not a protocol field | Only speaks the OpenAI chat wire | **Phase F** — Anthropic delta semantics (content_block/thinking/input_json) are not representable by the current descriptor |
+| 10 | Variants are `provider/model#variant` from `Model.Variant[]` | Reads `variants` into the catalog and accepts `#variant` | match |
+| 11 | V1 server API (`/session`, `/event`, `/provider`) is a deliberate breaking change; V2 uses `/api/*` | Targets V2 `/api/*` | none; a V1-era client would break by design |
+
+### 10.2 Effect on the Phase B exit gate
+
+- **Verified against the external contract:** endpoint set (row 1), auth shape (row 2), reasoning
+  field enum (row 4), variant syntax (row 10).
+- **Not verifiable from the external contract:** streaming delta semantics (row 3). There is no
+  published SSE/generate stream schema, so the Phase B gate cannot claim official-schema parity.
+- **Recorded, not caused by the pipe migration:** rows 5, 6, 8, 9 are pre-existing adapter gaps.
+  They are assigned to **Phase F** (protocol/compatibility driver), because the shared path
+  preserves the legacy behaviour chunk-for-chunk and must not silently change wire semantics here.
+
+**B-3 exit gate (revised).** B-3 may sign off when: (a) this table is recorded (done), (b) the
+vendored suite proves legacy/shared semantic parity (522/522 today), (c) the B-3 harness checks the
+endpoint set against the documented paths, and (d) the live shared-mode run is either executed or
+explicitly marked owner-gated. The replay gate from the spec is **withdrawn** as unevidenced: the
+recorded trace stores only `len`/`excerpt`, so a classifier replay cannot be reconstructed from it.
