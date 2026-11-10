@@ -15,8 +15,8 @@ summary: Workspace-level progress roll-up — per-track state, the ordered cross
 
 | Track | Version | Tests | Live | Handoff |
 | :--- | :--- | :--- | :--- | :--- |
-| `dsh-custom-router` | `0.0.1-rc.10` | 372/372, stream 7/7, dispatch 17/17 | mounted | [HANDOFF](../dsh-custom-router/docs/HANDOFF.md) |
-| `dsh-opencode-v2` | `0.0.1-rc.5` | 481/481 | mounted | [HANDOFF](../dsh-opencode-v2/docs/HANDOFF.md) |
+| `dsh-custom-router` | `0.0.1-rc.10` | 491/491, vendored OpenCode 544/544, stream 7/7, dispatch 17/17, contract 0 undocumented | mounted | [HANDOFF](../dsh-custom-router/docs/HANDOFF.md) |
+| `dsh-opencode-v2` | `0.0.1-rc.5` | shim only (7 re-exports); suite moved to `vendor/opencode` 544/544 | mounted via router | [HANDOFF](../dsh-opencode-v2/docs/HANDOFF.md) |
 | `dsh-notify` | `0.0.1-rc.4` | 70/70 | loaded; live visual check open | [HANDOFF](../dsh-notify/docs/HANDOFF.md) |
 | `dsh-tokeneconomizer` | `0.0.1-rc.1` | 139 pass / 1 skip | loaded; live visual check open | [HANDOFF](../dsh-tokeneconomizer/docs/HANDOFF.md) |
 | `dsh-sidebar-manager` | `0.0.1-rc.1` | 162/162 | mounted | [HANDOFF](../dsh-sidebar-manager/docs/HANDOFF.md) |

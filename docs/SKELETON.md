@@ -126,19 +126,19 @@
 - **1.0** · active · 2026-11-06 · [archive/dsh-subrouter/docs/INDEX.md](../archive/dsh-subrouter/docs/INDEX.md)
   Generated per-subproject index for @nolit/dsh-subrouter: every document this track owns, one line each.
 
-## boot (newest 5 of 53)
+## boot (newest 5 of 54)
 
 - **active** · INDEX.md · [card](../bootcards/INDEX.md)
   Newest-first list of dated boot cards.
+- **active** · 2026-11-10T2257+0900.md · [card](../bootcards/2026-11-10T2257+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-10T2257+0900. Older cards are historical.
 - **active** · 2026-11-10T1954+0900.md · [card](../bootcards/2026-11-10T1954+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-10T1954+0900. Older cards are historical.
 - **active** · 2026-11-08T2020+0900.md · [card](../bootcards/2026-11-08T2020+0900.md)
   Next-section work order. Each track now owns a docs/HANDOFF.md with ordered stages; this card carries the priority order, the owner-only blockers, and the measured gates for the 2026-11-08 session.
 - **active** · 2026-11-08T0902+0900.md · [card](../bootcards/2026-11-08T0902+0900.md)
   Session card. Anthropic Messages protocol lane (shared hooks + DeepInfra direct route, opt-in) and CLI-subagent patches (model selection, usage ledger, absolute path) landed; live profile has anthropicRoute:true and the restart is the owner's. Lists every unresolved item with its measured state.
-- **active** · 2026-11-08T0503+0900.md · [card](../bootcards/2026-11-08T0503+0900.md)
-  Session card (tier 5): the Custom Router M10 UI sprint is complete (settings schema, sidebar dashboard, tabbed model picker, OpenCode plan evidence). Handoff: P3 deepinfra stream-pipe integration, deferred UI cleanup, and the fixed 4-worker orchestration schema.
 
 ---
 
-37 workspace docs (53 boot cards), 0 with problems, 6 subprojects.
+37 workspace docs (54 boot cards), 0 with problems, 6 subprojects.

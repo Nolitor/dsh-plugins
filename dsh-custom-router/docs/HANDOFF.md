@@ -1,11 +1,11 @@
 # Custom Router — Handoff
 
 <!-- skeleton:
-version: 1.1
+version: 1.2
 kind: report
 status: active
 updated: 2026-11-10
-summary: Stage-by-stage handoff for @nolit/dsh-custom-router at 0.0.1-rc.10 — what is done, the next ordered stages with their gates, the preset-based dispatch policy revised 2026-11-10, and the owner decisions that block each one.
+summary: Handoff for @nolit/dsh-custom-router at 0.0.1-rc.10 — Phase B (OpenCode absorption, shared pipe, ingress guard, external-contract check) closed; runtime invariants, owner-gated live run, and the Phase C–F / Core-A roadmap that follows.
 -->
 
 > History lives in [CHANGELOG.md](../CHANGELOG.md). This file is the **forward** view: stage order,
@@ -16,8 +16,10 @@ summary: Stage-by-stage handoff for @nolit/dsh-custom-router at 0.0.1-rc.10 — 
 | Item | Measured value |
 | :--- | :--- |
 | Package | `@nolit/dsh-custom-router@0.0.1-rc.10` |
-| Last commit | `56c59d6` 2026-11-08 (rc.9) + the 2026-11-10 preset-policy revision (rc.10) |
-| Tests | `npm test` → **372/372 pass** |
+| Last commit | `135c009` 2026-11-10 — B-3 contract check recorded (Phase B closed) |
+| Tests | `npm test` → **491/491**; vendored OpenCode → **544/544** |
+| Contract check | `vendor/opencode: npm run verify:contract` → 139 documented, 5 used, **0 undocumented** |
+| Guard | `strictWire:false`, `allowDynamicPassthrough:true`, `rawBypass:false` (all declared, advisory default) |
 | Shared pipe | `npm run verify:stream` → **7/7 cases, 0 vendor loads** |
 | Preset parity | `npm run verify:presets` → OK; providers `deepseek-account, antigravity, deepinfra, deepinfra-anthropic, opencode-http-agent` |
 | Live mount | 5 providers, 6 commands, 6 tools resolved from the live profile |
@@ -31,7 +33,7 @@ summary: Stage-by-stage handoff for @nolit/dsh-custom-router at 0.0.1-rc.10 — 
 | Entry | P2 + P3 integrated (done) |
 | Work | add the `classifyText` hook in [SHARED-STREAM-PIPE-SPEC.md](SHARED-STREAM-PIPE-SPEC.md) terms |
 | Exit gate | opencode-v2 suite green; replay shows `markerDeltas == 0`; S2-3 prose gate passes |
-| Blocked by | nothing technical — **not started** |
+| Result | **done (Phase B)** — opencode moved onto the shared pipe behind `pipe: 'legacy'|'shared'` (legacy default), parity proven 544/544. The replay gate was withdrawn as unevidenced (trace stores only len/excerpt); prose gate moved to Phase F (owner decision D-4) |
 | Blueprint | [OPENCODE-ABSORPTION-BLUEPRINT.md](./OPENCODE-ABSORPTION-BLUEPRINT.md) Phase B (legacy classifier first; canonical default in Phase F) |
 
 ### S2 — P5: parity suite
@@ -115,3 +117,32 @@ Reported, not fixed.
 ```bash
 cd dsh-custom-router && npm test && npm run verify:stream && npm run verify:presets
 ```
+
+## 8. Phase B closure — runtime invariants and next targets
+
+**Phase B closed 2026-11-10** as *absorbed, guarded, regression-parity proven* — not production-
+certified (no published streaming contract; protocol work is Phase F).
+
+| Invariant | Value / owner |
+| :--- | :--- |
+| HTTP pipe selection | `pipe: 'legacy' \| 'shared'`, **legacy default**; shared is opt-in per profile |
+| Wire guard | `strictWire: false` (advisory: warn + `wire:'unverified'` + attempt) |
+| Dynamic passthrough | `allowDynamicPassthrough: true` — unknown catalog keys preserved |
+| Raw bypass | `rawBypass: false` — skips preflight and body rewriting when enabled |
+| Parser | `parser: 'legacy'` default; canonical parser stays ported-but-off (Phase F) |
+| Stream lifecycle | one `AbortController` per stream; reader lock released on every exit |
+| Dispatch policy | `minimal`/`ptc` hard-block; `read-only` blocks; `workspace-write`/`full` allow |
+| Mount | vendored `vendor/opencode`; `dsh-opencode-v2` is a 7-file re-export shim only |
+
+**Next targets, in order.**
+
+1. **Owner verification gate** — one live request with `pipe: 'shared'` (owner-gated; needs the
+   running service and a real turn). Until then the shared path is test-proven only.
+2. **Core-A0 (audit engine)** — contract + registry + synthetic-preset fixture; explicitly deferred
+   until Phase B's guard was verified (now satisfied). Non-blocking observer, no runtime gate.
+3. **Phase C** — vendored OpenCode surface supervisor (`syncAll` + `app-boot/config-reload` parity
+   with Antigravity), registry binding for `cli_worker`, one dashboard UI.
+4. **Phase D** — switch the preset to the vendored slot, cut the profile link, preset-only boot.
+5. **Phase E** — retire the shim/old track after one release.
+6. **Phase F** — canonical parser default + oracle, Anthropic/Responses protocol seam, 2.2.6
+   job/session P0–P5, compatibility fields (`requireReasoning`, thinking/effort updates).
