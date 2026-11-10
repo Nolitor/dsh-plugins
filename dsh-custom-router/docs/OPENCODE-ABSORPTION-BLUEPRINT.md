@@ -421,3 +421,62 @@ vendored suite proves legacy/shared semantic parity (522/522 today), (c) the B-3
 endpoint set against the documented paths, and (d) the live shared-mode run is either executed or
 explicitly marked owner-gated. The replay gate from the spec is **withdrawn** as unevidenced: the
 recorded trace stores only `len`/`excerpt`, so a classifier replay cannot be reconstructed from it.
+
+## 11. Correction — legacy parity is a regression baseline, not a production sign-off
+
+**The earlier framing in this document was wrong and is retracted.** "The shared path is
+chunk-for-chunk identical to legacy" proves the pipe migration introduced no regression. It does
+**not** prove the integration is production-ready: the legacy implementation itself is missing
+protocol handling that the live catalog now requires.
+
+### 11.1 Measured facts (2026-11-10, live daemon)
+
+| Fact | Evidence |
+| :--- | :--- |
+| The live `/api/model` advertises Claude models with an **Anthropic** package | `opencode/claude-opus-5-5`, `opencode/claude-sonnet-5-5`, `opencode/claude-haiku-5-5`, `opencode/claude-fable-5-2` → `package: '@opencode/ai/providers/anthropic'` |
+| The adapter **drops** `package` and all compatibility fields except `reasoningField` | `modelFromApiEntry` (`lib/shared.js:461-499`) keeps id/name/modalities/reasoningField/limit/variants only |
+| The serving path is an **undocumented internal endpoint** | `/backend/v1/chat/completions` is absent from the published OpenAPI (0 of 139 paths). The documented V2 generation route is `/api/experimental/generate/text` and is non-streaming |
+| The catalog snapshot the host sees therefore cannot distinguish wires | `opencode-models.json` entries carry `package: null`, `compatibility: null` |
+| A 400 was already measured on such routes for forwarded variant settings | `lib/shared.js:474-480`: "produced 400 'cannot be represented by …' on gpt-6-luna and claude-haiku-5-5" |
+
+### 11.2 Production blocker classification
+
+| Class | Blocker | Exact live failure if routed today | Deferrable? |
+| :--- | :--- | :--- | :--- |
+| **P0** | No ingress protocol guard; `package` dropped | Selecting `opencode/claude-opus-5-5` builds an OpenAI body (`messages`, `tools`, `stream_options`, `max_tokens`) and POSTs the undocumented `/backend/v1/chat/completions`. The outcome is **undefined**: the facade may translate and stream (semantics chosen by the facade), or reject with 400 as already measured. The adapter can do neither deliberately: it cannot reject early and cannot translate. That is exactly the "unhandled failure state" objection | **No** |
+| **P0** | `cacheFormat` / `supportsPromptCacheKey` ignored | On an OpenAI-compatible proxy serving Claude, the request carries **no `cache_control` markers** (and no `prompt_cache_key`). Cache hit-rate collapses to whatever the proxy decides; we lose the lever the official docs specify | **No** — it is the prompt-cache path the owner explicitly depends on |
+| **P0** | `max_completion_tokens` never sent | A route that requires `max_completion_tokens` answers **HTTP 400 immediately**; the model is advertised but unusable | **No** for any such route in the catalog |
+| **P1** | `streamUsage:false` ignored | `stream_options.include_usage` is sent to a route that rejects it → 400; or usage silently absent → cost/token accounting wrong | Yes, until such a route is enabled |
+| **P1** | `requireReasoning`, `requireAssistantAfterTool`, `supportsThinkingBlockBinding`, `supportsEffortUpdates`, `mediaInput` ignored | Multi-turn/thinking-block/media requests can be rejected by strict endpoints; not exercised by the current routes | Yes |
+| **P2** | Responses API (`openai/responses`) and Claude Agent providers unsupported | A model whose package is `…/responses` would receive the chat wire → the same undefined outcome as P0 until the guard rejects it | Guard covers it; dispatch seam later |
+
+### 11.3 What "Phase B closed" may and may not claim
+
+- It **may** claim: the OpenCode vendor is absorbed, the shared pipe is wired behind a flag, and
+  legacy/shared semantic parity is proven (522/522, parity tests).
+- It **may not** claim production integration parity until the **Ingress Protocol Guard** below
+  exists and is tested.
+
+## 12. Ingress Protocol Guard — Phase B closure condition (B-3 minimum)
+
+The guard runs **before any network call**, at request build time, using catalog metadata the
+adapter must stop discarding.
+
+| Step | Rule | Failure mode |
+| :--- | :--- | :--- |
+| G1 | Retain `package` and `compatibility` in the catalog record (`modelFromApiEntry`, snapshot signature) | — |
+| G2 | Allowlist the wires this adapter speaks: `@opencode/ai/providers/openai`, `…/openai/chat`, `…/openai-compatible` (and any suffix-matched azure chat variant). Anything else — `anthropic`, `anthropic-compatible`, `openai/responses`, `google*` — is **rejected** with a typed `LlmError` (code `UNSUPPORTED_PROTOCOL`) naming the model and its package | Hard, clean rejection; no request, no argv, no partial stream |
+| G3 | An unknown package (older server) is allowed but marked `unverified` in the trace, so a silent wire change is visible | Degraded, not silent |
+| G4 | `compatibility.maxTokensField` selects `max_completion_tokens` or `max_tokens` | Removes the guaranteed 400 |
+| G5 | `compatibility.streamUsage === false` omits `stream_options` and the usage expectation | No rejected body / no invented usage |
+| G6 | `compatibility.cacheFormat === 'anthropic'` adds `cache_control: {type:'ephemeral'}` to the last tool definition, the system prompt and the latest message (official V2 rules) | Restores prompt-cache reuse on OpenAI-compatible proxies serving Claude |
+| G7 | `requireFinishReason`, `requireReasoning` honoured where cheap | Fewer strict-endpoint 400s |
+
+**Advertise only what can be served.** Either the catalog omits a rejected-package model from the
+advertised list (preferred), or the guard rejects it at request time. Today it does neither, which
+is the defect this section closes.
+
+**Gate.** B-3 signs off only when: the guard exists with unit tests (allowed package, anthropic
+rejection, unknown package marked, `max_completion_tokens`, `streamUsage:false`, cache markers),
+the endpoint-set check passes against the documented OpenAPI, and the parity tests stay green.
+The live shared-mode run remains owner-gated.
