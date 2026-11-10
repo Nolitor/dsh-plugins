@@ -634,3 +634,19 @@ hand-written endpoint check. Nothing here changes runtime routing: the engine re
 | B-3 external-contract check | API worker run for the `opencode` preset against `openapi.json` |
 | Phase F protocol work | consumes API-worker `wires`/field findings; no duplicated ad-hoc probing |
 | New preset in future | declaration only; no engine change, no hand-written audit |
+
+### 10.3 B-3 result (2026-11-10)
+
+| Gate | Result |
+| :--- | :--- |
+| Endpoint set vs documented OpenAPI | **green** — fixture pins 139 paths (sha256 `a2c9b373…`, fetched 2026-11-10); 5 endpoints used, **0 undocumented** |
+| Legacy/shared semantic parity | **green** — 544/544 vendored (522 baseline + 22 guard tests) |
+| Ingress guard G1–G8 | **green** — advisory default, `strictWire` opt-in, capability translations, escape hatches |
+| Audit table recorded (§10.1/§11) | done |
+| Live shared-mode run | **owner-gated** — not executed; needs a real request with `pipe: 'shared'` |
+
+**Phase B exit:** satisfied to the extent the external contract allows. The endpoint and metadata
+dimensions are checked; streaming delta semantics remain unverifiable because the V2 docs publish
+no streaming generate contract (§10.2). That limitation is recorded, not papered over. Phase B may
+be closed as **"absorbed, guarded, regression-parity proven"** — not as "production integration
+certified"; the remaining protocol work is Phase F.
