@@ -480,3 +480,121 @@ is the defect this section closes.
 rejection, unknown package marked, `max_completion_tokens`, `streamUsage:false`, cache markers),
 the endpoint-set check passes against the documented OpenAPI, and the parity tests stay green.
 The live shared-mode run remains owner-gated.
+
+## 13. Provider Audit Engine — core platform capability
+
+> **Correction of method.** The audit in §10–§12 was a pin-set check written against specific
+> vendor names. It answers "is OpenCode's contract still what we measured?", which is useful, but it
+> is not a platform capability: every new preset would need another hand-written check. This section
+> specifies the generalised engine. It is a **core capability of the router**, not part of the
+> OpenCode absorption, and it is owned independently of any one vendor.
+
+### 13.1 Principle
+
+The router core is vendor-agnostic. A preset **declares** how it is audited; the engine **executes**
+that declaration through specialised workers. Adding a preset must require **zero engine changes** —
+only a new declaration. No engine module may contain a vendor id (`antigravity`, `deepinfra`,
+`opencode`, …); a source-scan test enforces that.
+
+### 13.2 `PresetAuditContract` — self-describing presets
+
+Every preset carries an `audit` object next to its existing `catalog`/`switches`/`surfaces`
+declarations (one home, same file):
+
+| Field | Type | Required | Meaning |
+| :--- | :--- | :--- | :--- |
+| `id` | string | yes | Preset id; must equal the preset's own id (cross-checked by the registry) |
+| `integrationType` | `'api_rest' \| 'cli_binary' \| 'web_auth_session' \| 'custom_proxy'` | yes | Selects which worker probes it and how credentials are obtained |
+| `catalogSource.endpoint` | string | no | Path/URL the API worker fetches for the live model list (defaults to the preset's `catalog` probe layer) |
+| `catalogSource.signatureKey` | string | no | Stable hash input: which catalog fields constitute the contract (id/package/limit/variants/compatibility) |
+| `specSource.openApiUrl` | string | no | Machine-readable spec to diff endpoints/params against |
+| `specSource.schemaUrl` | string | no | Non-OpenAPI schema (JSON Schema, capability manifest) |
+| `changelogSource.feedUrl` | string | no | Release notes/feed URL |
+| `changelogSource.releaseTagCommand` | string | no | Command that lists upstream tags/versions (CLI or `git ls-remote`) |
+
+Example shape (values are declarations, not engine code):
+
+```js
+audit: {
+  integrationType: 'custom_proxy',
+  catalogSource: { endpoint: '/api/model', signatureKey: 'id|package|limit|variants|compatibility' },
+  specSource: { openApiUrl: 'https://opencode.ai/docs/openapi.json' },
+  changelogSource: { feedUrl: 'https://opencode.ai/changelog', releaseTagCommand: 'opencode --version' },
+}
+```
+
+| Preset | `integrationType` | catalog | spec | changelog |
+| :--- | :--- | :--- | :--- | :--- |
+| antigravity | `web_auth_session` | vendor `catalog.js` web-auth RPC | — | — |
+| deepinfra | `api_rest` | `/v1/models` (OpenAI listing) | OpenAI-compatible schema (none currently) | vendor CHANGELOG |
+| opencode | `custom_proxy` | `/api/model` (daemon, Basic auth) | `https://opencode.ai/docs/openapi.json` | docs/changelog + binary version |
+
+### 13.3 Workers (specialised, vendor-neutral)
+
+| Worker | Input from the contract | Output |
+| :--- | :--- | :--- |
+| **API** | `catalogSource`, `specSource` | live catalog + signature hash; endpoint set diffed against the adapter's declared capabilities; parameter/field diff (e.g. `maxTokensField`, `streamUsage`, `cacheFormat`) |
+| **CLI** | `releaseTagCommand`, preset's CLI surfaces | binary version/fingerprint, flag contract, exit schema |
+| **Auth** | `integrationType` + preset's credential slots | handshake headers, session/token lifecycle, expiry path (owner session needed for web-auth) |
+| **Changelog** | `changelogSource` | parsed breaking-change notices mapped to capability dimensions |
+
+Each worker returns findings, never verdicts about a vendor: `{ dimension, severity: 'blocker'|'warn'|'info', code, detail, evidence }`.
+The engine merges them into one report keyed by preset id.
+
+### 13.4 Capability declaration (what the adapter claims)
+
+The audit is only meaningful if the adapter states what it can speak. That belongs to the
+**driver/slot contract** (§2), not to the engine:
+
+```js
+capabilities: {
+  wires: ['openai-chat'],                 // anthropic-messages is absent by design
+  requestFields: ['max_tokens', 'stream_options.include_usage'],
+  compatibility: ['reasoningField'],      // fields it actually honours
+  endpoints: ['/api/info', '/api/model', '/api/provider/{id}', '/api/credential', '/api/experimental/usage/limits'],
+}
+```
+
+The API worker diffs this declaration against the live spec/catalog and reports every gap. That is
+what turns "we measured it once" into a continuously checkable contract.
+
+### 13.5 Report and gate
+
+```
+audit report = { preset, at, signature, findings[], unverified[] }
+```
+
+- `blocker` findings fail the preset's audit gate; `warn` is visible but non-blocking.
+- `unverified` records what could not be checked (no spec, owner session absent) — never silently
+  green.
+- The B-3 external-contract check becomes one API-worker run for the `opencode` preset; the
+  §10 audit table is the expected baseline it compares against.
+
+### 13.6 Roadmap (core track, parallel to A–F)
+
+| Step | Work | Gate |
+| :--- | :--- | :--- |
+| **Core-A0** | `lib/audit/contract.js` + registry: validate/normalise `PresetAuditContract`, cross-check `id` against `PRESETS` | contract tests; a synthetic 4th preset validates without engine edits |
+| **Core-A1** | API worker: fetch catalog + spec, signature hash, endpoint/field diff vs capabilities | runs for deepinfra + opencode; no vendor literals in `lib/audit/` |
+| **Core-A2** | Presets declare `audit`; capabilities declared by each driver | the three presets report complete or explicitly `unverified` |
+| **Core-A3** | CLI + auth workers | CLI fingerprint for antigravity/opencode; web-auth path marked owner-gated |
+| **Core-A4** | Changelog worker + `npm run verify:audit` wired into the doc/CI gate | a new preset needs only its declaration to be audited |
+
+Core-A0/A1 are foundational and can land **before** B-3; B-3 then consumes the report instead of a
+hand-written endpoint check. Nothing here changes runtime routing: the engine reads and reports.
+
+### 13.7 Verification of the engine itself
+
+- Source scan: `lib/audit/**` contains none of the known vendor ids (test, not convention).
+- Synthetic preset: a fixture preset with a fake endpoint/spec drives every worker; no engine edit.
+- Determinism: two runs against the same fixture produce the same signature and finding codes.
+- Failure isolation: one worker throwing yields an `unverified` finding for its dimension, never a
+  crashed report.
+
+### 13.8 Relationship to the absorption
+
+| Absorption item | Engine role |
+| :--- | :--- |
+| B-3 external-contract check | API worker run for the `opencode` preset against `openapi.json` |
+| Phase F protocol work | consumes API-worker `wires`/field findings; no duplicated ad-hoc probing |
+| New preset in future | declaration only; no engine change, no hand-written audit |
