@@ -32,18 +32,35 @@ export { count, finishReasonFor } from './wire.js'
 /**
  * Run one provider event stream through the shared pipeline.
  *
- * @param options - `{ events, descriptor, hooks, signal, onUsage }`.
+ * @param options - `{ events, descriptor, hooks, createHooks, signal, onUsage }`.
  * @param options.events - async iterable of decoded provider payloads.
  * @param options.descriptor - `{ toolCallShape, usage, malformedRecord }`.
- * @param options.hooks - `{ readEvent }` plus optional overrides.
+ * @param options.hooks - `{ readEvent }` plus optional overrides. Shared and
+ *   therefore pure; a stateful provider passes `createHooks` instead.
+ * @param options.createHooks - optional `({ descriptor, signal }) => hooks`.
+ *   Called exactly once per stream, before any payload is read, so the returned
+ *   object is that stream's own state. Takes precedence over `hooks`.
  * @param options.signal - caller cancellation.
  * @param options.onUsage - optional sink invoked when a usage chunk is produced.
  * @returns async generator of `StreamChunk`s.
  */
 export async function* normalizeStream(options = {}) {
-  const { events, descriptor = {}, hooks = {}, signal, onUsage } = options
+  const { events, descriptor = {}, createHooks, signal, onUsage } = options
   if (events === null || events === undefined) throw new TypeError('normalizeStream requires an events iterable')
-  if (typeof hooks.readEvent !== 'function') throw new TypeError('normalizeStream requires a hooks.readEvent function')
+
+  // One resolution per stream. A provider whose hooks accumulate state across
+  // deltas (an in-text tool-call classifier) supplies a factory, so concurrent
+  // streams never share that state; a pure provider keeps passing `hooks`.
+  const fromFactory = typeof createHooks === 'function'
+  const hooks = fromFactory ? createHooks({ descriptor, signal }) : options.hooks ?? {}
+  if (hooks === null || typeof hooks !== 'object') {
+    throw new TypeError(`normalizeStream createHooks must return a hooks object, got ${hooks === null ? 'null' : typeof hooks}`)
+  }
+  if (typeof hooks.readEvent !== 'function') {
+    throw new TypeError(fromFactory
+      ? 'normalizeStream createHooks must return a hooks object with a readEvent function'
+      : 'normalizeStream requires a hooks.readEvent function')
+  }
 
   const shape = descriptor.toolCallShape ?? 'fragmented'
   if (shape !== 'fragmented' && shape !== 'complete') throw new TypeError(`unknown toolCallShape: ${String(shape)}`)

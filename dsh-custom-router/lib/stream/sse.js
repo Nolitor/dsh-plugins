@@ -90,6 +90,9 @@ function readerOf(body) {
           async next() { return reader.read() },
           async return(value) {
             try { await reader.cancel() } catch { /* already gone */ }
+            // cancel() leaves the stream locked; release it so an early break or
+            // an upstream throw cannot strand the lock (measured in the B-1 review).
+            try { reader.releaseLock() } catch { /* already released */ }
             return { done: true, value }
           },
         }
