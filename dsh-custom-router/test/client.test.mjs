@@ -879,14 +879,14 @@ test('the settings section follows the built-in plugin section spec', async () =
   assert.ok(css.includes('.crSettingsSection{display:flex;flex-direction:column;gap:12px;max-width:760px;min-width:0}'), 'the settings column is 760px wide')
   assert.ok(css.includes('font-size:calc(var(--dsh-content-font-size,14px) + 4px);font-weight:600'), 'the heading is the content size +4px, weight 600')
   assert.ok(css.includes('.crSettingsIntro{margin:0;font-family:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary)}'), 'the intro is the secondary token in the tertiary label colour')
-  assert.ok(css.includes('.crSettingsTabs{display:flex;align-items:flex-end;gap:22px;border-bottom:.5px solid var(--dsw-alias-border-l2);margin-top:2px;'), 'the tab strip is the built-in geometry')
+  assert.ok(css.includes('.crSettingsTabs{display:flex;align-items:flex-end;gap:22px;border-bottom:var(--dsh-hairline-width,1px) solid var(--dsw-alias-border-l2);margin-top:2px;'), 'the tab strip is the built-in geometry on the host hairline token')
   assert.ok(css.includes('padding:7px 1px 9px;'), 'the tab padding is the built-in padding')
   assert.ok(css.includes('font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:nowrap;flex:0 0 auto}'), 'the tab label is the secondary token')
   assert.ok(css.includes('.crSettingsTab[aria-selected=true]{color:var(--dsw-alias-label-primary)}'), 'the active tab is the primary label colour')
   assert.ok(css.includes('.crSettingsTab[aria-selected=true]::after,.crSettingsTab:focus-visible::after{position:absolute;right:0;bottom:-1px;left:0;height:2px;border-radius:2px 2px 0 0;background:var(--dsw-alias-label-primary);content:""}'), 'the active tab carries a 2px label-primary underline')
   assert.ok(css.includes('.crSettingsTab:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px;border-radius:2px;color:var(--dsw-alias-label-primary)}'), 'the focused tab carries the host focus ring')
   // The group cards keep the settings-card tokens and the large radius.
-  assert.ok(css.includes('.crGroup{border:.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-lg);'), 'a group card is a hairline settings card')
+  assert.ok(css.includes('.crGroup{border:var(--dsh-hairline-width,1px) solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);border-radius:var(--dsw-radius-lg);'), 'a group card is a hairline settings card on the host token')
   loaded.dispose()
 })
 
@@ -1255,7 +1255,7 @@ test('the stylesheet uses the token grid and never a bare element selector', () 
   assert.match(css, /\.crProviderList\{display:flex;flex-direction:column/)
   assert.match(css, /\.crProviderItem\{display:flex;flex-direction:column/)
   assert.match(css, /\.crProviderRow\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto/)
-  assert.match(css, /\.crProviderDetail\{[^}]*border:\.[0-9]px solid var\(--dsw-alias-settings-card-stroke\)/)
+  assert.match(css, /\.crProviderDetail\{[^}]*border:var\(--dsh-hairline-width,1px\) solid var\(--dsw-alias-settings-card-stroke\)/)
   assert.match(css, /\.crLayerGrid\{display:grid;grid-template-columns:repeat\(auto-fit,minmax\(min\(240px,100%\),1fr\)\)/)
   assert.match(css, /\.crReveal\{display:grid;grid-template-rows:0fr/)
   assert.match(css, /\.crReveal\[data-open=true\]\{grid-template-rows:1fr\}/)
@@ -1263,7 +1263,7 @@ test('the stylesheet uses the token grid and never a bare element selector', () 
   // The width container and the shared model-list geometry are pinned here.
   assert.match(css, /\.crPage\{width:100%;max-width:1120px;margin:0 auto;padding:20px 24px;box-sizing:border-box\}/)
   assert.match(css, /\.crToolbar\{display:flex/)
-  assert.match(css, /\.crGroup\{border:\.[0-9]px solid var\(--dsw-alias-settings-card-stroke\)/)
+  assert.match(css, /\.crGroup\{border:var\(--dsh-hairline-width,1px\) solid var\(--dsw-alias-settings-card-stroke\)/)
   assert.match(css, /\.crRow\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto/)
   assert.match(css, /\.crPriceList\{[^}]*text-decoration:line-through/)
   assert.match(css, /\.crFooterBar\{display:flex/)
@@ -1688,4 +1688,26 @@ test('a reduced-motion preference disables the reveal and the switch transitions
   assert.match(block[1], /\.crReveal/)
   assert.match(block[1], /\.crSwitch::after/)
   assert.match(block[1], /transition:none/)
+})
+
+// --- 2026-11-11 regression gate ------------------------------------------------
+// The 2026-11-08 settings-surface alignment (3b1634a) shipped the hairline as a
+// `.5px` literal, which ignores the host's device-pixel-ratio correction. This
+// check fails the build the moment a literal comes back.
+
+test('REGRESSION GATE: no .5px hairline literal exists in the stylesheet', async () => {
+  const loaded = await loadModels()
+  const css = loaded.exports.CSS
+  const literals = css.match(/\.5px/g) ?? []
+  assert.deepEqual(
+    literals,
+    [],
+    'hairline width must come from var(--dsh-hairline-width,1px), never a .5px literal',
+  )
+  loaded.dispose()
+})
+
+test('REGRESSION GATE: the root container keeps Korean words together', () => {
+  assert.match(clientSource, /\.crSection\{[^}]*word-break:keep-all/, 'the root must wrap on word boundaries (CJK)')
+  assert.match(clientSource, /\.crSection\{[^}]*overflow-wrap:break-word/, 'the root must still break a single long token')
 })

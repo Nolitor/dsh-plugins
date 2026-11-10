@@ -1,12 +1,28 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.10
+version: 0.0.1-rc.11
 kind: report
 status: active
-updated: 2026-11-10
+updated: 2026-11-11
 summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy.
 -->
+
+## 0.0.1-rc.11 — hairline token, CJK wrapping — 2026-11-11
+
+Owner task: the four plugin UI surfaces must stop hardcoding the hairline and must not break
+Korean words mid-word.
+
+**Measured, from the shipped source (before → after):** `.5px` literals in `lib/client.src.js`
+**28 → 0**; `word-break:keep-all` on the root `.crSection` absent → present.
+
+Every border now reads `var(--dsh-hairline-width,1px) solid var(--dsw-*)`. The one negative
+offset (`.crTab{margin-bottom:-.5px}`) became `calc(-1 * var(--dsh-hairline-width,1px))`, so the
+tab underline still cancels exactly one hairline instead of a fixed half pixel. The token is
+published on the document root by `@deepseek-ai/dsh-client-ui-theme`, which resolves it to
+`max(1, floor(0.5 * dpr)) / dpr` — the literal ignored that on every display.
+`test/client.test.mjs` gained a regression gate that fails the suite if a `.5px` literal or a
+missing `keep-all` returns.
 
 ## 0.0.1-rc.10 — 2026-11-10 (dispatch policy: preset-based, not workspace-write)
 
