@@ -32,6 +32,7 @@ summary: Stage-by-stage handoff for @nolit/dsh-custom-router at 0.0.1-rc.10 — 
 | Work | add the `classifyText` hook in [SHARED-STREAM-PIPE-SPEC.md](SHARED-STREAM-PIPE-SPEC.md) terms |
 | Exit gate | opencode-v2 suite green; replay shows `markerDeltas == 0`; S2-3 prose gate passes |
 | Blocked by | nothing technical — **not started** |
+| Blueprint | [OPENCODE-ABSORPTION-BLUEPRINT.md](./OPENCODE-ABSORPTION-BLUEPRINT.md) Phase B (legacy classifier first; canonical default in Phase F) |
 
 ### S2 — P5: parity suite
 
@@ -41,6 +42,7 @@ summary: Stage-by-stage handoff for @nolit/dsh-custom-router at 0.0.1-rc.10 — 
 | Work | one recorded fixture per provider replayed through the shared core |
 | Exit gate | the three streams produce the same `StreamChunk` shape for the same semantic event |
 | Blocked by | S1 |
+| Blueprint | [OPENCODE-ABSORPTION-BLUEPRINT.md](./OPENCODE-ABSORPTION-BLUEPRINT.md) Phase F |
 
 ### S3 — Antigravity usage per model group
 

@@ -31,6 +31,11 @@ summary: Stage-by-stage handoff for @nolit/dsh-opencode-v2 at 0.0.1-rc.5 — the
 
 ## 3. Stages
 
+> **Absorption (2026-11-10).** This track is being absorbed into
+> [dsh-custom-router/vendor/opencode](../../dsh-custom-router/docs/OPENCODE-ABSORPTION-BLUEPRINT.md).
+> Stages below are re-homed, not dropped: S2 → Phase B (port, legacy default) and Phase F
+> (canonical default + oracle); S3 → Phase B; S4 → Phase F; S5 → Phase A–E.
+
 ### S1 — stage-1 observations awaiting an owner verdict
 
 Each needs an owner report first; do **not** pre-emptively "fix" these.
@@ -41,22 +46,25 @@ Each needs an owner report first; do **not** pre-emptively "fix" these.
 | O2 | Marker glyph drift — `｜` (U+FF5C), `│` (U+2502), `|` used for the same token | 1,048 / 7,291 finishes (14.4 %) carried a marker delta | stage 2 handles it; no standalone fix |
 | O3 | `content_filter` maps to an error | 26 occurrences in trace | confirm the host handles the error kind well |
 
-### S2 — canonical parser swap
+### S2 — canonical parser swap → Phase B + Phase F
 
-Replace the 679-line regex classifier with the staged parser in
-`staging/opencode-v2-stage2/`, behind `parser: 'legacy' | 'canonical'` (default `legacy`).
-Keep `stream-parser.legacy.js` for one release. Entry condition: S1 verdicts.
+Port the staged parser in `staging/opencode-v2-stage2/` behind
+`parser: 'legacy' | 'canonical'` (default `legacy`) while Phase B integrates the shared pipe.
+Making canonical the default, and the S2-4/S2-5 gates, move to **Phase F**. Owner decision
+2026-11-10 decoupled Phase B from the O1/O2/O3 verdict.
 Implementation brief: [OPENCODE-V2-IMPROVEMENT-SPEC-20261107.md](OPENCODE-V2-IMPROVEMENT-SPEC-20261107.md).
 
-### S3 — shared stream pipe (P4) integration
+### S3 — shared stream pipe (P4) integration → Phase B
 
 The pipe-side delivery is `classifyText`. Its owner-side work is in the Custom Router handoff
-(`dsh-custom-router/docs/HANDOFF.md` S1); this track supplies the hook.
+(`dsh-custom-router/docs/HANDOFF.md` S1); this track supplies the hook. Phase B uses the
+**legacy** classifier behind the hook; the canonical parser becomes the default in Phase F.
 
-### S4 — OpenCode 2.2.6 job/session APIs
+### S4 — OpenCode 2.2.6 job/session APIs → Phase F
 
 [OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md](OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md)
-is a **draft**. P0 requires owner approval and a DB backup. Not scheduled.
+is a **draft**. P0 requires owner approval and a DB backup. Re-homed to **Phase F** (with P1–P5)
+in the absorption blueprint; not scheduled before Phase E.
 
 ### S5 — provider-slot migration (2026-11-08)
 

@@ -6,6 +6,11 @@ updated: 2026-11-04
 summary: Stage plan for @nolit/dsh-opencode-v2 — what "stabilised" means as a measurable gate, then stage 2 (move the canonical recipe-derived protocol parser into this single package) and stage 3 (ship the conformance oracle in the test suite). Replaces the deleted beta package. Records the exact defects that block promotion, the acceptance thresholds taken from recorded traffic, the rollback route, and who is allowed to open a stage.
 -->
 
+> **Absorption 2026-11-10:** stages 2 and 3 are re-homed to Phase B (port + `classifyText`
+> hook, legacy default) and Phase F (canonical default + oracle) of
+> [OPENCODE-ABSORPTION-BLUEPRINT.md](../../dsh-custom-router/docs/OPENCODE-ABSORPTION-BLUEPRINT.md).
+> Phase B is decoupled from the O1/O2/O3 verdict.
+>
 > Status: **stage 1 (stabilisation) in progress** · Baseline: `0.0.2-rc.1` ·
 > Staged code: `staging/opencode-v2-stage2/` · Next plugin: [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../../dsh-custom-router/vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md) ·
 > Evidence: [CHANGELOG](../CHANGELOG.md),
