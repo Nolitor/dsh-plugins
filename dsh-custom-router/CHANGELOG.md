@@ -8,6 +8,27 @@ updated: 2026-11-11
 summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy.
 -->
 
+## 0.0.1-rc.11 (cont.) — border fallback — 2026-11-11
+
+Owner correction, measured against the upstream authority
+[`docs/web-styling.md`](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/web-styling.md):
+
+> Flat borders and separators that use a neutral `--dsw-alias-border-*` token draw at `0.5px` …
+> Dashed affordances and **state-colored borders keep 1px**.
+
+The previous entry replaced `.5px` with `var(--dsh-hairline-width,1px)`. The token itself is real —
+`@deepseek-ai/dsh-client-ui-theme` publishes it on the document root and resolves it to
+`max(1, floor(0.5*dpr))/dpr` — but **its fallback in the shipped host bundle is `.5px`, not
+`1px`** (`dsh-web-frontend` declares `var(--dsh-hairline-width, .5px)`), and the upstream styling
+reference never mentions the token at all. With a `1px` fallback the border painted twice as thick
+whenever the token was not injected (headless capture, non-window documents, test harnesses).
+
+**Corrected in this package:** every `--dsh-hairline-width` use now carries the host's own
+`.5px` fallback instead of `1px` — **28 occurrences, measured before -> after**.
+
+The `.5px` regression gate was narrowed to a bare literal so it still rejects a hand-written
+literal while accepting the token fallback.
+
 ## 0.0.1-rc.11 — hairline token, CJK wrapping — 2026-11-11
 
 Owner task: the four plugin UI surfaces must stop hardcoding the hairline and must not break
