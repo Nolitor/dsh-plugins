@@ -296,3 +296,32 @@ dropped: shipped items keep a regression gate, planned items are attached to A�
 | OpenCodex selection mirror | CHANGELOG 2026-11-07 | D (config keys unchanged) | projection + scope union tests |
 | Settings allow-list / plan usage cards | [MODEL-SERVING-PLAN](../../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md) | C5 (fold into dashboard) | one UI, no duplicate section |
 | Antigravity/OpenCode CLI feasibility record | [pending-docs](../../pending-docs/unimplemented/OPENCODE-ANTIGRAVITY-FEASIBILITY.md) | historical — no phase | superseded by the shipped surfaces |
+
+## 8. Checkpoint log
+
+### CP1 — Provider Driver Contract (2026-11-10)
+
+Reviewer: **Argon 4.0 (medium)** via `agy --model gemini-4-argon-medium` (the DSH runtime had not
+loaded the new Antigravity models yet; see §8.1). Usage: 7,933 input / 698 output tokens,
+16 s. Verdict: **APPROVE-WITH-CHANGES**.
+
+Three changes are now part of the contract (`lib/driver/contract.js`) and D1:
+
+| # | Finding | Accepted change |
+| :--- | :--- | :--- |
+| C1-1 | `surfaces` overlapped (`cli.toolName`, `subagent.toolName`, `tools[]`) making uniqueness ambiguous; `model.adapter: true` had no resolvable adapter key | `model: { adapter: true, factory: 'createAdapter' }`; one normaliser derives the effective tool/command set per driver before the global uniqueness check |
+| C1-2 | Readiness lacked provider-specific metadata; hooks forbid I/O; antigravity also needs thought/citation block handling | `activation.readiness: { bridge, catalogLayer, auth: 'web-auth' \| 'api-key' \| 'daemon', health?: string }`; add optional `classifyBlock` hook next to `classifyText` |
+| C1-3 | A vendor importing the router is a cycle direction | the contract **and the stream core** are leaf modules: they must not import `lib/index.js`, `lib/presets.js`, or any vendor. Enforced by an import-graph test |
+
+### 8.1 Endpoint verification — Argon 4.0 / Opus 5.5 (2026-11-10)
+
+| Layer | Measured |
+| :--- | :--- |
+| Upstream account (`agy models`) | `gemini-4-argon-{low,medium,high}`, `claude-opus-5-5-{low,medium,high}` present |
+| Live profile `vendorConfig['dsh-antigravity'].enabledModels` | both families already allow-listed |
+| Live profile `subagent-model-selection-settings.allowedModels` | **registered** (six ids added; backup `cordis.patch.yml.bak.before-argon-opus-register-*`) |
+| Running DSH runtime (`list_subagent_models`) | only `gemini-3.8-flash` — **applied pending restart** |
+
+Consequence: Argon/Opus are reachable through the vendor CLI now, and through the DSH subagent
+roster after the next `dsh-web.service` restart (owner-only). CP1 was therefore executed on the
+vendor endpoint, which is the same model id the DSH path will use.
