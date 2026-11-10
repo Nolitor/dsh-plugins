@@ -350,6 +350,90 @@ test('the legacy hooks-only path is untouched and still refuses a missing readEv
 })
 
 
+test('createHooks wins when both it and a shared hooks object are supplied', async () => {
+  const legacyReads = []
+  const factoryReads = []
+  const chunks = await collect(normalizeStream({
+    events: payloads({ parts: [{ kind: 'text', text: 'x' }] }, { finish: 'stop' }),
+    // The shared object is deliberately valid: if precedence were "mix" or
+    // "legacy wins", its readEvent would be observed here.
+    hooks: {
+      readEvent: (payload) => { legacyReads.push(payload); return payload },
+      classifyText: () => undefined,
+    },
+    createHooks: () => ({
+      readEvent: (payload) => { factoryReads.push(payload); return payload },
+    }),
+  }))
+  assert.equal(legacyReads.length, 0, 'the shared hooks object must not be consulted')
+  assert.equal(factoryReads.length, 2)
+  assert.deepEqual(shape(chunks), ['block-start:0:text', 'text-delta:0:x', 'block-end:0:text:x', 'finish:stop:'])
+})
+
+test('the terminal path reads the resolved per-stream hooks, not a module-level one', async () => {
+  const seen = []
+  // onEmpty: a stateful classifier that held a delta back still exposes its
+  // final counter to the terminal hook, so the hold-back is not silently lost.
+  const empty = await collect(normalizeStream({
+    events: payloads({ parts: [{ kind: 'text', text: 'held' }] }, { finish: 'stop' }),
+    createHooks: () => {
+      let held = 0
+      return {
+        readEvent: (payload) => payload,
+        classifyText: () => { held += 1; return [] },
+        onEmpty: ({ usage, finish }) => {
+          seen.push(['onEmpty', held, finish?.kind])
+          return { type: 'finish', reason: { kind: 'stop' } }
+        },
+      }
+    },
+  }))
+  assert.deepEqual(seen, [['onEmpty', 1, 'stop']])
+  assert.equal(empty.at(-1).reason.kind, 'stop')
+
+  // onCut: the same per-stream object serves the failure terminal.
+  const cut = await collect(normalizeStream({
+    events: (async function* () {
+      throw Object.assign(new Error('boom'), { code: 'ECONNRESET' })
+    })(),
+    createHooks: () => {
+      let events = 0
+      return {
+        readEvent: (payload) => payload,
+        onCut: (failure, context) => {
+          seen.push(['onCut', failure.code, context.blocks, events])
+          return { type: 'finish', reason: { kind: 'error', failure } }
+        },
+        onMalformed: () => 'skip',
+        classifyText: () => { events += 1; return undefined },
+      }
+    },
+  }))
+  assert.deepEqual(seen.at(-1), ['onCut', 'ECONNRESET', 0, 0])
+  assert.equal(cut.at(-1).reason.kind, 'error')
+})
+
+test('the abort terminal still closes blocks and uses the resolved hooks', async () => {
+  const controller = new AbortController()
+  const calls = []
+  const chunks = await collect(normalizeStream({
+    events: (async function* () {
+      yield { parts: [{ kind: 'text', text: 'x' }] }
+      controller.abort()
+      yield { parts: [{ kind: 'text', text: 'y' }] }
+    })(),
+    signal: controller.signal,
+    createHooks: () => {
+      let reads = 0
+      return {
+        readEvent: (payload) => { reads += 1; calls.push(reads); return payload },
+      }
+    },
+  }))
+  assert.equal(chunks.at(-1).reason.kind, 'aborted')
+  assert.equal(calls.length, 1, 'no hook runs after the abort')
+})
+
 test('an early break releases the ReadableStream lock', async () => {
   const { readSseEvents } = await import('../lib/stream/index.js')
   let cancelled = false
@@ -367,4 +451,55 @@ test('an early break releases the ReadableStream lock', async () => {
   assert.deepEqual(seen, [{ n: 1 }])
   assert.equal(stream.locked, false, 'the reader lock must be released on early break')
   assert.equal(cancelled, true)
+})
+
+test('full consumption releases the lock too, not just an early break', async () => {
+  const { readSseEvents } = await import('../lib/stream/index.js')
+  // The wrapper's iterator owns a `return`, but full consumption never reaches
+  // it — the caller's `finally` does. Both exits must unlock the stream.
+  const raw = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"n":1}\n\ndata: [DONE]\n\n'))
+      controller.close()
+    },
+  })
+  const out = []
+  for await (const event of readSseEvents(raw)) out.push(event)
+  assert.deepEqual(out, [{ n: 1 }])
+  assert.equal(raw.locked, false, 'full consumption must release the lock')
+
+  const response = new Response('data: {"n":2}\n\n')
+  const out2 = []
+  for await (const event of readSseEvents(response)) out2.push(event)
+  assert.deepEqual(out2, [{ n: 2 }])
+  assert.equal(response.body.locked, false, 'a Response body must be released as well')
+})
+
+test('releaseLock is idempotent and survives a throw path without an unhandled rejection', async () => {
+  const { readSseEvents } = await import('../lib/stream/index.js')
+  const unhandled = []
+  const onUnhandled = (reason) => unhandled.push(reason)
+  process.on('unhandledRejection', onUnhandled)
+  try {
+    // A body whose cancel() rejects: releaseLock must still run and the
+    // rejection must be swallowed by the guarded catch.
+    const stream = new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode('data: {"n":1}\n\ndata: {"n":2}\n\n')) },
+      cancel() { throw new Error('cancel refused') },
+    })
+    const iterator = readSseEvents(stream)[Symbol.asyncIterator]()
+    assert.deepEqual(await iterator.next(), { done: false, value: { n: 1 } })
+    await iterator.return?.()
+    assert.equal(stream.locked, false, 'releaseLock must run even when cancel() rejects')
+    // A second return must not throw (guard for an already-released reader).
+    await iterator.return?.()
+    await iterator.return?.()
+    assert.equal(stream.locked, false)
+
+    // Let any queued rejection settle before asserting.
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.deepEqual(unhandled, [], `no unhandled rejection: ${unhandled.map(String).join(', ')}`)
+  } finally {
+    process.off('unhandledRejection', onUnhandled)
+  }
 })

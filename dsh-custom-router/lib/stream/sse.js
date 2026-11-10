@@ -78,27 +78,42 @@ export async function* readSseEvents(body, options = {}) {
  * @returns an async iterable of chunks plus an optional `return`.
  */
 function readerOf(body) {
-  if (typeof body?.[Symbol.asyncIterator] === 'function') return body
-  // A Response carries the stream on `.body`; accepting it keeps legacy callers
-  // working instead of forcing every consumer to unwrap by hand.
-  if (body?.body !== undefined && body.getReader === undefined) return readerOf(body.body)
+  // A web `ReadableStream` is ALSO async-iterable, so the reader branch is
+  // tested first. When the async-iterator branch won (measured), it shadowed
+  // the wrapper below entirely: the native iterator did its own cancel, and a
+  // rejecting `cancel()` escaped as a thrown error rather than being swallowed,
+  // because `release.return` on a raw stream is undefined. Keep this order.
   if (typeof body?.getReader === 'function') {
     const reader = body.getReader()
+    // One releaser for both exits: an early `break`/`return` reaches the
+    // iterator's `return`, while full consumption only reaches the caller's
+    // `finally`. Both must cancel AND unlock, exactly once.
+    let done = false
+    const release = async () => {
+      if (done) return
+      done = true
+      try { await reader.cancel() } catch { /* already gone */ }
+      // cancel() leaves the stream locked; release it so an early break or an
+      // upstream throw cannot strand the lock (measured in the B-1 review).
+      try { reader.releaseLock() } catch { /* already released */ }
+    }
     return {
+      return: release,
       [Symbol.asyncIterator]() {
         return {
           async next() { return reader.read() },
           async return(value) {
-            try { await reader.cancel() } catch { /* already gone */ }
-            // cancel() leaves the stream locked; release it so an early break or
-            // an upstream throw cannot strand the lock (measured in the B-1 review).
-            try { reader.releaseLock() } catch { /* already released */ }
+            await release()
             return { done: true, value }
           },
         }
       },
     }
   }
+  if (typeof body?.[Symbol.asyncIterator] === 'function') return body
+  // A Response carries the stream on `.body`; accepting it keeps legacy callers
+  // working instead of forcing every consumer to unwrap by hand.
+  if (body?.body !== undefined && body.getReader === undefined) return readerOf(body.body)
   throw new TypeError('readSseEvents requires a ReadableStream or an async iterable body')
 }
 
