@@ -4,14 +4,38 @@
 version: 1.0
 kind: report
 status: active
-updated: 2026-11-08
+updated: 2026-11-11
 summary: Engineering history for @nolit/dsh-sidebar-manager. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
 -->
 
 > History lives here (owner instruction 2026-11-04). Boot cards and `AGENTS.md` are narrowed to
 > the owner's unfinished asks; they are not a changelog. See [docs/RULES.md](../docs/RULES.md) §6.1.
 
-Current version: `0.0.1-rc.1`
+Current version: `0.0.1-rc.2`
+
+## 0.0.1-rc.2 — hairline token, font steps, CJK wrapping — 2026-11-11
+
+Owner task: the four plugin UI surfaces must stop hardcoding the hairline and the derived font
+steps, and must not break Korean words mid-word.
+
+**Measured, from the shipped source (before → after):**
+
+| Fact | Before | After |
+| --- | --- | --- |
+| `.5px` hairline literals in `lib/client.js` | **12** | **0** |
+| `calc(var(--dsh-content-font-size-secondary,13px) - Npx)` derivations | **7** | **0** |
+| `text-transform:uppercase` on the group-kind chip | 1 | 0 |
+| `letter-spacing:.4px` on the same chip | 1 | 0 |
+| `word-break:keep-all` on the root `.smPage` | absent | present |
+
+Every border now reads `var(--dsh-hairline-width,1px) solid var(--dsw-*)`. The token is
+published on the document root by `@deepseek-ai/dsh-client-ui-theme`, which resolves it to
+`max(1, floor(0.5 * dpr)) / dpr` — the `.5px` literal ignored that correction on every display.
+The derived sizes now use `--dsh-content-font-size-secondary` directly, because the host defines
+no smaller step: it publishes exactly two live sizes, `--dsh-content-font-size` and
+`--dsh-content-font-size-secondary` (measured in the shipped theme client). `test/typography-contract.test.mjs`
+gained a two-part regression gate that fails the suite if a `.5px` literal or a missing
+`keep-all` returns.
 
 ## client UI — DSH design-token stylesheet — 2026-11-08
 

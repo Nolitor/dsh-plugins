@@ -1,11 +1,11 @@
 # Sidebar Manager — Handoff
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: report
 status: active
-updated: 2026-11-08
-summary: Stage-by-stage handoff for @nolit/dsh-sidebar-manager at 0.0.1-rc.1 — the token-stylesheet migration, the drift gate that must run before any version-up, and the version/CHANGELOG mismatch.
+updated: 2026-11-11
+summary: Stage-by-stage handoff for @nolit/dsh-sidebar-manager at 0.0.1-rc.1 — the token-stylesheet migration, the drift gate that must run before any version-up, the version/CHANGELOG mismatch, and the open UI audit items from the 2026-11-11 /ui review (hairline tokens, derived font steps, CJK wrapping, row action order).
 -->
 
 > History lives in `CHANGELOG.md`, which is **not listed in this package's `files[]`** (see S1).
@@ -71,3 +71,53 @@ objects. Not a defect — recorded so a future reader does not mistake it for le
 cd dsh-sidebar-manager && npm test
 node scripts/audit-installed-vs-packaged.mjs
 ```
+
+## 5. Next work — UI audit findings (2026-11-11)
+
+Source read: `lib/client.js` only (no browser/CDP run, no token census). Findings are
+source-level and each cites the rule it came from. **Nothing here is fixed yet.**
+
+The audit that produced this list was run against the `/ui` skill *before* its Layer 2 rule was
+corrected. That rule used to say every colour, border, radius and shadow is `--dsh-*`; the host
+actually splits them (`--dsw-alias-*` for colour/border/radius/shadow/focus ring, `--dsh-*` for
+layout and content metrics). **This track already follows the correct split** — the mismatch was
+in the rule, not in the code (`skills/ui` commit `1a8f87b`, ledger row `host-drift`). Do not
+"fix" a `--dsw-alias-*` reference into `--dsh-*` on the strength of an older copy of the rule.
+
+### 5.1 Layer 2 — token discipline
+
+| # | Item | Where | Measured |
+| :-- | :--- | :--- | :--- |
+| A1 | Literal hairline border instead of `--dsh-hairline-width` | `.smRow` 579, `.smDialog` 646, `.smField` 624, `.smGate` 630, `.smMenuSeparator` | **11** occurrences of `.5px` in the sheet |
+| A2 | Font steps derived by subtracting px from the secondary token | `.smGroupKind` 609 (`-3px`), `.smGroupPin` 610 (`-2px`), `.smGroupBadge` 614 (`-3px`), `.smGroupHint` 616, `.smPath` 617, `.smInlineHint` 583, `.smMeta` 637, `.smGroupNotice` 604 | **8** occurrences; produces a third and fourth step the host scale does not define, and a user font-size change moves them non-linearly |
+| A3 | No `line-height` of its own, so a small label inherits the row's `calc(22px + delta)` | `.smGroupKind` 609, `.smGroupPin` 610, `.smGroupBadge` 614 | inherit from `.smGroupItem` |
+| A4 | Inline `style` colour bypasses the token layer | `groupAccent()` 552–556 → `style: {color: …}` at 1104 | a user-defined `group.color` is painted with no contrast check; it is the only route into the surface that skips `--dsw-alias-*` |
+| A5 | Hierarchy expressed by opacity instead of a label token | `.smMuted` 638 (`opacity:.75`) — applied on top of already-tertiary text | AA risk; `--dsw-alias-label-*` already has the step |
+
+### 5.2 Layer 1 — layout rhythm
+
+| # | Item | Where | Measured |
+| :-- | :--- | :--- | :--- |
+| B1 | One repeated interval for every level of the list | `.smRows` 578 `gap:8px`, `.smGroupList` 605 `gap:8px`, `.smGroupModules` 611 `gap:2px`, `.smRow` 579 `padding:12px 14px` | rows and group cards are both `8px` apart with identical padding, so proximity does no grouping — the container is compensating |
+| B2 | Button alignment convention differs by surface, and the control order is wrong | `.smRowActions` 581 (`flex:0 0 auto`, follows the name) vs `.smFooter` 640 (`justify-content:flex-end`); `@media (max-width:640px)` 663 turns the row actions full-width | the same cancel/confirm pair sits on a different axis in a row and in a dialog; and in a row the order is name → **actions** → `includeFolder` checkbox, so the control that changes the outcome sits *below* the actions that commit it |
+
+### 5.3 Layer 3 — Korean CJK
+
+| # | Item | Where | Measured |
+| :-- | :--- | :--- | :--- |
+| C1 | `word-break: keep-all` appears nowhere in the sheet | whole stylesheet | **0** occurrences; `overflow-wrap` exists only on `.smPath` 617, so `워크스페이스 관리자`, `작업 공간` break mid-word in narrow columns |
+| C2 | `text-transform: uppercase` + `letter-spacing` on a label that renders Hangul | `.smGroupKind` 609 | the values are `시스템` / `프로젝트` / `제안` / `미분류`; uppercase is a no-op on Hangul but the positive letter-spacing is not harmless |
+
+### 5.4 Suggested order
+
+1. **A1 + A2/A3** — tokenise hairline and collapse the derived steps onto the two host steps.
+   Mechanical, low risk, and `test/typography-contract.test.mjs` already has the harness to pin it.
+2. **C1 + C2** — add `word-break: keep-all` to the text rules and drop `uppercase`/`letter-spacing`
+   from `.smGroupKind`. Two lines, visible on every Korean surface.
+3. **B2** — pick one action axis and move the `includeFolder` checkbox above the actions.
+4. **B1** — widen the interval between group cards, keep the row interval tight.
+5. **A4 + A5** — validate `group.color` against the label tokens or map it to one; replace
+   `opacity:.75` with a label token.
+
+Each of these needs a `test/*.test.mjs` case in the same change, per the existing contract-test
+pattern (the 2026-11-03 typography migration set it).

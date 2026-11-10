@@ -79,11 +79,11 @@ test('no literal hex colour remains in the stylesheet', () => {
   assert.deepEqual(hexes, [], 'every colour must be a --dsw-* token')
 })
 
-test('borders are .5px hairlines on a token colour', () => {
+test('borders use the host hairline token on a token colour', () => {
   for (const match of css.matchAll(/border:\s*([^;}]+)/g)) {
     const value = match[1]
     if (value === '0' || value === '0 0') continue
-    assert.match(value, /^\.5px solid var\(--dsw-/, 'border must be a .5px hairline on a token, got: ' + value)
+    assert.match(value, /^var\(--dsh-hairline-width,1px\) solid var\(--dsw-/, 'border must be the host hairline token on a token, got: ' + value)
   }
 })
 
@@ -106,4 +106,25 @@ test('session menu rows keep the native 13px/400/20px spec on the secondary toke
   assert.match(rule, /font-weight:400/)
   assert.match(rule, /line-height:calc\(20px \+ var\(--dsh-content-font-delta-secondary,0px\)\)/)
   assert.ok(!/font: 'inherit'/.test(rule), "font: 'inherit' is what produced 16px")
+})
+
+// --- 2026-11-11 regression gate ------------------------------------------------
+// The 2026-11-08 token migration (86cfb66) shipped the hairline as a `.5px`
+// literal, which ignores the host's device-pixel-ratio correction. These two
+// checks are deliberately blunt: they fail the build the moment a literal or a
+// missing CJK wrap rule comes back, without any rendering required.
+
+test('REGRESSION GATE: no .5px hairline literal exists in the stylesheet', () => {
+  const literals = css.match(/\.5px/g) ?? []
+  assert.deepEqual(
+    literals,
+    [],
+    'hairline width must come from var(--dsh-hairline-width,1px), never a .5px literal',
+  )
+})
+
+test('REGRESSION GATE: the root container keeps Korean words together', () => {
+  const root = block('.smPage')
+  assert.match(root, /word-break:keep-all/, 'the root must wrap on word boundaries (CJK)')
+  assert.match(root, /overflow-wrap:break-word/, 'the root must still break a single long token')
 })
