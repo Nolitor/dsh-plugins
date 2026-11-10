@@ -101,9 +101,16 @@ export function usageFrom(raw) {
  * @param {object[]} [options.tools] - declared tools (schemas), for inference.
  * @param {string} [options.parser] - `'legacy'` (the only parser shipped in
  *   Phase B; the canonical parser arrives in Phase F).
+ * @param {object} [options.gate] - a display gate (lib/display-gate.js). When a
+ *   gate is present, a call recovered from text is QUEUED for the gate instead
+ *   of being emitted: the gate can only tell promote from echo once the
+ *   structured calls of the whole response are known. Without a gate the
+ *   legacy behaviour is unchanged.
  * @returns {{
  *   readEvent: (payload: unknown) => {parts?: object[], usage?: object, finish?: string, defect?: object}|undefined,
  *   classifyText: (text: string) => object[],
+ *   classifyReasoning: (text: string) => object[],
+ *   onPart: (part: unknown) => void,
  *   flush: () => object[],
  *   mapFinish: (value: unknown) => object,
  *   usageFrom: (raw: unknown) => object,
@@ -116,10 +123,25 @@ export function createStreamHooks(options = {}) {
     toolNames = [],
     tools = [],
     parser = 'legacy',
+    gate = null,
   } = options
 
   // ONE classifier per stream, held in this closure. Two streams never share it.
   const classifier = createStreamClassifier({ toolNames, tools })
+  // The reasoning channel gets its own classifier, exactly like the legacy path:
+  // the model also writes calls into the reasoning channel (measured: 5 of 6
+  // leaking requests had the marker in reasoning).
+  const reasoningClassifier = createStreamClassifier({ toolNames, tools })
+  // The structured calls of this response, as the gate decides against them.
+  const structuredCalls = []
+  // Whether a display gate was handed in. With a gate, recovered calls are
+  // queued and decided at the end of the stream; without one, the legacy
+  // behaviour is unchanged (a recovered call is emitted immediately).
+  const hasGate = gate !== null && gate !== undefined && typeof gate.addCandidate === 'function' && typeof gate.settle === 'function'
+  // The position of the next promoted call; the promoted call's index is its
+  // negative ordinal translation (-(n+1)), so it never collides with a wire
+  // ordinal.
+  let promotedOrdinal = 0
   // The next ordinal for a call recovered from text; negative, so it can never
   // collide with a wire ordinal (the wire's own ordinals are non-negative).
   let recoveredOrdinal = 0
@@ -201,7 +223,50 @@ export function createStreamHooks(options = {}) {
    */
   const classifyText = (text) => {
     if (typeof text !== 'string' || text.length === 0) return []
-    return translateRecovered(classifier.push(text))
+    if (!hasGate) return translateRecovered(classifier.push(text))
+    // With a gate, a recovered call is not emitted here: it is queued for the
+    // gate, which decides promote / echo / superseded / undeclared once the
+    // structured calls of the whole response are known.
+    return collectGateParts(classifier.push(text))
+  }
+
+  /**
+   * The `classifyReasoning` hook: notation the route left inside the reasoning
+   * channel.
+   *
+   * The reasoning channel gets its own classifier, exactly like the legacy
+   * path: the model also writes calls into reasoning (measured: 5 of 6 leaking
+   * requests had the marker there), and reasoning prose must stay reasoning.
+   *
+   * @param {string} text - one reasoning delta.
+   * @returns {object[]} the classifier's parts.
+   */
+  const classifyReasoning = (text) => {
+    if (typeof text !== 'string' || text.length === 0) return []
+    if (!hasGate) return translateRecovered(reasoningClassifier.push(text))
+    return collectGateParts(reasoningClassifier.push(text))
+  }
+
+  /**
+   * The `onPart` hook: one structured call of this response.
+   *
+   * Only a wire-field tool call is a structured call: the gate decides a
+   * recovered candidate against exactly those, so their id / name / arguments
+   * are collected here. Every other part is ignored.
+   *
+   * @param {object} part - one part of the response.
+   */
+  const onPart = (part) => {
+    if (!part || typeof part !== 'object') return
+    if (part.kind !== 'tool-call') return
+    structuredCalls.push({
+      id: part.id,
+      name: part.name,
+      // The classifier's own vocabulary is `arguments`; the pipe's is
+      // `argumentsDelta`. Both are accepted, so the gate compares arguments
+      // whichever vocabulary the caller used.
+      arguments: part.arguments !== undefined ? part.arguments : part.argumentsDelta,
+    })
   }
 
   /**
@@ -211,9 +276,66 @@ export function createStreamHooks(options = {}) {
    * pipe has the same seam (a held-back partial marker must be drained at EOF
    * or it is silently lost), so the hook is provided here too.
    *
+   * With a gate the drain composes the whole end-of-stream order: the text
+   * classifier, then the reasoning classifier, then the gate's verdict - the
+   * promoted calls, translated to the pipe's vocabulary with negative indices,
+   * so a promoted call can never collide with a wire ordinal.
+   *
    * @returns {object[]} the classifier's remaining parts.
    */
-  const flush = () => translateRecovered(classifier.flush())
+  const flush = () => {
+    if (!hasGate) return translateRecovered(classifier.flush())
+    const parts = [
+      ...collectGateParts(classifier.flush()),
+      ...collectGateParts(reasoningClassifier.flush()),
+    ]
+    const { promote } = gate.settle(structuredCalls)
+    for (const call of promote) {
+      parts.push(translatePromoted(call, promotedOrdinal))
+      promotedOrdinal += 1
+    }
+    return parts
+  }
+
+  /**
+   * Route a classifier's parts: a tool call goes to the gate, everything else
+   * is returned to the caller.
+   *
+   * @param {object[]} parts - the classifier's parts.
+   * @returns {object[]} the text / reasoning parts.
+   */
+  function collectGateParts(parts) {
+    const out = []
+    for (const part of parts) {
+      if (part?.kind === 'tool-call') {
+        gate.addCandidate(part)
+        continue
+      }
+      out.push(part)
+    }
+    return out
+  }
+
+  /**
+   * Translate one promoted call into the pipe's part vocabulary.
+   *
+   * A promoted call takes a negative index: the wire's own ordinals are
+   * non-negative, so a promoted call can never merge with a structured call's
+   * block. The index is ordinal-translated from the promoted call's position.
+   *
+   * @param {object} call - the gate's promoted call.
+   * @param {number} ordinal - the promoted call's position (0-based).
+   * @returns {object} the pipe part.
+   */
+  function translatePromoted(call, ordinal) {
+    return {
+      kind: 'tool-call',
+      index: -(ordinal + 1),
+      ...(call.id ? { id: call.id } : {}),
+      ...(call.name ? { name: call.name } : {}),
+      argumentsDelta: typeof call.arguments === 'string' ? call.arguments : '',
+    }
+  }
 
   /**
    * Translate the classifier's parts into the pipe's part vocabulary.
@@ -260,6 +382,8 @@ export function createStreamHooks(options = {}) {
   return {
     readEvent,
     classifyText,
+    classifyReasoning,
+    onPart,
     flush,
     mapFinish,
     usageFrom,

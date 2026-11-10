@@ -29,6 +29,7 @@ import {
   reasoningAccounting,
   usageFromOpenAi,
 } from '../lib/openai-mapping.js'
+import { createDisplayGate } from '../lib/display-gate.js'
 import * as http from '../lib/http.js'
 
 const TOOL_NAMES = new Set(['bash', 'run_code'])
@@ -349,4 +350,83 @@ test('two hook sets do not share the classifier instance', () => {
   // The second stream's classifier starts in the TEXT state: a plain text delta
   // comes back as text, not as an unterminated reasoning block.
   assert.deepEqual(second.classifyText('hello'), [{ kind: 'text', text: 'hello' }])
+})
+
+// --- the display gate: recovered calls are decided at end of stream ---
+
+test('a recovered call that duplicates a structured call is dropped as an echo', () => {
+  const gate = createDisplayGate({ toolNames: TOOL_NAMES })
+  const hooks = createStreamHooks({ toolNames: TOOL_NAMES, gate })
+
+  // The structured call arrived as a wire field.
+  hooks.onPart({ kind: 'tool-call', id: 'call_7', name: 'bash', arguments: '{"command":"ls"}' })
+  // The same call was also written into the text by the route.
+  const classified = hooks.classifyText('Now:\n[tool call bash #call_7]: {"command":"ls"}\n')
+
+  // With a gate the recovered call is never emitted directly.
+  assert.equal(classified.filter((part) => part.kind === 'tool-call').length, 0)
+  const flushed = hooks.flush()
+  assert.equal(flushed.filter((part) => part.kind === 'tool-call').length, 0)
+  assert.equal(gate.stats.echo, 1)
+})
+
+test('a recovered call with an undeclared name is never promoted', () => {
+  // The classifier knows one tool more than the gate does, so the candidate
+  // reaches the gate and the gate drops it.
+  const gate = createDisplayGate({ toolNames: TOOL_NAMES })
+  const hooks = createStreamHooks({ toolNames: new Set([...TOOL_NAMES, 'rm_rf']), gate })
+
+  hooks.classifyText('x\n[tool call rm_rf #call_1]: {"path":"/"}\n')
+  const flushed = hooks.flush()
+  assert.equal(flushed.filter((part) => part.kind === 'tool-call').length, 0)
+  assert.equal(gate.stats.undeclared, 1)
+  assert.equal(gate.stats.promoted, 0)
+})
+
+test('a recovered call with the same name but different arguments is superseded', () => {
+  const gate = createDisplayGate({ toolNames: TOOL_NAMES })
+  const hooks = createStreamHooks({ toolNames: TOOL_NAMES, gate })
+
+  hooks.onPart({ kind: 'tool-call', id: 'call_1', name: 'bash', arguments: '{"command":"ls"}' })
+  hooks.classifyText('Now:\n[tool call bash #call_2]: {"command":"pwd"}\n')
+  const flushed = hooks.flush()
+  assert.equal(flushed.filter((part) => part.kind === 'tool-call').length, 0)
+  assert.equal(gate.stats.superseded, 1)
+  assert.equal(gate.stats.promoted, 0)
+})
+
+test('a recovered call with a declared name and no structured peer is promoted', () => {
+  const gate = createDisplayGate({ toolNames: TOOL_NAMES })
+  const hooks = createStreamHooks({ toolNames: TOOL_NAMES, gate })
+
+  hooks.classifyText('Now:\n[tool call bash #call_7]: {"command":"ls"}\n')
+  const flushed = hooks.flush()
+  const calls = flushed.filter((part) => part.kind === 'tool-call')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].name, 'bash')
+  assert.equal(calls[0].index <= -1, true, 'a promoted call must not borrow a wire ordinal')
+  assert.equal(calls[0].argumentsDelta, '{"command":"ls"}')
+  assert.equal(gate.stats.promoted, 1)
+})
+
+test('two structured calls fed through onPart both reach the settle', () => {
+  const gate = createDisplayGate({ toolNames: TOOL_NAMES })
+  const hooks = createStreamHooks({ toolNames: TOOL_NAMES, gate })
+
+  hooks.onPart({ kind: 'tool-call', id: 'call_1', name: 'bash', arguments: '{"command":"ls"}' })
+  hooks.onPart({ kind: 'tool-call', id: 'call_2', name: 'run_code', arguments: '{"code":"1"}' })
+  hooks.classifyText('a\n[tool call bash #call_1]: {"command":"ls"}\nb\n[tool call run_code #call_2]: {"code":"1"}\n')
+  const flushed = hooks.flush()
+  assert.equal(flushed.filter((part) => part.kind === 'tool-call').length, 0)
+  assert.equal(gate.stats.echo, 2)
+  assert.equal(gate.stats.promoted, 0)
+})
+
+test('without a gate, classifyText still returns the recovered calls', () => {
+  const hooks = createStreamHooks({ toolNames: TOOL_NAMES })
+  const parts = hooks.classifyText('Now:\n[tool call bash #call_7]: {"command":"ls"}\n')
+  const calls = parts.filter((part) => part.kind === 'tool-call')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].name, 'bash')
+  assert.equal(calls[0].index < 0, true)
 })
