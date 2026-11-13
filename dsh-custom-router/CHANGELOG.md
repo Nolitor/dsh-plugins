@@ -5,8 +5,93 @@ version: 0.0.1-rc.20
 kind: report
 status: active
 updated: 2026-11-14
-summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events) and rc.15 with the preset-registry drift gate (static registry diff, `usageRoutes` on every preset, and a mutation harness that proves each drift class is rejected), and rc.17 with the `google-generative-ai` vendor wire plus JSON-Schema enums derived from their constant arrays instead of hand-copied, rc.18 with the subagent-activation contract migration that restores the `opencode`/`agy_worker` managed-child delegation on DSH 0.2.2-rc.3, and rc.19 with the living-spec gates (a 14-day age check on the manual `spec:watch` baseline, the four-preset live-route smoke gate), the vendored Antigravity fix that replays a Gemini `thoughtSignature` as a part-level sibling of `functionCall` instead of nesting it inside (live 400 → 200), the Anthropic/Google conformance fixtures, the approved deletion of two dead surfaces, and DSH credential-store support (`credentialRef`) for the DeepInfra and EXAONE keys, and rc.20 with the automatic plaintext-key migration (profile patch → DSH credential store), the EXAONE subagent-allowlist entry in both the live profile and the repo default, the atomic owner-only write the migration commits through, and the removal of the synthetic `OpenCode (config default)` model row from the picker (the `default` pseudo-route still resolves server-side).
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events) and rc.15 with the preset-registry drift gate (static registry diff, `usageRoutes` on every preset, and a mutation harness that proves each drift class is rejected), and rc.17 with the `google-generative-ai` vendor wire plus JSON-Schema enums derived from their constant arrays instead of hand-copied, rc.18 with the subagent-activation contract migration that restores the `opencode`/`agy_worker` managed-child delegation on DSH 0.2.2-rc.3, and rc.19 with the living-spec gates (a 14-day age check on the manual `spec:watch` baseline, the four-preset live-route smoke gate), the vendored Antigravity fix that replays a Gemini `thoughtSignature` as a part-level sibling of `functionCall` instead of nesting it inside (live 400 → 200), the Anthropic/Google conformance fixtures, the approved deletion of two dead surfaces, and DSH credential-store support (`credentialRef`) for the DeepInfra and EXAONE keys, and rc.20 with the automatic plaintext-key migration (profile patch → DSH credential store), the EXAONE subagent-allowlist entry in both the live profile and the repo default, the atomic owner-only write the migration commits through, and the removal of the synthetic `OpenCode (config default)` model row from the picker (the `default` pseudo-route still resolves server-side), and three post-rc.20 fixes found by live probing (the credential-store ref read through the inject-free accessor, the Gemini replay argument pruning, and the deferred credential injection) with a live verification block.
 -->
+
+## 0.0.1-rc.20 (cont. 2) — three post-rc.20 fixes found by live probing — 2026-11-14
+
+### What changed
+
+| Item | Before | After | Evidence |
+|---|---|---|---|
+| Credential-store ref read | `ctx.credentials` (a bare property read) | `ctx.get('credentials')` — the inject-free accessor | commits `0b2c516`, `6388397` |
+| Replayed Gemini `functionCall.args` | replayed verbatim, undeclared keys included | only keys the tool declaration declares are replayed | commit `642ee06` |
+| Antigravity vendor suite | 190 | **193** | `npm test` in `vendor/antigravity` (+3 regression cases) |
+| Router suite | 649 | **649** (unchanged) | `npm test` in the track |
+| Vendor suites (unchanged) | — | deepinfra **222 pass / 7 skip** (229 total), opencode **555**, exaone **19** | `npm test` per vendor |
+
+### `0b2c516` — the credential ref was read through a service this plugin does not inject
+
+The rc.20 `credentialRef` support read the host credential service as **`ctx.credentials`**. Both
+vendored presets declare `inject: ['llm']`, so cordis refuses the bare property read with
+`cannot get property "credentials" without inject` (cordis:1257). The `try/catch` around it
+swallowed that error and returned `''` — **silently**: the migrated keys were never resolved and
+DeepInfra/EXAONE turns went out with no API key (live `HTTP 401`).
+
+The fix is the **inject-free accessor**: `ctx.get('credentials')` (cordis:1345) reads a mounted
+service without an inject requirement. Both `vendor/deepinfra/lib/index.js` and
+`vendor/exaone/lib/index.js` now use it.
+
+### `642ee06` — a replayed Gemini `functionCall.args` key the tool does not declare is fatal
+
+Measured live 2026-11-14 (session `2a16c3bb`, turn 1 step 14, model `gemini-4-hydrogen`): a request
+that replayed a `write` tool call carrying **`sandbox_permissions`** was rejected by Google with
+`HTTP 400 "Request contains an invalid argument."`. Google validates **replayed** `functionCall`
+arguments against the tool declaration; a key the declaration does not declare poisons the request.
+Earlier steps replayed only schema-normal arguments and passed.
+
+- `declaredArguments(tools)` builds the per-tool parameter map from the **request's own** tool list.
+- `pruneArguments(value, schema)` keeps only declared keys, recursively (arrays included), and drops
+  `null`/`undefined` values, which Gemini also rejects on replay.
+- An **undeclared tool name** still projects its arguments unchanged — the projection cannot invent a
+  schema it was not given.
+
+Antigravity suite **190 → 193** (+3 regression cases).
+
+### `6388397` — the store ref was resolved once, at mount, and that was too early
+
+The live DeepInfra child failed with `HTTP 401: missing API key` even though the store held
+`DEEPINFRA_API_KEY` and the credentials provider was mounted (`dsh --dump-config` shows
+`credentials -> @deepseek-ai/dsh-credentials-local`).
+
+**Cause:** `ctx.get(name, strict)` returns `undefined` while the providing fiber is still activating,
+and a plugin `apply()` can run **before** the credentials service is. The single eager resolve
+therefore cached an empty key for the whole process lifetime.
+
+**Fix:** read with **`strict=false`** (return the provider even while its fiber is activating) **and**
+register **`ctx.inject(['credentials'], …)`** — cordis's deferred sub-context, whose callback runs as
+soon as the service becomes available — so the value is resolved at the right time and refreshed on
+`credentials/reference-updated`.
+
+### Live verification (2026-11-14, post-restart)
+
+Measured after the service restart at **06:10:57 KST** (`MainPID 284518`):
+
+| Probe | Result |
+|---|---|
+| DeepInfra child, model `deepseek-ai/DeepSeek-V4.1-Flash-1017` | **`DEEPINFRA_PROBE_OK`**, no error |
+| Gemini child, model `gemini-4-hydrogen` — two consecutive requests, the second a **replay carrying `sandbox_permissions`** | **`GEMINI_OK_3`** / **`GEMINI_OK_3B`** / **`TWO_REQUESTS_OK`**, **no HTTP 400** |
+| Live service | `MainPID 284518`, started **06:10:57 KST** |
+| Boot log | **no credential warnings** (credential-warning match count in the boot journal = **0**) |
+
+**An EXAONE *child* call is still UNVERIFIED.** The probing children inherited their allowlist from
+their **parent** Session `session-b32097ec…`, a top-level Session created at **01:08:57 KST** —
+*before* the 7-route allowlist row was applied to the live patch — and the allowlist freezes at
+`agent/created`. The children therefore carry the parent's **6-route** list (no
+`exaone/k-exaone_v2.5`) even though the live patch row and the repo default both carry **7**.
+Measured: 8 Sessions carry the 7-route policy (all created 04:25–04:37 KST, after the edit) and 16
+carry 6; the probe children `a8399f2d` / `b9d83d3f` / `62f0816a` (06:11–06:20 KST, after the
+06:10:57 restart) are all children of the 6-route parent. A **top-level** EXAONE turn works
+(confirmed by the owner). The child route therefore remains owner-verifiable only from a **new**
+top-level Session (P1-1/P1-3 in `docs/ROADMAP.md`).
+
+### Notes
+
+- Version held at `rc.20` (same session, per owner instruction). No live profile value was written,
+  no service was restarted by this change, and no key value appears in this entry.
+- The three fixes are code-only (`vendor/deepinfra`, `vendor/exaone`, `vendor/antigravity`); the
+  docs in this session (`docs/ROADMAP.md`, `docs/HANDOFF.md`) were brought to the measured state
+  alongside them.
 
 ## 0.0.1-rc.20 (cont.) — the synthetic `OpenCode (config default)` model row is removed — 2026-11-14
 
