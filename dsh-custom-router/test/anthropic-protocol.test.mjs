@@ -112,7 +112,9 @@ test('a malformed data frame rejects with PROTOCOL_DEFECT instead of being skipp
     },
     (error) => {
       assert.equal(error.code, 'PROTOCOL_DEFECT')
-      assert.match(error.message, /malformed Anthropic SSE data/)
+      // The wording belongs to the shared reader (`stream/sse.js`), which owns
+      // framing for every wire; only the policy is this module's: fail, never skip.
+      assert.equal(error.raw, '{"type":')
       return true
     },
   )

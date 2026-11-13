@@ -15,6 +15,14 @@
  *   - a server that closes without a trailing blank line still gets its last
  *     record decoded, otherwise the trailing usage chunk would be lost.
  *
+ * Two framing dialects share the reader. The default is the OpenAI-compatible
+ * one described above (`data:` only, `[DONE]` terminates). `{ eventNames: true }`
+ * selects the Anthropic-style dialect: `event:` lines are captured too, no
+ * `[DONE]` sentinel exists, and a blank `data:` keep-alive frame is ignored.
+ * Framing itself (where a record ends) is identical in both dialects, so the
+ * option never changes how the byte stream is split — only how a record is
+ * decoded. Every default path below is byte-for-byte the previous behaviour.
+ *
  * @module @nolit/dsh-custom-router/stream/sse
  */
 
@@ -28,14 +36,23 @@ export const DONE = '[DONE]'
  *
  * @param body - a web `ReadableStream` of bytes, an async iterable of chunks, or a
  *   `Response` whose `.body` carries the stream.
- * @param options - `{ signal, malformed = 'fail', emitDone = false }`.
+ * @param options - `{ signal, malformed = 'fail', emitDone = false, eventNames = false }`.
  * @returns decoded `data:` payload objects. `[DONE]` normally ends the iterable;
  *   with `emitDone` it is yielded as the legacy `{ done: true }` sentinel instead,
  *   which keeps a published legacy reader contract working.
+ *
+ *   With `eventNames: true` the reader speaks the Anthropic-style dialect: the
+ *   `event:` name is captured and folded into `type` only when the payload has
+ *   no discriminator of its own, `[DONE]` is not special (Anthropic streams end
+ *   by closing), and a blank `data:` keep-alive is skipped. Only a literal
+ *   `true` opts in; everything else keeps the OpenAI-compatible default.
  */
 export async function* readSseEvents(body, options = {}) {
   if (body === null || body === undefined) return
-  const { signal, malformed = 'fail', emitDone = false } = options
+  const { signal, malformed = 'fail', emitDone = false, eventNames } = options
+  // Only a literal `true` opts into the Anthropic-style dialect; anything else
+  // (absent, false, a truthy non-boolean) keeps the OpenAI-compatible default.
+  const named = eventNames === true
   if (malformed !== 'fail' && malformed !== 'skip') throw new TypeError(`unknown malformed policy: ${String(malformed)}`)
 
   const decoder = new TextDecoder()
@@ -50,7 +67,7 @@ export async function* readSseEvents(body, options = {}) {
       while ((boundary = nextRecord(buffer)) !== -1) {
         const record = buffer.slice(0, boundary)
         buffer = buffer.slice(boundary).replace(/^\r?\n/, '')
-        const decoded = decodeRecord(record, malformed)
+        const decoded = decodeRecord(record, malformed, named)
         if (decoded === DONE) {
           if (emitDone) yield { done: true }
           return
@@ -61,7 +78,7 @@ export async function* readSseEvents(body, options = {}) {
     buffer += decoder.decode()
     for (const record of buffer.split(/\r?\n\r?\n/)) {
       if (record.trim() === '') continue
-      const decoded = decodeRecord(record, malformed)
+      const decoded = decodeRecord(record, malformed, named)
       if (decoded === DONE) {
         if (emitDone) yield { done: true }
         return
@@ -150,21 +167,39 @@ function nextRecord(buffer) {
  *
  * @param record - raw record text without its terminating blank line.
  * @param malformed - `'fail'` or `'skip'`.
- * @returns the decoded payload, the `DONE` sentinel, or undefined for a record with no data.
+ * @param eventNames - when `true`, use the Anthropic-style dialect: capture the
+ *   `event:` name, treat a blank `data:` as a keep-alive, and never treat
+ *   `[DONE]` as a sentinel. Default `false` is the previous behaviour exactly.
+ * @returns the decoded payload, the `DONE` sentinel (default dialect only), or
+ *   undefined for a record with no data.
  */
-function decodeRecord(record, malformed) {
+function decodeRecord(record, malformed, eventNames = false) {
   if (record.length === 0) return undefined
   const data = []
+  let event
   for (const line of record.split(/\r?\n/)) {
     if (line.startsWith(':')) continue
-    if (!line.startsWith('data:')) continue
-    data.push(line.slice(5).replace(/^ /, ''))
+    if (line.startsWith('data:')) {
+      data.push(line.slice(5).replace(/^ /, ''))
+      continue
+    }
+    // Only the named dialect reads `event:`; the default loop is untouched.
+    if (eventNames && line.startsWith('event:')) event = line.slice(6).replace(/^ /, '')
   }
   if (data.length === 0) return undefined
   const joined = data.join('\n')
-  if (joined === DONE) return DONE
+  // Anthropic-style streams have no `[DONE]`; they end by closing the stream. A
+  // blank `data:` frame is a proxy keep-alive and carries no payload.
+  if (eventNames) {
+    // No sentinel in this dialect: a literal `[DONE]` payload is not JSON and is
+    // not a payload either, so it is dropped rather than raised as a defect.
+    if (joined.trim().length === 0 || joined === DONE) return undefined
+  } else if (joined === DONE) {
+    return DONE
+  }
+  let payload
   try {
-    return JSON.parse(joined)
+    payload = JSON.parse(joined)
   } catch {
     if (malformed === 'skip') return undefined
     const error = new Error('the provider sent an undecodable SSE record')
@@ -172,4 +207,10 @@ function decodeRecord(record, malformed) {
     error.raw = joined.slice(0, 400)
     throw error
   }
+  if (!eventNames || event === undefined) return payload
+  // The event name is redundant with `data.type` on every measured event; it is
+  // folded in only when the payload omits its own discriminator.
+  if (payload === null || typeof payload !== 'object') return payload
+  if (payload.type === undefined) return { ...payload, type: event }
+  return payload
 }

@@ -2,37 +2,35 @@
  * Anthropic Messages provider hooks for the shared downstream stream pipe.
  *
  * Anthropic is not an OpenAI-shaped SSE stream, and the differences are the
- * whole reason this module exists:
- *   - an event carries its name in `event:` *and* in `data.type`; the pipe only
- *     sees decoded payloads, so `type` is the discriminator;
- *   - there is no `[DONE]` sentinel — the server closes the connection after
- *     `message_stop`, so end-of-stream is normal termination;
- *   - usage arrives in two pieces: input/cache on `message_start`, output on
- *     `message_delta`, and `input_tokens` EXCLUDES cache by design;
- *   - a tool call is announced on `content_block_start` (id + name) and its JSON
- *     arrives in `input_json_delta.partial_json` fragments, so the block index
- *     must be carried, never inferred from ordinal;
- *   - thinking blocks carry an opaque `signature` (or `data` for a redacted
- *     block) that no host chunk field can hold — and a turn can contain more
- *     than one such block, so signatures are kept per block index;
- *   - an in-stream `error` event is a terminal provider failure, not a no-op: it
- *     must never leave the turn looking like a clean `stop`.
+ * whole reason this module exists. An event carries its name in `event:` *and*
+ * in `data.type`, and the pipe only sees decoded payloads, so `type` is the
+ * discriminator. There is no `[DONE]` sentinel: the server closes after
+ * `message_stop`. Usage arrives in two pieces — input/cache on `message_start`,
+ * output on `message_delta` — and `input_tokens` EXCLUDES cache by design. A
+ * tool call is announced on `content_block_start` (id + name) with its JSON in
+ * `input_json_delta.partial_json` fragments, so the block index is carried, never
+ * inferred from ordinal. Thinking blocks carry an opaque `signature` (or `data`
+ * when redacted) that no host chunk field can hold, and a turn can hold several,
+ * so signatures are kept per block index. An in-stream `error` is a terminal
+ * provider failure, never a clean `stop`.
+ *
+ * Framing is not implemented here: `readSseEvents` owns it for every wire.
  *
  * @module @nolit/dsh-custom-router/stream/anthropic
  */
 
-import { abortError, CODES } from './failure.js'
+import { CODES } from './failure.js'
+import { readSseEvents } from './sse.js'
 import { usageFromAnthropic } from './usage.js'
 import { finishReasonFor } from './wire.js'
 
 /**
  * The pipeline descriptor for Anthropic's wire.
  *
- * Measured facts behind the fields: tool calls are fragmented (`partial_json`),
- * a usage total can only be rebuilt as `input+output+cache` because cache tokens
- * are reported separately and are not inside `input_tokens`, and a decoded
- * payload that cannot be read is a defect rather than a skippable frame — a
- * skipped `content_block_delta` silently truncates the turn.
+ * Measured: tool calls are fragmented (`partial_json`), a usage total rebuilds
+ * only as `input+output+cache` because cache tokens are reported separately, and
+ * an undecodable payload is a defect rather than a skippable frame — a skipped
+ * `content_block_delta` silently truncates the turn.
  */
 export const ANTHROPIC_DESCRIPTOR = Object.freeze({
   protocol: 'anthropic-messages',
@@ -41,73 +39,41 @@ export const ANTHROPIC_DESCRIPTOR = Object.freeze({
   malformedRecord: 'fail',
 })
 
-/** A blank line ends a record; `\r?` covers CRLF, LF and the mixed `\n\r\n`. */
-const BOUNDARY = /\r?\n\r?\n/
-
 /**
  * Read an Anthropic SSE response as decoded event payloads, in wire order.
  *
- * Framing rules guaranteed here, matching the provider's own output:
- *   - a record ends at a blank line under CRLF or LF;
- *   - multi-line `data:` fields join with `'\n'`, as the SSE spec requires;
- *   - `: comment` / keep-alive lines are ignored;
- *   - a trailing record with no closing blank line is still decoded, because the
- *     socket closes right after `message_stop`;
- *   - end of stream is clean termination: there is no `[DONE]` sentinel to wait
- *     for and none is yielded.
+ * A thin adapter over the shared reader's named-event dialect: `event:` names
+ * fold into `type` only when the payload omits its own, keep-alive lines and
+ * blank `data:` frames are skipped, an unterminated trailing record is still
+ * decoded (the socket closes right after `message_stop`), and there is no
+ * `[DONE]` sentinel — end of stream is clean termination.
  *
  * @param response - a `Response` (its `.body` is read), a web `ReadableStream`,
  *   an async iterable of byte/string chunks, or a string body.
  * @param options - `{ signal }`; `signal` aborts iteration mid-stream.
- * @returns async generator of decoded payload objects; the `event:` name is
- *   folded into `type` only when the payload does not carry its own.
- * @throws an `Error` with `code: 'PROTOCOL_DEFECT'` when a `data:` field is not
- *   valid JSON. Silently skipping it would drop a delta from the turn.
+ * @returns async generator of decoded payload objects.
+ * @throws `Error` with `code: 'PROTOCOL_DEFECT'` on undecodable `data:` — a
+ *   skipped frame would drop a delta from the turn.
  */
 export async function* readAnthropicSse(response, options = {}) {
-  if (response === null || response === undefined) return
-  const { signal } = options
-
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  for await (const chunk of chunksOf(response)) {
-    if (signal?.aborted) throw abortError()
-    buffer += typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true })
-    let boundary
-    while ((boundary = BOUNDARY.exec(buffer)) !== null) {
-      const record = buffer.slice(0, boundary.index)
-      buffer = buffer.slice(boundary.index + boundary[0].length).replace(/^(?:\r?\n)+/, '')
-      const payload = decodeRecord(record)
-      if (payload !== undefined) yield payload
-    }
-  }
-
-  buffer += decoder.decode()
-  // A closed connection leaves the last record unterminated; dropping it would
-  // lose the final `message_stop`.
-  for (const record of buffer.split(BOUNDARY)) {
-    const payload = decodeRecord(record)
-    if (payload !== undefined) yield payload
-  }
+  // A plain string is not async-iterable, so it is wrapped before the reader sees it.
+  const body = typeof response === 'string' ? (async function* () { yield response })() : response
+  yield* readSseEvents(body, { ...options, eventNames: true })
 }
 
 /**
  * Map one Anthropic event payload onto the pipe record.
  *
  * A `signature_delta` is deliberately not surfaced: the host's chunk shape has
- * no signature field, and inventing one would fork the pipe. The signature is
- * still accumulated on the state so a caller that must replay thinking blocks
- * on the next request can read it. A turn may contain several thinking blocks,
- * so signatures live in `state.signatures` keyed by `payload.index`; a second
- * block starting must not wipe the first block's signature.
+ * no signature field, and inventing one would fork the pipe. It is still
+ * accumulated on the state so a caller replaying thinking blocks can read it,
+ * keyed by block index in `state.signatures`.
  *
  * @param payload - one decoded event (`{ type, index?, content_block?, delta?, usage? }`).
  * @param state - accumulator shared across events; `signatures` (a Map keyed by
- *   block index) is populated, and `signature` mirrors the most recent block for
- *   backward compatibility. Note: the shared pipe passes a fresh object per
- *   event, so a caller that needs the signature across records must pass its own
- *   long-lived object (or use `createAnthropicHooks`).
+ *   block index) is populated, and `signature` mirrors the most recent block.
+ *   The pipe passes a fresh object per event, so a caller needing the signature
+ *   across records must pass its own long-lived object (or use the factory).
  * @returns a pipe record `{ parts?, usage?, finish?, defect?, done? }`, or
  *   `undefined` for an event with no downstream effect.
  */
@@ -134,15 +100,7 @@ export function readAnthropicEvent(payload, state = {}) {
           // Text arrives as deltas only; there is nothing to open downstream.
           return undefined
         case 'tool_use':
-          return {
-            parts: [{
-              kind: 'tool-call',
-              index,
-              id: block.id,
-              name: block.name,
-              argumentsDelta: '',
-            }],
-          }
+          return { parts: [{ kind: 'tool-call', index, id: block.id, name: block.name, argumentsDelta: '' }] }
         case 'thinking':
           setSignature(state, index, block.signature ?? '')
           return { parts: [{ kind: 'reasoning', text: block.thinking ?? '' }] }
@@ -162,13 +120,7 @@ export function readAnthropicEvent(payload, state = {}) {
         case 'thinking_delta':
           return { parts: [{ kind: 'reasoning', text: delta.thinking }] }
         case 'input_json_delta':
-          return {
-            parts: [{
-              kind: 'tool-call',
-              index: payload.index ?? 0,
-              argumentsDelta: delta.partial_json,
-            }],
-          }
+          return { parts: [{ kind: 'tool-call', index: payload.index ?? 0, argumentsDelta: delta.partial_json }] }
         case 'signature_delta':
           // No host chunk field exists for a signature; accumulate only.
           appendSignature(state, payload.index ?? 0, delta.signature ?? '')
@@ -179,15 +131,11 @@ export function readAnthropicEvent(payload, state = {}) {
     }
 
     case 'message_delta': {
-      // Measured 2026-11-08 against DeepInfra's native Anthropic mount: the
-      // request's INPUT counts are reported HERE, not on `message_start`
-      // (`message_start.input_tokens` is 0 and `message_delta.input_tokens` is
-      // the real 51). `input_tokens` already EXCLUDES cache, so all three input
-      // buckets are read.
-      //
-      // Only a NON-ZERO count is claimed: `mergeCounts` treats any finite number
-      // as a statement, so forwarding a 0 from this event would erase an input
-      // count that `message_start` already established.
+      // Measured 2026-11-08 on DeepInfra's native Anthropic mount: the request's
+      // INPUT counts are reported HERE, not on `message_start` (0 there, the
+      // real 51 here), and `input_tokens` already EXCLUDES cache. Only a
+      // NON-ZERO count is claimed: a 0 forwarded from this event would erase an
+      // input count `message_start` already established.
       const usage = payload.usage ?? {}
       const piece = { output: usage.output_tokens }
       const claim = (field, key) => {
@@ -220,9 +168,9 @@ export function readAnthropicEvent(payload, state = {}) {
  * Project an Anthropic in-stream `error` event onto the pipe's failure shape.
  *
  * The wire's `error.type` decides the code, because the host routes on it: an
- * overloaded/`api_error` turn is a provider-capacity problem, and a rate limit
- * is a rate limit. Anything unrecognised stays a resource failure rather than
- * becoming a generic defect, since the turn cannot be completed either way.
+ * overloaded/`api_error` turn is a provider-capacity problem and a rate limit is
+ * a rate limit. Anything unrecognised stays a resource failure rather than
+ * becoming a generic defect — the turn cannot be completed either way.
  *
  * @param payload - the decoded `{ type: 'error', error: { type, message } }`.
  * @returns `{ code, message }` with a non-empty message, as the pipe requires.
@@ -243,11 +191,8 @@ function anthropicErrorFailure(payload) {
       break
     case 'overloaded_error':
     case 'api_error':
-      code = CODES.PROVIDER_RESOURCE
-      break
     default:
       code = CODES.PROVIDER_RESOURCE
-      break
   }
   return { code, message }
 }
@@ -255,14 +200,9 @@ function anthropicErrorFailure(payload) {
 /**
  * Store a block's own start signature, replacing only that block's entry.
  *
- * A `content_block_start` states the block's signature outright, so it sets
- * rather than appends. An empty start signature never erases a real one that
- * already arrived for the same block (a replayed start must not lose it), and it
- * never touches another block's entry — the old single-field version wiped a
- * real signature when a later block started without one.
- *
- * `state.signature` mirrors the latest non-empty signature so a single-block
- * caller keeps working.
+ * A start states the signature outright, so it sets rather than appends; an
+ * empty start never erases a real one that already arrived, and never touches
+ * another block's entry. `state.signature` mirrors the latest non-empty one.
  *
  * @param state - the per-stream accumulator.
  * @param index - the block index the signature belongs to.
@@ -297,9 +237,6 @@ function appendSignature(state, index, fragment) {
 /**
  * Lazily create the per-block signature map on a caller-supplied state.
  *
- * The state object is often created by a caller (or defaulted by the pipe), so
- * it cannot be assumed to be prepared by {@link createAnthropicHooks}.
- *
  * @param state - the per-stream accumulator.
  * @returns the signature map, created on first use.
  */
@@ -310,9 +247,7 @@ function ensureSignatures(state) {
 
 /**
  * Point `state.signature` at the most recent block that has a signature.
- *
- * Backward compatibility only: the binding's accessor reads this field, and the
- * map is the source of truth.
+ * Backward compatibility only; the map is the source of truth.
  *
  * @param state - the per-stream accumulator.
  */
@@ -327,7 +262,7 @@ function mirrorSignature(state) {
  *
  * @param state - the per-stream accumulator.
  * @param index - a specific block index; omitted means the latest block.
- * @returns the signature string, or `''` when nothing has arrived.
+ * @returns the signature string, or `''` before anything arrives.
  */
 export function signatureFor(state = {}, index) {
   if (index !== undefined) return state.signatures?.get(index) ?? ''
@@ -353,12 +288,10 @@ export function mapAnthropicFinish(stopReason) {
 }
 
 /**
- * Project accumulated Anthropic token counts onto the host usage shape.
- *
- * Re-exported from {@link module:@nolit/dsh-custom-router/stream/usage}: the
- * writer is the shared one, so this module keeps no accounting of its own. The
- * additive cache convention is declared by the descriptor's
- * `totalFormula: 'input+output+cache'`, not by a private function here.
+ * Project accumulated Anthropic token counts onto the host usage shape. A
+ * re-export: the writer is shared, so this module keeps no accounting of its
+ * own; the additive cache convention is declared by the descriptor's
+ * `totalFormula: 'input+output+cache'`.
  */
 export { usageFromAnthropic }
 
@@ -381,8 +314,8 @@ const COUNT_KEYS = Object.freeze(['input', 'cacheRead', 'cacheWrite', 'output', 
  * Copy the accumulated counters into a fresh usage object.
  *
  * A new object per call: the pipe and the caller both receive a snapshot, so
- * mutating what they got cannot corrupt the stream's counters. `total` stays
- * `undefined` until the provider states one — the merge never invents a number.
+ * mutating one cannot corrupt the stream's counters. `total` stays `undefined`
+ * until the provider states one — the merge never invents a number.
  *
  * @param state - the per-stream accumulator.
  * @returns `{ input, cacheRead, cacheWrite, output, total? }`.
@@ -402,8 +335,8 @@ function usageSnapshot(state) {
  *
  * Only a finite number overwrites a counter: Anthropic omits fields it has
  * nothing to say about (`cache_read_input_tokens` is absent on an uncached
- * turn), and `undefined`/`null` must not clobber a count that already arrived.
- * A real `0` is a statement and does overwrite.
+ * turn), and `undefined`/`null` must not clobber a count already arrived. A real
+ * `0` is a statement and does overwrite.
  *
  * @param state - the per-stream accumulator.
  * @param raw - the `usage` object taken off one pipe record.
@@ -424,33 +357,26 @@ function mergeCounts(state, raw) {
 /**
  * Create one Anthropic hook set for one stream.
  *
- * Why a factory and not {@link ANTHROPIC_HOOKS}: two pieces of stream state have
- * no home in the pipe's record shape, and the pipe hands the hook a *fresh*
- * context object per event (`readEvent(payload, { descriptor, usageFormula })`),
- * so a hook that relied on that object would lose its contents between two
- * events of the same stream.
+ * Why a factory and not `ANTHROPIC_HOOKS`: two pieces of stream state have no
+ * home in the pipe's record shape, and the pipe hands the hook a *fresh* context
+ * object per event, so a hook relying on that object would lose its contents
+ * between two events of the same stream.
  *
- *   1. `usage` — it arrives in TWO pieces and the pipe REPLACES its usage on
- *      each record, not merges it:
- *        `message_start` -> { input, cacheRead, cacheWrite }
- *        `message_delta` -> { output } (and `stop_reason`)
- *      A record carrying only `{ output }` would therefore erase the input
- *      counts. This hook merges each piece and returns the cumulative object on
- *      every record that carried a usage piece, so the pipe's LAST such record
- *      is complete regardless of arrival order.
- *   2. `signature` — kept per block index in `state.signatures`, so a second
- *      thinking block cannot wipe the first one's signature.
+ *   1. `usage` — it arrives in TWO pieces and the pipe REPLACES its usage per
+ *      record rather than merging it: `message_start` -> { input, cacheRead,
+ *      cacheWrite }, `message_delta` -> { output }. A record carrying only
+ *      `{ output }` would erase the input counts, so this hook merges each piece
+ *      and returns the cumulative object on every usage-bearing record, leaving
+ *      the pipe's LAST such record complete regardless of arrival order.
+ *   2. `signature` — kept per block index in `state.signatures`.
  *
- * Measured Anthropic accounting this depends on: `usage.input_tokens` already
- * EXCLUDES cache reads and cache writes, so the three input-side buckets are
- * summed, not de-duplicated (see {@link usageFromAnthropic}).
- *
- * Every call owns a private state, which is the point: two concurrent streams
- * must not share a signature or a token count.
+ * Measured: `usage.input_tokens` already EXCLUDES cache, so the three input-side
+ * buckets are summed, not de-duplicated (see `usageFromAnthropic`). Every call
+ * owns a private state: two concurrent streams must not share a token count.
  *
  * @returns `{ descriptor, hooks, signature, usage }`, where `signature()` is the
- *   accumulated thinking signature (`''` until one arrives), `signature(index)`
- *   is one block's signature, and `usage()` is the accumulated usage snapshot.
+ *   accumulated thinking signature, `signature(index)` is one block's, and
+ *   `usage()` is the accumulated usage snapshot.
  */
 export function createAnthropicHooks() {
   /** The stream's own accumulator; never shared between two streams. */
@@ -466,10 +392,8 @@ export function createAnthropicHooks() {
 
   /**
    * `readEvent` hook: delegate to the shared reader, then fold any usage piece
-   * into the stream's counters and hand back the cumulative object.
-   *
-   * The shared reader accumulates signatures into `state` itself, so this hook
-   * does not touch them.
+   * into the stream's counters and hand back the cumulative object. The shared
+   * reader accumulates signatures into `state` itself.
    *
    * @param payload - one decoded SSE payload.
    * @returns the reader's record with `usage` replaced by the accumulated
@@ -506,77 +430,4 @@ export function createAnthropicHooks() {
     /** @returns a fresh copy of the accumulated usage counters. */
     usage: () => usageSnapshot(state),
   })
-}
-
-/**
- * Decode one `event:`/`data:` record.
- *
- * @param record - the text between two blank lines.
- * @returns the decoded payload, or `undefined` for a comment/keep-alive record.
- * @throws an `Error` with `code: 'PROTOCOL_DEFECT'` on malformed JSON.
- */
-function decodeRecord(record) {
-  let event
-  const dataLines = []
-  for (const line of record.split(/\r?\n/)) {
-    if (line.length === 0 || line.startsWith(':')) continue
-    const colon = line.indexOf(':')
-    const field = colon === -1 ? line : line.slice(0, colon)
-    let value = colon === -1 ? '' : line.slice(colon + 1)
-    if (value.startsWith(' ')) value = value.slice(1)
-    if (field === 'data') dataLines.push(value)
-    else if (field === 'event') event = value
-  }
-  if (dataLines.length === 0) return undefined
-
-  const data = dataLines.join('\n')
-  // A blank `data:` frame is a keep-alive some proxies inject. It carries no
-  // payload, so it is ignored — JSON.parse('') would raise a PROTOCOL_DEFECT for
-  // a frame that means "nothing happened".
-  if (data.trim().length === 0) return undefined
-
-  let payload
-  try {
-    payload = JSON.parse(data)
-  } catch (cause) {
-    throw Object.assign(
-      new Error(`malformed Anthropic SSE data: ${data.slice(0, 120)}`),
-      { code: 'PROTOCOL_DEFECT', cause },
-    )
-  }
-  if (payload === null || typeof payload !== 'object') return payload
-  // The event name is redundant with `data.type` on every measured event; it is
-  // used only when the payload omits its own discriminator.
-  if (payload.type === undefined && event !== undefined) return { ...payload, type: event }
-  return payload
-}
-
-/**
- * Normalize a response-like source into an async iterable of chunks.
- *
- * @param source - a `Response`, `ReadableStream`, async iterable, or string.
- * @returns async generator of byte chunks, strings, or whatever the iterable yields.
- */
-async function* chunksOf(source) {
-  if (typeof source === 'string') {
-    yield source
-    return
-  }
-  const body = typeof source.getReader === 'function' ? source : source.body ?? source
-  if (body === null || body === undefined) return
-  if (typeof body.getReader === 'function') {
-    const reader = body.getReader()
-    try {
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) return
-        if (value !== undefined) yield value
-      }
-    } finally {
-      reader.releaseLock?.()
-    }
-  }
-  if (typeof body[Symbol.asyncIterator] === 'function') {
-    for await (const chunk of body) yield chunk
-  }
 }
