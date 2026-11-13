@@ -1,16 +1,19 @@
 # Custom Router — Active Roadmap
 
 <!-- skeleton:
-version: 1.1
-kind: plan
+version: 1.2
+kind: design
 status: active
 updated: 2026-11-14
-summary: The only active roadmap for @nolit/dsh-custom-router at 0.0.1-rc.20. Old Phase/Step plans are closed or superseded and live in ROADMAP-ARCHIVE.md; this file keeps P0 security, P1 operating verification, and P2 backlog items with a planning intent and a completion criterion each. The 2026-11-14 architecture audit replaced the unreachable "data-only preset install" promise (former P2-1, deleted) with a measured P2-A queue of seven protocol-pipe consolidation tasks (A2 -> A1 -> A3 -> A4 -> A5 -> A6, A7 independent).
+summary: Active roadmap for @nolit/dsh-custom-router at 0.0.1-rc.20: P0 security, P1 checks, and P2-A phased horizontally (Phase 1 serial core lock -> Phase 2 parallel vendor fan-out -> Phase 3 A7 host seam).
 -->
 
 > This is the **only** document that lists active work. Historical phases are in
 > [ROADMAP-ARCHIVE.md](./ROADMAP-ARCHIVE.md); current state and next actions are in
-> [HANDOFF.md](./HANDOFF.md). Do not execute a Phase/Step list from an older design doc.
+> [HANDOFF.md](./HANDOFF.md); the horizontal layer contract is in
+> [ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md); copy-paste worker dispatch packages live
+> in [WORKER-DISPATCH.md](./WORKER-DISPATCH.md). Do not execute a Phase/Step list from an older
+> design doc.
 
 ## 1. What the router is now (the context that makes old phases obsolete)
 
@@ -216,10 +219,11 @@ the preset's layers — `lib/catalog.js:57`, `lib/index.js:644`), `endpoint.rout
 `pay-per-token` / `none` — with **no cross-check**. `usage.routes[].normalize` joins to a
 hand-written `USAGE_READERS` table (`lib/client.src.js:772`) with **no gate**.
 
-### P2-A. Architecture consolidation — 3 standard protocol pipes
+### P2-A. Architecture consolidation — horizontal phase matrix
 
-> **Owner principle.** LOWER layer = a thin standardised shared pipeline for OpenAI / Anthropic /
-> Gemini. UPPER layer = thin vendor/preset adapters that carry **vendor quirks only**.
+> **Owner principle ([ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md)).** LOWER layer = a thin
+> standardised shared pipeline for OpenAI / Anthropic / Gemini. UPPER layer = thin vendor/preset
+> adapters that carry **vendor quirks only**.
 >
 > **Audit verdict 2026-11-14: the principle is not met.** The core pipe
 > (`lib/stream/` = **764** lines across `index` 343, `sse` 180, `usage` 90, `wire` 68, `failure` 83)
@@ -228,8 +232,87 @@ hand-written `USAGE_READERS` table (`lib/client.src.js:772`) with **no gate**.
 > layer is not thin: the four vendors carry **22 672** lines of `lib/` (antigravity 5 216, opencode
 > 12 330, deepinfra 3 950, exaone 1 176) between them, with a measured **681-line** duplicated
 > OpenAI wire in two of them.
+>
+> **Removed, not closed:** the former **P2-1** ("data-only preset install") remains **DELETED** as an
+> unreachable promise (0 of 4 presets are data-only; `kind:'declaration'` mounts nothing). Its real
+> host seam is **Phase 3 (A7)** below.
 
-**Ordering: A2 → A1 → A3 → A4 → A5 → A6.** A7 is **independent** and measure-first.
+**Horizontal split (replaces the vertical A2 → A1 → … single-worker silo):** lock all L0/L1 lower
+interfaces **serially** first (Phase 1), then fan out L2 vendor clean-ups and L3 gates **in parallel**
+with provably disjoint write scopes (Phase 2), followed by the independent host-seam measurement
+(Phase 3). Dispatch blocks for every worker live in [WORKER-DISPATCH.md](./WORKER-DISPATCH.md).
+
+#### Phase dependency diagram
+
+```text
+  PHASE 1 — CORE LOCK (SERIAL: 1 worker at a time, touches lib/ + package.json + core tests)
+    [W1-1: A2-core (lib/stream/openai.js)]
+          │  establishes protocol-profile pattern in lib/stream/
+          ▼
+    [W1-2: A1-core (lib/stream/{anthropic,sse,usage,failure,index}.js + contract.js)]
+          │  unifies SSE, TOTAL_FORMULAS, abortError, per-stream createHooks
+          ▼
+    [W1-3: A4-core (lib/{cost,plan,usage}.js + store/ledger interface)]
+          │  locks single accounting & ledger contract on top of normalized usage
+          ▼
+    [W1-4: A5-core (lib/retry.js + lib/catalog-cache.js)]
+          │
+          ▼
+  ════════ CORE INTERFACE LOCKED (all Phase 1 gates green; zero core-internal forks) ════════
+          │
+          ├──────────────────┬──────────────────┬──────────────────┬──────────────────┐
+          ▼                  ▼                  ▼                  ▼                  ▼
+  [W2-A: A3 OpenCode] [W2-B: DeepInfra] [W2-C: EXAONE]    [W2-D: A6 Gates]   [W2-E: Antigravity]
+  vendor/opencode/**  vendor/deepinfra  vendor/exaone/**  scripts/ + specs/  vendor/antigravity/**
+                                                          (sole owner of     (A4/A5 rewiring;
+                                                           verify-stream.mjs) disjoint scope)
+          │                  │                  │                  │                  │
+          └──────────────────┴──────────────────┴──────────────────┴──────────────────┘
+                                                │
+                                                ▼
+  ════════ INTEGRATION VERIFY (npm run verify + all 4 vendor suites + live OpenCode turn) ════════
+                                                │
+                                                ▼
+  PHASE 3 — A7 HOST SEAM (measure-first, owner decision, NOT parallel with Phase 1/2)
+    [W3-1: A7 — inspect @deepseek-ai/dsh-llm-pi-ai providers dict & write decision]
+```
+
+#### Phase 1 — Core lock, SERIAL (single worker, sequential, file-conflict safety)
+
+Phase 1 touches shared core files (`lib/stream/index.js`, `lib/driver/contract.js`, `package.json`),
+so steps **must** run sequentially on one worker at a time.
+
+| Order | Step | Task scope | Why this order | Lock criteria (before next step / Phase 2) |
+| :-: |---|---|---|---|
+| **1.1** | **W1-1 (A2-core)** | Extract `lib/stream/openai.js` (delta→parts mapper, `readOpenAiEvent`, shared OpenAI request-projection helpers) + export in `lib/stream/index.js` / `package.json` | **Smallest blast radius** and pure duplication extraction; establishes the `lib/stream/<proto>.js` module pattern that A1 reuses | `lib/stream/openai.js` API frozen; comment-stripped diff vs extracted vendor functions = 0 changed lines (except parameterized vendor label); `openai-completions` conformance + `npm run verify` + all vendor suites green |
+| **1.2** | **W1-2 (A1-core)** | Consolidate `lib/stream/anthropic.js` onto eventName-aware `sse.js`, `usage.js` (`TOTAL_FORMULAS['input+output+cache']`), `failure.js` (single `abortError`), and `createHooks`; align `lib/driver/contract.js:14` `TOTAL_FORMULAS` | **Largest L1 violation** (614 L = 80.4 % on top of 764 L core) and requires the A2 core-module pattern; closes the split `totalFormula` vocabulary so drivers and `usageFrom` agree | `lib/stream/anthropic.js` ≤ 434 L (≥ 180 L removed); zero duplicate SSE/usage/`abortError` inside `lib/stream/`; `defineProviderDriver` accepts Anthropic & Antigravity descriptors; `anthropic-messages` conformance + `npm run verify` green |
+| **1.3** | **W1-3 (A4-core)** | Lock `lib/cost.js` + `lib/plan.js` + `lib/usage.js` as the single accounting & cost-ledger interface (incl. canonical `createCostStore`, `createCostLedger`, `numberOrNull`, `pickSession`) | Reads normalized token buckets from A1/A2 (`lib/stream/usage.js`), so it lands after stream normalization is locked | Core accounting & ledger exports frozen in `package.json`; core cost/plan/usage unit tests + `npm run verify` green; zero duplicate accounting helpers in `lib/` |
+| **1.4** | **W1-4 (A5-core)** | Add `lib/retry.js` (bounded transport retry per [RETRY-POLICY.md](./RETRY-POLICY.md)) and `lib/catalog-cache.js` (generic TTL + `?refresh=1` bypass) | Pure cross-vendor mechanics with zero wire coupling; locks right before Phase 2 vendor rewiring | `lib/retry.js` + `lib/catalog-cache.js` exports frozen; R1–R9 retry tests + cache TTL/refresh tests green; **CORE INTERFACE LOCKED** (`npm run verify` + all 4 vendor suites green) |
+
+#### Phase 2 — Upper-layer fan-out, PARALLEL after core lock
+
+Once Phase 1 locks every L1/core interface, launch **4 primary parallel workers** (`W2-A`..`W2-D`)
+plus optional disjoint **`W2-E`** (Antigravity A4/A5 rewiring) simultaneously. Every worker owns a
+**provably disjoint write scope** — zero shared files. Only **`W2-D`** may edit `scripts/verify-stream.mjs`.
+
+| Worker | Task | Allowed write scope (disjoint) | Forbidden paths | Owns `verify-stream.mjs`? |
+|---|---|---|---|---|
+| **W2-A** | **A3 — OpenCode onto shared pipe** (+ OpenCode ledger/retry/cache rewiring) | `vendor/opencode/lib/**`, `vendor/opencode/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,deepinfra,exaone}/**` | No |
+| **W2-B** | **DeepInfra dedup** (OpenAI `map`/`wire`/`stream-contract` + `cost` ledger + catalog TTL cache) | `vendor/deepinfra/lib/**`, `vendor/deepinfra/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,opencode,exaone}/**` | No |
+| **W2-C** | **EXAONE dedup + dead exports** (OpenAI `map`/`wire`/`stream-contract` + `map.js:96-130` 35 L dead exports) | `vendor/exaone/lib/**`, `vendor/exaone/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,opencode,deepinfra}/**` | No |
+| **W2-D** | **A6 — Dead surface removal & gate hardening** (`dsh-exaone` stream guard, spec↔preset mirror, dead-field allowlist, `L1` boundary lint) | `scripts/verify-stream.mjs`, `scripts/verify-specs.mjs`, `scripts/verify-presets-mutation.mjs`, `lib/driver/contract.js`, `lib/preset-drift.js`, `specs/**`, `test/specs.test.mjs`, `test/preset-drift.test.mjs`, `test/driver-contract.test.mjs`, `test/stream-boundary.test.mjs` | `lib/stream/**`, `lib/{cost,plan,usage,retry,catalog-cache}.js`, `vendor/**`, `package.json` | **YES (sole owner)** |
+| **W2-E** *(optional Wave 2)* | **Antigravity A4/A5 rewiring** (70 L retry + 92 L catalog cache + 28 L `agy` usage double-map) | `vendor/antigravity/lib/**`, `vendor/antigravity/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{opencode,deepinfra,exaone}/**` | No |
+
+> **Integration bar after Phase 2:** once all Phase 2 branches land together, run the full gate suite
+> (`npm run verify`, `npm run verify:presets`, `npm run verify:presets:mutation`, `npm run verify:dispatch`,
+> all 4 vendor suites, repo-wide uniqueness grep checks for `mapDelta`/`numberOrNull`/`pickSession`/`createCostStore`/`backoffDelay`,
+> and the owner-verified live OpenCode shared-pipe turn).
+
+#### Phase 3 — A7 Host Seam (measure-first, owner decision, sequential)
+
+**A7** (`dsh-llm-pi-ai` `providers: z.dict(profile)` seam) is **not** parallel with Phase 1/2
+refactoring. It runs as a dedicated measure-first pass against the host package, producing an
+owner decision before any code or profile mutation is attempted.
 
 ---
 
@@ -593,24 +676,21 @@ turn works, confirmed by the owner.
    applied and live-verified for DeepInfra) — owner-gated.
 2. **P1-1/P1-3** — owner restart once after the rotation, then a **new** top-level session and the
    EXAONE **child** turn. Top-level EXAONE is already confirmed working.
-3. **P2-A** in the measured order **A2 → A1 → A3 → A4 → A5 → A6** (A7 is independent and
-   measure-first):
+3. **P2-A — Horizontal Phase Matrix** (full contracts in
+   [ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md), dispatch packages in
+   [WORKER-DISPATCH.md](./WORKER-DISPATCH.md)):
 
-   | # | Task | Why it sits here |
-   |---|---|---|
-   | 1 | **A2** — one OpenAI wire profile | **First**: it is pure duplication removal with no behaviour change, and it establishes the core-module pattern (a protocol profile in `lib/stream/`) that A1 then reuses for Anthropic. Doing A1 first would build the pattern twice. |
-   | 2 | **A1** — one Anthropic wire in the shared pipe | Second: it is the largest single violation (614 L = 80.4 % on top of the 764-line core) and it needs the A2 pattern. It also closes the `dsh-exaone` guard gap and the `totalFormula` vocabulary split, which A6's gates depend on. |
-   | 3 | **A3** — OpenCode onto the shared pipe | Third: it needs the core seams A1/A2 finish (the `createHooks` seam and the OpenAI profile). It is the only task that requires a live turn, so it comes after the low-risk A2. |
-   | 4 | **A4** — one cost/plan/usage accounting | Fourth: independent of the wire work, but it reads the usage projections A1/A2 normalise, so it lands after them. |
-   | 5 | **A5** — one retry/backoff + one catalog cache | Fifth: pure mechanics, no wire coupling. |
-   | 6 | **A6** — delete dead surfaces + close the gates | **Last**: the new gates must assert the *final* shape of the core and the four vendors, so they cannot be written before A1–A5 land. |
-   | — | **A7** — the host `dsh-llm-pi-ai` providers seam | **Independent** and **measure-first**: it is a *measurement* task about a seam in another package, so it does not block or get blocked by A1–A6. It may run in parallel. |
+   | Phase | Mode | Tasks | Gate / Exit Bar |
+   | :-: |---|---|---|
+   | **1** | **SERIAL** (1 worker, sequential) | **W1-1 (A2-core)** → **W1-2 (A1-core)** → **W1-3 (A4-core)** → **W1-4 (A5-core)** | **Core Interface Locked:** `lib/stream/*`, `lib/driver/contract.js`, `lib/{cost,plan,usage,retry,catalog-cache}.js` frozen; `anthropic.js` ≤ 434 L; `npm run verify` + all 4 vendor suites green |
+   | **2** | **PARALLEL** (disjoint write scopes) | **W2-A (A3 OpenCode)** ‖ **W2-B (DeepInfra)** ‖ **W2-C (EXAONE)** ‖ **W2-D (A6 Gates, owns `scripts/verify-stream.mjs`)** ‖ **W2-E (Antigravity A4/A5)** | Zero vendor-local wire/ledger/retry/cache copies left; `verify:stream` 8/8 with `dsh-exaone` guarded (`vendor loads: 0`); `verify:presets:mutation` 17/17 + spec↔preset mirror + boundary lint green; 1 live OpenCode shared-pipe turn |
+   | **3** | **SERIAL / Measure-first** | **W3-1 (A7 host seam)** | Measured answer on `dsh-llm-pi-ai` `providers` dict + owner decision (no unmeasured data-only promise) |
 
 4. The remaining **P2** items keep their own order and gates: **P2-2** and **P2-3** are superseded by
    **A3** (tracked there); **P2-5** (S3, owner deferred 2026-11-08) and **P2-6** (S4, blocked on owner
    approval) stay owner-gated and are not in the P2-A queue; **P2-8** (EXAONE live catalog) waits on
    the platform. P2-4 is split into Anthropic and Google fixtures (a single worker ran out of
-   context doing both).
+   context doing both). The deleted **P2-1** remains **removed, not closed** (unreachable promise).
 
 ## 7. Evidence
 
