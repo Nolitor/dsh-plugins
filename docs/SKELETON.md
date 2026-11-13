@@ -184,19 +184,19 @@
 - **1.0** · active · 2026-11-06 · [archive/dsh-subrouter/docs/INDEX.md](../archive/dsh-subrouter/docs/INDEX.md)
   Generated per-subproject index for @nolit/dsh-subrouter: every document this track owns, one line each.
 
-## boot (newest 5 of 60)
+## boot (newest 5 of 61)
 
 - **active** · INDEX.md · [card](../bootcards/INDEX.md)
   Newest-first list of dated boot cards.
+- **active** · 2026-11-14T0717+0900.md · [card](../bootcards/2026-11-14T0717+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-14T0717+0900. Older cards are historical.
 - **active** · 2026-11-14T0625+0900.md · [card](../bootcards/2026-11-14T0625+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-14T0625+0900. Older cards are historical.
 - **active** · 2026-11-14T0515+0900.md · [card](../bootcards/2026-11-14T0515+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-14T0515+0900. Older cards are historical.
 - **active** · 2026-11-14T0409+0900.md · [card](../bootcards/2026-11-14T0409+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-14T0409+0900. Older cards are historical.
-- **active** · 2026-11-14T0106+0900.md · [card](../bootcards/2026-11-14T0106+0900.md)
-  Dated session card (tier 5). This card hands the next session the Custom Router roadmap as a subagent-executable task graph: P0 owner-gated key work, P1 route/spec verification, P2 architecture backlog, with model routing, write scopes, dependencies and gates. It supersedes the generic 2026-11-13 card.
 
 ---
 
-65 workspace docs (60 boot cards), 0 with problems, 5 subprojects.
+65 workspace docs (61 boot cards), 0 with problems, 5 subprojects.
