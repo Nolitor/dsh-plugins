@@ -166,7 +166,9 @@ export function apply(ctx, config) {
       // inject throws "cannot get property ... without inject" (cordis:1257),
       // and swallowing that error silently disabled the key. Both presets
       // inject only `llm`, so this accessor is the correct one.
-      const credentials = ctx?.get?.('credentials')
+      // strict=false: return the provider even while its fiber is still
+      // activating (a plugin apply() can run first — measured 2026-11-14).
+      const credentials = ctx?.get?.('credentials', false)
       const found = await credentials?.resolve?.(ref)
       return typeof found?.value === 'string' ? found.value : ''
     } catch (error) {
@@ -175,13 +177,22 @@ export function apply(ctx, config) {
     }
   }
   const refreshStoredKey = () => { void resolveStoredKey().then((value) => { storedKey = value }) }
+  // MEASURED 2026-11-14: `ctx.get(name, strict)` returns undefined while the
+  // providing fiber is not yet active, and a plugin `apply()` can run before the
+  // credentials service is. A single eager attempt therefore left the key empty
+  // for the whole process (live DeepInfra child: `HTTP 401: missing API key`).
+  // `ctx.inject([...])` is cordis's deferred sub-context: the callback runs as
+  // soon as the service is available, which is the correct mount seam.
   refreshStoredKey()
   try {
-    ctx?.on?.('credentials/reference-updated', (ref) => {
-      if (ref === undefined || ref === credentialRefName()) refreshStoredKey()
+    ctx?.inject?.(['credentials'], (scoped) => {
+      refreshStoredKey()
+      scoped?.on?.('credentials/reference-updated', (ref) => {
+        if (ref === undefined || ref === credentialRefName()) refreshStoredKey()
+      })
     })
   } catch {
-    /* an older host without the event still resolves once at mount */
+    /* an older host without deferred inject keeps the eager attempt */
   }
 
   /** Live settings: a key saved in the UI applies on the next request. */
