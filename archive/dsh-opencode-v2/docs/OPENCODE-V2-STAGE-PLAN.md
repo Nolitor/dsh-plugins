@@ -8,11 +8,11 @@ summary: Stage plan for @nolit/dsh-opencode-v2 — what "stabilised" means as a 
 
 > **Absorption 2026-11-10:** stages 2 and 3 are re-homed to Phase B (port + `classifyText`
 > hook, legacy default) and Phase F (canonical default + oracle) of
-> [OPENCODE-ABSORPTION-BLUEPRINT.md](../../dsh-custom-router/docs/OPENCODE-ABSORPTION-BLUEPRINT.md).
+> [OPENCODE-ABSORPTION-BLUEPRINT.md](../../../dsh-custom-router/docs/OPENCODE-ABSORPTION-BLUEPRINT.md).
 > Phase B is decoupled from the O1/O2/O3 verdict.
 >
 > Status: **stage 1 (stabilisation) in progress** · Baseline: `0.0.2-rc.1` ·
-> Staged code: `staging/opencode-v2-stage2/` · Next plugin: [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../../dsh-custom-router/vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md) ·
+> Staged code: `staging/opencode-v2-stage2/` · Next plugin: [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../../../dsh-custom-router/vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md) ·
 > Evidence: [CHANGELOG](../CHANGELOG.md),
 > [capability delta](../RECIPE-CAPABILITY-DELTA.md)
 
@@ -52,7 +52,7 @@ first boot. **A green suite is not S6.** S6 requires time and the owner's own us
 ### Sibling track — `@nolit/dsh-antigravity`
 
 Antigravity uses the same S1–S7 gate; its status and stage-1 reinforcement are recorded in
-[dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](../../dsh-custom-router/vendor/antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md). Stage 2/3 work opens for **both** tracks
+[dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](../../../dsh-custom-router/vendor/antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md). Stage 2/3 work opens for **both** tracks
 together, and only after each track's S6 soak is owner-confirmed. Do not open stage 2 for one
 track alone.
 
@@ -118,13 +118,13 @@ file stays in-tree for one release.
 ### 4.1 Relationship to the shared stream pipe
 
 The recipe parser is the **`classifyText` hook** of the workspace shared downstream pipe
-([SHARED-STREAM-PIPE-SPEC.md](../../dsh-custom-router/docs/SHARED-STREAM-PIPE-SPEC.md) §5.5),
+([SHARED-STREAM-PIPE-SPEC.md](../../../dsh-custom-router/docs/SHARED-STREAM-PIPE-SPEC.md) §5.5),
 not a private stage-2 file that happens to live in this package. Stage 2 therefore has two
 possible landing shapes and the order is an owner decision:
 
 The rollout order is fixed by the owner: the shared core lands first (P1, no consumer), then
 **antigravity (P2)**, then **deepinfra (P3)**, and **this track last (P4)**
-([SHARED-STREAM-PIPE-SPEC.md §1 §7](../../dsh-custom-router/docs/SHARED-STREAM-PIPE-SPEC.md)).
+([SHARED-STREAM-PIPE-SPEC.md §1 §7](../../../dsh-custom-router/docs/SHARED-STREAM-PIPE-SPEC.md)).
 This track is last because it carries the most live traffic and is the only consumer of the
 optional hook, so the wire-only path must be proven twice before it moves.
 

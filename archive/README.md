@@ -4,8 +4,8 @@
 version: 1.1
 kind: index
 status: reference
-updated: 2026-11-07
-summary: What lives under archive/ (six absorbed tracks: directsdk, antigravity-cli, subagent-antigravity, subagent-opencode, subrouter, subagent-local), the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
+updated: 2026-11-14
+summary: What lives under archive/ (seven absorbed tracks: directsdk, antigravity-cli, subagent-antigravity, subagent-opencode, subrouter, subagent-local, opencode-v2), the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
 -->
 
 **Nothing in this directory is installed, linked, packed, or imported by a shipped package.**
@@ -34,6 +34,7 @@ The chain of these moves is [HISTORY.md](../HISTORY.md) §2–§3.
 | `dsh-subagent-opencode` | `@nolit/dsh-opencode-v2` | 2026-11-05 | `opencode` subagent provider + `subagent_opencode` row |
 | `dsh-subrouter` | `@nolit/dsh-opencode-v2/http` | 2026-11-06 | the OpenAI/Anthropic-compatible model route (`ctx.llm.registerAdapter`), served as `opencode-http-agent` |
 | `dsh-subagent-local` | `@nolit/dsh-antigravity` (`agy_cli`) + `@nolit/dsh-opencode-v2` (`cli_worker` gates) | 2026-11-07 | the synchronous one-shot CLI shape, per-backend gates and the `provider-mounted` yield |
+| `dsh-opencode-v2` | `@nolit/dsh-custom-router` (`vendor/opencode`) | 2026-11-14 | the whole OpenCode surface: `opencode-http-agent` model route, `subagent_opencode`, `opencode`/`ocode` CLI worker |
 
 Owner instruction for the subagent moves (2026-11-05): "이미 서브에이전트는 안티그래비티에 통합되어
 서비스 되고 있는데 … 서브에이전트도 아카이브에 들어가야 하는거 잖아". The earlier round archived only

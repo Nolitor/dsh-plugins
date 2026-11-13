@@ -42,7 +42,7 @@ The **shared stream pipe** (S3 → Phase B) is delivered on the vendor side, not
 `vendor/opencode/lib/{stream-contract,stream-lifecycle,openai-mapping}.js` exist, `pipe` stays
 `legacy` by default, and `npm run verify:stream` reports **8/8, 0 vendor loads**. Nothing in this
 track still needs to ship for that step — see the router's
-[OPENCODE-ABSORPTION-BLUEPRINT.md §9.1](../../dsh-custom-router/docs/OPENCODE-ABSORPTION-BLUEPRINT.md).
+[OPENCODE-ABSORPTION-BLUEPRINT.md §9.1](../../../dsh-custom-router/docs/OPENCODE-ABSORPTION-BLUEPRINT.md).
 
 ## 2. Done
 
@@ -56,7 +56,7 @@ track still needs to ship for that step — see the router's
 ## 3. Stages
 
 > **Absorption (2026-11-10).** This track is being absorbed into
-> [dsh-custom-router/vendor/opencode](../../dsh-custom-router/docs/OPENCODE-ABSORPTION-BLUEPRINT.md).
+> [dsh-custom-router/vendor/opencode](../../../dsh-custom-router/docs/OPENCODE-ABSORPTION-BLUEPRINT.md).
 > Stages below are re-homed, not dropped: S2 → Phase B (port, legacy default) and Phase F
 > (canonical default + oracle); S3 → Phase B; S4 → Phase F; S5 → Phase A–E.
 
@@ -119,7 +119,7 @@ flip needs a `dsh-web.service` restart (ledger F-46 class). `vendor/antigravity`
   not look for it in the profile.
 - The router's dispatch policy changed on 2026-11-10: `minimal`/`ptc` hard-block this package's
   external CLI paths, while `standard`/`cordis` allow them on `workspace-write` and only
-  `read-only` still blocks. Detail: [router CLI doc §9](../../dsh-custom-router/docs/CLI-DISPATCH-CONTROL-PLANE.md).
+  `read-only` still blocks. Detail: [router CLI doc §9](../../../dsh-custom-router/docs/CLI-DISPATCH-CONTROL-PLANE.md).
 - Multiple older CHANGELOG entries carry "applied pending restart"; those are historical. The
   current `rc.3` row is applied on disk.
 

@@ -275,7 +275,7 @@ the live `tool-subagent-opencode` row is composed from THIS package
 
 The duplicate-provider yield guard in `lib/index.js` stays: it protects the window where the old
 package could still be mounted beside this one. Version unchanged (`0.0.1-rc.1`) — no code changed.
-Process record: [HISTORY.md H-1/H-2](../HISTORY.md), [F-50/F-51](../docs/FAILURE-LEDGER.md).
+Process record: [HISTORY.md H-1/H-2](../../HISTORY.md), [F-50/F-51](../../docs/FAILURE-LEDGER.md).
 
 ## 0.0.1-rc.1 — version ladder + English-by-default locale pass — 2026-11-05
 

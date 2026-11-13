@@ -8,16 +8,28 @@ updated: 2026-11-07
 summary: Operator manual for @nolit/dsh-opencode-v2 — a native DSH LLM adapter that streams from OpenAI-compatible backends (OpenCode Go) while the DSH agent loop keeps ownership of tools, history and workspace. Covers the three switchable surfaces (model serving/router via opencode-http-agent, subagent provider, CLI: opencode tool + /ocode + cli_worker), their on/off switches, Tier A request guards derived from deepseek-recipe, the legacy-provider collision guard, verified prerequisites (CLI version, web auth and token store, PATH resolution), the release ladder, installation, and the measured OpenCode 2.2.6 compatibility boundary. Engineering history lives in CHANGELOG.md.
 -->
 
+>
+> ## ⚠️ ARCHIVED / SUPERSEDED — do not install this package
+>
+> **Archived 2026-11-14.** The OpenCode surfaces this package served now live in
+> `@nolit/dsh-custom-router` (`vendor/opencode`): the `opencode-http-agent` model route,
+> the `subagent_opencode` provider and the `opencode` / `ocode` CLI worker. Nothing in
+> `archive/` is installed, linked, packed, or imported by a shipped package.
+>
+> Historical note: the version strings below were corrupted on 2026-11-13 by a global
+> replacement of the `rc` token (`0.0.1-0.0.1-rc.5`, `sou0.0.1-rc.5`); they are kept as
+> the record of that session rather than rewritten.
+
 OpenCode models inside DeepSeek Harness, served **natively** through the DSH model
 registry.
 
 | | |
 |---|---|
 | Package | `@nolit/dsh-opencode-v2` |
-| Version | `0.0.1-rc.2` |
+| Version | `0.0.1-0.0.1-rc.5` |
 | Host | DSH `>=0.2.2-alpha.2 <0.3.0` |
 | History | [CHANGELOG.md](CHANGELOG.md) |
-| Release line | `0.0.1-rc.N` (owner normalization 2026-11-05); the retired `0.0.2` name was the pre-normalization line |
+| Release line | `0.0.1-0.0.1-rc.5N` (owner normalization 2026-11-05); the retired `0.0.2` name was the pre-normalization line |
 | Proof of record | [VERIFICATION.md](VERIFICATION.md) |
 | Upstream compatibility | [UPSTREAM-COMPAT.md](UPSTREAM-COMPAT.md) — per-release surface diff, tag-verified |
 
@@ -148,8 +160,8 @@ stored by `opencode auth login`; the adapter reads it from the local control pla
 
 | Step | Version | What ships |
 |---|---|---|
-| 1 | `0.0.1-rc.1`, `-rc.2`, … | Each `rc` is one instructed fix round on the single `0.0.1` line. |
-| 2 | next minor patch of the stable package | Only after the `rc` line is quiet. The canonical parser (former "beta") is added to THIS package, not to a second one. |
+| 1 | `0.0.1-0.0.1-rc.5`, `-0.0.1-rc.5`, … | Each `0.0.1-rc.5 is one instructed fix round on the single `0.0.1` line. |
+| 2 | next minor patch of the stable package | Only after the `0.0.1-rc.5 line is quiet. The canonical parser (former "beta") is added to THIS package, not to a second one. |
 | 3 | following stable line | The conformance oracle becomes part of the shipped test suite. |
 
 Rules:
@@ -227,7 +239,7 @@ metadata, credential shape), the real `run --format json` parser path, a real DS
 and a browser boot with zero activation warnings. A successful adapter data-plane
 generation was **not** measured: the free route returned HTTP 429 `FreeUsageLimitError`.
 `session export`, tool use, background-job waiting, and SIGTERM cancellation were also not
-exercised.
+exe0.0.1-rc.5sed.
 
 Read the full boundary and cleanup gate before changing live state:
 
@@ -243,7 +255,7 @@ Read the full boundary and cleanup gate before changing live state:
 | Fact (measured) | Consequence in this plugin |
 |---|---|
 | `opencode models` lists **49 models** — 30 `opencode-go/*`, 19 `opencode/*` | the default route is `opencode-go/minimax-m3.1-flash#low`; no route is ever assumed to resolve |
-| `run --format json` emits no whole-run `step_finish`: a tool-free run emits only `step_start`, `reasoning`, `text`; a tool-using run emits a **per-step** `step_finish` | `run` never carries a whole-run usage total; char/4 heuristics are never emitted, and `session export` is the only authoritative source |
+| `run --format json` emits no whole-run `step_finish`: a tool-free run emits only `step_start`, `reasoning`, `text`; a tool-using run emits a **per-step** `step_finish` | `run` never carries a whole-run usage total; char/4 heuristics are never emitted, and `session export` is the only authoritative sou0.0.1-rc.5 |
 | `part.text` is a **cumulative snapshot** per part id, not a delta | the parser diffs snapshots into deltas |
 | `--thinking` is required for `reasoning` events | streaming reasoning is opt-in via `thinking: true` (default on) |
 | a route's reasoning levels are its **model variants**: `run --help` documents `-m provider/model#variant`, and `GET /api/model` lists `variants` per model (39 of 49 models on this account) | `resolveModel()` advertises them as `reasoning.efforts` and the selected level becomes `-m provider/model#<variant>` |
@@ -259,7 +271,7 @@ Read the full boundary and cleanup gate before changing live state:
 The host contract (`@deepseek-ai/dsh-llm` `types.d.ts`, `TokenUsage`) is **disjoint**:
 `inputTokens` is uncached input only, and cache hits are reported separately.
 
-| host field | OpenCode source |
+| host field | OpenCode sou0.0.1-rc.5 |
 |---|---|
 | `inputTokens` | `tokens.input` (already uncached-only) |
 | `outputTokens` | `tokens.output` |
@@ -331,7 +343,7 @@ That is not a model-size problem — it is a missing metadata field. This adapte
 **always** publishes a positive `context.contextWindow` (and `defaultMaxTokens`) from
 `resolveModel()`:
 
-| Source | Used for |
+| Sou0.0.1-rc.5 | Used for |
 |---|---|
 | `opencode serve` -> `GET /api/model` -> `limit.context` / `limit.output` | real per-model values |
 | `opencode models` (ids only) | ids + conservative `32768` / `8192` floor |
@@ -353,7 +365,7 @@ resolution returns `reasoning` (`buildModelCatalog` -> `llm.resolveModelInfo()`;
 and an explicit level is rejected with `UNSUPPORTED_REASONING_EFFORT` rather than silently running
 at a different one.
 
-| Host contract | Source in OpenCode v2.2.0 |
+| Host contract | Sou0.0.1-rc.5 in OpenCode v2.2.0 |
 |---|---|
 | `reasoning.efforts[].id` / `.name` | `GET /api/model` -> `variants[].id`, ordered none -> minimal -> low -> medium -> high -> xhigh -> max, then any unknown id |
 | wire selection (`GenerateOptions.reasoningEffort`) | `-m provider/model#<variant>` (the variant sets `reasoningEffort` or `thinkingConfig` provider-side) |
@@ -384,7 +396,7 @@ because the route id is split at its first `/` and a `#` suffix would become par
 `defaultModel`), so the row inherits that route's context window and levels instead of the
 conservative floor. The CLI adapter inherits them when the route table's `default.opencodeModel`
 names a discovered route; with no such entry it advertises none and sends no `-m`, leaving
-OpenCode's own default in force.
+OpenCode's own default in fo0.0.1-rc.5.
 
 A level reaches the wire only when the resolved route advertises it. Both adapters reject an
 unadvertised level before spawning or creating a session, with `UNSUPPORTED_REASONING_EFFORT` and
@@ -514,7 +526,7 @@ is not a bundle row. There are deliberately **no `attach` / `pure` keys**.
 `opencode-http-agent` directly into `dsh-llm` and needs no `dsh-subrouter`,
 no bridge plugin, and no `llm-pi-ai` dependency. Token metering, session
 tracking, and request waterfalls are all harness-level, so a native adapter is
-intercepted exactly like any other route.
+inte0.0.1-rc.5pted exactly like any other route.
 
 The HTTP row runs a read-only conflict guard (`lib/conflicts.js`) at activation
 and on every `llm/adapters-updated` event:
@@ -580,7 +592,7 @@ root; the helper is not shipped in this package:
 ```
 
 `STALE` is expected before the restart (the serving pid loaded the previous build). It is `PASS`
-only when that pid's `load` beacon carries the source version: `beacon(pid=<new>): 0.0.1
+only when that pid's `load` beacon carries the sou0.0.1-rc.5 version: `beacon(pid=<new>): 0.0.1
 events={"load":1,...}`, verdict `PASS - serving pid <new> loaded 0.0.1`, exit 0.
 
 **Isolated profile boot** (boot-card rule 3 — no live state touched):
