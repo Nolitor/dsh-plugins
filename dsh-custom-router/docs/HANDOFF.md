@@ -1,11 +1,11 @@
 # Custom Router — Handoff
 
 <!-- skeleton:
-version: 1.4
+version: 1.5
 kind: report
 status: active
 updated: 2026-11-13
-summary: Handoff for @nolit/dsh-custom-router at 0.0.1-rc.13 — Phase B stays closed; this round delivered the model-list refresh contract (vendor ?refresh=1, two buttons, one bus), six measured vendor defects (catalog host, xhigh round-trip, promotion coercion, disabled routes, two test-isolation leaks), a live route gate (verify:refresh), the preset-registry audit recorded for a future one-place preset addition, and the doc corrections that closed C1 (llm-pi-ai active by default, router does not force it) and adopted the DSH credential-store policy for API keys; records the preparation state for N3 and the S-steps.
+summary: Handoff for @nolit/dsh-custom-router at 0.0.1-rc.14 — Phase B is now recorded as IN PROGRESS (B-1 and B-2 measured delivered, B-3's OpenCode descriptor case added this round after a re-measurement found it was never in verify:stream); the round also delivered the model-list refresh contract (vendor ?refresh=1, two buttons, one bus), six measured vendor defects (catalog host, xhigh round-trip, promotion coercion, disabled routes, two test-isolation leaks), a live route gate (verify:refresh), the preset-registry audit recorded for a future one-place preset addition, and the doc corrections that closed C1 (llm-pi-ai active by default, router does not force it) and adopted the DSH credential-store policy for API keys; records the preparation state for N3 and the S-steps.
 -->
 
 > History lives in [CHANGELOG.md](../CHANGELOG.md). This file is the **forward** view: stage order,
@@ -15,7 +15,7 @@ summary: Handoff for @nolit/dsh-custom-router at 0.0.1-rc.13 — Phase B stays c
 
 | Item | Measured value |
 | :--- | :--- |
-| Package | `@nolit/dsh-custom-router@0.0.1-rc.13` (vendors: antigravity `rc.12`, deepinfra `rc.13`, opencode `rc.6`; every peer pinned `0.0.1-rc.13`) |
+| Package | `@nolit/dsh-custom-router@0.0.1-rc.14` (vendors: antigravity `rc.12`, deepinfra `rc.13`, opencode `rc.6`; every peer pinned `0.0.1-rc.13`) |
 | Last commit | `8ea7044` (tokeneconomizer hairline) — this round is the working tree, committed as the round's own commit |
 | Host | DSH `0.2.2-rc.1` (measured: `@deepseek-ai/dsh/package.json`) |
 | Tests | `npm test` → **509/509**; antigravity **184**, deepinfra **217**, vendored OpenCode **546** |
@@ -65,7 +65,7 @@ Measured 2026-11-13 in `~/.dsh/profiles/web/cordis.patch.yml`:
 | :--- | :--- |
 | Contract check | `vendor/opencode: npm run verify:contract` → 139 documented, 5 used, **0 undocumented** |
 | Guard | `strictWire:false`, `allowDynamicPassthrough:true`, `rawBypass:false` (all declared, advisory default) |
-| Shared pipe | `npm run verify:stream` → **7/7 cases, 0 vendor loads** |
+| Shared pipe | `npm run verify:stream` → **8/8 cases, 0 vendor loads** (7 generic + the OpenCode descriptor case added this round) |
 | Preset parity | `npm run verify:presets` → OK; providers `deepseek-account, antigravity, deepinfra, deepinfra-anthropic, opencode-http-agent` |
 | Live mount | 5 providers, 6 commands, 6 tools resolved from the live profile |
 
@@ -99,7 +99,7 @@ force it; API-key input is managed through the DSH system store.
 | Entry | P2 + P3 integrated (done) |
 | Work | add the `classifyText` hook in [SHARED-STREAM-PIPE-SPEC.md](SHARED-STREAM-PIPE-SPEC.md) terms |
 | Exit gate | opencode-v2 suite green; replay shows `markerDeltas == 0`; S2-3 prose gate passes |
-| Result | **done (Phase B)** — opencode moved onto the shared pipe behind `pipe: 'legacy'|'shared'` (legacy default), parity proven 544/544. The replay gate was withdrawn as unevidenced (trace stores only len/excerpt); prose gate moved to Phase F (owner decision D-4) |
+| Result | **Phase B in progress** — opencode moved onto the shared pipe behind `pipe: 'legacy'|'shared'` (legacy default), parity green. The replay gate was withdrawn as unevidenced (trace stores only len/excerpt); prose gate moved to Phase F (owner decision D-4); the descriptor case in `verify:stream` landed 2026-11-13 (8/8) |
 | Blueprint | [OPENCODE-ABSORPTION-BLUEPRINT.md](./OPENCODE-ABSORPTION-BLUEPRINT.md) Phase B (legacy classifier first; canonical default in Phase F) |
 
 ### S2 — P5: parity suite
@@ -191,7 +191,7 @@ explicitly. No live write was made — migrating the key is a profile edit that 
 ```bash
 cd dsh-custom-router
 npm test                    # 509 (router surface)
-npm run verify              # check + test + verify:stream
+npm run verify              # check + test + verify:stream (8/8)
 npm run verify:presets      # preset parity against the live profile
 npm run verify:refresh      # NEW: real routes, isolated DSH_HOME, plain + ?refresh=1
 (cd vendor/antigravity && node --test test/*.test.mjs)   # 184
@@ -285,7 +285,7 @@ The S-steps are listed in §2. Their preparation state, so a next session does n
 
 | Step | State | What is ready | What is missing |
 |---|---|---|---|
-| S1 (shared pipe) | **done — Phase B** | `pipe: 'legacy' \| 'shared'`, legacy default, parity 544/544; `verify:stream` 7/7 with 0 vendor loads | the owner-gated live request with `pipe:'shared'` (§7 target 1) |
+| S1 (shared pipe) | **Phase B in progress** — B-1/B-2 delivered, B-3 case added | `pipe: 'legacy' \| 'shared'`, legacy default, parity green; `verify:stream` 8/8 with 0 vendor loads | the owner-gated live request with `pipe:'shared'` (§7 target 1) |
 | S2 (parity suite) | **not started** | S1 delivered; the shared core exists and is the replay target | one recorded fixture per provider; the exit gate needs the three streams to agree on `StreamChunk` shape |
 | S3 (antigravity usage per group) | **deferred by owner 2026-11-08** | in-group window order already 5시간 → 주간 → 월간 | split the dashboard card per model group (Gemini / Claude·GPT / Argon) |
 | S4 (spec-only surfaces) | **blocked: needs owner approval** | `CUSTOM-ROUTER-PRESET-SURFACE.md` written | no `settings.section` row, no client half, no real mount |
@@ -296,10 +296,17 @@ The S-steps are listed in §2. Their preparation state, so a next session does n
 **Ordered next S work:** S2 (parity fixtures) is the only S-step with no blocker other than its own
 work. S4 stays parked behind owner approval; do not start it from a spec alone.
 
-## 7. Phase B closure — runtime invariants and next targets
+## 7. Phase B — runtime invariants and next targets
 
-**Phase B closed 2026-11-10** as *absorbed, guarded, regression-parity proven* — not production-
-certified (no published streaming contract; protocol work is Phase F).
+**Phase B is IN PROGRESS as of 2026-11-13.** An earlier revision called it closed on 2026-11-10.
+Re-measured this round: the B-1 and B-2 code was present and green, but B-3's stated deliverable —
+one OpenCode descriptor case in `verify:stream` — **was never added**; the script shipped only the
+two generic providers. That case now exists and `verify:stream` is **8/8**. The blueprint's §9.1
+carries the full measured start state.
+
+Within Phase B, *"absorbed, guarded, regression-parity proven"* still holds; *production
+certification* does not, and cannot from here (no published streaming contract; protocol work is
+Phase F).
 
 | Invariant | Value / owner |
 | :--- | :--- |

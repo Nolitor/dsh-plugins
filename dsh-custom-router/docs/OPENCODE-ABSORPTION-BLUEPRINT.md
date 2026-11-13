@@ -1,16 +1,17 @@
 # OpenCode v2 Absorption — Three-Pipeline Blueprint
 
 <!-- skeleton:
-version: 1.1
+version: 1.2
 kind: design
-status: draft
-updated: 2026-11-10
-summary: Phased plan to absorb @nolit/dsh-opencode-v2 into dsh-custom-router/vendor/opencode, aligned against the three existing pipelines — DeepInfra for the shared stream pipe, Antigravity for the surface/dispatch supervisor, and the router preset slot for registry and dynamic activation — with file moves, fallback shims, per-phase verification gates, the four owner decisions recorded, and every OpenCode beta-roadmap milestone assigned to a phase.
+status: active
+updated: 2026-11-13
+summary: Phased plan to absorb @nolit/dsh-opencode-v2 into dsh-custom-router/vendor/opencode, aligned against the three existing pipelines — DeepInfra for the shared stream pipe, Antigravity for the surface/dispatch supervisor, and the router preset slot for registry and dynamic activation — with file moves, fallback shims, per-phase verification gates, the four owner decisions recorded, and every OpenCode beta-roadmap milestone assigned to a phase. Phase A closed 2026-11-10; Phase B (stream unification) is in progress as of 2026-11-13 with B-1 and B-2 delivered and B-3's last gate (the OpenCode descriptor case) landed.
 -->
 
 > Status: **Phase A delivered 2026-11-10** (vendor tree, shim, exports, leaf contract, first
 > conforming driver, dual-mount guard); owner decisions in §6 and beta milestones in §7; CP3
-> approved closing Phase A. Owner instruction 2026-11-10: absorb OpenCode v2 as a native vendor
+> approved closing Phase A. **Phase B in progress from 2026-11-13** — see §9.1 for the measured
+> start state. Owner instruction 2026-11-10: absorb OpenCode v2 as a native vendor
 > slot, not in isolation, by conforming to the two shipped vendor references.
 > Rules: [RULES.md](../../docs/RULES.md) · Stage authority:
 > [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md) P4/P5 ·
@@ -381,6 +382,49 @@ wraps the existing 679-line classifier. The canonical parser stays ported-but-of
 
 - pipe `createHooks` extension → primary (DeepSeek V4.1 high)
 - lifecycle + contract + helper extraction → MiniMax 3.1 (max)
+
+### 9.1 Phase B start state — measured 2026-11-13
+
+**Reading correction, stated plainly.** An earlier revision of this document described Phase B as
+already closed, and the HANDOFF even carried the note "(*fixed in the same round*)" for this
+section. A re-measurement on 2026-11-13 shows that framing was **half true**: the B-1 and B-2 code
+is present and green, but B-3's own stated deliverable — *"one OpenCode descriptor case in
+`verify:stream`"* — **was never added**. `scripts/verify-stream.mjs` carried only the two generic
+providers (A = OpenAI-shaped, B = Gemini-shaped), so 7/7 was true and the B-3 gate was not met.
+It is now added (8/8).
+
+| Incr. | Delivered | Measured evidence |
+| :--- | :--- | :--- |
+| **B-1** | pipe `createHooks` extension | [lib/stream/index.js:61-75](../lib/stream/index.js#L61-L75); tests [test/stream-pipe.test.mjs:236](../test/stream-pipe.test.mjs#L236) (called once with `{descriptor, signal}`, per-stream state, throwing factory, missing `readEvent` refused by name) |
+| | `stream-lifecycle.js` (CP3 owner) | [vendor/opencode/lib/stream-lifecycle.js](../vendor/opencode/lib/stream-lifecycle.js) — one `AbortController`, synchronous honouring of an already-aborted caller, `dispose()` removes the listener and does **not** abort, both idempotent |
+| | `stream-contract.js` (descriptor + hooks) | [vendor/opencode/lib/stream-contract.js](../vendor/opencode/lib/stream-contract.js) — `OPENCODE_DESCRIPTOR` frozen (`fragmented` / `prompt+output` / `fail`), `createStreamHooks()` returns a fresh classifier per stream |
+| | `openai-mapping.js` (pure helpers) | [vendor/opencode/lib/openai-mapping.js](../vendor/opencode/lib/openai-mapping.js) — `usageFromOpenAi`, `finishFromOpenAi`, `reasoningAccounting`; `http.js` re-exports them, so no import path moved |
+| **B-2** | `readSseEvents` + `normalizeStream` in the adapter | [vendor/opencode/lib/http.js:2342-2347](../vendor/opencode/lib/http.js#L2342-L2347), behind `pipe: 'legacy' \| 'shared'` **default `legacy`** ([:290](../vendor/opencode/lib/http.js#L290)), branch read per request ([:2054](../vendor/opencode/lib/http.js#L2054)) |
+| | parity with generated artefacts | [vendor/opencode/test/http.test.mjs:1620](../vendor/opencode/test/http.test.mjs#L1620) and [:1644](../vendor/opencode/test/http.test.mjs#L1644) compare `legacy` vs `shared` output for text/reasoning/usage/finish and for a fragmented call |
+| **B-3** | OpenCode descriptor case in `verify:stream` | **added 2026-11-13** — [scripts/verify-stream.mjs](../scripts/verify-stream.mjs) case 8 drives the real `OPENCODE_DESCRIPTOR` + `createStreamHooks` through the core: fragmented ordinal→`index` / `arguments`→`argumentsDelta` translation, `tool_calls` finish, independent second hook set, `classifyText` presence. Mutation-tested: flipping `malformedRecord` to `'skip'` makes it **FAIL** |
+| | replay `markerDeltas == 0` | **withdrawn** as unevidenced (§10.2) — the trace stores only `len`/`excerpt` |
+| | P4 prose gate | moved to Phase F by owner decision D-4; **not** a Phase B closure condition |
+
+Suite state at the Phase B start, before any edit in this round (all green):
+
+| Suite | Result |
+| :--- | :--- |
+| router `npm test` | **509 / 509** |
+| vendored OpenCode | **546 / 546** |
+| antigravity | **184 / 184** |
+| deepinfra | **217 pass / 7 skipped** |
+| `npm run verify:stream` | **7 / 7 → 8 / 8** after the B-3 case, **0 vendor loads** |
+
+Runtime behaviour was **not** changed by this round: the only edited file is
+`scripts/verify-stream.mjs`. `pipe` stays `legacy` by default and the legacy loop is untouched, so
+backward compatibility is preserved by construction, not by assertion.
+
+**Import-path note.** The B-3 case imports the contract by relative path
+(`vendor/opencode/lib/stream-contract.js`), never via `@nolit/dsh-opencode-v2/…`: the guard blocks
+that specifier deliberately, because resolving a vendor through its published entry point is the
+coupling the absorption removes. The contract's module graph is the leaf set
+(`stream-parser` / `upstream-map` / `openai-mapping`), so the case adds **0 plugin loads** — it is
+not a vendor mounting through the back door.
 
 ## 10. Official-contract audit (2026-11-10, pre-B-3)
 

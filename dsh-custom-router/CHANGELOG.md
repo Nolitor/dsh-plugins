@@ -1,12 +1,65 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.13
+version: 0.0.1-rc.14
 kind: report
 status: active
 updated: 2026-11-13
 summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events).
 -->
+
+## 0.0.1-rc.14 — Phase B-3: the OpenCode descriptor case in `verify:stream` — 2026-11-13
+
+### What was measured, and what was not true
+
+The blueprint and this track's HANDOFF both described Phase B as closed on 2026-11-10. Re-measured
+on 2026-11-13, that was **half true**: B-1 and B-2 were present and green, but B-3's own stated
+deliverable — *one OpenCode descriptor case in `verify:stream`* — had never been added.
+`scripts/verify-stream.mjs` carried only the two generic providers, so `7/7` was accurate while the
+gate it was supposed to satisfy was unmet. Both documents are corrected this round.
+
+| Increment | State | Where |
+|---|---|---|
+| B-1 pipe `createHooks` | delivered, unchanged | `lib/stream/index.js:61-75`; `test/stream-pipe.test.mjs:236` |
+| B-1 lifecycle + contract + mapping | delivered, unchanged | `vendor/opencode/lib/{stream-lifecycle,stream-contract,openai-mapping}.js` |
+| B-2 `readSseEvents` + `normalizeStream` | delivered, unchanged | `vendor/opencode/lib/http.js:2342-2347`, flag `pipe` default `legacy` (`:290`) |
+| B-3 OpenCode descriptor case | **added this round** | `scripts/verify-stream.mjs` → 8/8 |
+
+### The case
+
+One new `check()` drives the **real** `OPENCODE_DESCRIPTOR` and `createStreamHooks()` (imported by
+relative path from `vendor/opencode/lib/stream-contract.js`) through the shared core, asserting:
+
+- the descriptor announces `fragmented` and `malformedRecord: 'fail'`;
+- a fragmented call reassembles to `{"a":1}` across two deltas — the boundary translation
+  `ordinal → index`, `arguments → argumentsDelta` happens exactly once (a raw pass-through would
+  make both fragments ordinal 0);
+- `finish_reason: 'tool_calls'` maps to `tool-calls`;
+- two hook sets from one factory are independent, and the same body produces the same sequence;
+- `classifyText` is present (the P4 gate's `classifyText` requirement).
+
+**Mutation-tested, not assumed:** flipping `malformedRecord` to `'skip'` makes the case **FAIL**;
+restoring it makes it pass. The `stream-contract.js` mutation was reverted and the file verified
+byte-identical to HEAD.
+
+### Backward compatibility
+
+Only `scripts/verify-stream.mjs` changed in runtime terms, plus docs and this CHANGELOG. `pipe`
+stays `legacy` by default and the legacy streaming loop is untouched, so no runtime behaviour
+moves. The case adds **0 vendor loads** (the guard still reports 0): the contract's module graph is
+the leaf set, and `@nolit/dsh-opencode-v2/…` remains blocked on purpose.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| router `npm test` | 509 / 509 |
+| vendored OpenCode | 546 / 546 |
+| antigravity | 184 / 184 |
+| deepinfra | 217 pass / 7 skipped |
+| `npm run verify:stream` | **8 / 8**, 0 vendor loads |
+| `npm run docs:check` | OK — 39 workspace / 12 pending / 6 tracks, 1,558 links |
+| `node scripts/check-plugin-history.mjs` | 6 tracks OK |
 
 ## 0.0.1-rc.13 — model-serving list refresh: cache bypass, two buttons, one bus — 2026-11-13
 

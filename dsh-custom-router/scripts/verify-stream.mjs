@@ -38,6 +38,16 @@ registerHooks({
 
 const { normalizeStream, readSseEvents, CODES } = await import(join(HERE, '..', 'lib', 'stream', 'index.js'))
 
+// The OpenCode descriptor case (Phase B-3) imports the VENDORED contract by
+// relative path, never by its package specifier `@nolit/dsh-opencode-v2/…`:
+// the guard above blocks that specifier on purpose, because resolving a vendor
+// through its published entry point is the coupling the absorption removes. Its
+// module graph is the leaf set (stream-parser / upstream-map / openai-mapping),
+// so importing it loads no plugin.
+const { OPENCODE_DESCRIPTOR, createStreamHooks } = await import(
+  join(HERE, '..', 'vendor', 'opencode', 'lib', 'stream-contract.js')
+)
+
 /** Split an SSE body into awkward byte-boundary chunks. */
 function sseStream(text, splitAt = 7) {
   const bytes = new TextEncoder().encode(text)
@@ -264,6 +274,71 @@ check('abort ends as aborted through the shared terminal policy', async () => {
     signal: controller.signal,
   })) chunks.push(chunk)
   if (chunks.at(-1).reason.kind !== 'aborted') throw new Error(`abort mapped to ${chunks.at(-1).reason.kind}`)
+})
+
+check('the OpenCode descriptor drives the real contract hooks through the shared core', async () => {
+  // Phase B-3: the vendored descriptor + hook factory, not a copy of them.
+  if (OPENCODE_DESCRIPTOR.toolCallShape !== 'fragmented') {
+    throw new Error(`OpenCode descriptor announced ${OPENCODE_DESCRIPTOR.toolCallShape}; the wire sends fragmented calls`)
+  }
+  if (OPENCODE_DESCRIPTOR.malformedRecord !== 'fail') {
+    throw new Error(`OpenCode malformedRecord is ${OPENCODE_DESCRIPTOR.malformedRecord}; a skipped frame truncates a turn`)
+  }
+
+  // TWO hook sets from ONE factory: the per-stream classifier must not be shared.
+  const hooksA = createStreamHooks({ toolNames: ['bash'], parser: 'legacy' })
+  const hooksB = createStreamHooks({ toolNames: ['bash'], parser: 'legacy' })
+  if (hooksA === hooksB || hooksA.readEvent === hooksB.readEvent) {
+    throw new Error('createStreamHooks returned a shared hook set; two streams of one factory must be independent')
+  }
+  if (typeof hooksA.classifyText !== 'function') {
+    throw new Error('the OpenCode hook set does not expose classifyText (P4 gate)')
+  }
+
+  const body = [
+    frame({ choices: [{ delta: { reasoning_content: 'plan' } }] }),
+    frame({ choices: [{ delta: { content: 'hi' } }] }),
+    frame({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', function: { name: 'bash', arguments: '{"a"' } }] } }] }),
+    // Fragmented continuation: ordinal and argument slice only, no id, no name.
+    frame({ choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: ':1}' } }] } }] }),
+    frame({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] }),
+  ].join('')
+
+  const run = async (hooks) => {
+    const chunks = []
+    for await (const chunk of normalizeStream({
+      events: readSseEvents(sseStream(body)),
+      descriptor: OPENCODE_DESCRIPTOR,
+      hooks,
+    })) chunks.push(chunk)
+    return chunks
+  }
+
+  const chunks = await run(hooksA)
+  const deltas = chunks.filter((c) => c.type === 'tool-call-delta')
+  if (deltas.length !== 2) throw new Error(`fragmented call produced ${deltas.length} deltas, expected 2`)
+  // The boundary translation (ordinal -> index, arguments -> argumentsDelta) is
+  // the one vocabulary change this contract makes; a raw pass-through would
+  // make both fragments look like ordinal 0.
+  const args = deltas.map((d) => d.argumentsDelta).join('')
+  if (args !== '{"a":1}') throw new Error(`reassembled arguments were ${JSON.stringify(args)}`)
+  if (deltas.some((d) => d.index === undefined)) throw new Error('a tool-call delta lost its index')
+
+  const finish = chunks.at(-1)
+  if (finish.type !== 'finish' || finish.reason.kind !== 'tool-calls') {
+    throw new Error(`finish_reason tool_calls mapped to ${JSON.stringify(finish.reason)}`)
+  }
+
+  // A second stream through an independent hook set must produce the same
+  // sequence; this is the per-stream-state guarantee, measured.
+  const again = await run(hooksB)
+  if (JSON.stringify(shape(again)) !== JSON.stringify(shape(chunks))) {
+    throw new Error('the same body produced a different sequence on a second hook set')
+  }
+
+  // The classifier contract is present and hands back the pipe's part kinds.
+  const parts = hooksA.classifyText('[tool call: bash] {"a":1}')
+  if (!Array.isArray(parts)) throw new Error('classifyText did not return an array of parts')
 })
 
 const json = process.argv.includes('--json')
