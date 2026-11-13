@@ -75,7 +75,7 @@ Anthropic / Gemini; UPPER layer = thin vendor/preset adapters that carry **vendo
 
 | Layer | Measured lines | Verdict vs the owner principle |
 |---|---|---|
-| **Core pipe** `lib/stream/` | **764** (`index` 343, `sse` 180, `usage` 90, `wire` 68, `failure` 83) | **Protocol-agnostic in code** — zero protocol branches. But **not thin**: `lib/stream/anthropic.js` alone is **614 L = 44.6 %** of it. |
+| **Core pipe** `lib/stream/` | **764** (`index` 343, `sse` 180, `usage` 90, `wire` 68, `failure` 83) | **Protocol-agnostic in code** — zero protocol branches. But **not thin**: `lib/stream/anthropic.js` alone adds **614 L = 80.4 % on top of** the 764-line core (44.6 % of the whole 1,378-line directory including itself). |
 | **↳ Anthropic fork inside the core** | **614** in `lib/stream/anthropic.js` | **VIOLATION.** One protocol forked *inside* the lower layer: own SSE reader (85 L duplicating `sse.js`), own usage writer (22 L bypassing `usageFromProjection`), 3 `abortError` copies (14 L). |
 | **↳ per-stream seam** `createHooks` | `lib/stream/index.js:61-76` | **Exists and is used** — by OpenCode (`vendor/opencode/lib/http.js:2358`), but only inside the non-default `shared` branch. It is the seam the Anthropic state should ride. |
 | **Core accounting** `lib/cost.js` + `plan.js` + `usage.js` | **85 + 254 + 192 = 531** | **DEAD CORE.** Imported by **zero** vendors; the serving path uses two private ledgers instead. |
@@ -91,7 +91,7 @@ Anthropic / Gemini; UPPER layer = thin vendor/preset adapters that carry **vendo
 | Protocol | Verdict |
 |---|---|
 | **OpenAI** | **Shared seam, but duplicated in two vendors.** The core has the right shape; the vendors each keep a private copy. Measured: `vendor/exaone/lib/map.js` and `vendor/deepinfra/lib/map.js` are **130 L each with a zero non-comment diff**; of the 8 named request-projection functions, **6 are byte-identical** and 2 differ only in vendor branding. Duplicated subset across both vendor copies = **681 L** (measured by brace-matched function spans). |
-| **Anthropic** | **Forked inside the core.** 614 L (44.6 % of the core) with its own SSE reader, own usage writer and its own `abortError`. The shared pipe is not shared for this protocol. |
+| **Anthropic** | **Forked inside the core.** 614 L (80.4 % on top of the 764-line core) with its own SSE reader, own usage writer and its own `abortError`. The shared pipe is not shared for this protocol. |
 | **Gemini** | **Thin vendor binding — CORRECT.** Antigravity binds through the core at `adapter.js:280-288` and keeps only genuine Gemini quirks upstairs. This is what the other two protocols should look like. |
 
 ### Vocabulary split (measured)

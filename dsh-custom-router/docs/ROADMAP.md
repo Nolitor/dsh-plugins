@@ -27,7 +27,7 @@ summary: The only active roadmap for @nolit/dsh-custom-router at 0.0.1-rc.20. Ol
   against **3 of 4** vendors (`scripts/verify-stream.mjs:23` does not guard `dsh-exaone`). OpenCode
   still defaults its request path to `pipe: 'legacy'`; the shared path exists and is test-proven.
   The 2026-11-14 architecture audit measured that the pipe is **not** yet thin: one protocol
-  (Anthropic, 614 L = 44.6 % of the 764-line core) is forked inside it, and the four vendors carry
+  (Anthropic, 614 L — 80.4 % on top of the 764-line core, i.e. 44.6 % of the whole 1,378-line `lib/stream/` directory including itself) is forked inside it, and the four vendors carry
   a measured **681-line** duplicated OpenAI wire across two vendors. The consolidation queue
   is **§4 P2-A**.
 - **Specs and conformance are part of the product.** `specs/` holds the protocol/provider/pricing
@@ -224,7 +224,7 @@ hand-written `USAGE_READERS` table (`lib/client.src.js:772`) with **no gate**.
 > **Audit verdict 2026-11-14: the principle is not met.** The core pipe
 > (`lib/stream/` = **764** lines across `index` 343, `sse` 180, `usage` 90, `wire` 68, `failure` 83)
 > is protocol-agnostic in code — zero protocol branches — **but `lib/stream/anthropic.js` is 614
-> lines = 44.6 % of the core**: one protocol is forked *inside* the lower layer. And the upper
+> lines — 80.4 % on top of the 764-line core**: one protocol is forked *inside* the lower layer. And the upper
 > layer is not thin: the four vendors carry **22 672** lines of `lib/` (antigravity 5 216, opencode
 > 12 330, deepinfra 3 950, exaone 1 176) between them, with a measured **681-line** duplicated
 > OpenAI wire in two of them.
@@ -236,7 +236,7 @@ hand-written `USAGE_READERS` table (`lib/client.src.js:772`) with **no gate**.
 #### A1 — one Anthropic wire in the shared pipe
 
 - **Measured evidence.**
-  - `lib/stream/anthropic.js` = **614** lines = **44.6 %** of the 764-line core.
+  - `lib/stream/anthropic.js` = **614** lines — **80.4 % on top** of the 764-line core (44.6 % of the whole 1,378-line directory including itself).
   - Own SSE reader `readAnthropicSse` (**66–92**, 27 L) + `decodeRecord` (**545–579**, 35 L) +
     `chunksOf` (**587–609**, 23 L) = **85 lines** duplicating `lib/stream/sse.js` (180 L).
   - Own usage writer `usageFromAnthropic` (**369–390**, 22 L) bypassing `usageFromProjection`
@@ -599,7 +599,7 @@ turn works, confirmed by the owner.
    | # | Task | Why it sits here |
    |---|---|---|
    | 1 | **A2** — one OpenAI wire profile | **First**: it is pure duplication removal with no behaviour change, and it establishes the core-module pattern (a protocol profile in `lib/stream/`) that A1 then reuses for Anthropic. Doing A1 first would build the pattern twice. |
-   | 2 | **A1** — one Anthropic wire in the shared pipe | Second: it is the largest single violation (614 L = 44.6 % of the core) and it needs the A2 pattern. It also closes the `dsh-exaone` guard gap and the `totalFormula` vocabulary split, which A6's gates depend on. |
+   | 2 | **A1** — one Anthropic wire in the shared pipe | Second: it is the largest single violation (614 L = 80.4 % on top of the 764-line core) and it needs the A2 pattern. It also closes the `dsh-exaone` guard gap and the `totalFormula` vocabulary split, which A6's gates depend on. |
    | 3 | **A3** — OpenCode onto the shared pipe | Third: it needs the core seams A1/A2 finish (the `createHooks` seam and the OpenAI profile). It is the only task that requires a live turn, so it comes after the low-risk A2. |
    | 4 | **A4** — one cost/plan/usage accounting | Fourth: independent of the wire work, but it reads the usage projections A1/A2 normalise, so it lands after them. |
    | 5 | **A5** — one retry/backoff + one catalog cache | Fifth: pure mechanics, no wire coupling. |
