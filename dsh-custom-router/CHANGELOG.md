@@ -1,12 +1,64 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.14
+version: 0.0.1-rc.15
 kind: report
 status: active
 updated: 2026-11-13
-summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events).
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events) and rc.15 with the preset-registry drift gate (static registry diff, `usageRoutes` on every preset, and a mutation harness that proves each drift class is rejected).
 -->
+
+## 0.0.1-rc.15 — N3: the preset-registry drift gate actually gates — 2026-11-13
+
+### What was measured, and what was not true
+
+`PRESET-REGISTRY-STANDARD.md` §2 named five places a new preset must be registered and stated that
+two of them (`MODEL_PRESETS` descriptor, `fetchUsageFeeds`) fail **silently**. Measured this round:
+`scripts/verify-presets.mjs` never read `MODEL_PRESETS` at all — it booted the profile and diffed
+only the backend half. So the gate reported **OK** while both silent failures were live. The
+standard's own §4 steps 1/4/5 (planned for "later") had also never been done.
+
+| Defect | Measured before | After |
+|---|---|---|
+| static registry diff | absent — `grep MODEL_PRESETS scripts/verify-presets.mjs` → no hits | `lib/preset-drift.js` + `test/preset-drift.test.mjs` (13 tests) |
+| a new preset with no descriptor | silent (no tab) | rejected, naming the preset |
+| a preset with no usage route | silent (no card) | rejected, naming the preset |
+| `fetchUsageFeeds` literal array | 3 hardcoded jobs | iterates `MODEL_PRESETS[].usageRoutes` |
+| `usage.routes` on presets | absent | declared on all three; required by the schema when the preset reports usage |
+| test id array | literal `['antigravity','opencode','deepinfra']` | derived from `PRESETS` |
+| stale `client.js` / `locale-table.js` | unguarded | `checkGeneratedArtifacts()` fails the gate |
+
+### The gate
+
+- **`lib/preset-drift.js`** — pure, no boot: `checkPresetRegistry()` diffs `PRESETS` ×
+  `MODEL_PRESETS` × `locale/*.json`; `checkGeneratedArtifacts()` fails on a stale bundle.
+- **`scripts/verify-presets.mjs`** — runs the static half **first**, then the isolated boot, and
+  reports both through one tail. A static failure can no longer be hidden behind a boot.
+- **`scripts/verify-presets-mutation.mjs`** — injects all 10 documented drift classes into copies of
+  the registries and asserts each is rejected. Measured **10/10**. M10 (`metered: true` on a
+  subscription preset) **survived the first version of the gate**, which is why the billing
+  cross-check exists: the harness found a real gap, not a hypothetical one.
+- New scripts: `npm run verify:presets:static`, `npm run verify:presets:mutation`.
+
+### Scope decisions recorded
+
+- `usage.routes[].normalize` is a **reader name**, not a function: `lib/presets.js` is backend code
+  and must not carry browser functions. `client.src.js` owns `USAGE_READERS`.
+- A preset with `plan: 'unavailable'` **and** `billing.mode: 'none'` (the `local-hub` declaration
+  example) is the only legitimate absence of usage routes; forcing a route there failed
+  `test/presets.test.mjs` and the rule was corrected rather than the test.
+- Steps 2–3 of the standard (derive `MODEL_PRESETS` from the host seam) remain **open**: the two
+  registries are kept in agreement by the gate, not by derivation. Recorded, not claimed as done.
+
+### Verification
+
+| Suite | Result |
+|---|---|
+| router `npm test` | **522 / 522** (509 before, +13 drift tests) |
+| `verify:presets:mutation` | **10 / 10** drift classes caught |
+| `verify:presets` (full, isolated boot) | OK |
+| `verify:stream` | 8 / 8, 0 vendor loads |
+| `docs:check:all` | OK |
 
 ## 0.0.1-rc.14 — Phase B-3: the OpenCode descriptor case in `verify:stream` — 2026-11-13
 

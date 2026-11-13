@@ -284,6 +284,37 @@ export function validatePresetModel(preset) {
   } else {
     if (typeof preset.usage.record !== 'string' || preset.usage.record === '') add('usage.record must be a non-empty string')
     if (!PLAN_STATES.includes(preset.usage.plan)) add(`usage.plan must be one of ${PLAN_STATES.join(', ')}`)
+    // `usage.routes` is the ordered list the dashboard and the refresh bus
+    // iterate. It is REQUIRED for a preset that reports usage, and forbidden
+    // for one that does not (`plan: 'unavailable'` + `billing.mode: 'none'` =
+    // a loopback server with no plan to read): a preset that claims a usage
+    // surface without a route is exactly the silent failure the drift gate
+    // exists to catch.
+    const reportsUsage = preset.usage.plan !== 'unavailable' || preset.usage.billing?.mode !== 'none'
+    const routes = preset.usage.routes
+    if (routes === undefined || routes === null) {
+      if (reportsUsage) add('usage.routes is required when the preset reports usage (plan/billing are not "unavailable"/"none")')
+    } else if (!Array.isArray(routes) || routes.length === 0) {
+      add('usage.routes must be a non-empty ordered array of { path, normalize }')
+    } else {
+      if (!reportsUsage) add('a preset with billing.mode "none" must not declare usage routes')
+      const seen = new Set()
+      for (const route of routes) {
+        if (route === null || typeof route !== 'object') {
+          add('every usage route must be an object')
+          continue
+        }
+        if (typeof route.path !== 'string' || !route.path.startsWith('/api/local/')) {
+          add(`usage route path must be a local panel route (/api/local/…), got ${JSON.stringify(route.path)}`)
+        } else {
+          if (seen.has(route.path)) add(`usage route "${route.path}" is listed twice`)
+          seen.add(route.path)
+        }
+        if (typeof route.normalize !== 'string' || route.normalize === '') {
+          add(`usage route "${route.path}" must name its normalize function`)
+        }
+      }
+    }
     const billing = preset.usage.billing
     if (billing !== undefined) {
       if (billing === null || typeof billing !== 'object') {

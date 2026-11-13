@@ -9,6 +9,10 @@
  * trustworthy if something mechanical compares it every time.
  *
  * What it does, in an ISOLATED `DSH_HOME` (never the live profile):
+ *   0. STATIC half first — compares `PRESETS`, the browser `MODEL_PRESETS` and
+ *      every locale (lib/preset-drift.js), plus the generated artefacts. This
+ *      needs no boot and catches the two SILENT failures (no settings tab, no
+ *      usage card) that the runtime half structurally cannot see;
  *   1. copies the profile manifest + patch and symlinks `node_modules`;
  *   2. boots the profile through the host's public `profile-boot` entry;
  *   3. reads the live registries — providers, tools, commands;
@@ -16,7 +20,7 @@
  *   5. diffs everything against `lib/presets.js` and exits non-zero on any gap.
  *
  * Usage:
- *   node scripts/verify-presets.mjs [--profile-dir <dir>] [--patch <file>] [--keep]
+ *   node scripts/verify-presets.mjs [--profile-dir <dir>] [--patch <file>] [--keep] [--static-only]
  *
  * Exit codes: 0 clean, 1 drift found, 2 the harness could not run.
  */
@@ -28,16 +32,50 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { PRESETS, validatePresets } from '../lib/presets.js'
+import { checkGeneratedArtifacts, checkPresetRegistry, readLocales, readModelPresets } from '../lib/preset-drift.js'
 
 const argv = process.argv.slice(2)
 const flag = (name, fallback) => {
   const index = argv.indexOf(name)
-  return index === -1 || index + 1 >= argv.length ? fallback : argv[index + 1]
+  return index === -1 || index + 1 >= argv.length ? null : argv[index + 1]
 }
 const KEEP = argv.includes('--keep')
-const PROFILE_DIR = resolve(flag('--profile-dir', join(homedir(), '.dsh', 'profiles', 'web')))
+const STATIC_ONLY = argv.includes('--static-only')
+const PROFILE_DIR = resolve(flag('--profile-dir') ?? join(homedir(), '.dsh', 'profiles', 'web'))
 const DEFAULT_PATCH = join(homedir(), '.local', 'share', 'dsh', 'cordis.local-bridge.patch.yml')
-const PATCH = flag('--patch', DEFAULT_PATCH)
+const PATCH = flag('--patch') ?? DEFAULT_PATCH
+
+const problems = []
+
+// ------------------------------------------------------- static half (no boot)
+// A stale bundle would make the static checks pass against code the page never
+// runs, so the artefact check comes first: everything after it can then trust
+// that `lib/client.js` is what `lib/client.src.js` builds to.
+const artifacts = checkGeneratedArtifacts()
+for (const problem of artifacts.problems) problems.push(`artifacts: ${problem}`)
+
+let staticVerdict
+try {
+  staticVerdict = checkPresetRegistry({
+    presets: PRESETS,
+    descriptors: readModelPresets(),
+    locales: readLocales(),
+  })
+  for (const problem of staticVerdict.problems) problems.push(`registry: ${problem}`)
+} catch (error) {
+  problems.push(`registry: could not evaluate lib/client.js: ${error instanceof Error ? error.message : String(error)}`)
+}
+
+process.stdout.write(
+  `static registry: ${staticVerdict ? (staticVerdict.ok ? 'OK' : `${staticVerdict.problems.length} problem(s)`) : 'FAILED'}` +
+    ` (${PRESETS.length} presets, ${staticVerdict ? readModelPresets().length : 0} descriptors, ${Object.keys(readLocales()).length} locales)\n`,
+)
+
+if (STATIC_ONLY) {
+  reportAndExit()
+}
+
+// ------------------------------------------------------------ dynamic half
 
 const fail = (message) => {
   process.stderr.write(`verify-presets: ${message}\n`)
@@ -119,7 +157,6 @@ try {
   fail(`could not boot the isolated profile: ${error instanceof Error ? error.message : String(error)}`)
 }
 
-const problems = []
 try {
   const providers = new Set(ctx.get('llm').listProviders().map((provider) => provider.id))
   const tools = new Set(ctx.get('tools').definitions().map((tool) => tool.name))
@@ -198,10 +235,30 @@ try {
   if (!KEEP) rmSync(home, { recursive: true, force: true })
 }
 
-if (problems.length > 0) {
-  process.stderr.write(`\nDRIFT (${problems.length}):\n`)
-  for (const problem of problems) process.stderr.write(`  - ${problem}\n`)
-  process.exit(1)
+reportAndExit()
+
+/**
+ * Print the verdict and exit.
+ *
+ * One tail for both halves: a static failure must not be hidden behind a boot,
+ * and a boot failure must not be reported as a clean run.
+ * @returns {never} exits the process.
+ */
+function reportAndExit() {
+  if (problems.length > 0) {
+    process.stderr.write(`\nDRIFT (${problems.length}):\n`)
+    for (const problem of problems) process.stderr.write(`  - ${problem}\n`)
+    process.exit(1)
+  }
+  // A green report states its blind spots rather than implying full coverage.
+  // The runtime hole is only a hole when the boot half did not run; printing it
+  // after a successful boot would understate what the command just checked.
+  for (const hole of staticVerdict?.holes ?? []) {
+    if (!STATIC_ONLY && /runtime registration/.test(hole)) continue
+    process.stdout.write(`not checked here: ${hole}\n`)
+  }
+  process.stdout.write(
+    '\nOK: preset declarations, the browser registry, the locales and the runtime registries all agree\n',
+  )
+  process.exit(0)
 }
-process.stdout.write('\nOK: every preset declaration matches the runtime registries\n')
-process.exit(0)

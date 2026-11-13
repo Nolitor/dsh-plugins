@@ -11,7 +11,7 @@
     "dsh:isolation": "node scripts/check-dsh-isolation.mjs",
     "test:isolation": "node --test scripts/check-dsh-isolation.test.mjs scripts/cleanup-orphan-sessions.test.mjs",
     "cleanup:orphans": "node scripts/cleanup-orphan-sessions.mjs",
-    "docs:check:all": "npm run docs:check && node scripts/check-plugin-history.mjs && node scripts/check-disposal-safety.mjs && npm run test:docs && npm run check:publish && npm run verify:presets",
+    "docs:check:all": "npm run docs:check && node scripts/check-plugin-history.mjs && node scripts/check-disposal-safety.mjs && npm run test:docs && npm run check:publish && npm run verify:presets:static && npm run verify:presets:mutation",
     "docs:links": "node scripts/check-doc-links.mjs",
     "test:docs": "node --test scripts/check-doc-links.test.mjs",
     "docs:moves": "node scripts/check-doc-moves.mjs",
@@ -20,6 +20,8 @@
     "check:publish": "node scripts/check-npm-publishable.mjs",
     "publish:dry": "scripts/publish-npm.sh --dry-run",
     "link:custom-router": "node scripts/link-custom-router.mjs",
-    "verify:presets": "node dsh-custom-router/scripts/verify-presets.mjs"
+    "verify:presets": "node dsh-custom-router/scripts/verify-presets.mjs",
+    "verify:presets:mutation": "node dsh-custom-router/scripts/verify-presets-mutation.mjs",
+    "verify:presets:static": "node dsh-custom-router/scripts/verify-presets.mjs --static-only"
   }
 }

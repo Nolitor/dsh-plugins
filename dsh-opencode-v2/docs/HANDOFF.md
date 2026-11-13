@@ -1,11 +1,11 @@
 # OpenCode v2 — Handoff
 
 <!-- skeleton:
-version: 1.1
+version: 1.2
 kind: report
 status: active
-updated: 2026-11-10
-summary: Stage-by-stage handoff for @nolit/dsh-opencode-v2 at 0.0.1-rc.5 — the delivered CLI-subagent work, the router dispatch-policy revision, the three open stage-1 observations that need an owner verdict, and the gated stage-2 parser swap.
+updated: 2026-11-13
+summary: Stage-by-stage handoff for @nolit/dsh-opencode-v2 at 0.0.1-rc.5 — the delivered CLI-subagent work, the router dispatch-policy revision, the three open stage-1 observations that need an owner verdict, and the gated stage-2 parser swap. Re-measured 2026-11-13 for the S-work handoff: the track is a 7-file re-export shim whose suite lives in dsh-custom-router/vendor/opencode, `npm test` now reports the real 546/546 instead of a hollow 0/0, and the stale router peer pin (rc.11 vs the shipped rc.15) is corrected.
 -->
 
 > History lives in [CHANGELOG.md](../CHANGELOG.md). This file is the **forward** view.
@@ -17,8 +17,32 @@ summary: Stage-by-stage handoff for @nolit/dsh-opencode-v2 at 0.0.1-rc.5 — the
 | :--- | :--- |
 | Package | `@nolit/dsh-opencode-v2@0.0.1-rc.5` |
 | Last code commit | `56c59d6` 2026-11-08 (rc.4) + the 2026-11-10 router-peer revision (rc.5) |
-| Tests | `npm test` → **481/481 pass** |
+| Tests | `npm test` → **546/546 pass** (measured 2026-11-13) |
 | Stage | **stage 1 (stabilisation) in progress** |
+| **Track body** | **a 7-file re-export shim** (`lib/{index,http,provider,subagent,cost,client,optional-service}.js`, 57–81 bytes each) pointing at `@nolit/dsh-custom-router/vendor/opencode/*` — Phase A moved the implementation |
+| **Router peer** | `0.0.1-rc.15` (was a stale `0.0.1-rc.11`, which the shipped `rc.14`/`rc.15` could never satisfy) |
+
+### 1a. S-work readiness — measured 2026-11-13
+
+Two defects were found by measuring rather than by reading, and both would have made an S-work
+handoff report a state that was not true:
+
+1. **`npm test` reported 0/0 and exited 0.** Phase A moved `test/` into
+   `dsh-custom-router/vendor/opencode/test`, but `package.json` kept pointing at the deleted
+   `./test/` glob. Node's test runner treats an unmatched glob as "no tests" and exits **0**, so the
+   command looked green with nothing having run. The script now points at the vendored suite:
+   **546/546**, measured.
+2. **The router peer pin was unsatisfiable.** `@nolit/dsh-custom-router@0.0.1-rc.11` is an exact
+   pin; the installed router was `rc.14`. `semver.satisfies('0.0.1-rc.14', '0.0.1-rc.11')` is
+   `false`. It went unnoticed because the live profile links both packages from disk, and a `file:`
+   link carries no version metadata for npm to check. Repinned to `rc.15`; all four manifests now
+   agree.
+
+The **shared stream pipe** (S3 → Phase B) is delivered on the vendor side, not here:
+`vendor/opencode/lib/{stream-contract,stream-lifecycle,openai-mapping}.js` exist, `pipe` stays
+`legacy` by default, and `npm run verify:stream` reports **8/8, 0 vendor loads**. Nothing in this
+track still needs to ship for that step — see the router's
+[OPENCODE-ABSORPTION-BLUEPRINT.md §9.1](../../dsh-custom-router/docs/OPENCODE-ABSORPTION-BLUEPRINT.md).
 
 ## 2. Done
 
@@ -102,5 +126,7 @@ flip needs a `dsh-web.service` restart (ledger F-46 class). `vendor/antigravity`
 ## 5. Verification
 
 ```bash
-cd dsh-opencode-v2 && npm test
+cd dsh-opencode-v2 && npm test     # 546/546 — runs the VENDORED suite (see §1a)
+cd dsh-custom-router && npm test   # 522/522, includes the preset drift gate
+cd dsh-custom-router && npm run verify:presets && npm run verify:presets:mutation
 ```

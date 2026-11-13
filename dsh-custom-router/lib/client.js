@@ -1168,10 +1168,26 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Read live usage from the three vendor panel routes.
+     * The usage readers, keyed by the name a preset's `usageRoutes` declares.
      *
-     * The routes are the same measured seams each vendor's own panel uses.
-     * A missing/unmounted route is omitted, not turned into a zero.
+     * A preset names a reader instead of contributing a call site, so adding a
+     * vendor is a declaration rather than a fourth entry in a literal array.
+     * Standalone deepinfra takes one payload; opencode combines two, so it
+     * receives the whole payload list in route order.
+     */
+    const USAGE_READERS = Object.freeze({
+      normalizeAntigravityUsage: (payloads) => normalizeAntigravityUsage(payloads[0]),
+      normalizeOpencodeUsage: (payloads) => normalizeOpencodeUsage(payloads[0], payloads[1]),
+      normalizeDeepinfraUsage: (payloads) => normalizeDeepinfraUsage(payloads[0]),
+    })
+
+    /**
+     * Read live usage from every preset that declares usage routes.
+     *
+     * The routes are the same measured seams each vendor's own panel uses. A
+     * missing/unmounted route is omitted, not turned into a zero. Nothing here
+     * enumerates presets by hand: `MODEL_PRESETS` is the only list, so a new
+     * preset with routes gets a card without touching this function.
      * @param {Function} [fetchImpl] - injectable fetch.
      * @param {{force?: boolean}} [options] - `force` bypasses vendor caches.
      * @returns {Promise<object>} measurements keyed by preset id.
@@ -1179,17 +1195,20 @@ window.__ModuleLoader__.load({
     async function fetchUsageFeeds(fetchImpl, options = {}) {
       const doFetch = typeof fetchImpl === 'function' ? fetchImpl : globalThis.fetch
       if (typeof doFetch !== 'function') return {}
-      const jobs = [
-        (async () => ['antigravity', normalizeAntigravityUsage(await postUsageRoute(doFetch, '/api/local/dsh-antigravity/models', options))])(),
-        (async () => {
-          const [plan, catalog] = await Promise.all([
-            postUsageRoute(doFetch, '/api/local/opencode-v2/plan-usage', options),
-            postUsageRoute(doFetch, '/api/local/opencode-v2/model-settings', options),
-          ])
-          return ['opencode', normalizeOpencodeUsage(plan, catalog)]
-        })(),
-        (async () => ['deepinfra', normalizeDeepinfraUsage(await postUsageRoute(doFetch, '/api/local/deepinfra/cost/summary', options))])(),
-      ]
+      const jobs = []
+      for (const preset of MODEL_PRESETS) {
+        const routes = Array.isArray(preset.usageRoutes) ? preset.usageRoutes : []
+        if (routes.length === 0) continue
+        // All routes of one preset resolve together: opencode needs both its
+        // plan and its catalog to build one reading, and a half-read preset
+        // would report an empty card instead of an absent one.
+        jobs.push((async () => {
+          const payloads = await Promise.all(routes.map((route) => postUsageRoute(doFetch, route.path, options)))
+          const reader = USAGE_READERS[routes[0].normalize]
+          if (typeof reader !== 'function') throw new Error('unknown usage reader: ' + routes[0].normalize)
+          return [preset.id, reader(payloads)]
+        })())
+      }
       const settled = await Promise.allSettled(jobs)
       const output = {}
       for (const result of settled) {
@@ -2054,6 +2073,8 @@ window.__ModuleLoader__.load({
         row: 'dsh-antigravity',
         route: '/api/local/dsh-antigravity/models',
         planKey: 'planSubscription',
+        // The dashboard reads these; nothing enumerates presets by hand.
+        usageRoutes: Object.freeze([Object.freeze({ path: '/api/local/dsh-antigravity/models', normalize: 'normalizeAntigravityUsage' })]),
         // FAMILY groups: `groups[].limits[]` becomes the card's quota badge and
         // one row owns every reasoning-effort variant of one base model.
         load: (payload) => ({ groups: antigravityGroups(payload) }),
@@ -2066,6 +2087,11 @@ window.__ModuleLoader__.load({
         row: 'dsh-opencode-v2-http',
         route: '/api/local/opencode-v2/model-settings',
         planKey: 'planOpenCode',
+        // Two routes, in order: plan windows then the catalog/allow-list.
+        usageRoutes: Object.freeze([
+          Object.freeze({ path: '/api/local/opencode-v2/plan-usage', normalize: 'normalizeOpencodeUsage' }),
+          Object.freeze({ path: '/api/local/opencode-v2/model-settings', normalize: 'normalizeOpencodeUsage' }),
+        ]),
         // PLAN groups (`go` / `zen`), seeded from the route's `enabled` list.
         load: (payload) => ({ groups: opencodeGroups(payload) }),
       }),
@@ -2075,6 +2101,9 @@ window.__ModuleLoader__.load({
         row: 'dsh-deepinfra',
         route: '/api/local/deepinfra/models',
         planKey: 'planPayAsYouGo',
+        usageRoutes: Object.freeze([
+          Object.freeze({ path: '/api/local/deepinfra/cost/summary', normalize: 'normalizeDeepinfraUsage' }),
+        ]),
         // The only preset billed per token: `metered` is what turns on the price
         // block and the promotion count, never a hardcoded vendor id.
         metered: true,

@@ -71,10 +71,11 @@
     "dsh": ">=0.2.2-alpha.2 <0.3.0"
   },
   "scripts": {
-    "test": "node --import ./test/setup-isolate.mjs --test test/*.test.mjs",
+    "test": "node --import ./../dsh-custom-router/vendor/opencode/test/setup-isolate.mjs --test ../dsh-custom-router/vendor/opencode/test/*.test.mjs",
     "check": "node --check lib/index.js && node --check lib/provider.js && node --check lib/http.js && node --check lib/conflicts.js && node --check lib/stream-parser.js && node --check lib/display-gate.js && node --check lib/arguments.js && node --check lib/trace.js && node --check lib/upstream-map.js && node --check lib/display-clean.js && node --check lib/shared.js && node --check lib/catalog-cache.js && node --check lib/workers/index.js && node --check lib/workers/run.js && node --check lib/workers/backends.js && node --check lib/workers/artifacts.js && node --check lib/plans.js && node --check lib/verdict-store.js && node --check lib/resilience.js && node --check lib/cost.js && node --check lib/cost-pill.js && node --check lib/request-guards.js && node --check lib/optional-service.js && node --check lib/client.js",
     "docs:index": "node ../scripts/doc-index-track.mjs",
-    "docs:check": "node ../scripts/doc-index-track.mjs --check"
+    "docs:check": "node ../scripts/doc-index-track.mjs --check",
+    "test:track": "node -e \"console.log('shim only: the suite lives in dsh-custom-router/vendor/opencode')\""
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
@@ -82,7 +83,7 @@
     "@deepseek-ai/dsh-subprocess": "^0.2.2-alpha.2",
     "@deepseek-ai/dsh-tools": "^0.2.2-alpha.2",
     "@deepseek-ai/schemastery": "~3.18.4",
-    "@nolit/dsh-custom-router": "0.0.1-rc.11"
+    "@nolit/dsh-custom-router": "0.0.1-rc.15"
   },
   "dependencies": {}
 }

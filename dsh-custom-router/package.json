@@ -1,6 +1,6 @@
 {
   "name": "@nolit/dsh-custom-router",
-  "version": "0.0.1-rc.14",
+  "version": "0.0.1-rc.15",
   "private": false,
   "description": "Custom Router: the single DSH plugin that owns provider presets, the browser dashboard, the OpenCodex bridge library, and the vendored Antigravity/DeepInfra adapters. Vendor packages are no longer separate profile installs.",
   "keywords": [
@@ -174,7 +174,9 @@
     "build": "node scripts/gen-locale.mjs && node scripts/build-client.mjs",
     "pretest": "npm run build",
     "verify:dispatch": "node scripts/verify-dispatch-gate.mjs",
-    "verify:refresh": "node scripts/verify-refresh-routes.mjs"
+    "verify:refresh": "node scripts/verify-refresh-routes.mjs",
+    "verify:presets:static": "node scripts/verify-presets.mjs --static-only",
+    "verify:presets:mutation": "node scripts/verify-presets-mutation.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/schemastery": "^3.18.4",

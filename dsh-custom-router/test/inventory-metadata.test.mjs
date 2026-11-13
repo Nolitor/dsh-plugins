@@ -148,7 +148,12 @@ test('the model-serving tabs map onto the three presets and their declared rows'
   for (const preset of PRESETS) for (const entry of preset.entries) rows.add(entry.row)
 
   // ONE descriptor per preset, and no fourth implementation hiding in the JSX.
-  assert.equal(JSON.stringify(exports.MODEL_PRESETS.map((preset) => preset.id)), JSON.stringify(['antigravity', 'opencode', 'deepinfra']))
+  // The expectation is DERIVED from PRESETS, not a literal id list: a correct
+  // new preset must not fail this test (PRESET-REGISTRY-STANDARD §4 step 5).
+  assert.equal(
+    JSON.stringify(exports.MODEL_PRESETS.map((preset) => preset.id)),
+    JSON.stringify(PRESETS.map((preset) => preset.id)),
+  )
   for (const descriptor of exports.MODEL_PRESETS) {
     assert.ok(presets.has(descriptor.id), 'unknown preset behind a model tab: ' + descriptor.id)
     // The saved value lands in this row's config, so the row MUST be one the

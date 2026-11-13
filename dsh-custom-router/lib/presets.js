@@ -137,6 +137,13 @@ export const PRESETS = Object.freeze([
         service: 'antigravity',
         windows: Object.freeze([Object.freeze({ label: '5h' }), Object.freeze({ label: 'weekly' }), Object.freeze({ label: 'monthly' })]),
       }),
+      // An ORDERED route list, never one call site: the dashboard and the
+      // refresh bus both iterate this. `normalize` names a function the browser
+      // half owns — the backend declares the route, it does not carry UI code
+      // (STAGE-PLAN `PRESET-REGISTRY-STANDARD.md` §3 `usageRoutes`).
+      routes: Object.freeze([
+        Object.freeze({ path: '/api/local/dsh-antigravity/models', normalize: 'normalizeAntigravityUsage' }),
+      ]),
     }),
   }),
   Object.freeze({
@@ -225,6 +232,13 @@ export const PRESETS = Object.freeze([
       record: 'opencode-cost',
       plan: 'available',
       billing: Object.freeze({ mode: 'flat', service: 'opencode-v2', windows: Object.freeze([Object.freeze({ label: 'per-request' })]) }),
+      // Two routes, both needed: the plan card comes from `plan-usage` and the
+      // catalog/allow-list from `model-settings`. The normalizer receives every
+      // payload in list order, so the order below is part of the contract.
+      routes: Object.freeze([
+        Object.freeze({ path: '/api/local/opencode-v2/plan-usage', normalize: 'normalizeOpencodeUsage' }),
+        Object.freeze({ path: '/api/local/opencode-v2/model-settings', normalize: 'normalizeOpencodeUsage' }),
+      ]),
     }),
   }),
   Object.freeze({
@@ -269,7 +283,9 @@ export const PRESETS = Object.freeze([
       commands: Object.freeze([]),
       skill: null,
     }),
-    usage: Object.freeze({ record: 'deepinfra-cost', plan: 'unavailable', billing: Object.freeze({ mode: 'pay-per-token' }) }),
+    usage: Object.freeze({ record: 'deepinfra-cost', plan: 'unavailable', billing: Object.freeze({ mode: 'pay-per-token' }), routes: Object.freeze([
+      Object.freeze({ path: '/api/local/deepinfra/cost/summary', normalize: 'normalizeDeepinfraUsage' }),
+    ]) }),
   }),
 ])
 
