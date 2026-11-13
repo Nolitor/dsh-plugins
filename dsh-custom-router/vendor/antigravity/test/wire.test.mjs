@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { effortMatchesModel, inlineImage, modelForEffort, requestBody, sanitizeSchema, toContents, toTools } from '../lib/wire.js'
+import { declaredArguments, effortMatchesModel, inlineImage, modelForEffort, requestBody, sanitizeSchema, toContents, toTools } from '../lib/wire.js'
 
 test('system message is hoisted into systemInstruction', () => {
   const { contents, systemInstruction } = toContents(
@@ -237,4 +237,61 @@ test('requestBody carries the required top-level model', () => {
 
 test('requestBody rejects an empty conversation', () => {
   assert.throws(() => requestBody({ messages: [] }, { model: 'm', project: 'p' }), /no content/)
+})
+
+test('an undeclared replayed argument is dropped from functionCall.args', () => {
+  // Live 2026-11-14: turn 1 step 14 answered HTTP 400 "Request contains an
+  // invalid argument." after a `write` call carried `sandbox_permissions`,
+  // which the tool declaration does not declare. Google validates replayed
+  // arguments against the declaration; the projection must drop unknown keys.
+  const tools = [
+    {
+      name: 'write',
+      description: 'create a file',
+      parameters: {
+        type: 'object',
+        properties: { file_path: { type: 'string' }, content: { type: 'string' } },
+        required: ['file_path', 'content'],
+      },
+    },
+  ]
+  const body = requestBody({
+    messages: [
+      { role: 'user', content: 'write it' },
+      { role: 'assistant', content: [{
+        type: 'tool-call', id: 'c1', name: 'write',
+        arguments: '{"file_path":"/tmp/x","content":"hi","sandbox_permissions":"danger-full-access"}',
+        thoughtSignature: 'sig',
+      }] },
+      { role: 'tool', toolCallId: 'c1', content: [{ type: 'text', text: 'ok' }] },
+    ],
+    tools,
+  }, { model: 'gemini-4-hydrogen-low', project: 'p' })
+  const part = body.request.contents.flatMap((content) => content.parts).find((item) => item.functionCall)
+  assert.deepEqual(part.functionCall.args, { file_path: '/tmp/x', content: 'hi' })
+  assert.ok(!('sandbox_permissions' in part.functionCall.args))
+})
+
+test('a declared argument survives pruning, nested and in arrays', () => {
+  const tools = [{
+    name: 'configure',
+    parameters: {
+      type: 'object',
+      properties: {
+        mode: { enum: ['a', 'b'] },
+        items: { type: 'array', items: { type: 'object', properties: { keep: { type: 'string' } } } },
+      },
+    },
+  }]
+  const { contents } = toContents([
+    { role: 'assistant', content: [{ type: 'tool-call', id: 'c1', name: 'configure', arguments: '{"mode":"a","extra":1,"items":[{"keep":"k","drop":"d"}]}' }] },
+  ], undefined, declaredArguments(tools))
+  assert.deepEqual(contents[0].parts[0].functionCall.args, { mode: 'a', items: [{ keep: 'k' }] })
+})
+
+test('without a declaration the arguments are passed through unchanged', () => {
+  const { contents } = toContents([
+    { role: 'assistant', content: [{ type: 'tool-call', id: 'c1', name: 'unknown_tool', arguments: '{"a":1,"b":2}' }] },
+  ])
+  assert.deepEqual(contents[0].parts[0].functionCall.args, { a: 1, b: 2 })
 })

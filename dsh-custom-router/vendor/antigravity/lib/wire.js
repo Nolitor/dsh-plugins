@@ -31,7 +31,7 @@ export const GENERATION_PATH = '/v1internal:streamGenerateContent?alt=sse'
  * @param explicitSystem - `options.system` from a one-shot caller.
  * @returns contents and the system instruction, if any.
  */
-export function toContents(messages, explicitSystem) {
+export function toContents(messages, explicitSystem, schemas) {
   const contents = []
   const systemParts = []
   if (explicitSystem) systemParts.push(explicitSystem)
@@ -83,7 +83,7 @@ export function toContents(messages, explicitSystem) {
         continue
       }
     }
-    const parts = partsOf(message)
+    const parts = partsOf(message, schemas)
     if (parts.length === 0) continue
     contents.push({ role: role === 'assistant' ? 'model' : 'user', parts })
   }
@@ -112,11 +112,63 @@ function textOf(content) {
 }
 
 /**
+ * Declared argument schemas per tool name, from the request's own tool list.
+ *
+ * MEASURED 2026-11-14: a replayed `functionCall` whose `args` carried a key the
+ * tool declaration does not declare made Gemini answer
+ * `HTTP 400 "Request contains an invalid argument."` (turn 1 step 14 of session
+ * 2a16c3bb: a `write` call carrying `sandbox_permissions`). Google validates
+ * REPLAYED call arguments against the declaration; other wires do not. The
+ * projection therefore keeps only declared keys.
+ *
+ * @param tools - DSH tool schemas (the same list `toTools` consumes).
+ * @returns a map of tool name to its (sanitized) parameters schema.
+ */
+export function declaredArguments(tools) {
+  const map = new Map()
+  if (!Array.isArray(tools)) return map
+  for (const tool of tools) {
+    if (!tool?.name) continue
+    if (tool.parameters && typeof tool.parameters === 'object') map.set(tool.name, sanitizeSchema(tool.parameters))
+  }
+  return map
+}
+
+/**
+ * Keep only the argument keys a schema declares, recursively.
+ *
+ * Unknown keys are dropped; a schema without `properties` leaves the value
+ * untouched (nothing is declared, so nothing can be checked). `undefined` and
+ * `null` values are dropped because Gemini rejects them on replay.
+ *
+ * @param value - parsed call arguments.
+ * @param schema - the tool's parameters schema.
+ * @returns pruned arguments.
+ */
+export function pruneArguments(value, schema) {
+  if (schema === null || typeof schema !== 'object') return value
+  if (Array.isArray(value)) {
+    return schema.items === undefined ? value : value.map((item) => pruneArguments(item, schema.items))
+  }
+  if (value === null || typeof value !== 'object') return value
+  const properties = schema.properties
+  if (properties === null || typeof properties !== 'object') return value
+  const out = {}
+  for (const [key, item] of Object.entries(value)) {
+    if (!Object.hasOwn(properties, key)) continue
+    if (item === undefined || item === null) continue
+    out[key] = pruneArguments(item, properties[key])
+  }
+  return out
+}
+
+/**
  * Convert one DSH message into Gemini parts.
  * @param message - one request message.
+ * @param schemas - declared arguments per tool name (see {@link declaredArguments}).
  * @returns provider parts.
  */
-function partsOf(message) {
+function partsOf(message, schemas) {
   const content = message?.content
   if (typeof content === 'string') return content === '' ? [] : [{ text: content }]
   if (!Array.isArray(content)) return []
@@ -150,7 +202,7 @@ function partsOf(message) {
         parts.push({
           functionCall: {
             name: block.name,
-            args: parseArguments(block.arguments),
+            args: pruneArguments(parseArguments(block.arguments), schemas?.get?.(block.name)),
             id: block.id ?? undefined,
           },
           ...(typeof block.thoughtSignature === 'string' && block.thoughtSignature !== ''
@@ -348,7 +400,8 @@ function aliasesOf(base) {
  * @returns the JSON body to POST.
  */
 export function requestBody(options, context) {
-  const { contents, systemInstruction } = toContents(options.messages, options.system)
+  const schemas = declaredArguments(options.tools)
+  const { contents, systemInstruction } = toContents(options.messages, options.system, schemas)
   if (contents.length === 0) {
     throw Object.assign(new Error('Antigravity request has no content to send'), { code: 'EMPTY_REQUEST' })
   }
