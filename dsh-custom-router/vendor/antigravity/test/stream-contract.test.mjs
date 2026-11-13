@@ -60,6 +60,13 @@ test('a thought signature never reaches the record', () => {
   assert.deepEqual(record.parts, [{ kind: 'text', text: 'visible' }])
 })
 
+test('a functionCall thoughtSignature is preserved for replay', () => {
+  const record = readEvent(frame({ parts: [{ functionCall: { name: 'read_file', args: { path: '/tmp/x' }, id: 'g1' }, thoughtSignature: 'sig' }] }))
+  assert.deepEqual(record.parts, [
+    { kind: 'tool-call', id: 'g1', name: 'read_file', arguments: { path: '/tmp/x' }, thoughtSignature: 'sig' },
+  ])
+})
+
 test('text and reasoning parts map to the pipe vocabulary', () => {
   const record = readEvent(frame({ parts: [{ text: 'think', thought: true }, { text: 'answer' }] }))
   assert.deepEqual(record.parts, [

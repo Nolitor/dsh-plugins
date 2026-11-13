@@ -71,6 +71,7 @@ export const MEASURED_LABELS = Object.freeze({
   antigravity: Object.freeze({ labelKey: 'vendorAntigravity', planKey: 'planSubscription' }),
   opencode: Object.freeze({ labelKey: 'vendorOpenCode', planKey: 'planOpenCode' }),
   deepinfra: Object.freeze({ labelKey: 'vendorDeepInfra', planKey: 'planPayAsYouGo' }),
+  exaone: Object.freeze({ labelKey: 'vendorExaone', planKey: 'planFree' }),
 })
 
 /**
@@ -84,7 +85,7 @@ export const BILLING_PLAN_KEYS = Object.freeze({
   subscription: 'planSubscription',
   flat: 'planFlat',
   'pay-per-token': 'planPayAsYouGo',
-  none: 'planOther',
+  none: 'planFree',
 })
 
 /**

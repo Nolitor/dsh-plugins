@@ -1,17 +1,19 @@
 # OpenCode Console — Single-Preset Absorption Spec (Session + Token Isolation, Plan Billing)
 
 <!-- skeleton:
-version: 0.0.1-rc.2
+version: 0.0.1-rc.3
 kind: spec
 status: active
-updated: 2026-11-12
-summary: How the existing single `opencode` preset absorbs the OpenCode Console workspace session/token isolation and the plan-specific billing and limit rules, with no second preset, no new model prefix, and no second route table; the measured evidence for every claim, and the three defects the absorption must close.
+updated: 2026-11-14
+summary: Specification only; six pieces remain unlanded (ROADMAP P2-6). How the existing single `opencode` preset absorbs the OpenCode Console workspace session/token isolation and the plan-specific billing and limit rules, with no second preset, no new model prefix, and no second route table; the measured evidence for every claim, and the three defects the absorption must close. Re-measured 2026-11-14 at router 0.0.1-rc.19 / suite 625/625.
 -->
 
+> **SPECIFICATION ONLY (2026-11-14).** Six pieces named here are still unlanded ([ROADMAP.md](./ROADMAP.md) P2-6). Test counts and rc numbers in this document are historical; the current baseline is router `0.0.1-rc.19`, host DSH `0.2.2-rc.3`, suite **625/625**.
+
 > Status: **measurement plus the Track A/B correction**, 2026-11-12. `lib/plan.js` and its tests
-> changed (see §8); no profile, live service or browser code was touched. Plugin
-> `@nolit/dsh-custom-router` is `0.0.1-rc.12` — this session changed that plugin's files, so the
-> `rc` suffix advanced by the agent-managed rule (global AGENTS.md §6).
+> changed (see §8); no profile, live service or browser code was touched. At that time the plugin
+> was `0.0.1-rc.12`; it is now `0.0.1-rc.19` (the `rc` suffix advances per session that changes the
+> plugin's files, global AGENTS.md §6).
 > Parents: [OPENCODE-PLAN-USAGE-SPEC.md](OPENCODE-PLAN-USAGE-SPEC.md),
 > [PLAN-AND-USAGE-SPEC.md](PLAN-AND-USAGE-SPEC.md),
 > [PRESET-SCHEMA-AND-EXTENSION.md](PRESET-SCHEMA-AND-EXTENSION.md),
@@ -704,7 +706,8 @@ while the account is `go-plus`, with nothing in the surface contradicting it.
 under `vendor/`, `locale/`, or the browser client. No profile patch, no `~/.dsh` write, no service
 restart, no version or `rc` change.
 
-**Full suite:** `npm test` → **502/502 pass** (was 493; +9 new).
+**Full suite:** `npm test` → **502/502 pass** at the time of this correction (was 493; +9 new).
+Current baseline re-measured 2026-11-14: **625/625**.
 
 **Still to build (specified here, not implemented):** the R2 `entry.isolate` mount change (§3.2), the
 Console window bridge (§4.2), the four-wire catalog reader (§4.5), the `usage.billing.limits` table

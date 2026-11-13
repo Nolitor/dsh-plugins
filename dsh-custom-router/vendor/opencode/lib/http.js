@@ -219,6 +219,18 @@ export const Config = Schema.object({
    */
   cwd: Schema.string().default('').volatile(),
   defaultModel: Schema.string().default('opencode-go/minimax-m3.1-flash').volatile(),
+  /**
+   * The operator's OWN route table. It seeds NO row.
+   *
+   * This array used to carry one synthetic entry (id `default`, named after the
+   * OpenCode configuration default). That entry is NOT a model id: it was
+   * prepended to the picker's provider group as if it were a served route. It
+   * is gone from every list and from the config default.
+   *
+   * The `default` PSEUDO-ROUTE still resolves server-side, and that behaviour
+   * is unchanged: `defaultModel` above is what it resolves to
+   * (`modelRefFromRoute` -> `entry?.opencodeModel || defaultModel`).
+   */
   models: Schema.array(
     Schema.object({
       id: Schema.string(),
@@ -226,7 +238,7 @@ export const Config = Schema.object({
       name: Schema.string().default(''),
     }),
   )
-    .default([{ id: 'default', opencodeModel: '', name: 'OpenCode (config default)' }])
+    .default([])
     .volatile(),
   /** Local OpenCode provider id whose backend endpoint and credential are used. */
   backendProviderId: Schema.string().default('opencode-go').volatile(),
@@ -1138,10 +1150,10 @@ export class OpencodeHttpAdapter {
         if (leftNew !== rightNew) return leftNew ? -1 : 1
         return String(left.name ?? left.id).localeCompare(String(right.name ?? right.id))
       })
-      return [
-        { provider, id: 'default', name: 'OpenCode (config default)', description, inputModalities: ['text'] },
-        ...rows,
-      ]
+      // No synthetic `default` row: the picker shows the served catalog only.
+      // The `default` pseudo-route still resolves on the wire (`defaultModel`),
+      // it is just not ADVERTISED as a model.
+      return rows
     }
     if (this.config.autoDiscoverModels.get()) {
       const reason = this.discoveryError?.message ?? 'the server returned no models'

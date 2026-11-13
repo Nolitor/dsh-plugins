@@ -3,10 +3,12 @@
 <!-- skeleton:
 version: 1.0
 kind: report
-status: active
+status: historical
 updated: 2026-11-08
-summary: Record of the owner-ordered 2026-11-08 integration: Antigravity and DeepInfra moved from separate profile plugins into the Custom Router vendor tree, their standalone links were removed, and llm-pi-ai was re-enabled.
+summary: Historical record of the 2026-11-08 integration. Record of the owner-ordered 2026-11-08 integration: Antigravity and DeepInfra moved from separate profile plugins into the Custom Router vendor tree, their standalone links were removed, and llm-pi-ai was re-enabled.
 -->
+
+> **HISTORICAL RECORD (2026-11-14).** The Antigravity/DeepInfra integration shipped; there is no active plan in this document.
 
 > **Owner instruction (2026-11-08):** *"커스텀라우터 플러그인 통합으로 인하여 플러그인 중에
 > 안티그래비티, 딥인프라 플러그인 삭제 및 관련 서브 프로젝트 해당 플러그인 사용하지 않고

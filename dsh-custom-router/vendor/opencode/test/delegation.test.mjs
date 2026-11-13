@@ -112,7 +112,7 @@ test('per-call options child mode cannot honor are detected, not ignored', () =>
   }
 })
 
-test('a started child carries the activation spec the rc.1 seam expects', async () => {
+test('a started child carries the flat activation spec the 0.2.1-rc.2+ seam expects', async () => {
   const service = recordingSubagents()
   const controller = new AbortController()
   const started = await startChildSession({
@@ -132,9 +132,14 @@ test('a started child carries the activation spec the rc.1 seam expects', async 
   assert.equal(spec.delivery, CHILD_DELIVERY)
   assert.equal(spec.delivery, 'parent')
   assert.equal(spec.signal, controller.signal)
-  assert.equal(spec.request.parent, PARENT)
-  assert.deepEqual(spec.request.prompt, [{ type: 'text', text: 'do the task' }])
-  assert.equal(Object.hasOwn(spec.request, 'cwd'), false, 'omitted cwd inherits the parent directory')
+  // Regression 2026-11-13: the host removed the nested `request` field in DSH
+  // 0.2.1-rc.2 and reads `spec.parent.id` first. The old nested shape made every
+  // `opencode` call fail with "Cannot read properties of undefined (reading 'id')".
+  assert.equal(Object.hasOwn(spec, 'request'), false, 'the removed nested `request` field must not be sent')
+  assert.equal(spec.parent, PARENT)
+  assert.equal(spec.parent.session.id, 'parent-1', 'the live service resolves spec.parent.id before any provider')
+  assert.deepEqual(spec.prompt, [{ type: 'text', text: 'do the task' }])
+  assert.equal(Object.hasOwn(spec, 'cwd'), false, 'omitted cwd inherits the parent directory')
 })
 
 test('an explicit cwd is forwarded; a missing signal gets a live one', async () => {
@@ -148,7 +153,7 @@ test('an explicit cwd is forwarded; a missing signal gets a live one', async () 
     cwd: '/repo/sub',
   })
   assert.equal(started.childId, 'child-9')
-  assert.equal(service.starts[0].request.cwd, '/repo/sub')
+  assert.equal(service.starts[0].cwd, '/repo/sub')
   assert.ok(service.starts[0].signal instanceof AbortSignal)
   assert.equal(service.starts[0].signal.aborted, false)
 })

@@ -78,6 +78,23 @@ function optional(ctx, name) {
   }
 }
 
+/**
+ * Credential precedence, as one pure rule so it can be tested without a host:
+ * an explicitly configured key wins, then the DSH credential-store value, then
+ * the ambient environment. A blank never wins.
+ *
+ * @param {unknown} uiKey - value from the profile/UI `apiKey` field.
+ * @param {unknown} storedKey - value resolved from the DSH credential store.
+ * @param {unknown} envKey - ambient environment fallback.
+ * @returns {string} the key to use, or '' when none is configured.
+ */
+export function keyPrecedence(uiKey, storedKey, envKey) {
+  const explicit = typeof uiKey === 'string' ? uiKey.trim() : ''
+  if (explicit.length > 0) return explicit
+  if (typeof storedKey === 'string' && storedKey.trim().length > 0) return storedKey.trim()
+  return typeof envKey === 'string' ? envKey.trim() : ''
+}
+
 /** Config schema: defaults live here; cordis.yml and GUI edits validate against it. */
 export const Config = Schema.object({
   /** Provider base URL. Override only for a compatible gateway. */
@@ -87,7 +104,15 @@ export const Config = Schema.object({
    * the UI learns only whether a value is set. Empty means "use the environment",
    * which is what makes the UI-then-env precedence work without a key file.
    */
-  apiKey: Schema.string().default('').role('secret').description('DeepInfra API key. Leave empty to use DEEPINFRA_API_KEY.').volatile(),
+  apiKey: Schema.string().default('').role('secret').description('DeepInfra API key. Leave empty to use credentialRef, then DEEPINFRA_API_KEY.').volatile(),
+  /**
+   * DSH credential-store reference (an env-var-shaped name in
+   * `~/.dsh/.credentials.yaml` -> `refs:`). The store owns the value; the
+   * profile carries only this name. Resolved at mount and re-resolved on
+   * `credentials/reference-updated`, so a rotated value reaches the next
+   * request without a plugin restart.
+   */
+  credentialRef: Schema.string().default('DEEPINFRA_API_KEY').description('DSH credential-store ref used when apiKey is empty.').volatile(),
   /** Completion tokens ONE TURN reserves (the host's defaultMaxTokens). */
   turnMaxTokens: Schema.number().default(DEFAULT_TURN_MAX_TOKENS).description('Completion tokens one turn reserves.').volatile(),
   /** Context window used only when a route reports none. */
@@ -134,6 +159,34 @@ export function apply(ctx, config) {
   const stringAt = (field, fallback) => {
     const value = configValue(config, field)
     return typeof value === 'string' ? value : fallback
+  }
+
+  // The host credential store is the managed path: the value lives in
+  // `~/.dsh/.credentials.yaml` under `refs:` and is resolved by reference, so
+  // nothing secret is ever stored in the profile patch. An unresolvable ref is a
+  // warning plus the env fallback, never a crash and never a logged value.
+  let storedKey = ''
+  const credentialRefName = () => stringAt('credentialRef', 'DEEPINFRA_API_KEY').trim()
+  const resolveStoredKey = async () => {
+    const ref = credentialRefName()
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(ref)) return ''
+    try {
+      const credentials = optional(ctx, 'credentials')
+      const found = await credentials?.resolve?.(ref)
+      return typeof found?.value === 'string' ? found.value : ''
+    } catch (error) {
+      log.warn('dsh-deepinfra: credential ref "' + ref + '" could not be resolved: ' + (error instanceof Error ? error.message : String(error)))
+      return ''
+    }
+  }
+  const refreshStoredKey = () => { void resolveStoredKey().then((value) => { storedKey = value }) }
+  refreshStoredKey()
+  try {
+    ctx?.on?.('credentials/reference-updated', (ref) => {
+      if (ref === undefined || ref === credentialRefName()) refreshStoredKey()
+    })
+  } catch {
+    /* an older host without the event still resolves once at mount */
   }
 
   /** @type {{ entries: object[], fetchedAt: number } | undefined} */
@@ -252,7 +305,8 @@ export function apply(ctx, config) {
     const envKey = typeof process.env.DEEPINFRA_API_KEY === 'string' ? process.env.DEEPINFRA_API_KEY.trim() : ''
     return {
       baseURL: baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL,
-      apiKey: uiKey.trim().length > 0 ? uiKey.trim() : envKey,
+      // Precedence: explicit profile/UI key -> DSH credential store -> env.
+      apiKey: keyPrecedence(uiKey, storedKey, envKey),
     }
   }
 

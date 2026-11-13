@@ -1,0 +1,33 @@
+{
+  "id": "opencode",
+  "preset": "opencode",
+  "status": "active",
+  "protocol": "openai-completions",
+  "docs": "https://opencode.ai/docs/console/models",
+  "verifiedAt": "2026-11-13",
+  "ttlDays": 90,
+  "endpoint": "daemon (native server, baseUrl from the router config; spawned as `opencode serve --hostname 127.0.0.1 --port 0` when no baseUrl is set)",
+  "models": [
+    "opencode-go/deepseek-v4.1-flash",
+    "opencode-go/minimax-m3.1-flash"
+  ],
+  "capabilities": {
+    "tools": true,
+    "reasoning": [
+      "none",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "thinking"
+    ],
+    "usage": true,
+    "cache": true,
+    "structuredOutput": false,
+    "vision": true
+  },
+  "pricing": "opencode",
+  "notes": "Daemon preset (providerId 'opencode-http-agent', modelPrefixes ['opencode-http-agent','opencode-go','opencode'], endpoint mode 'daemon', protocol openai-completions, route 'own', chatPath /chat/completions). The base URL is NOT a public host: it is resolved at runtime from the router's baseUrl setting, or by attaching to / spawning the local OpenCode server, so no fixed endpoint string is recorded here. models are the ENABLED routes measured in this repo (go/deepseek-v4.1-flash and go/minimax-m3.1-flash, the latter also being the declared default model); the served catalog is the live /api/model list, which also carries zen routes and other families, so this is a measured subset, not a fixed catalog — the ENABLED set is operator-controlled (enabledModels) and can differ per install. reasoning lists the VARIANT ID VOCABULARY a route can advertise (vendor/opencode/lib/shared.js VARIANT_ORDER), not a promise that every route offers all of them: effort is a per-route variant selected as `provider/model#<variant>`, a route with no variants advertises NO efforts, and the ids actually offered come from that route's own `/api/model` variant list — so this list is catalog-dependent, and the leading 'none' is a real selectable level here rather than an absence marker. UNVERIFIED / catalog-dependent: cache is true because the wire reports prompt_tokens_details.cached_tokens and the adapter can send cache_control markers, but whether a given route actually caches is not asserted; structuredOutput is true as a protocol capability and is NOT exercised by any vendored adapter here (no response_format is sent), so treat it as unproven for these routes; vision is true only for routes the catalog tags image-capable — the host's modality vocabulary is text|image, so audio/video/pdf are never advertised and an untagged route is text-only in the picker. Credentials come from the daemon control plane (GET /api/credential, oauth ranked before key) or an apiKey/OPENCODE_API_KEY; none is recorded here."
+}

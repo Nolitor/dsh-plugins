@@ -1,22 +1,23 @@
 # Custom Router — Adding a Model-Serving Preset
 
 <!-- skeleton:
-version: 0.0.1-rc.14
+version: 0.0.1-rc.15
 kind: spec
 status: active
-updated: 2026-11-13
-summary: The five places a new model-serving preset must be registered, the exact drift each one causes when forgotten, the normative descriptor contract, and the two-part drift gate that now enforces it — a static registry diff (presets × descriptors × locales × artefacts) plus the isolated runtime boot — with a mutation harness that proves each drift class is actually rejected.
+updated: 2026-11-14
+summary: The preset registry is derived and its drift gate is implemented; the only hand-authored dashboard residual is ROUTER_PROVIDERS/PICKER_ITEMS (ROADMAP P2-1). Records the places a new model-serving preset touches, the exact drift each causes when forgotten, the normative descriptor contract, and the two-part drift gate that enforces it — a static registry diff (presets × descriptors × locales × artefacts) plus the isolated runtime boot — with a mutation harness that proves each drift class is rejected (17/17).
 -->
 
-> Status: **measured registry audit**, 2026-11-13, router `0.0.1-rc.13`; **gate implemented
-> 2026-11-13 (rc.14)**. §4 steps 1, 4, 5 and 6 are done; steps 2–3 (generating the browser
-> descriptor from the host seam) remain open and are recorded as such.
-> Owner question that produced this document: 프리셋이 계속 추가될텐데 3개만 업데이트되고 신규로
-> 추가되는 프리셋은 업데이트 또 별도로 해야하나? 그것도 규격화해야 하지 않아?
-> Answer: **five places today; four of them are now enforced mechanically, and the two silent
-> ones are the reason the static gate exists.**
-> Parent: [CUSTOM-ROUTER-PRESET-SURFACE.md](./CUSTOM-ROUTER-PRESET-SURFACE.md),
-> [MODEL-LIST-REFRESH.md](./MODEL-LIST-REFRESH.md).
+> **PARTIALLY SUPERSEDED (2026-11-14).** The browser registry is now derived
+> (`lib/preset-derive.js`, `lib/client.src.js:2010`) and the drift gate is implemented; the
+> “two registries / five places” model below is historical. The only hand-authored parts left are
+> `ROUTER_PROVIDERS` (`lib/client.src.js:395`) / `PICKER_ITEMS` (`lib/client.src.js:478`), tracked
+> as [ROADMAP.md](./ROADMAP.md) P2-1. Mutation gate re-measured 2026-11-14: **17/17**.
+
+> **Historical status (2026-11-14).** The registry is derived (`preset-derive` + `sync-derive`)
+> and the drift gate is implemented; all §4 steps are done or superseded. The only remaining
+> hand-authored part is the dashboard `ROUTER_PROVIDERS`/`PICKER_ITEMS` pair, tracked in
+> [ROADMAP.md](./ROADMAP.md) P2-1.
 
 ## 1. The two registries (both exist today, neither derives from the other)
 
@@ -30,10 +31,14 @@ They are joined only by **id**. As of rc.14 the join is enforced by the drift ga
 used to be the whole guard. That earlier test
 (`test/inventory-metadata.test.mjs`, "the model-serving tabs map onto the three presets") caught a
 **typo or a missing descriptor** and nothing else: it could not notice a *new* preset that was never
-added to either place, nor a preset with no usage route. Both of those are now rejected (measured:
-`npm run verify:presets:mutation` → 10/10).
+added to either place, nor a preset with no usage route. Both of those are now rejected (measured
+2026-11-14: `npm run verify:presets:mutation` → **17/17**).
 
-## 2. Measured: adding one preset touches five places
+## 2. Measured: adding one preset touches five places (historical)
+
+> **Historical table (2026-11-14).** Rows 2 and 3 describe the pre-derivation state and no longer
+> exist as hand-edit sites: `MODEL_PRESETS` is derived at `lib/client.src.js:2010` and
+> `fetchUsageFeeds` iterates the registry. Kept as the record of *why* the gate exists.
 
 Verified by reading every consumer of both registries (`grep -rn "MODEL_PRESETS\|PRESETS"` across
 `lib/`, `test/`, `scripts/`), 2026-11-13:
@@ -41,9 +46,9 @@ Verified by reading every consumer of both registries (`grep -rn "MODEL_PRESETS\
 | # | Place | What must be added | If forgotten |
 |---|---|---|---|
 | 1 | `lib/presets.js` → `PRESETS` | the whole declaration | the preset cannot be mounted; `planApplications()` reports an unknown preset |
-| 2 | `lib/client.src.js` → `MODEL_PRESETS` | the UI descriptor (`id`, `labelKey`, `row`, `route`, `load`) | **silently no tab** — the settings page renders `MODEL_PRESETS.map(...)`, so a missing entry is simply absent, with no error anywhere |
-| 3 | `lib/client.src.js` → `fetchUsageFeeds` | one hardcoded job in a literal array | **silently no usage card** — the dashboard shows the other presets and never says one is missing. **Fixed in rc.14:** the function now iterates `MODEL_PRESETS[].usageRoutes`, so this place no longer exists |
-| 4 | `test/inventory-metadata.test.mjs:151` | the expected id array `['antigravity','opencode','deepinfra']` | the suite fails, which is the desired behaviour, but only after the change. **Fixed in rc.14:** the expectation is derived from `PRESETS` |
+| 2 | `lib/client.src.js` → `MODEL_PRESETS` | *(no longer hand-edited)* — derived by `deriveModelPresets(PRESET_DECLARATIONS)` | **silently no tab** was the old failure; the derivation removes the site |
+| 3 | `lib/client.src.js` → `fetchUsageFeeds` | *(no longer a literal array)* — iterates `MODEL_PRESETS[].usageRoutes` | **silently no usage card** was the old failure; fixed |
+| 4 | `test/inventory-metadata.test.mjs:151` | the expected id array `['antigravity','opencode','deepinfra']` | the suite fails, which is the desired behaviour, but only after the change. **Fixed:** the expectation is derived from `PRESETS` |
 | 5 | `locale/en.json`, `locale/ko.json`, `locale/zh.json` + `node scripts/gen-locale.mjs` | the `labelKey` string in every locale | the tab renders the raw key (`vendorNewThing`) via the `t()` fallback |
 
 Two of these (`#2`, `#3`) fail **without any signal**. That is the real defect: a new preset looks
@@ -91,21 +96,25 @@ array) must instead iterate the registry.
 
 ## 4. Ordered plan — status
 
-Steps in dependency order; the rc.14 column is the measured state, not an intention.
+Steps in dependency order. The state column was re-measured 2026-11-14 at router `0.0.1-rc.19`;
+it records what the tree does now, not an intention. This plan is closed — any new work belongs in
+[ROADMAP.md](./ROADMAP.md), not here.
 
 | # | Step | State |
 |---|---|---|
-| 1 | `usageRoutes` on every preset in `lib/presets.js` (ordered `{ path, normalize }`) | **done rc.14** — antigravity 1 route, opencode 2 (order is the contract), deepinfra 1; `normalize` is a *reader name* because the backend graph cannot carry browser code |
-| 2 | Expose the registry to the browser over the host seam | **open** — `MODEL_PRESETS` is still authored by hand in `client.src.js`; the two registries are kept in agreement by the gate, not by derivation |
-| 3 | Derive `MODEL_PRESETS` from that single source | **open** — depends on step 2 |
-| 4 | `fetchUsageFeeds` iterates the registry | **done rc.14** — no literal preset list remains; readers are selected by the declared name |
-| 5 | Replace the literal id array in the test | **done rc.14** — `test/inventory-metadata.test.mjs` compares against `PRESETS.map(p => p.id)` |
-| 6 | Drift gate for descriptor↔preset and `usageRoutes` | **done rc.14** — §5 |
+| 1 | `usageRoutes` on every preset in `lib/presets.js` (ordered `{ path, normalize }`) | **done** — one route per preset (opencode 2, where order is the contract); `normalize` is a *reader name* because the backend graph cannot carry browser code |
+| 2 | Expose the registry to the browser over the host seam | **done** — `lib/index.js` publishes `presetSettings` |
+| 3 | Derive `MODEL_PRESETS` from that single source | **done** — `lib/client.src.js:2010` `deriveModelPresets(PRESET_DECLARATIONS)`; `lib/preset-derive.js` owns the derivation |
+| 4 | `fetchUsageFeeds` iterates the registry | **done** — no literal preset list remains; readers are selected by the declared name |
+| 5 | Replace the literal id array in the test | **done** — `test/inventory-metadata.test.mjs` compares against `PRESETS.map(p => p.id)` |
+| 6 | Drift gate for descriptor↔preset and `usageRoutes` | **done** — §5 |
 
-Steps 2–3 are the remaining *architectural* work. Until they land, adding a preset still means
-editing two files, and **the gate is what makes that safe** rather than a comment asking nicely.
+**The only hand-authored preset surface left** is the dashboard pair `ROUTER_PROVIDERS`
+(`lib/client.src.js:395`) and `PICKER_ITEMS` (`lib/client.src.js:478`), which are still literal
+arrays. That residual is tracked as [ROADMAP.md](./ROADMAP.md) P2-1; it is not a second registry,
+because the drift gate rejects disagreement with the derived descriptors.
 
-## 5. The gate (implemented rc.14)
+## 5. The gate (implemented)
 
 Two halves, one command. The split matters: the silent failures live in the browser half, which a
 Cordis runtime cannot see.
@@ -145,13 +154,14 @@ class into an in-memory copy of both registries and asserts the gate rejects it 
 disk are never touched.
 
 ```bash
-npm run verify:presets:mutation   # 10/10 drift classes caught, exit 1 on any survivor
+npm run verify:presets:mutation   # 17/17 drift classes caught, exit 1 on any survivor
 ```
 
-Measured 2026-11-13: **10/10 caught.** M10 (`metered: true` on a subscription preset) initially
-**survived**, which is why the billing cross-check in §5.1 exists — the harness found a real gap in
-the first version of the gate. A new drift class is added here *first*; a check without a mutation
-case is a claim without evidence.
+Measured 2026-11-14 at router `0.0.1-rc.19`: **17/17 caught** (M1–M13 descriptor/registry cases,
+F1–F4 derivation cases). The harness has grown since the first version; M10 (`metered: true` on a
+subscription preset) initially **survived**, which is why the billing cross-check in §5.1 exists —
+the harness found a real gap in the first version of the gate. A new drift class is added here
+*first*; a check without a mutation case is a claim without evidence.
 
 ### 5.3 What a green report does not mean
 

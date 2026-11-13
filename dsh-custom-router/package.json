@@ -1,6 +1,6 @@
 {
   "name": "@nolit/dsh-custom-router",
-  "version": "0.0.1-rc.16",
+  "version": "0.0.1-rc.20",
   "private": false,
   "description": "Custom Router: the single DSH plugin that owns provider presets, the browser dashboard, the OpenCodex bridge library, and the vendored Antigravity/DeepInfra adapters. Vendor packages are no longer separate profile installs.",
   "keywords": [
@@ -63,6 +63,12 @@
     "./stream/anthropic": {
       "default": "./lib/stream/anthropic.js"
     },
+    "./allowlist": {
+      "default": "./lib/allowlist.js"
+    },
+    "./credential-migration": {
+      "default": "./lib/credential-migration.js"
+    },
     "./presets": {
       "default": "./lib/presets.js"
     },
@@ -121,6 +127,10 @@
     "./vendor/deepinfra": {
       "default": "./vendor/deepinfra/lib/index.js"
     },
+    "./vendor/exaone": {
+      "default": "./vendor/exaone/lib/index.js"
+    },
+    "./vendor/exaone/package.json": "./vendor/exaone/package.json",
     "./driver/contract": {
       "default": "./lib/driver/contract.js"
     },
@@ -156,20 +166,21 @@
     "scripts/",
     "docs/",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "specs/"
   ],
   "engines": {
     "node": ">=24.9",
     "dsh": ">=0.2.2-alpha.2 <0.3.0"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs",
-    "check": "node --check lib/client.js && node --check lib/settings-schema.js && node --check lib/config.js && node --check lib/opencodex-client.js && node --check lib/management-token.js && node --check lib/selection-projector.js && node --check lib/scope-aggregator.js && node --check lib/selection-sync.js && node --check lib/vendor-bridge.js && node --check lib/stream/index.js && node --check lib/stream/sse.js && node --check lib/stream/usage.js && node --check lib/stream/wire.js && node --check lib/stream/failure.js",
+    "test": "node --test test/*.test.mjs test/conformance/*.test.mjs",
+    "check": "node --check lib/client.js && node --check lib/settings-schema.js && node --check lib/config.js && node --check lib/opencodex-client.js && node --check lib/management-token.js && node --check lib/selection-projector.js && node --check lib/scope-aggregator.js && node --check lib/selection-sync.js && node --check lib/vendor-bridge.js && node --check lib/allowlist.js && node --check lib/credential-migration.js && node --check lib/index.js && node --check scripts/migrate-plaintext-keys.mjs && node --check lib/stream/index.js && node --check lib/stream/sse.js && node --check lib/stream/usage.js && node --check lib/stream/wire.js && node --check lib/stream/failure.js",
     "docs:check": "node ../scripts/doc-index-track.mjs --check",
     "docs:index": "node ../scripts/doc-index-track.mjs",
     "verify:stream": "node scripts/verify-stream.mjs",
     "verify:stream:json": "node scripts/verify-stream.mjs --json",
-    "verify": "npm run check && npm test && npm run verify:stream",
+    "verify": "npm run check && npm test && npm run verify:stream && npm run specs:check",
     "verify:presets": "node scripts/verify-presets.mjs",
     "build": "node scripts/gen-locale.mjs && node scripts/sync-derive.mjs && node scripts/build-presets.mjs && node scripts/build-client.mjs",
     "build:presets": "node scripts/build-presets.mjs",
@@ -179,7 +190,12 @@
     "verify:dispatch": "node scripts/verify-dispatch-gate.mjs",
     "verify:refresh": "node scripts/verify-refresh-routes.mjs",
     "verify:presets:static": "node scripts/verify-presets.mjs --static-only",
-    "verify:presets:mutation": "node scripts/verify-presets-mutation.mjs"
+    "verify:presets:mutation": "node scripts/verify-presets-mutation.mjs",
+    "specs:build": "node scripts/build-spec-matrix.mjs",
+    "specs:check": "node scripts/build-spec-matrix.mjs --check && node scripts/verify-specs.mjs",
+    "verify:freshness": "node scripts/verify-specs.mjs",
+    "verify:freshness:strict": "node scripts/verify-specs.mjs --strict-watch",
+    "spec:watch": "node scripts/spec-watch.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/schemastery": "^3.18.4",

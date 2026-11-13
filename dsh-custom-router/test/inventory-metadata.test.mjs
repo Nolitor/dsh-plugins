@@ -134,11 +134,11 @@ test('the OpenCode preset keeps its two distinct rows', () => {
   assert.equal(JSON.stringify([...subagent.path]), JSON.stringify(['vendorConfig', 'dsh-opencode-v2', 'subagent']))
 })
 
-test('the picker offers the three presets and the custom JSON declaration', () => {
+test('the picker offers the four presets and the custom JSON declaration', () => {
   const exports = loadExports()
   const ids = exports.PICKER_ITEMS.map((item) => item.id)
-  assert.equal(JSON.stringify(ids), JSON.stringify(['antigravity', 'opencode', 'deepinfra', 'custom-json']))
-  assert.equal(exports.PICKER_ITEMS[3].presetId, null, 'a JSON declaration mounts no preset row')
+  assert.equal(JSON.stringify(ids), JSON.stringify(['antigravity', 'opencode', 'deepinfra', 'exaone', 'custom-json']))
+  assert.equal(exports.PICKER_ITEMS[4].presetId, null, 'a JSON declaration mounts no preset row')
 })
 
 test('the model-serving tabs map onto the three presets and their declared rows', () => {

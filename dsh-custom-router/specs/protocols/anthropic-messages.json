@@ -1,0 +1,27 @@
+{
+  "id": "anthropic-messages",
+  "revision": 1,
+  "verifiedAt": "2026-11-13",
+  "ttlDays": 90,
+  "docs": "https://docs.anthropic.com/en/api/messages",
+  "streaming": "sse",
+  "canonical": {
+    "text": "content_block_delta.delta.text (text_delta)",
+    "reasoning": "content_block_delta.delta.thinking (thinking_delta)",
+    "toolCalls": "content_block_delta.delta.partial_json (input_json_delta, fragmented per content block index)",
+    "usage": "message_start.message.usage (input + cache) merged with message_delta.usage (output)",
+    "finish": "message_delta.delta.stop_reason"
+  },
+  "capabilities": {
+    "tools": true,
+    "reasoning": true,
+    "usage": true,
+    "cache": true,
+    "structuredOutput": true,
+    "vision": true
+  },
+  "adapters": [
+    "vendor/deepinfra/lib/anthropic-adapter.js"
+  ],
+  "notes": "Served today only by DeepInfra's opt-in Anthropic mount (vendor/deepinfra/lib/anthropic-adapter.js, plugin config anthropicRoute: true, default off); the shared reader is lib/stream/anthropic.js and the descriptor is ANTHROPIC_DESCRIPTOR. Measured wire differences from the OpenAI family that the normalizer has to carry: no [DONE] sentinel (the server closes after message_stop, so end-of-stream is normal termination); the event name lives in the data.type discriminator; a tool call is ANNOUNCED on content_block_start (id + name) while its JSON arrives in input_json_delta.partial_json fragments, so the block index must be carried, never inferred from an ordinal; thinking blocks carry an opaque signature (or data for a redacted block) that no host chunk field can hold, kept per block index; usage arrives in TWO pieces and input_tokens EXCLUDES cache by design, so the total only reconciles as input+output+cache; an in-stream error event is a terminal provider failure and must never surface as a clean stop. max_tokens is required by the wire, and system is a TOP-LEVEL field, so the chat body builder cannot be reused. Not claimed here: DeepInfra currently emits no thinking block on this route even with thinking enabled, and no cache_control/prompt_cache_key is sent. The protocol docs anchor is Anthropic's Messages API; the DeepInfra mount is a provider-side compatible surface."
+}

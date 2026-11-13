@@ -698,7 +698,7 @@ test('classifyProbe maps the measured backend answers', () => {
   assert.equal(classifyProbe(500, 'boom'), 'error')
 })
 
-test('listModels hides routes outside enabledModels but keeps the default row', async () => {
+test('listModels hides routes outside enabledModels and never lists the synthetic default row', async () => {
   const { state, close } = await startServer()
   try {
     const adapter = adapterFor(state, {
@@ -707,9 +707,27 @@ test('listModels hides routes outside enabledModels but keeps the default row', 
     })
     const models = await adapter.listModels('opencode-http-agent')
     const ids = models.map((model) => model.id)
-    assert.ok(ids.includes('default'), 'the config-default row always stays selectable')
+    assert.ok(!ids.includes('default'), 'the synthetic "OpenCode (config default)" row is not a model id and is not offered')
+    assert.ok(!models.some((model) => model.name === 'OpenCode (config default)'), 'no row carries the removed label')
     assert.ok(ids.includes('opencode-go/minimax-m3.1-flash'))
     assert.ok(!ids.includes('opencode/beam-free'), 'an unselected route is hidden')
+  } finally {
+    await close()
+  }
+})
+
+test('the default pseudo-route still resolves server-side to defaultModel', async () => {
+  // The row is gone from the PICKER, but the resolution behaviour is not: a
+  // session that selects the `default` id must still reach the configured
+  // default route on the wire.
+  const { state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), defaultModel: 'opencode-go/minimax-m3.1-flash' })
+    assert.deepEqual(
+      modelRefFromRoute('default', adapter.config.models.get(), adapter.config.defaultModel.get()),
+      { providerID: 'opencode-go', id: 'minimax-m3.1-flash' },
+      'the pseudo-route still resolves to defaultModel',
+    )
   } finally {
     await close()
   }

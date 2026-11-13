@@ -275,14 +275,18 @@ function loadClient(options = {}) {
 }
 
 const NAMESPACE_WITH_USAGE = {
-  presets: { antigravity: true, opencode: true, deepinfra: false },
+  presets: { antigravity: true, opencode: true, deepinfra: false, exaone: true },
   vendorConfig: {
     'dsh-antigravity': { modelServing: true, subagent: false, cliWorker: false, workerEnabled: false },
     'dsh-opencode-v2': { subagent: true, cli: false, workerEnabled: false },
     'dsh-opencode-v2-http': { modelServing: true },
     'dsh-deepinfra': { apiKey: '<redacted>' },
+    'dsh-exaone': { apiKey: '<redacted>' },
   },
-  secrets: [{ path: ['vendorConfig', 'dsh-deepinfra', 'apiKey'], set: true }],
+  secrets: [
+    { path: ['vendorConfig', 'dsh-deepinfra', 'apiKey'], set: true },
+    { path: ['vendorConfig', 'dsh-exaone', 'apiKey'], set: true },
+  ],
   usage: {
     antigravity: {
       measuredAt: '2026-11-08T00:00:00.000Z',
@@ -305,6 +309,13 @@ const NAMESPACE_WITH_USAGE = {
       outputTokens: 200,
       inputRate: 0.5,
       outputRate: 1.5,
+    },
+    exaone: {
+      measuredAt: '2026-11-08T00:00:00.000Z',
+      spend: 0.42,
+      requests: 3,
+      inputTokens: 100,
+      outputTokens: 40,
     },
   },
 }
@@ -373,7 +384,7 @@ test('the dashboard renders inside one centred width container, not full-bleed',
   dispose()
 })
 
-test('the rendered dashboard has a KPI grid of three cards and a provider grid of three cards', () => {
+test('the rendered dashboard has a KPI grid of three cards and a provider grid of four cards', () => {
   const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
 
@@ -389,7 +400,7 @@ test('the rendered dashboard has a KPI grid of three cards and a provider grid o
 
   const providerList = byClass(tree, 'crProviderList')
   assert.equal(providerList.length, 1)
-  assert.equal(byClass(providerList[0], 'crProviderItem').length, 3)
+  assert.equal(byClass(providerList[0], 'crProviderItem').length, 4)
   dispose()
 })
 
@@ -467,7 +478,7 @@ test('live vendor usage routes feed the dashboard when the namespace carries non
     return { ok: true, status: 200, json: async () => routeAnswers[path], text: async () => JSON.stringify(routeAnswers[path]) }
   }
   const { exports, renderRoot, dispose } = loadClient({
-    namespace: { presets: { antigravity: true, opencode: true, deepinfra: true }, vendorConfig: {} },
+    namespace: { presets: { antigravity: true, opencode: true, deepinfra: true, exaone: true }, vendorConfig: {} },
     fetch: fetchStub,
   })
   // First render runs the effect that starts the fetches; the state lands on a
@@ -528,6 +539,17 @@ const MODEL_ROUTE_ANSWERS = {
       { route: 'opencode-zen/qwen3-coder', name: 'Qwen3 Coder', plan: 'zen', available: true },
     ],
   },
+  '/api/local/dsh-exaone/models': {
+    models: [{
+      id: 'k-exaone_v2.5',
+      name: 'K-EXAONE 2.5',
+      contextWindow: 524288,
+      reasoning: true,
+      enabled: true,
+    }],
+    enabled: ['k-exaone_v2.5'],
+    total: 1,
+  },
   '/api/local/deepinfra/models': {
     models: [{
       id: 'inclusionAI/Ling-3.1-flash',
@@ -549,7 +571,7 @@ async function loadModels(options = {}) {
     return { ok: true, status: 200, json: async () => answers[path] }
   }
   const loaded = loadClient({
-    namespace: { presets: { antigravity: true, opencode: true, deepinfra: true }, vendorConfig: {} },
+    namespace: { presets: { antigravity: true, opencode: true, deepinfra: true, exaone: true }, vendorConfig: {} },
     fetch: options.fetch ?? fetchStub,
     secrets: options.secrets,
   })
@@ -585,8 +607,9 @@ test('the models section is tabbed by preset and renders only the active tab', a
     'cr-models-tab-antigravity',
     'cr-models-tab-opencode',
     'cr-models-tab-deepinfra',
+    'cr-models-tab-exaone',
   ])
-  assert.deepEqual(tabs.map((entry) => entry.props['aria-selected']), ['true', 'false', 'false'])
+  assert.deepEqual(tabs.map((entry) => entry.props['aria-selected']), ['true', 'false', 'false', 'false'])
 
   // ONE panel, and no vendor section: the three long categories are gone.
   let panels = findAll(tree, (node) => node.props?.role === 'tabpanel')
@@ -913,7 +936,7 @@ test('the settings section follows the built-in plugin section spec', async () =
   assert.equal(tablist.props['aria-label'], 'Models')
   assert.equal(typeof tablist.props.onKeyDown, 'function')
   const tabs = findAll(tablist, (node) => node.props?.role === 'tab')
-  assert.equal(tabs.length, 3)
+  assert.equal(tabs.length, 4)
   for (const tab of tabs) assert.equal(tab.props.className, 'crSettingsTab')
 
   // The measured built-in spec, pinned.
@@ -932,10 +955,10 @@ test('the settings section follows the built-in plugin section spec', async () =
   loaded.dispose()
 })
 
-test('the three presets are descriptors: shared chrome, preset-only hooks', async () => {
+test('the four presets are descriptors: shared chrome, preset-only hooks', async () => {
   const loaded = await loadModels()
   const presets = loaded.exports.MODEL_PRESETS
-  assert.equal(JSON.stringify(presets.map((preset) => preset.id)), JSON.stringify(['antigravity', 'opencode', 'deepinfra']))
+  assert.equal(JSON.stringify(presets.map((preset) => preset.id)), JSON.stringify(['antigravity', 'opencode', 'deepinfra', 'exaone']))
   // The descriptor table carries data and hooks, never elements.
   for (const preset of presets) {
     assert.equal(typeof preset.load, 'function')
@@ -1007,6 +1030,12 @@ test('the documented monthly limit resolves through the provider prefix', () => 
   assert.equal(exports.documentedLimit('opencode-go/minimax-m3.1-flash', 'go'), 20)
   assert.equal(exports.documentedLimit('opencode-go/minimax-m3.1-flash', 'go-teams'), 25)
   assert.equal(exports.documentedLimit('opencode-go/minimax-m3.1-flash', null), null, 'unknown tier has no limit')
+  // Regression 2026-11-13: the table key used a dot (`claude-haiku-5.5`) while
+  // the catalog route uses dashes, so the documented Go limit never resolved.
+  assert.equal(exports.documentedLimit('opencode-go/claude-haiku-5-5', 'go'), 15)
+  assert.equal(exports.documentedLimit('opencode-go/claude-haiku-5-5', 'go-plus'), 60)
+  assert.equal(exports.documentedLimit('opencode-go/claude-haiku-5-5', 'go-teams'), 20)
+  assert.equal(exports.documentedLimit('opencode-go/beam-free', 'go'), null, 'free routes have no monthly limit')
   assert.equal(exports.documentedLimit('opencode-go/not-in-docs', 'go-plus'), null)
   dispose()
 })
@@ -1251,7 +1280,7 @@ function openAddTab(loaded) {
   return tree
 }
 
-test('the add-provider tab panel lists four equal cards', () => {
+test('the add-provider tab panel lists five equal cards', () => {
   const loaded = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = openAddTab(loaded)
   const panel = findAll(tree, (node) => node.props?.id === 'cr-panel-add')[0]
@@ -1259,8 +1288,8 @@ test('the add-provider tab panel lists four equal cards', () => {
   const grid = byClass(panel, 'crPickerGrid')
   assert.equal(grid.length, 1)
   const cards = byClass(grid[0], 'crPickerCard')
-  assert.equal(cards.length, 4)
-  assert.deepEqual(cards.map((card) => card.props['data-picker']), ['antigravity', 'opencode', 'deepinfra', 'custom-json'])
+  assert.equal(cards.length, 5)
+  assert.deepEqual(cards.map((card) => card.props['data-picker']), ['antigravity', 'opencode', 'deepinfra', 'exaone', 'custom-json'])
   for (const card of cards) {
     assert.equal(byClass(card, 'crPickerDesc').length, 1)
     assert.equal(byClass(card, 'crPickerAuth').length, 1)
@@ -1469,7 +1498,7 @@ test('the credential form labels every write-only field and shows its set state'
   const cards = byClass(tree, 'crProviderItem')
   for (const card of cards) {
     const fields = byClass(card, 'crField')
-    const credentials = card.props['data-preset'] === 'deepinfra' ? 1 : 2
+    const credentials = card.props['data-preset'] === 'deepinfra' || card.props['data-preset'] === 'exaone' ? 1 : 2
     assert.equal(fields.length, credentials)
     for (const field of fields) {
       assert.equal(byClass(field, 'crFieldLabel').length, 1)
@@ -1508,7 +1537,7 @@ test('the provider list renders one compact row per provider and a full-width de
   const list = byClass(tree, 'crProviderList')
   assert.equal(list.length, 1)
   const items = byClass(list[0], 'crProviderItem')
-  assert.equal(items.length, 3)
+  assert.equal(items.length, 4)
   for (const item of items) {
     // One row per provider: the identity, the compact measurement and the
     // settings trigger, and nothing else.
@@ -1620,7 +1649,7 @@ test('the models tab strip moves the selection with the keyboard', async () => {
   assert.equal(panels[0].props['aria-labelledby'], 'cr-models-tab-opencode')
 
   const end = pressTabKey(loaded, outcome.tree, 'End', 'CustomRouterModels')
-  assert.deepEqual(end.selected, ['cr-models-tab-deepinfra'])
+  assert.deepEqual(end.selected, ['cr-models-tab-exaone'])
   loaded.dispose()
 })
 
@@ -1628,7 +1657,7 @@ test('a collapsed settings panel leaves the tab order and the accessibility tree
   const { exports, renderRoot, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
   const tree = renderRoot(exports.CustomRouterDashboard, {})
   const cards = byClass(tree, 'crProviderItem')
-  assert.equal(cards.length, 3)
+  assert.equal(cards.length, 4)
   for (const card of cards) {
     const gear = findAll(card, (node) => node.props?.className === 'crGear')[0]
     assert.equal(gear.props['aria-expanded'], 'false')
@@ -1799,7 +1828,7 @@ test('a manual refresh asks every vendor route for a cache bypass', async () => 
   loaded.fetchCalls.length = 0
   loaded.exports.requestRefresh({ force: true })
   await flush(loaded, loaded.exports.CustomRouterModels)
-  assert.equal(loaded.fetchCalls.length, 3, 'one announcement refreshes every preset')
+  assert.equal(loaded.fetchCalls.length, 4, 'one announcement refreshes every preset')
   for (const call of loaded.fetchCalls) {
     assert.match(call.url, /\?refresh=1$/, call.url + ' must carry the bypass flag')
     assert.equal(call.method, 'POST')
@@ -1813,7 +1842,7 @@ test('an event-driven refresh re-reads without forcing the upstream catalog', as
   loaded.fetchCalls.length = 0
   for (const handler of loaded.remoteEvents.get('llm/models-updated') ?? []) handler()
   await flush(loaded, loaded.exports.CustomRouterModels)
-  assert.equal(loaded.fetchCalls.length, 3)
+  assert.equal(loaded.fetchCalls.length, 4)
   for (const call of loaded.fetchCalls) {
     assert.equal(call.url.includes('refresh=1'), false, 'an event must not spend an upstream request')
   }

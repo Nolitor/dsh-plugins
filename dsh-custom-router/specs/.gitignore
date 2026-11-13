@@ -1,0 +1,2 @@
+# Normalized bodies fetched by `npm run spec:watch`; only the hash lock is committed.
+.watch-cache/

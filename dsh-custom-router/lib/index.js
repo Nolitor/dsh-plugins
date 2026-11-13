@@ -34,6 +34,7 @@
  */
 import { PRESETS, validatePresets } from './presets.js'
 import { presetSettingsList } from './preset-derive.js'
+import { MIGRATION_TARGETS, planPlaintextKeyMigration, runPlaintextKeyMigration, unwrap } from './credential-migration.js'
 import { createVendorBridges } from './bridges/index.js'
 import { mergeCatalog } from './catalog.js'
 import { probePreset } from './probe.js'
@@ -266,6 +267,118 @@ function readProfileContext(ctx) {
 }
 
 /**
+ * Read the host's `profileContext` for the migration hook.
+ *
+ * `readProfileContext` is the mount-time reader; this one is the migration
+ * hook's, and it exists because the hook runs BEFORE the mount-time read and
+ * must not swallow a service error twice.
+ * @param {object} ctx - cordis context.
+ * @returns {object|undefined} the context.
+ */
+function profileContextOf(ctx) {
+  return readProfileContext(ctx)
+}
+
+/**
+ * Migrate plaintext provider keys into the DSH credential store, at mount.
+ *
+ * The trigger is the LIVE profile's own config: when the router's
+ * `vendorConfig` still carries a plaintext `apiKey` for a managed row, the
+ * value moves into `ctx.credentials` (the DSH credential store) and the
+ * profile patch line is replaced by the reference.
+ *
+ * Why the live config and not the patch file: the live config is what the
+ * running service actually uses, so it is the only place a plaintext key can
+ * still be serving traffic. The patch file is then edited to match, so the
+ * two cannot drift.
+ *
+ * FAILURE IS SAFE: every failure path leaves the plaintext key in place and
+ * logs a warning naming the ref (never a value). There is no env fallback on
+ * the live service, so a half-finished migration would be an outage — the
+ * hook therefore never removes a line whose store entry was not confirmed.
+ *
+ * @param {object} ctx - cordis context.
+ * @param {object} config - the plugin's live config.
+ * @param {object|undefined} profileContext - the host's profile context.
+ * @param {(message: string) => void} warn - the warning sink.
+ * @returns {Promise<{migrated: object[], backupPath?: string}|undefined>} the report.
+ */
+export async function migratePlaintextKeysAtMount(ctx, config, profileContext, warn) {
+  const vendorConfig = unwrap(configValue(config, 'vendorConfig', {}))
+  if (vendorConfig === null || typeof vendorConfig !== 'object') return undefined
+
+  // The live config is the trigger: a plaintext key still served from it.
+  const pending = []
+  for (const target of MIGRATION_TARGETS) {
+    const rowConfig = unwrap(vendorConfig[target.row])
+    if (rowConfig === null || typeof rowConfig !== 'object') continue
+    const value = unwrap(rowConfig.apiKey)
+    if (typeof value !== 'string' || value.trim().length === 0) continue
+    pending.push({ ...target, value: value.trim() })
+  }
+  if (pending.length === 0) return undefined
+
+  const credentials = (() => {
+    try { return ctx?.get?.('credentials') } catch { return undefined }
+  })()
+  if (credentials === undefined || typeof credentials.set !== 'function') {
+    warn('dsh-custom-router: plaintext provider key(s) are present but no credential store is mounted; the migration was skipped')
+    return undefined
+  }
+
+  const patchPath = profileContext?.patchPath
+  if (typeof patchPath !== 'string' || patchPath === '') {
+    warn('dsh-custom-router: plaintext provider key(s) are present but the profile patch path is unknown; the migration was skipped')
+    return undefined
+  }
+
+  let text
+  try {
+    const { readFile } = await import('node:fs/promises')
+    text = await readFile(patchPath, 'utf8')
+  } catch (error) {
+    warn(`dsh-custom-router: the profile patch could not be read for the plaintext-key migration: ${error instanceof Error ? error.message : String(error)}`)
+    return undefined
+  }
+
+  const planned = planPlaintextKeyMigration(text)
+  if (planned.problems.length > 0) {
+    for (const problem of planned.problems) warn(`dsh-custom-router: plaintext-key migration refused: ${problem}`)
+    return undefined
+  }
+  // Only the rows whose live config still holds a plaintext key are migrated.
+  const wanted = new Set(pending.map((item) => item.row))
+  const plan = planned.plan.filter((item) => wanted.has(item.row))
+  if (plan.length === 0) return undefined
+
+  try {
+    // The patch file is read by the whole toolchain: write it the way the Host
+    // writes such files (a random-suffix sibling plus a rename), so a reader
+    // sees either the old or the new complete content.
+    const installAnchor = typeof profileContext?.installAnchor === 'string' ? profileContext.installAnchor : undefined
+    const writeFile = installAnchor === undefined
+      ? (await import('./credential-migration.js')).writeOwnerOnly
+      : await (await import('./credential-migration.js')).atomicOwnerOnlyWriter(installAnchor)
+    const report = await runPlaintextKeyMigration({
+      patchPath,
+      plan,
+      store: {
+        set: (ref, value) => credentials.set(ref, value),
+        resolve: (ref) => credentials.resolve(ref),
+      },
+      writeFile,
+    })
+    for (const item of report.migrated) {
+      warn(`dsh-custom-router: migrated the ${item.row} plaintext key into the credential store as "${item.ref}" (${item.value}); the profile patch now carries the reference`)
+    }
+    return report
+  } catch (error) {
+    warn(`dsh-custom-router: the plaintext-key migration did not complete: ${error instanceof Error ? error.message : String(error)}`)
+    return undefined
+  }
+}
+
+/**
  * The bundle packages this process already started.
  *
  * `profileContext.startedBundles` is the host's own list (measured available;
@@ -330,6 +443,18 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
   const warn = (message) => {
     try { ctx?.logger?.warn?.(message) } catch { /* logging is advisory */ }
   }
+
+  // Plaintext-key migration (idempotent, mount-time).
+  //
+  // A provider key that still sits as a plaintext `apiKey:` line in the profile
+  // patch is migrated into the DSH credential store, and the line is replaced
+  // by the reference the adapter already resolves (`credentialRef`). The hook
+  // runs BEFORE the rows mount, so a child never sees a half-migrated config.
+  //
+  // It is a no-op in the steady state: with the plaintext lines gone, the plan
+  // is empty and nothing is written. It never prints a value — only a ref name
+  // and a redacted shape.
+  await migratePlaintextKeysAtMount(ctx, config, profileContextOf(ctx), warn)
 
   // The profile holds the `@nolit` links; the install anchor holds the host's
   // own packages. Neither is discoverable from the router's own path (measured),
@@ -498,6 +623,10 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
   try {
     ctx?.provide?.('customRouter', {
       presets,
+      // The presets this profile actually mounts. A declared preset that the
+      // operator has not enabled is a normal state (the dashboard's "Add
+      // provider" writes the switch), so a runtime gate must not call it drift.
+      enabledPresets: plan.active.map((entry) => entry.id),
       // The derived browser settings (labelKey/planKey/metered/row/route/
       // usageRoutes/surface), one entry per preset, in declaration order. A page
       // reads THIS instead of hand-copying a second registry: it is the same

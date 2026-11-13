@@ -81,6 +81,23 @@ export function declarationSource(presets = PRESETS) {
 }
 
 /**
+ * Whether a client source already carries the declarations `presets` derive.
+ *
+ * `declarationSource()` ends with the assignment line's trailing newline, while
+ * `DECLARATION_LINE` (`/m`, `.*$`) never captures it. Comparing the raw strings
+ * made `--check` fail forever on a semantically identical tree (measured
+ * 2026-11-13), so the gate could no longer tell real drift from its own newline.
+ * @param {string} source - `lib/client.src.js` text.
+ * @param {readonly object[]} [presets] - declarations to derive from.
+ * @returns {boolean} true when the baked line already equals the derived one.
+ */
+export function declarationsAreCurrent(source, presets = PRESETS) {
+  const current = DECLARATION_LINE.exec(String(source ?? ''))?.[0]
+  if (current === undefined) return false
+  return current === declarationSource(presets).replace(/\n$/, '')
+}
+
+/**
  * Rewrite `lib/client.src.js` in place with the current declarations.
  * @param {object} [options] - `{ presets?, srcPath? }`.
  * @returns {{changed: boolean, count: number}} what happened.
@@ -103,9 +120,7 @@ export function bakePresetDeclarations(options = {}) {
 if (process.argv[1] !== undefined && import.meta.url.endsWith(process.argv[1].split('/').pop())) {
   if (process.argv.includes('--check')) {
     const source = readFileSync(srcPath, 'utf8')
-    const wanted = declarationSource()
-    const current = DECLARATION_LINE.exec(source)?.[0]
-    if (current !== wanted) {
+    if (!declarationsAreCurrent(source)) {
       process.stderr.write('build-presets: client.src.js is STALE versus lib/presets.js — run node scripts/build-presets.mjs\n')
       process.exit(1)
     }

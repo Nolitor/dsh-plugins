@@ -458,6 +458,20 @@ window.__ModuleLoader__.load({
         // unsupported capabilities instead of inventing a switch for them.
         layers: Object.freeze([]),
       }),
+      Object.freeze({
+        id: 'exaone',
+        nameKey: 'vendorExaone',
+        planKey: 'planFree',
+        usageKind: 'billing',
+        masterPath: Object.freeze(['presets', 'exaone']),
+        // Model-only preset: its master IS the model router, like DeepInfra.
+        masterIsModelServing: true,
+        credentialRow: 'dsh-exaone',
+        credentials: Object.freeze([
+          Object.freeze({ field: 'apiKey', labelKey: 'credentialApiKey' }),
+        ]),
+        layers: Object.freeze([]),
+      }),
     ])
 
     /** The provider picker entries (the add-provider tab). */
@@ -465,6 +479,7 @@ window.__ModuleLoader__.load({
       Object.freeze({ id: 'antigravity', nameKey: 'vendorAntigravity', descKey: 'pickerAntigravityDesc', authKey: 'pickerAuthWebAuth', presetId: 'antigravity' }),
       Object.freeze({ id: 'opencode', nameKey: 'vendorOpenCode', descKey: 'pickerOpenCodeDesc', authKey: 'pickerAuthWebAuth', presetId: 'opencode' }),
       Object.freeze({ id: 'deepinfra', nameKey: 'vendorDeepInfra', descKey: 'pickerDeepInfraDesc', authKey: 'pickerAuthApiKey', presetId: 'deepinfra' }),
+      Object.freeze({ id: 'exaone', nameKey: 'vendorExaone', descKey: 'pickerExaoneDesc', authKey: 'pickerAuthApiKey', presetId: 'exaone' }),
       Object.freeze({ id: 'custom-json', nameKey: 'customJson', descKey: 'pickerCustomDesc', authKey: 'pickerAuthJson', presetId: null }),
     ])
 
@@ -1631,6 +1646,7 @@ const MEASURED_LABELS = Object.freeze({
   antigravity: Object.freeze({ labelKey: 'vendorAntigravity', planKey: 'planSubscription' }),
   opencode: Object.freeze({ labelKey: 'vendorOpenCode', planKey: 'planOpenCode' }),
   deepinfra: Object.freeze({ labelKey: 'vendorDeepInfra', planKey: 'planPayAsYouGo' }),
+  exaone: Object.freeze({ labelKey: 'vendorExaone', planKey: 'planFree' }),
 })
 
 /**
@@ -1644,7 +1660,7 @@ const BILLING_PLAN_KEYS = Object.freeze({
   subscription: 'planSubscription',
   flat: 'planFlat',
   'pay-per-token': 'planPayAsYouGo',
-  none: 'planOther',
+  none: 'planFree',
 })
 
 /**
@@ -1819,7 +1835,7 @@ function presetUi(preset, ui = {}) {
   return Object.freeze({ ...settings, ...ui })
 }
 
-    // ---- END DERIVED PRESET REGISTRY --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- ---------------------------------------
+    // ---- END DERIVED PRESET REGISTRY --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- --------------------------------------- ---------------------------------------
 
     /**
      * The declarations this page renders — baked from `lib/presets.js`.
@@ -1828,7 +1844,65 @@ function presetUi(preset, ui = {}) {
      * backend registry on every build, so a new preset appears here without an
      * edit and a stale bundle is caught by `checkGeneratedArtifacts()`.
      */
-    const PRESET_DECLARATIONS = Object.freeze(JSON.parse("[{\"id\":\"antigravity\",\"name\":\"Antigravity\",\"kind\":\"package\",\"row\":\"dsh-antigravity\",\"providerId\":\"antigravity\",\"catalog\":{\"layers\":[{\"source\":\"probe\",\"kind\":\"web-auth\",\"shape\":\"vendor\",\"endpoint\":\"/v1internal:fetchAvailableModels\",\"ttlMs\":900000}]},\"surfaces\":{\"model\":{\"adapter\":true},\"subagent\":{\"toolRow\":\"@deepseek-ai/dsh-tool-subagent\",\"toolName\":\"subagent_antigravity\",\"maxDepth\":\"provider-managed\"},\"cli\":{\"shape\":\"async\",\"toolName\":\"agy_worker\",\"commandName\":\"agy\"},\"batch\":{\"shape\":\"sync\",\"toolName\":\"agy_cli\",\"gate\":\"cliBatch\",\"default\":false},\"skill\":null,\"tools\":[\"agy_worker\",\"agy_cli\"],\"commands\":[\"agy\"]},\"switches\":[{\"name\":\"enabled\",\"module\":\"index\",\"role\":\"master\"},{\"name\":\"modelServing\",\"module\":\"index\",\"role\":\"model\"},{\"name\":\"subagent\",\"module\":\"index\",\"role\":\"subagent\"},{\"name\":\"cliWorker\",\"module\":\"index\",\"role\":\"cli\"},{\"name\":\"workerEnabled\",\"module\":\"index\",\"role\":\"cli-mode\"},{\"name\":\"cliBatch\",\"module\":\"index\",\"role\":\"cli-mode\",\"default\":false},{\"name\":\"usagePill\",\"module\":\"index\",\"role\":\"auxiliary\"}],\"usage\":{\"record\":\"antigravity-usage\",\"plan\":\"available\",\"billing\":{\"mode\":\"subscription\",\"service\":\"antigravity\",\"windows\":[{\"label\":\"5h\"},{\"label\":\"weekly\"},{\"label\":\"monthly\"}]},\"routes\":[{\"path\":\"/api/local/dsh-antigravity/models\",\"normalize\":\"normalizeAntigravityUsage\"}]}},{\"id\":\"opencode\",\"name\":\"OpenCode v2\",\"kind\":\"package\",\"row\":\"dsh-opencode-v2-http\",\"providerId\":\"opencode-http-agent\",\"catalogRoute\":\"/api/local/opencode-v2/model-settings\",\"catalog\":{\"layers\":[{\"source\":\"upstream\",\"providers\":[\"opencode\",\"opencode-go\"]},{\"source\":\"probe\",\"kind\":\"api\",\"shape\":\"vendor\",\"endpoint\":\"/api/model\",\"ttlMs\":300000}]},\"surfaces\":{\"model\":{\"adapter\":true},\"subagent\":{\"toolRow\":\"@deepseek-ai/dsh-tool-subagent\",\"toolName\":\"subagent_opencode\",\"maxDepth\":\"provider-managed\"},\"cli\":{\"shape\":\"sync\",\"toolName\":\"cli_worker\",\"commandName\":\"ocode\",\"gates\":[\"opencode\"]},\"batch\":null,\"skill\":null,\"tools\":[\"opencode\",\"cli_worker\"],\"commands\":[\"ocode\"]},\"switches\":[{\"name\":\"enabled\",\"module\":\"index\",\"role\":\"master\"},{\"name\":\"modelServing\",\"module\":\"http\",\"role\":\"model\"},{\"name\":\"subagent\",\"module\":\"index\",\"role\":\"subagent\"},{\"name\":\"cli\",\"module\":\"index\",\"role\":\"cli\"},{\"name\":\"workerEnabled\",\"module\":\"index\",\"role\":\"cli-mode\"}],\"usage\":{\"record\":\"opencode-cost\",\"plan\":\"available\",\"billing\":{\"mode\":\"flat\",\"service\":\"opencode-v2\",\"windows\":[{\"label\":\"per-request\"}]},\"routes\":[{\"path\":\"/api/local/opencode-v2/plan-usage\",\"normalize\":\"normalizeOpencodeUsage\"},{\"path\":\"/api/local/opencode-v2/model-settings\",\"normalize\":\"normalizeOpencodeUsage\"}]}},{\"id\":\"deepinfra\",\"name\":\"DeepInfra\",\"kind\":\"package\",\"row\":\"dsh-deepinfra\",\"providerId\":\"deepinfra\",\"catalogRoute\":\"/api/local/deepinfra/models\",\"catalog\":{\"layers\":[{\"source\":\"probe\",\"kind\":\"api\",\"shape\":\"openai\",\"endpoint\":\"/models\",\"ttlMs\":1800000}]},\"surfaces\":{\"model\":{\"adapter\":true},\"subagent\":null,\"cli\":null,\"batch\":null,\"skill\":null,\"tools\":[],\"commands\":[]},\"switches\":[],\"usage\":{\"record\":\"deepinfra-cost\",\"plan\":\"unavailable\",\"billing\":{\"mode\":\"pay-per-token\"},\"routes\":[{\"path\":\"/api/local/deepinfra/cost/summary\",\"normalize\":\"normalizeDeepinfraUsage\"}]}}]"))
+    const PRESET_DECLARATIONS = Object.freeze(JSON.parse("[{\"id\":\"antigravity\",\"name\":\"Antigravity\",\"kind\":\"package\",\"row\":\"dsh-antigravity\",\"providerId\":\"antigravity\",\"catalog\":{\"layers\":[{\"source\":\"probe\",\"kind\":\"web-auth\",\"shape\":\"vendor\",\"endpoint\":\"/v1internal:fetchAvailableModels\",\"ttlMs\":900000}]},\"surfaces\":{\"model\":{\"adapter\":true},\"subagent\":{\"toolRow\":\"@deepseek-ai/dsh-tool-subagent\",\"toolName\":\"subagent_antigravity\",\"maxDepth\":\"provider-managed\"},\"cli\":{\"shape\":\"async\",\"toolName\":\"agy_worker\",\"commandName\":\"agy\"},\"batch\":{\"shape\":\"sync\",\"toolName\":\"agy_cli\",\"gate\":\"cliBatch\",\"default\":false},\"skill\":null,\"tools\":[\"agy_worker\",\"agy_cli\"],\"commands\":[\"agy\"]},\"switches\":[{\"name\":\"enabled\",\"module\":\"index\",\"role\":\"master\"},{\"name\":\"modelServing\",\"module\":\"index\",\"role\":\"model\"},{\"name\":\"subagent\",\"module\":\"index\",\"role\":\"subagent\"},{\"name\":\"cliWorker\",\"module\":\"index\",\"role\":\"cli\"},{\"name\":\"workerEnabled\",\"module\":\"index\",\"role\":\"cli-mode\"},{\"name\":\"cliBatch\",\"module\":\"index\",\"role\":\"cli-mode\",\"default\":false},{\"name\":\"usagePill\",\"module\":\"index\",\"role\":\"auxiliary\"}],\"usage\":{\"record\":\"antigravity-usage\",\"plan\":\"available\",\"billing\":{\"mode\":\"subscription\",\"service\":\"antigravity\",\"windows\":[{\"label\":\"5h\"},{\"label\":\"weekly\"},{\"label\":\"monthly\"}]},\"routes\":[{\"path\":\"/api/local/dsh-antigravity/models\",\"normalize\":\"normalizeAntigravityUsage\"}]}},{\"id\":\"opencode\",\"name\":\"OpenCode v2\",\"kind\":\"package\",\"row\":\"dsh-opencode-v2-http\",\"providerId\":\"opencode-http-agent\",\"catalogRoute\":\"/api/local/opencode-v2/model-settings\",\"catalog\":{\"layers\":[{\"source\":\"upstream\",\"providers\":[\"opencode\",\"opencode-go\"]},{\"source\":\"probe\",\"kind\":\"api\",\"shape\":\"vendor\",\"endpoint\":\"/api/model\",\"ttlMs\":300000}]},\"surfaces\":{\"model\":{\"adapter\":true},\"subagent\":{\"toolRow\":\"@deepseek-ai/dsh-tool-subagent\",\"toolName\":\"subagent_opencode\",\"maxDepth\":\"provider-managed\"},\"cli\":{\"shape\":\"sync\",\"toolName\":\"cli_worker\",\"commandName\":\"ocode\",\"gates\":[\"opencode\"]},\"batch\":null,\"skill\":null,\"tools\":[\"opencode\",\"cli_worker\"],\"commands\":[\"ocode\"]},\"switches\":[{\"name\":\"enabled\",\"module\":\"index\",\"role\":\"master\"},{\"name\":\"modelServing\",\"module\":\"http\",\"role\":\"model\"},{\"name\":\"subagent\",\"module\":\"index\",\"role\":\"subagent\"},{\"name\":\"cli\",\"module\":\"index\",\"role\":\"cli\"},{\"name\":\"workerEnabled\",\"module\":\"index\",\"role\":\"cli-mode\"}],\"usage\":{\"record\":\"opencode-cost\",\"plan\":\"available\",\"billing\":{\"mode\":\"flat\",\"service\":\"opencode-v2\",\"windows\":[{\"label\":\"per-request\"}]},\"routes\":[{\"path\":\"/api/local/opencode-v2/plan-usage\",\"normalize\":\"normalizeOpencodeUsage\"},{\"path\":\"/api/local/opencode-v2/model-settings\",\"normalize\":\"normalizeOpencodeUsage\"}]}},{\"id\":\"deepinfra\",\"name\":\"DeepInfra\",\"kind\":\"package\",\"row\":\"dsh-deepinfra\",\"providerId\":\"deepinfra\",\"catalogRoute\":\"/api/local/deepinfra/models\",\"catalog\":{\"layers\":[{\"source\":\"probe\",\"kind\":\"api\",\"shape\":\"openai\",\"endpoint\":\"/models\",\"ttlMs\":1800000}]},\"surfaces\":{\"model\":{\"adapter\":true},\"subagent\":null,\"cli\":null,\"batch\":null,\"skill\":null,\"tools\":[],\"commands\":[]},\"switches\":[],\"usage\":{\"record\":\"deepinfra-cost\",\"plan\":\"unavailable\",\"billing\":{\"mode\":\"pay-per-token\"},\"routes\":[{\"path\":\"/api/local/deepinfra/cost/summary\",\"normalize\":\"normalizeDeepinfraUsage\"}]}},{\"id\":\"exaone\",\"name\":\"EXAONE\",\"kind\":\"package\",\"row\":\"dsh-exaone\",\"providerId\":\"exaone\",\"catalogRoute\":\"/api/local/dsh-exaone/models\",\"catalog\":{\"layers\":[{\"source\":\"override\",\"models\":[{\"id\":\"k-exaone_v2.5\",\"name\":\"K-EXAONE 2.5\",\"contextWindow\":524288,\"maxTokens\":524288,\"input\":[\"text\"],\"reasoning\":true}]}]},\"surfaces\":{\"model\":{\"adapter\":true},\"subagent\":null,\"cli\":null,\"batch\":null,\"skill\":null,\"tools\":[],\"commands\":[]},\"switches\":[],\"usage\":{\"record\":\"exaone-usage\",\"plan\":\"unavailable\",\"billing\":{\"mode\":\"none\"},\"routes\":[]}}]"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1897,6 +1971,10 @@ function presetUi(preset, ui = {}) {
         // on; nothing here tests the vendor id.
         load: (payload) => ({ groups: deepinfraGroups(payload) }),
         renderRowExtras: (row, ctx) => h(PriceBlock, { price: row.price, note: ctx.note }),
+      }),
+      exaone: () => ({
+        // One model, one row; the row carries the context/thinking badges.
+        load: (payload) => ({ groups: exaoneGroups(payload) }),
       }),
     })
 
@@ -2171,6 +2249,31 @@ function presetUi(preset, ui = {}) {
     }
 
     /**
+     * EXAONE catalog -> ONE flat card with a single model row.
+     *
+     * The vendor reports a flat `models` array (the platform serves one chat
+     * model), so the row owns its own id as the only variant. Without this hook
+     * the generic reader would emit a row with no variants, and the checkbox
+     * state would start empty while the route reports the model enabled.
+     * @param {object} payload - `/api/local/dsh-exaone/models` answer.
+     * @returns {object[]} groups.
+     */
+    function exaoneGroups(payload) {
+      const models = Array.isArray(payload?.models) ? payload.models : []
+      const rows = models.map((entry) => modelRow({
+        key: String(entry?.id ?? ''),
+        id: String(entry?.id ?? ''),
+        name: entry?.name ?? entry?.id,
+        enabled: entry?.enabled === true,
+        badges: [
+          ...contextBadge(entry),
+          ...(entry?.reasoning === true ? [{ label: t('modelThinking'), tone: 'muted' }] : []),
+        ],
+      })).filter((row) => row.id !== '')
+      return rows.length === 0 ? [] : [{ key: 'exaone', titleKey: 'vendorExaone', rows }]
+    }
+
+    /**
      * Save projection: the selected ids, in row order.
      *
      * Every preset can leave `saveValue` out: the shared default writes the
@@ -2371,9 +2474,15 @@ function presetUi(preset, ui = {}) {
       'grok-4.7': Object.freeze([15, 60, 20]),
       'gpt-6-luna': Object.freeze([15, 60, 20]),
       'gpt-5.6-luna': Object.freeze([15, 60, 20]),
-      'claude-haiku-5.5': Object.freeze([15, 60, 20]),
+      // Route ids use dashes (`opencode-go/claude-haiku-5-5`); a dotted key
+      // never matched `opencodeLimitKey`, so the Go row printed "—" instead of
+      // its documented limit. Free routes carry no monthly limit (null); the
+      // old combined free-model key could never be produced by the normalizer,
+      // so it was split into the two route ids the catalog actually serves.
+      'claude-haiku-5-5': Object.freeze([15, 60, 20]),
       'gemini-4-argon': Object.freeze([30, 120, 35]),
-      'crouton-alpha-free-/-beam-free-/-iceman-contributor-free': Object.freeze([null, null, null]),
+      'beam-free': Object.freeze([null, null, null]),
+      'iceman-contributor-free': Object.freeze([null, null, null]),
     })
 
     /** The published plan page the limits come from. */

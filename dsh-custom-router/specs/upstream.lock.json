@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-13T15:27:38.053Z",
+  "entries": {
+    "openai-openapi": {
+      "url": "https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml",
+      "sha256": "2609fddefdcea459c28edce415315bf97f39e9308428c4847beb686df2454773",
+      "bytes": 4321867,
+      "etag": "W/\"37108f032cdbb6962d976d3d57a73d847f94f83f3a3471f31a01f8f93fb16099\"",
+      "fetchedAt": "2026-11-13T15:26:43.826Z"
+    },
+    "anthropic-messages": {
+      "url": "https://docs.anthropic.com/en/api/messages.md",
+      "sha256": "e17e1aa4fa5869ae610c773875a139ca51dfc6eecab1160b9cd927aae44078bb",
+      "bytes": 1305798,
+      "fetchedAt": "2026-11-13T15:27:38.053Z"
+    },
+    "anthropic-release-notes": {
+      "url": "https://docs.anthropic.com/en/release-notes/overview.md",
+      "sha256": "ef635befe188ab5319d170ba1fe632cfad580a275ce737f450263bcd9a47364b",
+      "bytes": 145183,
+      "fetchedAt": "2026-11-13T15:27:38.053Z"
+    },
+    "google-generative": {
+      "url": "https://ai.google.dev/api/generate-content.md",
+      "sha256": "869b5d22c19ccb4a3e8187de8fb2b4a23370dbe40717d20a94d9bc5e52007a4e",
+      "bytes": 50,
+      "fetchedAt": "2026-11-13T15:27:38.053Z"
+    },
+    "google-changelog": {
+      "url": "https://ai.google.dev/gemini-api/docs/changelog",
+      "sha256": "edda5532f5dd19716c80965e473a3d8b6431d40c6bf9287545ed1517988d7d11",
+      "bytes": 45,
+      "fetchedAt": "2026-11-13T15:27:38.053Z"
+    },
+    "antigravity-docs": {
+      "url": "https://antigravity.google/docs/overview",
+      "sha256": "06405691c5126b3ce91641ae980cfb742adb76b7e82c650a68a4b9b80fd8b480",
+      "bytes": 17644,
+      "lastModified": "Thu, 12 Nov 2026 23:57:33 GMT",
+      "fetchedAt": "2026-11-13T15:26:43.826Z"
+    },
+    "opencode-plan": {
+      "url": "https://opencode.ai/docs/console/go",
+      "sha256": "19d124f1554cdc0edd0d10fc72dc2042b95bc1e897039c3d20703daf5109ad90",
+      "bytes": 28688,
+      "fetchedAt": "2026-11-13T15:27:38.053Z"
+    },
+    "opencode-models": {
+      "url": "https://opencode.ai/docs/console/models",
+      "sha256": "c67a42056bad3d472f2e21d978e1b6904130eeec2c2d1cb2bd6169772cb91237",
+      "bytes": 27885,
+      "fetchedAt": "2026-11-13T15:27:38.053Z"
+    },
+    "opencode-changelog": {
+      "url": "https://opencode.ai/changelog",
+      "sha256": "68269a4cfab4038d9e92770f6b15749b1894b6277851c950f14ca5d850932f01",
+      "bytes": 14003,
+      "fetchedAt": "2026-11-13T15:27:38.053Z"
+    },
+    "deepinfra-docs": {
+      "url": "https://docs.deepinfra.com",
+      "sha256": "92396b27f80dc5b04afb28f6881b13d612aa4694c656459d0033bf7b135c7cff",
+      "bytes": 36819,
+      "lastModified": "Fri, 13 Nov 2026 14:43:35 GMT",
+      "fetchedAt": "2026-11-13T15:26:43.826Z"
+    },
+    "deepinfra-catalog": {
+      "url": "https://api.deepinfra.com/v1/openai/models",
+      "sha256": "68b45aa9e3bdbcc67d73679f43f5b23d4668c189e582552a7dbcc7a21b3092d2",
+      "bytes": 160540,
+      "fetchedAt": "2026-11-13T15:27:38.053Z"
+    },
+    "exaone-endpoint": {
+      "url": "https://docs.exaone.ai/en/docs/k-exaone-2.5",
+      "sha256": "77e43a182b1b96efebcf6598014f6b874b844a1d9c3d67c9cad8f2fb437badcc",
+      "bytes": 10055,
+      "fetchedAt": "2026-11-13T15:27:38.053Z"
+    },
+    "exaone-models": {
+      "url": "https://docs.exaone.ai/en/docs/models",
+      "sha256": "bf991e0626547102a244f45438b216eda33e2a9f45b4c9d17e743d18e82cfff8",
+      "bytes": 3568,
+      "fetchedAt": "2026-11-13T15:27:38.053Z"
+    },
+    "exaone-changelog": {
+      "url": "https://docs.exaone.ai/en/docs/changelog",
+      "sha256": "601fc9e993e00b8e80c4a771e766867530d64dd5884b7ef909e999996add3bcb",
+      "bytes": 818,
+      "fetchedAt": "2026-11-13T15:27:38.053Z"
+    }
+  }
+}

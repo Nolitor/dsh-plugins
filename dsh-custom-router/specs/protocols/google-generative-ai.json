@@ -1,0 +1,25 @@
+{
+  "id": "google-generative-ai",
+  "revision": 1,
+  "verifiedAt": "2026-11-13",
+  "ttlDays": 90,
+  "docs": "https://ai.google.dev/api/generate-content",
+  "streaming": "sse",
+  "canonical": {
+    "text": "candidates[].content.parts[].text",
+    "reasoning": "candidates[].content.parts[].text where part.thought === true",
+    "toolCalls": "candidates[].content.parts[].functionCall (complete, args is an object)",
+    "usage": "usageMetadata (promptTokenCount / candidatesTokenCount / thoughtsTokenCount / cachedContentTokenCount / totalTokenCount)",
+    "finish": "candidates[].finishReason"
+  },
+  "capabilities": {
+    "tools": true,
+    "reasoning": true,
+    "usage": true,
+    "cache": true,
+    "structuredOutput": true,
+    "vision": true
+  },
+  "adapters": [],
+  "notes": "DECLARED ONLY: no router adapter serves this wire today (adapters is empty). It names the documented generateContent / streamGenerateContent family a Google-compatible vendor endpoint speaks, WITHOUT the v1internal envelope Antigravity wraps around the same parts (google-generative-sse carries {response: {...}}; this wire carries the response object directly, which is why the two are separate ids in WIRE_PROTOCOLS). None of the mapping is measured through this repository: the canonical paths are the public docs' field names, and the capabilities are protocol-family defaults. In particular structuredOutput (generationConfig.responseMimeType + responseSchema) and cache (cachedContentTokenCount reporting, not a cache the router controls) are NOT verified by any adapter here, and no fixture pins them; a future adapter must add one and this revision must move if the canonical fields change. Reasoning again depends on thinkingConfig.includeThoughts and appears as parts carrying thought: true; effort selection is vendor-specific and unmeasured."
+}

@@ -390,7 +390,12 @@ const DESCRIPTION =
   + 'The child is a real DSH session with this conversation as its parent (no orphan process).'
 
 /** Parameter map, upstream-compatible plus the v2-only additions. */
-export function parameters() {
+export function parameters(model = DEFAULT_MODEL) {
+  // The prompt must name the model the CHILD will actually run, not the
+  // compile-time default: `cfg('model')` is the live row value (the router
+  // remounts this row when the settings change), and an empty/absent value
+  // falls back to the same default the provider uses.
+  const configured = typeof model === 'string' && model.trim() !== '' ? model.trim() : DEFAULT_MODEL
   return {
     prompt: {
       type: 'string',
@@ -403,7 +408,7 @@ export function parameters() {
     },
     model: {
       type: 'string',
-      description: `Not honored per call in managed child-session mode (the child runs on the configured route, currently ${DEFAULT_MODEL}); supplying it is rejected. Set the plugin's model config instead.`,
+      description: `Not honored per call in managed child-session mode (the child runs on the configured route, currently ${configured}); supplying it is rejected. Set the plugin's model config instead.`,
     },
     agent: {
       type: 'string',
@@ -626,7 +631,7 @@ export async function apply(ctx, config) {
   const buildTool = (defineTool) => defineTool({
     name: 'opencode',
     description: DESCRIPTION,
-    parameters: parameters(),
+    parameters: parameters(cfg('model', DEFAULT_MODEL)),
     output: {
       schema: outputSchema(),
       render: (_args, value) => [{ type: 'text', text: renderActivation(value) }],
@@ -702,8 +707,11 @@ export async function apply(ctx, config) {
         return { kind: listing.ok ? 'success' : 'error', text: listing.text || '(no models reported)' }
       }
       if (task === '' || options.help) {
-        const saved = await readSelection('ocode')
-        const model = saved.model ?? cfg('model', DEFAULT_MODEL)
+        // Managed mode runs on the provider config; the fallback-only saved
+        // selection is never consulted there, so it must not be advertised as
+        // "current" (same static-default class as the tool prompt, 2026-11-13).
+        const saved = services.subagents === undefined ? await readSelection('ocode') : null
+        const model = saved?.model ?? cfg('model', DEFAULT_MODEL)
         return {
           kind: 'success',
           text: `${OCODE_USAGE}\n\nCurrent: model ${model}\nModel list: \`opencode models\``,

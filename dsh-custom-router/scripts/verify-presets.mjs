@@ -171,7 +171,23 @@ try {
   const declared = validatePresets(PRESETS)
   for (const error of declared.errors) problems.push(`declaration: ${error}`)
 
+  // A declared-but-not-enabled preset mounts nothing by design (the dashboard's
+  // "Add provider" writes `presets.<id>: true`). The static half already
+  // validated its declaration, descriptor and locale keys; calling its absence
+  // from the runtime registries drift would make every new opt-in preset fail
+  // the gate until the operator enables it.
+  const enabledPresets = new Set(
+    Array.isArray(ctx.get('customRouter')?.enabledPresets)
+      ? ctx.get('customRouter').enabledPresets
+      : PRESETS.map((preset) => preset.id),
+  )
+  const skipped = []
+
   for (const preset of PRESETS) {
+    if (!enabledPresets.has(preset.id)) {
+      skipped.push(preset.id)
+      continue
+    }
     if (!providers.has(preset.providerId)) {
       problems.push(`${preset.id}: provider "${preset.providerId}" is not registered at runtime`)
     }
@@ -231,6 +247,7 @@ try {
     }
   }
 
+  if (skipped.length > 0) process.stdout.write(`disabled presets (not checked at runtime): ${skipped.join(', ')}\n`)
   process.stdout.write(`providers: ${[...providers].join(', ')}\n`)
   process.stdout.write(`commands: ${[...commands].join(', ')}\n`)
   process.stdout.write(`tools: ${[...tools].join(', ')}\n`)

@@ -135,15 +135,21 @@ test('agy_worker starts a tracked child instead of spawning a bare process', asy
   assert.equal(spec.label, 'fix the build')
   assert.equal(spec.delivery, 'parent')
   assert.equal(spec.signal, SIGNAL)
-  assert.equal(spec.request.parent, agent)
-  assert.deepEqual(spec.request.prompt, [{ type: 'text', text: 'fix the build' }])
-  assert.equal('cwd' in spec.request, false, 'omitted cwd inherits the parent directory')
+  // Regression 2026-11-13: DSH 0.2.1-rc.2 removed the nested `request` field and
+  // `startActivation()` reads `spec.parent.id` before any provider runs. The old
+  // shape failed every `agy_worker` call with "Cannot read properties of
+  // undefined (reading 'id')".
+  assert.equal(Object.hasOwn(spec, 'request'), false, 'the removed nested `request` field must not be sent')
+  assert.equal(spec.parent, agent)
+  assert.equal(spec.parent.session.header.cwd, '/tmp/project', 'the live service resolves spec.parent.id first')
+  assert.deepEqual(spec.prompt, [{ type: 'text', text: 'fix the build' }])
+  assert.equal('cwd' in spec, false, 'omitted cwd inherits the parent directory')
 })
 
 test('agy_worker forwards an explicit cwd to the activation request', async () => {
   const { tool, subagents } = mountPlugin()
   await tool.execute({ task: 'do it', cwd: '/tmp/other' }, { agent: parentAgent(), signal: SIGNAL })
-  assert.equal(subagents.activations[0].request.cwd, '/tmp/other')
+  assert.equal(subagents.activations[0].cwd, '/tmp/other')
 })
 
 test('/agy starts a child session and reports the id plus the notice semantics', async () => {
@@ -153,7 +159,7 @@ test('/agy starts a child session and reports the id plus the notice semantics',
   assert.match(result.text, /started Antigravity child session child-1 \(antigravity\)/)
   assert.match(result.text, /completion notice/)
   assert.equal(spawned.length, 0)
-  assert.equal(subagents.activations[0].request.prompt[0].text, 'run the tests')
+  assert.equal(subagents.activations[0].prompt[0].text, 'run the tests')
 })
 
 test('/agy models still works and is the only direct process', async () => {

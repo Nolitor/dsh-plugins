@@ -1,16 +1,16 @@
 # Custom Router Service — Standard Baseline, Coexistence Verdict, and Activation Spec
 
 <!-- skeleton:
-version: 0.0.1-rc.1
+version: 0.0.1-rc.2
 kind: spec
 status: active
-updated: 2026-11-06
-summary: Measured DSH standard serving/router first (incl. discount / new-model / usage gaps), then the real-mount coexistence verdict, then the tool-preset activation model.
+updated: 2026-11-14
+summary: Measured DSH standard serving/router first (incl. discount / new-model / usage gaps), then the real-mount coexistence verdict, then the tool-preset activation model. Packaging re-measured 2026-11-14 — the four adapters are vendored inside the router, not separate profile installs.
 -->
 
-> Status: **specification built on measurement**. Baseline: DSH `0.2.2-rc.1`,
-> `@deepseek-ai/dsh-llm@0.2.2-rc.1`, 2026-11-06. No runtime code, live profile, service
-> restart, or plugin version was changed in the session that produced it.
+> Status: **specification built on measurement**. Baseline re-measured 2026-11-14: DSH
+> `0.2.2-rc.3`, `@deepseek-ai/dsh-llm@0.2.2-rc.3`, router `0.0.1-rc.19`. No runtime code, live
+> profile, service restart, or plugin version was changed by this documentation pass.
 > Reading order: **§1 standard baseline → §2 coexistence verdict → §3 service definition →
 > §4 activation model**. Skipping §1/§2 was the defect of v1.0, which asserted the standard
 > router was "insufficient" before measuring it.
@@ -24,7 +24,7 @@ Source of truth: the **installed** runtime, not docs or memory.
 
 | Piece | Measured identity | Role |
 | :--- | :--- | :--- |
-| `@deepseek-ai/dsh-llm` | `0.2.2-rc.1`, `lib/index.js` | the provider-neutral LLM **runtime**; owns the adapter registry, directory, discovery and dispatch |
+| `@deepseek-ai/dsh-llm` | `0.2.2-rc.3`, `lib/index.js` | the provider-neutral LLM **runtime**; owns the adapter registry, directory, discovery and dispatch |
 | `@deepseek-ai/dsh-base` | `cordis.patch.yml` | mounts `@deepseek-ai/dsh-llm`, `dsh-agent-default-model`, `dsh-llm-retry`, account/credential services, and `dsh-llm-pi-ai` |
 | `dsh-llm-deepseek-account` | provider `deepseek-account` | web-account route; `registerConfigurableProviders` + `registerDeepSeekProvider` |
 | `dsh-llm-deepseek-api-key` | provider `deepseek-official` | raw API-key route; `registerConfigurableProviders` + `registerDeepSeekProvider` |
@@ -72,7 +72,7 @@ preference — v1.0 of this document called it "fit, not capability" and was wro
 
 | Owner question | Standard DSH answer | Measured evidence | Custom answer |
 | :--- | :--- | :--- | :--- |
-| **모델 할인** | **NO** | `dsh-llm-pi-ai/lib/index.js` 271–275: *"The harness never reads pi-ai's cost metadata — `replay.ts` zeroes it and no consumer reports spend"*; `NO_COST` = all zeros; `emptyPiUsage()` zeroes `cost`. No `discount` field exists in `dsh-llm`/pi-ai (grep: 0 hits). | DeepInfra `lib/catalog.js` `promotionOf()`: `metadata.discount` on **8 of 91 chat routes**, 0.10–0.75 (pay 90%→25%), derived because tags are capability-only; `/v1/request-costs` returns `costNanoUsd`; `cost.js` records it. |
+| **모델 할인** | **NO** | `dsh-llm-pi-ai/lib/index.js` 271–275: *"The harness never reads pi-ai's cost metadata — `replay.ts` zeroes it and no consumer reports spend"*; `NO_COST` = all zeros; `emptyPiUsage()` zeroes `cost`. No `discount` field exists in `dsh-llm`/pi-ai (grep: 0 hits). | DeepInfra `lib/catalog.js` `promotionOf()`: `metadata.discount` on **8 of 92 chat routes**, 0.05–0.51 (pay 95%→49%), derived because tags are capability-only; `/v1/request-costs` returns `costNanoUsd`; `cost.js` records it. |
 | **신규 모델 추가** | **NO without a DSH release** | `PROVIDER_DATA`: *"Generated from the installed pi-ai catalog. Run `pnpm gen-provider-data`; do not edit."* The catalog is **baked into the installed DSH version**. `catalogModels()` reads that frozen table; `modelOverrides` can only patch a model the installed catalog already describes. `sharedCatalogApi` admits the intent — *"lets a deployment add a model the installed catalog has not caught up with"* — but the operator must hand-declare it; no live refresh. | DeepInfra `fetchCatalog(.../models)` on a 30-min TTL — live, public, no key. OpenCode `rankingUrl: https://opencode.ai/data/index.json` + `NEW_MODEL_DAYS = 7` + `isNewModel()` + `firstSeen` ledger + "New" badge. Antigravity `fetchAvailableModels` + 15-min `catalogTtlMs` + quota summary. |
 | **각 서비스 사용량 체크** | **NO** | `emptyPiUsage()` returns all zeros; `mapUsage()` (1451–1459) maps only pi-ai's own cumulative `input/output` — no per-service quota, no account allowance, no plan burn, no cost chip. `dsh-client-ui-settings-models` shows credential dots and model rows, not usage. | Antigravity `retrieveUserQuotaSummary` → weekly / 5-hour buckets per family + usage chip. OpenCode `session export` / `/api/experimental/usage/limits` → disjoint buckets + cost pill + plan panel. DeepInfra trailing usage chunk + `/v1/request-costs` → estimated/exact cost chip. |
 
@@ -80,7 +80,7 @@ preference — v1.0 of this document called it "fit, not capability" and was wro
 When a provider adds a model, the DSH release must regenerate `provider-data.generated`; until
 then the standard prints only the models hardcoded at that DSH version. Calling *that* "the
 standard" and teaching the owner it is sufficient was the error in the earlier version of this
-document. [dsh-opencode-v2/docs/OPENCODE-V2-SURFACE-MEASUREMENT.md](../../dsh-opencode-v2/docs/OPENCODE-V2-SURFACE-MEASUREMENT.md) already
+document. [dsh-opencode-v2/docs/OPENCODE-V2-SURFACE-MEASUREMENT.md](../../archive/dsh-opencode-v2/docs/OPENCODE-V2-SURFACE-MEASUREMENT.md) already
 measured the contrast: OpenCode Go served **45 models** (30 `opencode-go/*`, 15 `opencode/*`)
 against the CLI, while the standard pi-ai table is frozen per release.
 
@@ -168,7 +168,7 @@ plugin named `dsh-subrouter` and not a second router layer beside the harness. I
 **inside** the standard `LlmRuntime` through `ctx.llm.registerAdapter` (§1.2), i.e. it *uses*
 the standard **registration contract** while replacing pi-ai's **stale, feature-poor serving
 implementation** (§1.3). It does not replace the harness. The decommissioned `@nolit/dsh-subrouter`
-(2026-10-30, [OPENCODE-MODEL-SERVING-PLAN.md §3](../../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md)) sat beside
+(2026-10-30, [OPENCODE-MODEL-SERVING-PLAN.md §3](../../archive/dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md)) sat beside
 the harness and lost retry/attribution/discovery; that is the pattern this definition forbids.
 
 | Responsibility | Meaning |
@@ -180,12 +180,15 @@ the harness and lost retry/attribution/discovery; that is the pattern this defin
 
 | Service | Package | Route id | Serves | Credential boundary |
 | :--- | :--- | :--- | :--- | :--- |
-| OpenCode v2 | `@nolit/dsh-opencode-v2` `0.0.1-rc.1` | `opencode-http-agent` | OpenCode Go/Zen plane + `opencode`, `/ocode`, `cli_worker` | local `opencode serve` control plane; oauth-before-key ranking |
-| Antigravity | `@nolit/dsh-antigravity` `0.0.1-rc.7` | `antigravity` | Gemini on consumer cloudcode-pa + `/agy`, `agy_worker` | `~/.gemini/antigravity-cli/*oauth-token` + refresh grant |
-| DeepInfra | `@nolit/dsh-deepinfra` `0.0.1-rc.8` | `deepinfra` | public OpenAI-compatible catalog (91 chat routes) | one `DEEPINFRA_API_KEY` bearer / Settings-saved key |
+| OpenCode v2 | `@nolit/dsh-opencode-v2` `0.0.1-rc.8` | `opencode-http-agent` | OpenCode Go/Zen plane + `opencode`, `/ocode`, `cli_worker` | local `opencode serve` control plane; oauth-before-key ranking |
+| Antigravity | `@nolit/dsh-antigravity` `0.0.1-rc.14` | `antigravity` | Gemini on consumer cloudcode-pa + `/agy`, `agy_worker` | `~/.gemini/antigravity-cli/*oauth-token` + refresh grant |
+| DeepInfra | `@nolit/dsh-deepinfra` `0.0.1-rc.14` | `deepinfra` | public OpenAI-compatible catalog (178 entries / 92 chat routes) | one `DEEPINFRA_API_KEY` bearer / Settings-saved key |
+| EXAONE | `@nolit/dsh-exaone` `0.0.1-rc.1` | `exaone` | `k-exaone_v2.5` over the OpenAI-compatible `/v1/chat/completions` endpoint | one bearer API key, UI-first (`vendorConfig.dsh-exaone.apiKey`) |
 
-All three are `link:` dependencies in the live `web` profile, listed in `dsh.profile.bundles`,
-and each calls `ctx.llm.registerAdapter()` ([http.js:2408](../../dsh-opencode-v2/lib/http.js),
+**Packaging (re-measured 2026-11-14):** the four adapters are **vendored inside**
+`@nolit/dsh-custom-router` — they are NOT separate `link:` dependencies of the live `web` profile
+and are not listed in `dsh.profile.bundles`. Only `@nolit/dsh-custom-router` is installed. Each
+vendor still calls `ctx.llm.registerAdapter()` ([http.js:2408](../../archive/dsh-opencode-v2/lib/http.js),
 [index.js:413](../vendor/antigravity/lib/index.js), [index.js:239](../vendor/deepinfra/lib/index.js)).
 The **service** is the specification unit; the **package** is the current packaging decision
 ([PLUGIN-CONSOLIDATION.md](../../docs/PLUGIN-CONSOLIDATION.md): one package per vendor).
@@ -254,7 +257,7 @@ No preset row, plugin manifest, or live profile was changed in this session.
   OpenAI-compatible service (§1.2 shows that slot is viable).
 - Any live-profile edit, service restart, real generation turn, or S6 soak confirmation.
 - Stage-2 work gated on owner instruction
-  ([dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../../dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md), [dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](../vendor/antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md)).
+  ([dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../../archive/dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md), [dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](../vendor/antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md)).
 
 ## 7. Reproducing the measurement
 
@@ -288,6 +291,6 @@ The repository never contained the "DeepMind" typo; it was spoken. Owner-owned
 - [CUSTOM-ROUTER-PRESET-SURFACE.md](./CUSTOM-ROUTER-PRESET-SURFACE.md) — owner-approved plan B surface
 - [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md) — composition diagrams + normative per-service module contract
 - [RULES.md](../../docs/RULES.md), [FAILURE-LEDGER.md](../../docs/FAILURE-LEDGER.md), [PLUGIN-CONSOLIDATION.md](../../docs/PLUGIN-CONSOLIDATION.md)
-- [dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md](../../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md), [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md)
+- [dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md](../../archive/dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md), [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md)
 - [dsh-plugin-runtime-spec.md](../../docs/dsh-plugin-runtime-spec.md), [DSH-RC1-PLUGIN-DELTA.md](../../docs/DSH-RC1-PLUGIN-DELTA.md)
-- Installed `@deepseek-ai/dsh-llm@0.2.2-rc.1` `lib/index.js` and `lib/types/*.d.ts`
+- Installed `@deepseek-ai/dsh-llm@0.2.2-rc.3` `lib/index.js` and `lib/types/*.d.ts`

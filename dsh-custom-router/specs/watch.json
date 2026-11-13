@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "openai-openapi",
+      "url": "https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml",
+      "kind": "protocol",
+      "specs": ["openai-completions", "openai-responses"],
+      "note": "platform.openai.com answers 403 to non-browser clients; this is the official OpenAPI mirror."
+    },
+    {
+      "id": "anthropic-messages",
+      "url": "https://docs.anthropic.com/en/api/messages.md",
+      "kind": "protocol",
+      "specs": ["anthropic-messages"]
+    },
+    {
+      "id": "anthropic-release-notes",
+      "url": "https://docs.anthropic.com/en/release-notes/overview.md",
+      "kind": "changelog",
+      "specs": []
+    },
+    {
+      "id": "google-generative",
+      "url": "https://ai.google.dev/api/generate-content.md",
+      "kind": "protocol",
+      "specs": ["google-generative-sse", "google-generative-ai"]
+    },
+    {
+      "id": "google-changelog",
+      "url": "https://ai.google.dev/gemini-api/docs/changelog",
+      "kind": "changelog",
+      "specs": []
+    },
+    {
+      "id": "antigravity-docs",
+      "url": "https://antigravity.google/docs/overview",
+      "kind": "provider",
+      "specs": ["antigravity"]
+    },
+    {
+      "id": "opencode-plan",
+      "url": "https://opencode.ai/docs/console/go",
+      "kind": "pricing",
+      "specs": ["opencode"]
+    },
+    {
+      "id": "opencode-models",
+      "url": "https://opencode.ai/docs/console/models",
+      "kind": "provider",
+      "specs": ["opencode"]
+    },
+    {
+      "id": "opencode-changelog",
+      "url": "https://opencode.ai/changelog",
+      "kind": "changelog",
+      "specs": []
+    },
+    {
+      "id": "deepinfra-docs",
+      "url": "https://docs.deepinfra.com",
+      "kind": "provider",
+      "specs": ["deepinfra"]
+    },
+    {
+      "id": "deepinfra-catalog",
+      "url": "https://api.deepinfra.com/v1/openai/models",
+      "kind": "pricing",
+      "specs": ["deepinfra"]
+    },
+    {
+      "id": "exaone-endpoint",
+      "url": "https://docs.exaone.ai/en/docs/k-exaone-2.5",
+      "kind": "provider",
+      "specs": ["exaone"]
+    },
+    {
+      "id": "exaone-models",
+      "url": "https://docs.exaone.ai/en/docs/models",
+      "kind": "provider",
+      "specs": ["exaone"]
+    },
+    {
+      "id": "exaone-changelog",
+      "url": "https://docs.exaone.ai/en/docs/changelog",
+      "kind": "changelog",
+      "specs": []
+    }
+  ]
+}

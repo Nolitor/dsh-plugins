@@ -1,16 +1,18 @@
 # CLI Dispatch Control Plane — Admission Gate and Process Reclamation
 
 <!-- skeleton:
-version: 0.0.1-rc.10
+version: 0.0.1-rc.11
 kind: spec
 status: active
-updated: 2026-11-10
-summary: The router's two duties over external CLI workers (AGY, OpenCode v2): refuse dispatch from a restricted preset/sandbox before any argv exists, and reclaim a dispatched process when its session is torn down or the router unloads. Policy revised 2026-11-10 to preset-based enforcement (minimal/ptc block; read-only blocks).
+updated: 2026-11-14
+summary: Implemented spec (admission + reclamation live; §8.1–8.4 historical). The router's two duties over external CLI workers (AGY, OpenCode v2): refuse dispatch from a restricted preset/sandbox before any argv exists, and reclaim a dispatched process when its session is torn down or the router unloads. Policy revised 2026-11-10 to preset-based enforcement (minimal/ptc block; read-only blocks). Re-measured 2026-11-14 at router 0.0.1-rc.19 / host DSH 0.2.2-rc.3: verify:dispatch 17/17.
 -->
 
-> Status: **implemented and measured**. Baseline DSH `0.2.2-rc.1`, 2026-11-08; policy revised
-> 2026-11-10. Code: [`lib/dispatch-gate.js`](../lib/dispatch-gate.js). Tests:
-> [`test/dispatch-gate.test.mjs`](../test/dispatch-gate.test.mjs) plus the two provider
+> **IMPLEMENTED SPEC (2026-11-14).** The admission gate and reclamation are live. §8.1–8.4 describe a toggle that was withdrawn the same day and a migration that is already complete; do not re-run them. Current work: [ROADMAP.md](./ROADMAP.md).
+
+> Status: **implemented and measured**. Baseline DSH `0.2.2-rc.3`, 2026-11-14 (originally
+> 2026-11-08); policy revised 2026-11-10. Code: [`lib/dispatch-gate.js`](../lib/dispatch-gate.js).
+> Tests: [`test/dispatch-gate.test.mjs`](../test/dispatch-gate.test.mjs) plus the two provider
 > suites. Live check: `npm run verify:dispatch` (**17/17**).
 
 ## 1. Why the router owns this
@@ -251,9 +253,12 @@ Constants: `RESTRICTED_PRESETS = ['minimal', 'ptc']`,
 
 ### 9.3 Measured verification
 
-- `npm test` → **372/372** (four new policy cases).
+- `npm test` → **625/625** at router `0.0.1-rc.19` (re-measured 2026-11-14; the 372/372 recorded
+  when the policy revision landed was that revision's suite size, not the current one).
 - `npm run verify:dispatch` → **17/17** (eight denials, three allows, plus the reclamation cases).
 - Real mount of the live profile unchanged: tools/commands/providers identical to §8.5; this
   revision changes only *who may dispatch*, not *what is mounted*.
-- Live application: the running `dsh-web.service` still holds the pre-revision gate until it is
-  restarted — `applied pending restart` per RULES §5. Restarting is owner-only.
+- Live application: the gate itself is on disk and test-proven. The running `dsh-web.service`
+  (PID 142881, started 2026-11-14 01:07:25 KST) predates the later `lib/` rebuilds, so the process
+  serves the previous build until restarted — `applied pending restart` per RULES §5. Restarting is
+  owner-only.

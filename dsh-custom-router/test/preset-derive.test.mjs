@@ -76,7 +76,7 @@ test('the derivation reproduces the rc.15 descriptor values exactly', () => {
   // rc.16; the point of the change is that they now have ONE author.
   const derived = presetSettingsList(PRESETS)
   const byId = Object.fromEntries(derived.map((entry) => [entry.id, entry]))
-  assert.deepEqual(Object.keys(byId), ['antigravity', 'opencode', 'deepinfra'])
+  assert.deepEqual(Object.keys(byId), ['antigravity', 'opencode', 'deepinfra', 'exaone'])
 
   assert.equal(byId.antigravity.labelKey, 'vendorAntigravity')
   assert.equal(byId.antigravity.planKey, 'planSubscription')
@@ -99,6 +99,13 @@ test('the derivation reproduces the rc.15 descriptor values exactly', () => {
   assert.equal(byId.deepinfra.planKey, 'planPayAsYouGo')
   assert.equal(byId.deepinfra.metered, true)
   assert.equal(byId.deepinfra.route, '/api/local/deepinfra/models')
+
+  assert.equal(byId.exaone.labelKey, 'vendorExaone')
+  assert.equal(byId.exaone.planKey, 'planFree')
+  assert.equal(byId.exaone.metered, false)
+  assert.equal(byId.exaone.row, 'dsh-exaone')
+  assert.equal(byId.exaone.route, '/api/local/dsh-exaone/models')
+  assert.deepEqual(byId.exaone.usageRoutes, [])
 
   // The browser registry is what the page actually gets.
   const browser = readModelPresets()

@@ -1,14 +1,19 @@
 # Custom Router — Model-List Refresh Contract
 
 <!-- skeleton:
-version: 0.0.1-rc.13
+version: 0.0.1-rc.14
 kind: spec
 status: active
-updated: 2026-11-13
-summary: Normative refresh contract for the model-serving lists: the vendor `?refresh=1` cache bypass, the refresh button on both surfaces, and the single refresh bus that keeps the models tab and the dashboard in sync (host events included).
+updated: 2026-11-14
+summary: Normative refresh contract for the model-serving lists: the vendor `?refresh=1` cache bypass, the refresh button on both surfaces, and the single refresh bus that keeps the models tab and the dashboard in sync (host events included). Live route rows re-measured 2026-11-14 (Antigravity 10, OpenCode 32 go, DeepInfra 92 chat / 8 discounted, EXAONE 1).
 -->
 
-> Status: **implemented and measured**, 2026-11-13, router `0.0.1-rc.13`.
+> **IMPLEMENTED (2026-11-14).** This is the shipped refresh contract; there is no active work here.
+> `verify:refresh` covers plain and `?refresh=1` reads on all **4/4 preset routes**.
+
+> Status: **implemented and measured**, 2026-11-14, router `0.0.1-rc.19`, host DSH `0.2.2-rc.3`.
+> Originally written 2026-11-13 against router `0.0.1-rc.13`; the contract is unchanged and the
+> live row counts below were re-measured on 2026-11-14.
 > Owner instruction: 백엔드 `?refresh=1` 캐시 우회 + 대시보드/설정탭 전체 새로고침 버튼 + 양쪽
 > 컴포넌트 이벤트 동기화 세 구조로 설계해서 바로 패치.
 > Parent: [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md),
@@ -95,18 +100,22 @@ Measured result:
 
 | Preset | Route | Plain | Forced | What it read |
 |---|---|---|---|---|
-| antigravity | `/api/local/dsh-antigravity/models` | 200, 10 grouped rows | 200, 10 rows | bases include **`gemini-4-hydrogen`** |
+| antigravity | `/api/local/dsh-antigravity/models` | 200, 10 grouped rows | 200, 10 rows | bases include **`gemini-4-hydrogen`** and **`claude-opus-5-5`** |
 | opencode | `/api/local/opencode-v2/model-settings` | 200, 32 rows | 200, 32 rows | all 32 are `go`; **Hydrogen absent** (Zen route, `otherPlanCount: 26`) |
-| deepinfra | `/api/local/deepinfra/models` | 200, 91 rows | 200, 91 rows | **8 discounted, 83 at list price** |
+| deepinfra | `/api/local/deepinfra/models` | 200, 92 rows | 200, 92 rows | **8 discounted, 84 at list price** |
+| exaone | `/api/local/dsh-exaone/models` | 200, 1 row | 200, 1 row | `k-exaone_v2.5` |
+
+Re-measured 2026-11-14 on the live catalog: **178 entries, 92 chat-tagged, 8 discounted
+(0.05–0.51)**. Any earlier figure of 173 entries / 91 chat rows / "8 of 91" is stale.
 
 Three facts this settled that fixtures could not:
 
 1. **Hydrogen reaches the Antigravity route.** Grouped bases:
    `gemini-3-flash, gemini-2.5-pro, gemini-3.8-flash, gemini-3.5-flash-lite, gemini-4-hydrogen,
    gemini-3.1-flash-lite, claude-sonnet-5-5, claude-opus-5-5, gpt-oss-120b, gemini-4-argon`.
-2. **DeepInfra's promotion fix holds on the live payload.** 91 chat rows, exactly **8** carry a
-   `promotion` object and 83 are `null`; the route's own `promotionCount` is 8. Before the client
-   fix every one of those 83 rendered a `0%` badge.
+2. **DeepInfra's promotion fix holds on the live payload.** 92 chat rows, exactly **8** carry a
+   `promotion` object and 84 are at list price; the route's own `promotionCount` is 8. Before the
+   client fix every full-price row rendered a `0%` badge.
 3. **OpenCode's Hydrogen absence is a PLAN fact, not a catalog defect.** `activePlan: go`, 32 rows
    all `go`, `otherPlanCount: 26`. `opencode/gemini-4-hydrogen` is a **Zen** route, so no refresh
    can surface it while the tab is Go-scoped.
@@ -181,8 +190,8 @@ levels. Two defects stood between the account and that contract, and both were m
 `promoPercentOf(price)` is the single authority for "does this row have a discount". A row badges
 exactly when the value is a finite number **> 0**. Before 2026-11-13 the computation was
 `Number.isFinite(Number(price.promoPercent))`, and `Number(null) === 0` is finite, so every
-full-price row rendered `0% 할인` and the footer counted all of them. Live: 91 chat rows, 8 real
-discounts, 168/177 catalog entries with no discount at all.
+full-price row rendered `0% 할인` and the footer counted all of them. Live (re-measured
+2026-11-14): **92 chat rows, 8 real discounts, 84 at list price**.
 
 ## 7. What a refresh still does NOT fix
 
@@ -196,14 +205,21 @@ Measured 2026-11-13, recorded so a future session does not read a refresh as a c
 
 ## 8. Status
 
-`applied pending restart` — the rebuilt `lib/client.js` and the three vendor libraries are on
-disk; `dsh-web.service` serves the previous build until restarted (owner action). The live
-measurement in §5a ran against an **isolated** profile, so it proves the code, not the running
-service.
+**Implemented; two facts are separate and must not be conflated.**
+
+- **The contract is done.** `verify:refresh` passes on 4/4 preset routes, plain and `?refresh=1`.
+- **Runtime freshness is a different claim.** The live `dsh-web.service` (PID 142881) started
+  **2026-11-14 01:07:25 KST**; `lib/client.js` and `vendor/antigravity/lib/wire.js` were rebuilt
+  after that instant, so the running process serves the previous build until it is restarted
+  (`applied pending restart`, RULES §5). Restarting is owner-only.
+
+The `verify:refresh` measurement above boots an **isolated** `DSH_HOME`, so it proves the code on
+disk, not the currently running process. The live Gemini `thoughtSignature` fix is in the same
+"applied pending restart" state.
 
 ## 9. References
 
-- [PRESET-REGISTRY-STANDARD.md](./PRESET-REGISTRY-STANDARD.md) — the five places a new preset touches
+- [PRESET-REGISTRY-STANDARD.md](./PRESET-REGISTRY-STANDARD.md) — the derived registry and its drift gate
 - [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md)
 - [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md)
-- [../CHANGELOG.md](../CHANGELOG.md) — `0.0.1-rc.13`
+- [../CHANGELOG.md](../CHANGELOG.md) — router `0.0.1-rc.19`

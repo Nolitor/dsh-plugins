@@ -1,0 +1,8 @@
+{
+  "provider": "deepinfra",
+  "kind": "live-catalog",
+  "source": "https://api.deepinfra.com/v1/openai/models",
+  "verifiedAt": "2026-11-14",
+  "ttlDays": 7,
+  "notes": "The price comes from the public catalog at request time, never from this file or from source code: each entry carries pricing.input_tokens / pricing.output_tokens / pricing.cache_read_tokens and metadata.discount (a fraction to subtract, so 0.3 means pay 70%), and the adapter derives the cost chip and the promotion badge from those values. The endpoint needs no credential, so a cold start cannot fail on auth. The 7-day ttlDays is the maximum age of the last verification, not a cache lifetime: promotions and discounts change without warning, so a stale file must fail the freshness gate rather than silently price a route from an old read. Measured 2026-11-14: 178 entries, 92 chat-tagged, 8 chat routes discounted (0.05-0.51, pay 95%->49%). Re-measured 2026-11-14; the 7-day ttlDays is retained (conservative; the owner has not asked to move to the 30-day default) and the manual spec:watch cadence is at least weekly. No rate is recorded in this file."
+}

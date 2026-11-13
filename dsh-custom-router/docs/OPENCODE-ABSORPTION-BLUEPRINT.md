@@ -1,21 +1,23 @@
 # OpenCode v2 Absorption — Three-Pipeline Blueprint
 
 <!-- skeleton:
-version: 1.2
+version: 1.3
 kind: design
-status: active
-updated: 2026-11-13
-summary: Phased plan to absorb @nolit/dsh-opencode-v2 into dsh-custom-router/vendor/opencode, aligned against the three existing pipelines — DeepInfra for the shared stream pipe, Antigravity for the surface/dispatch supervisor, and the router preset slot for registry and dynamic activation — with file moves, fallback shims, per-phase verification gates, the four owner decisions recorded, and every OpenCode beta-roadmap milestone assigned to a phase. Phase A closed 2026-11-10; Phase B (stream unification) is in progress as of 2026-11-13 with B-1 and B-2 delivered and B-3's last gate (the OpenCode descriptor case) landed.
+status: historical
+updated: 2026-11-14
+summary: Historical design record (phases A/C/D/E delivered; residuals in ROADMAP P2-2/P2-3). Originally a phased plan to absorb @nolit/dsh-opencode-v2 into dsh-custom-router/vendor/opencode, aligned against the three existing pipelines — DeepInfra for the shared stream pipe, Antigravity for the surface/dispatch supervisor, and the router preset slot for registry and dynamic activation — with file moves, fallback shims, per-phase verification gates, the four owner decisions recorded, and every OpenCode beta-roadmap milestone assigned to a phase. Phase A closed 2026-11-10; Phase B (stream unification) is delivered as of 2026-11-14 — B-1, B-2 and B-3 landed, leaving only the OpenCode `pipe:'shared'` default and the Phase F parity work (ROADMAP P2-2/P2-3).
 -->
 
-> Status: **Phase A delivered 2026-11-10** (vendor tree, shim, exports, leaf contract, first
-> conforming driver, dual-mount guard); owner decisions in §6 and beta milestones in §7; CP3
-> approved closing Phase A. **Phase B in progress from 2026-11-13** — see §9.1 for the measured
-> start state. Owner instruction 2026-11-10: absorb OpenCode v2 as a native vendor
-> slot, not in isolation, by conforming to the two shipped vendor references.
-> Rules: [RULES.md](../../docs/RULES.md) · Stage authority:
-> [SHARED-STREAM-PIPE-SPEC.md](./SHARED-STREAM-PIPE-SPEC.md) P4/P5 ·
-> [CUSTOM-ROUTER-SURFACE-CONTRACT.md](./CUSTOM-ROUTER-SURFACE-CONTRACT.md) M13/M14.
+> **HISTORICAL DESIGN RECORD (2026-11-14).** Phases A, C, D, E and B-1..B-3 are implemented. Only the OpenCode `pipe:'shared'` default and the Phase F residuals remain, tracked in [ROADMAP.md](./ROADMAP.md) P2-2/P2-3. Do not execute the phase list below as a plan. Closed items: [ROADMAP-ARCHIVE.md](./ROADMAP-ARCHIVE.md).
+
+> **Historical status (2026-11-14).** Phase A, C, D, E and B-1..B-3 are delivered. The only
+> live residuals are the OpenCode `pipe:'shared'` default and the Phase F canonical-parser/parity
+> work, tracked in [ROADMAP.md](./ROADMAP.md) P2-2/P2-3. The phase text below is evidence, not a plan.
+>
+> **Test counts in this document are per-phase gate records, not the current suite.** Each figure
+> (464/464, 481/481, 522/522, 544/544) was measured on the date of its own gate. The current
+> baseline measured 2026-11-14 at router `0.0.1-rc.19` is: router **625/625**, antigravity
+> **190/190**, deepinfra **217 pass / 7 skip**, opencode **554/554**, exaone **14/14**.
 
 ## 1. Measured baseline (2026-11-10)
 
@@ -24,7 +26,7 @@ summary: Phased plan to absorb @nolit/dsh-opencode-v2 into dsh-custom-router/ven
 | Location | `vendor/antigravity/` (internal) | `vendor/deepinfra/` (internal) | top-level track, profile `link:` |
 | Package specifier | `@nolit/dsh-custom-router/vendor/antigravity` | `…/vendor/deepinfra` | `@nolit/dsh-opencode-v2` (+ `/http`) |
 | Stream | `lib/stream` via [adapter.js:280](../vendor/antigravity/lib/adapter.js#L280) | `normalizeStream` via [adapter.js:225](../vendor/deepinfra/lib/adapter.js#L225) | **own pipeline** |
-| SSE decode | shared `readSseEvents` | shared `readSseEvents` | `chatSseEvents` ([http.js:356](../../dsh-opencode-v2/lib/http.js#L356)) |
+| SSE decode | shared `readSseEvents` | shared `readSseEvents` | `chatSseEvents` ([http.js:356](../../archive/dsh-opencode-v2/lib/http.js#L356)) |
 | Notation | provider hook | provider hook | `stream-parser.js` 679 L + `display-gate.js` 157 L + `display-clean.js` 121 L |
 | Surface reconcile | `syncAll()` + `app-boot/config-reload` ([index.js:716](../vendor/antigravity/lib/index.js#L716), [:810](../vendor/antigravity/lib/index.js#L810)) | register once | register once (`apply()`), **no reconcile** |
 | Dispatch seam | `bindDispatch()` → gate/track | n/a (no CLI) | `ctx.inject(['customRouter'])` gate/track only |
@@ -159,7 +161,7 @@ the client. The canonical-parser gates are **not** required to close Phase B.
 | C2 | Add `bindDispatch()` and an `app-boot/config-reload → syncAll` listener | closes F-46 |
 | C3 | Bind `cli_worker` and the fallback spawn to `dispatch.track`/registry like `agy_worker` | reclamation parity |
 | C4 | **Owner decision 2026-11-10: keep the current policy** — the admission gate stays applied to the `opencode` tool for sandbox-policy consistency, even in managed-child mode. Record the rationale in the CLI doc; do not special-case the tool | one policy across all external-CLI surfaces |
-| C5 | **Owner decision 2026-11-10: consolidate** — drop the package's own `settings.section` and fold its fields into the router dashboard (`vendorConfig['dsh-opencode-v2']`); no second UI | one UI |
+| C5 | **Owner decision 2026-11-10: consolidate** — drop the package's own `settings.section` and fold its fields into the router dashboard (`vendorConfig['dsh-opencode-v2']`); no second UI. **CONFIRMED 2026-11-14** (measured, not assumed): the shipped `lib/client.js` registers exactly **one** `settings.section` (`id: custom-router`) plus one `sidebar.panellist` and one `main`, and zero vendor sections — asserted by `test/client.test.mjs` ("the client registers no vendor settings section") | one UI |
 | C6 | Add `installed()` diagnostics (`model/cliTool/cliCommand/subagent/worker`) | verifiable state |
 
 Exit gate: `verify:dispatch` matrix includes `opencode`/`cli_worker`; flipping `cli` on a live
@@ -191,19 +193,45 @@ now be removed from the profile without a code change.
 | Step | State 2026-11-13 |
 | :--- | :--- |
 | E0 — runtime independence | **done** — no `lib/` code resolves `@nolit/dsh-opencode-v2` from the profile; a test asserts nothing is read from `profileDir` |
-| E1 | **open** — `vendor/antigravity/lib/subagent-opencode.js` still has no importer measured |
+| E1 | **done 2026-11-14** — `vendor/antigravity/lib/subagent-opencode.js` deleted together with its `./subagent-opencode` export entry, after re-measuring zero importers (evidence below) |
 | E2 | **deferred** — the `dsh-opencode-v2/` directory stays until the owner approves archiving; it is a 7-file re-export shim with no runtime role |
 | E3 | **deferred** — docs move with E2 |
 
-The live profile still declares the legacy link (`~/.dsh/profiles/web/package.json`). Removing
-it is a **live-state write** and needs owner approval; nothing in this package breaks if it is
-removed.
+The live profile now no longer carries the legacy link. **Corrected 2026-11-14:** the claim that
+`~/.dsh/profiles/web/package.json` "still declares" it was already stale — a grep found no
+`dsh-opencode-v2` entry in that file and `dsh.profile.bundles` never listed it, so the only
+remaining artifact was the orphan symlink
+`~/.dsh/profiles/web/node_modules/@nolit/dsh-opencode-v2`. Measured before removal: `test -L`
+exit 0, `readlink` →
+`../../../../../Workspace/projects/dsh-workspace/dsh-plugins/dsh-opencode-v2`, `test -e` exit 1
+(target archived). The symlink alone was removed with `rm -- <symlink>`; the containing
+`@nolit/` directory kept its inode and all six other links still resolve, so nothing else in
+`~/.dsh` changed. No restart was needed — nothing in this package resolved that link.
 
 | Step | Action |
 | :--- | :--- |
-| E1 | Delete `vendor/antigravity/lib/subagent-opencode.js` (leftover, no importer measured) |
+| E1 | **done 2026-11-14** — `vendor/antigravity/lib/subagent-opencode.js` (187 lines) and its `./subagent-opencode` export entry removed in one change; see the E1 evidence block below |
 | E2 | Move `dsh-opencode-v2/` to `archive/` with the SUPERSEDED banner once the shim has shipped one release |
 | E3 | Move its docs to the router track or archive; update indexes and CHANGELOG per RULES §6.1 |
+
+**E1 evidence — measured deletion, 2026-11-14 (owner instruction: "사용안하거나 필요없으면 삭제해").**
+Re-measured immediately before the delete, not carried over from the earlier read-only pass.
+
+| Check | Command | Measured |
+| :--- | :--- | :--- |
+| Relative/dynamic importers | `grep -rn "from '\./subagent" vendor/antigravity/lib/` | only `./subagent.js` (line 40 of `lib/index.js`) — `subagent-opencode` has none |
+| Path/specifier importers | `grep -rnE "import OR require OR from .*subagent-opencode"` over `*.js`/`*.mjs`/`*.ts` (alternation written out, no pipe in this cell) | zero; every remaining hit is prose (`@nolit/dsh-subagent-opencode` history notes) or the unrelated preset row id `tool-subagent-opencode` |
+| Router export map | `createRequire(profile/web/package.json).resolve('@nolit/dsh-custom-router/vendor/antigravity/lib/subagent-opencode.js')` | `ERR_PACKAGE_PATH_NOT_EXPORTED` — the router export map never listed an `antigravity/subagent-opencode` subpath |
+| Own-package export map | export entry `"./subagent-opencode"` in `vendor/antigravity/package.json` | present before, removed in the same change; post-change every remaining export target on disk resolves |
+| Runtime registration | `grep "AntigravitySubagentProvider" vendor/antigravity/lib/index.js` | registers only `./subagent.js`; `lib/index.js` never imported the deleted file |
+| Host `Config` | `config.opencodePath` | only read inside the deleted module; the host schema has no such key |
+| File | `sha256sum` before delete | `033d478bacfc5b05aa2eca275964d7545705b01cf5f5a2e42f311cee68ec9f90`, 187 lines; gone after (`test -e` exit 1) |
+
+Superseded by `vendor/opencode/lib/subagent.js` (which also carries `resolveExecutable`). No docs
+referenced the path in `vendor/antigravity/README.md` or `vendor/antigravity/docs/` (grep: no
+hits), so the only prose touched was this blueprint. The registered subagent surfaces
+(`vendor/antigravity/lib/subagent.js`, `vendor/opencode/lib/subagent.js`, and the
+`tool-subagent-opencode` preset row) are untouched.
 
 ### Phase F — post-consolidation beta roadmap
 
@@ -213,18 +241,18 @@ measured through the router's pipe and vendor slot.
 
 | Item | Original gate | Phase-F work |
 | :--- | :--- | :--- |
-| Canonical parser becomes default (`S2-1..S2-5`) | [STAGE-PLAN §4](../../dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md) | flip `parser: 'canonical'` after replay `markerDeltas == 0` and one day of real turns |
+| Canonical parser becomes default (`S2-1..S2-5`) | [STAGE-PLAN §4](../../archive/dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md) | flip `parser: 'canonical'` after replay `markerDeltas == 0` and one day of real turns |
 | Conformance oracle (`S3-1..S3-4`) | STAGE-PLAN §6 | ship the recipe fixtures in the vendored suite; a parser change without a case is refused |
 | O1 prose destruction | STAGE-PLAN §3 | regression under `classifyText`: visible text keeps the sentence or an explicit `notation` part |
 | O2 glyph drift (`｜`/`│`/`|`) | STAGE-PLAN §3 | canonical token table; replay must show 0 marker deltas |
 | O3 `content_filter` error kind | STAGE-PLAN §3 | confirm the host renders the error kind; keep the `error` mapping |
-| 2.2.6 `P0` install + DB backup | [JOB-SESSION §4](../../dsh-opencode-v2/docs/OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md) | owner-gated prerequisite; no code |
+| 2.2.6 `P0` install + DB backup | [JOB-SESSION §4](../../archive/dsh-opencode-v2/docs/OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md) | owner-gated prerequisite; no code |
 | `P1` `--archived` version gate | JOB-SESSION §4 | session-list hygiene, behind a version check |
 | `P2` job summary on results | JOB-SESSION §4 | bounded kind/status/error attached to worker/subagent results |
 | `P3` HTTP session export | JOB-SESSION §4 | replace the CLI export spawn; usage ledger keeps one writer |
 | `P4` stream repair path | JOB-SESSION §4 | becomes a pipe hook over the truncated-stream fixture |
 | `P5` stats reconciliation | JOB-SESSION §4 | cost attribution once session-scoped stats are proven |
-| Protocol declaration from catalog | [PROTOCOL-GAP §5](../../dsh-opencode-v2/docs/OPENCODE-PROTOCOL-FLEXIBILITY-GAP.md) | refuse to advertise a route whose wire the adapter cannot speak |
+| Protocol declaration from catalog | [PROTOCOL-GAP §5](../../archive/dsh-opencode-v2/docs/OPENCODE-PROTOCOL-FLEXIBILITY-GAP.md) | refuse to advertise a route whose wire the adapter cannot speak |
 | Protocol dispatch seam | PROTOCOL-GAP §5 | sibling request builder for Responses/Messages, measured before adding |
 | Stage-1 soak (`S6`) and defect closure (`S7`) | STAGE-PLAN §2 | one full day of real turns on the consolidated vendor; `S7` closes with the cases above |
 
@@ -268,7 +296,7 @@ to avoid re-opening the migration.
 | :--- | :--- | :--- | :--- |
 | D-1 | M9 readiness | data connection only; **automatic activation on hold** | §2.3 keeps the manual preset/switch activation; no Phase gates on M9 |
 | D-2 | Managed-child gating | **keep the current policy** — the admission gate stays on the `opencode` tool for sandbox-policy consistency | C4 is fixed; no special case is added |
-| D-3 | Client half | **consolidate into the router dashboard**, remove the standalone plugin section | C5 is fixed; the vendored slot ships no `settings.section` |
+| D-3 | Client half | **consolidate into the router dashboard**, remove the standalone plugin section | **C5 CONFIRMED 2026-11-14** — the router bundle carries one `settings.section`; no vendor section is registered. Residual: `vendor/{antigravity,deepinfra,opencode}/lib/client.js` still exist on disk as unreachable dead code (the vendor packages are not installed and `build-client.mjs` bundles only `lib/client.src.js`); deleting them is optional cleanup, not a live second surface |
 | D-4 | Stage 2 parser | **Phase B uses the legacy classifier first**, decoupled from the O1/O2/O3 verdict | B4 keeps `legacy` default; canonical default + oracle move to Phase F |
 
 ### 6.2 Residual risks
@@ -292,11 +320,11 @@ dropped: shipped items keep a regression gate, planned items are attached to A�
 
 | Beta item | Source | Phase | Gate carried forward |
 | :--- | :--- | :--- | :--- |
-| CLI worker module layout, backend adapters | [CLI-WORKER-DESIGN](../../dsh-opencode-v2/docs/CLI-WORKER-PLUGIN-DESIGN.md) | A (move) + C (registry/gate) | worker suite green; registry reclamation |
-| Recipe Tier A (context clamp, finish mapping, request validation, stop lists, reasoning-token trace) | [RECIPE §4/§7](../../dsh-opencode-v2/RECIPE-CAPABILITY-DELTA.md) | A (carry) + B (regression through the pipe) | 401-pass behaviour preserved |
+| CLI worker module layout, backend adapters | [CLI-WORKER-DESIGN](../../archive/dsh-opencode-v2/docs/CLI-WORKER-PLUGIN-DESIGN.md) | A (move) + C (registry/gate) | worker suite green; registry reclamation |
+| Recipe Tier A (context clamp, finish mapping, request validation, stop lists, reasoning-token trace) | [RECIPE §4/§7](../../archive/dsh-opencode-v2/RECIPE-CAPABILITY-DELTA.md) | A (carry) + B (regression through the pipe) | 401-pass behaviour preserved |
 | Recipe Tier B — canonical tokens / declared-tool decision | RECIPE §4 | B (seam) → F (default) | S2-1..S2-5 |
 | Recipe Tier C — conformance oracle | RECIPE §4 | F (Stage 3) | S3-1..S3-4 |
-| Stage 1 S1–S4 (activation, build match, suite, isolated boot) | [STAGE-PLAN §2](../../dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md) | A–E verification | identical mount + suite |
+| Stage 1 S1–S4 (activation, build match, suite, isolated boot) | [STAGE-PLAN §2](../../archive/dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md) | A–E verification | identical mount + suite |
 | Stage 1 S5 browser boot | STAGE-PLAN §2 | D (post-cutover) | shell renders, no page errors |
 | Stage 1 S6 soak | STAGE-PLAN §2 | F | one full day of real turns |
 | Stage 1 S7 defect closure | STAGE-PLAN §2 | F | every closed defect has a regression test |
@@ -305,17 +333,17 @@ dropped: shipped items keep a regression gate, planned items are attached to A�
 | O3 `content_filter` error kind | STAGE-PLAN §3 | F | host renders the error |
 | Stage 2 parser (`S2-1..S2-5`) | STAGE-PLAN §4 | B (port, legacy default) → F (default) | conformance 7/7, invariance 300/300, replay, soak |
 | Stage 3 oracle (`S3-1..S3-4`) | STAGE-PLAN §6 | F | corpus in the shipped suite |
-| 2.2.6 `P0` install + backup | [JOB-SESSION §4](../../dsh-opencode-v2/docs/OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md) | F (owner prerequisite) | fixture + backup |
+| 2.2.6 `P0` install + backup | [JOB-SESSION §4](../../archive/dsh-opencode-v2/docs/OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md) | F (owner prerequisite) | fixture + backup |
 | `P1` `--archived` | JOB-SESSION §4 | F | version gate |
 | `P2` job summary | JOB-SESSION §4 | F | background-job fixture |
 | `P3` HTTP export | JOB-SESSION §4 | F | export equivalence |
 | `P4` stream repair | JOB-SESSION §4 | F | truncated-stream fixture |
 | `P5` stats reconciliation | JOB-SESSION §4 | F | session-scoped stats |
-| Protocol declaration from catalog | [PROTOCOL-GAP §5](../../dsh-opencode-v2/docs/OPENCODE-PROTOCOL-FLEXIBILITY-GAP.md) | F | `/api/model` exposes the wire |
+| Protocol declaration from catalog | [PROTOCOL-GAP §5](../../archive/dsh-opencode-v2/docs/OPENCODE-PROTOCOL-FLEXIBILITY-GAP.md) | F | `/api/model` exposes the wire |
 | Protocol dispatch seam | PROTOCOL-GAP §5 | F | non-OpenAI route measured |
-| Per-call selection normalization | [CHANGELOG rc.3](../../dsh-opencode-v2/CHANGELOG.md) | C | one selection contract across tool / `/ocode` / `subagent_opencode` |
+| Per-call selection normalization | [CHANGELOG rc.3](../../archive/dsh-opencode-v2/CHANGELOG.md) | C | one selection contract across tool / `/ocode` / `subagent_opencode` |
 | OpenCodex selection mirror | CHANGELOG 2026-11-07 | D (config keys unchanged) | projection + scope union tests |
-| Settings allow-list / plan usage cards | [MODEL-SERVING-PLAN](../../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md) | C5 (fold into dashboard) | one UI, no duplicate section |
+| Settings allow-list / plan usage cards | [MODEL-SERVING-PLAN](../../archive/dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md) | C5 (fold into dashboard) | one UI, no duplicate section |
 | Antigravity/OpenCode CLI feasibility record | [pending-docs](../../pending-docs/unimplemented/OPENCODE-ANTIGRAVITY-FEASIBILITY.md) | historical — no phase | superseded by the shipped surfaces |
 
 ## 8. Checkpoint log
@@ -341,7 +369,7 @@ Three changes are now part of the contract (`lib/driver/contract.js`) and D1:
 | Upstream account (`agy models`) | `gemini-4-argon-{low,medium,high}`, `claude-opus-5-5-{low,medium,high}` present |
 | Live profile `vendorConfig['dsh-antigravity'].enabledModels` | both families already allow-listed |
 | Live profile `subagent-model-selection-settings.allowedModels` | **registered** (six ids added; backup `cordis.patch.yml.bak.before-argon-opus-register-*`) |
-| Running DSH runtime (`list_subagent_models`) | only `gemini-3.8-flash` — **applied pending restart** |
+| Running DSH runtime (`list_subagent_models`) | only `gemini-3.8-flash` — measured 2026-11-10; the live unit predates later `lib/` rebuilds (**applied pending restart**, owner action) |
 
 Consequence: Argon/Opus are reachable through the vendor CLI now, and through the DSH subagent
 roster after the next `dsh-web.service` restart (owner-only). CP1 was therefore executed on the

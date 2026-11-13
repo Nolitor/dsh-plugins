@@ -115,6 +115,17 @@ test('a complete-shape provider emits one delta and one block per whole call', a
   assert.equal(chunks.at(-1).reason.kind, 'tool-calls')
 })
 
+test('a complete-shape call keeps provider metadata on the block', async () => {
+  // Gemini 3/4 require the functionCall thoughtSignature to be replayed on the
+  // next request; the shared pipe must not drop it between the hook and the host.
+  const chunks = await run([
+    { parts: [{ kind: 'tool-call', id: 'g1', name: 'read_file', arguments: { path: '/tmp/x' }, thoughtSignature: 'sig' }] },
+    { finish: 'STOP' },
+  ], { toolCallShape: 'complete' })
+  const end = chunks.find((chunk) => chunk.type === 'block-end')
+  assert.equal(end.block.thoughtSignature, 'sig')
+})
+
 test('a mapped stop is promoted to tool-calls when a tool block closed', async () => {
   const chunks = await run([
     { parts: [{ kind: 'tool-call', index: 0, id: 'c1', name: 'bash', argumentsDelta: '{}' }] },

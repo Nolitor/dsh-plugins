@@ -47,6 +47,106 @@ test('tool-call and tool-result become functionCall/functionResponse', () => {
   assert.equal(contents[1].parts[0].functionResponse.response.output, 'sunny')
 })
 
+test('a real DSH tool message becomes a paired functionResponse', () => {
+  // Regression 2026-11-14: the harness sends role:'tool' with the id on the
+  // MESSAGE, not a synthetic tool-result block. Claude on this host rejected the
+  // history as tool_use without tool_result; Gemini happened to tolerate it.
+  const { contents } = toContents([
+    { role: 'assistant', content: [{ type: 'tool-call', id: 'toolu_1', name: 'get_weather', arguments: '{"city":"Seoul"}' }] },
+    { role: 'tool', toolCallId: 'toolu_1', content: [{ type: 'text', text: 'sunny' }] },
+  ])
+  assert.deepEqual(contents[1], {
+    role: 'user',
+    parts: [{
+      functionResponse: {
+        name: 'get_weather',
+        response: { output: 'sunny' },
+        id: 'toolu_1',
+      },
+    }],
+  })
+})
+
+/** Every path at which `key` occurs anywhere under `value`. */
+function pathsOfKey(value, key, path = '$') {
+  if (value === null || typeof value !== 'object') return []
+  const found = []
+  for (const [k, v] of Object.entries(value)) {
+    const here = Array.isArray(value) ? `${path}[${k}]` : `${path}.${k}`
+    if (k === key) found.push(here)
+    found.push(...pathsOfKey(v, key, here))
+  }
+  return found
+}
+
+test('a tool-call thoughtSignature is replayed as a part-level sibling of functionCall', () => {
+  // Measured 2026-11-14 (gemini-4-hydrogen-low, isolated home): the inbound part
+  // is `{ thoughtSignature, functionCall: { name, args, id } }`, so the replay
+  // mirrors it. The old nested shape was rejected with HTTP 400.
+  const { contents } = toContents([
+    { role: 'assistant', content: [{ type: 'tool-call', id: 'c1', name: 'get_weather', arguments: '{"city":"Seoul"}', thoughtSignature: 'sig' }] },
+  ])
+  assert.deepEqual(contents[0].parts[0], {
+    functionCall: { name: 'get_weather', args: { city: 'Seoul' }, id: 'c1' },
+    thoughtSignature: 'sig',
+  })
+})
+
+test('regression: thoughtSignature never appears inside a functionCall', () => {
+  // Live 400 2026-11-14: `Unknown name "thoughtSignature" at
+  // 'request.contents[5].parts[0].function_call': Cannot find field.`
+  const body = requestBody({
+    messages: [
+      { role: 'user', content: 'weather in Seoul and Busan?' },
+      { role: 'assistant', content: [
+        { type: 'text', text: 'checking' },
+        { type: 'tool-call', id: 'c1', name: 'get_weather', arguments: '{"city":"Seoul"}', thoughtSignature: 'sig-1' },
+        { type: 'tool-call', id: 'c2', name: 'get_weather', arguments: { city: 'Busan' }, thoughtSignature: 'sig-2' },
+      ] },
+      { role: 'tool', toolCallId: 'c1', content: [{ type: 'text', text: 'sunny' }] },
+      { role: 'tool', toolCallId: 'c2', content: [{ type: 'text', text: 'rain' }] },
+    ],
+  }, { model: 'gemini-4-hydrogen-low', project: 'p' })
+  const calls = body.request.contents.flatMap((content) => content.parts).filter((part) => part.functionCall)
+  assert.equal(calls.length, 2)
+  for (const part of calls) {
+    assert.ok(!('thoughtSignature' in part.functionCall), 'thoughtSignature must not be a functionCall field')
+    assert.equal(typeof part.thoughtSignature, 'string')
+  }
+  assert.deepEqual(calls.map((part) => part.thoughtSignature), ['sig-1', 'sig-2'])
+  // Deep search: the key may only occur directly on a part, never deeper.
+  const paths = pathsOfKey(body, 'thoughtSignature')
+  assert.equal(paths.length, 2)
+  for (const path of paths) {
+    assert.match(path, /^\$\.request\.contents\[\d+\]\.parts\[\d+\]\.thoughtSignature$/)
+    assert.doesNotMatch(path, /functionCall/)
+  }
+})
+
+test('a tool-call without a signature carries no thoughtSignature key at all', () => {
+  const { contents } = toContents([
+    { role: 'assistant', content: [{ type: 'tool-call', id: 'c1', name: 'f', arguments: '{}' }] },
+  ])
+  assert.deepEqual(pathsOfKey(contents, 'thoughtSignature'), [])
+})
+
+test('two tool results merge into one user turn', () => {
+  // Anthropic requires every tool_result for one assistant turn in the SAME
+  // user message; Gemini also expects the responses grouped. The old loop made
+  // one user content per result, which is rejected by the Anthropic lane.
+  const { contents } = toContents([
+    { role: 'assistant', content: [
+      { type: 'tool-call', id: 'c1', name: 'a', arguments: '{}' },
+      { type: 'tool-call', id: 'c2', name: 'b', arguments: '{}' },
+    ] },
+    { role: 'tool', toolCallId: 'c1', content: [{ type: 'text', text: 'one' }] },
+    { role: 'tool', toolCallId: 'c2', content: [{ type: 'text', text: 'two' }] },
+  ])
+  const userTurns = contents.filter((content) => content.role === 'user')
+  assert.equal(userTurns.length, 1)
+  assert.deepEqual(userTurns[0].parts.map((part) => part.functionResponse.name), ['a', 'b'])
+})
+
 test('tools map to functionDeclarations', () => {
   const tools = toTools([{ name: 'f', description: 'd', parameters: { type: 'object', properties: { a: { type: 'string' } } } }])
   assert.equal(tools[0].functionDeclarations[0].name, 'f')

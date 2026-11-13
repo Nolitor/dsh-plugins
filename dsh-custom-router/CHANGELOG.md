@@ -1,12 +1,693 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.16
+version: 0.0.1-rc.20
 kind: report
 status: active
-updated: 2026-11-13
-summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events) and rc.15 with the preset-registry drift gate (static registry diff, `usageRoutes` on every preset, and a mutation harness that proves each drift class is rejected).
+updated: 2026-11-14
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events) and rc.15 with the preset-registry drift gate (static registry diff, `usageRoutes` on every preset, and a mutation harness that proves each drift class is rejected), and rc.17 with the `google-generative-ai` vendor wire plus JSON-Schema enums derived from their constant arrays instead of hand-copied, rc.18 with the subagent-activation contract migration that restores the `opencode`/`agy_worker` managed-child delegation on DSH 0.2.2-rc.3, and rc.19 with the living-spec gates (a 14-day age check on the manual `spec:watch` baseline, the four-preset live-route smoke gate), the vendored Antigravity fix that replays a Gemini `thoughtSignature` as a part-level sibling of `functionCall` instead of nesting it inside (live 400 → 200), the Anthropic/Google conformance fixtures, the approved deletion of two dead surfaces, and DSH credential-store support (`credentialRef`) for the DeepInfra and EXAONE keys, and rc.20 with the automatic plaintext-key migration (profile patch → DSH credential store), the EXAONE subagent-allowlist entry in both the live profile and the repo default, the atomic owner-only write the migration commits through, and the removal of the synthetic `OpenCode (config default)` model row from the picker (the `default` pseudo-route still resolves server-side).
 -->
+
+## 0.0.1-rc.20 (cont.) — the synthetic `OpenCode (config default)` model row is removed — 2026-11-14
+
+### What changed
+
+| Item | Before | After | Evidence |
+|---|---|---|---|
+| OpenCode provider group in the picker | carried one synthetic row `id: 'default'`, name `OpenCode (config default)` | the served catalog only | `vendor/opencode/lib/http.js` (`listModels`), `vendor/opencode/lib/provider.js` (`listModels`) |
+| `models` config default (both adapters) | `[{ id: 'default', opencodeModel: '', name: 'OpenCode (config default)' }]` | `[]` (seeds no row) | `vendor/opencode/lib/http.js` Config, `vendor/opencode/lib/provider.js` Config |
+| Router suite | 645 | **649** | `npm test` (+4 negative-proof cases) |
+| OpenCode vendor suite | 554 | **555** | `npm test` in `vendor/opencode` (+1 case: the pseudo-route still resolves) |
+
+### Where it came from
+
+The row was **synthesized in two places per vendored adapter**, never by the host and never by the
+router's own preset registry:
+
+1. `vendor/opencode/lib/http.js` — the `models` schema default carried the entry, and
+   `listModels()` prepended a fresh `{ provider, id: 'default', name: 'OpenCode (config default)' }`
+   row to the discovered catalog. That is the row the `OpenCode Go (direct)` provider group showed.
+2. `vendor/opencode/lib/provider.js` — the same two places for the CLI adapter (`OpenCode (CLI)`).
+
+It was never a model id: the backend serves no route by that name, so the picker advertised a
+phantom.
+
+### What was removed, and what was deliberately KEPT
+
+**Removed:** the ENTRY — both config defaults now seed no row, and both `listModels` prepends are
+gone. The list simply stops showing it; no replacement entry was invented.
+
+**Kept:** the `default` **pseudo-route** resolution, which is server-side route resolution and not a
+dropdown entry:
+
+- `modelRefFromRoute(route, table, defaultModel)` (`http.js`) still maps the `default` id to the
+  table's `opencodeModel` or, failing that, to `defaultModel`. The live profile sets
+  `defaultModel: opencode-go/minimax-m3.1-flash`.
+- `resolveOpencodeModel(routeId, table)` (`provider.js`) still maps `default` to the empty `-m`
+  value, so `opencode run` applies its own configuration.
+
+The two were coupled in the old code only because ONE synthetic row served both purposes. The
+removal deletes the advertisement and leaves the resolution untouched.
+
+### Negative proof
+
+- Producer grep count for the exact label in `vendor/*/lib/` + `lib/` = **0**. The label survives
+  only inside assertions that FORBID it.
+- New track test `test/model-catalog-default-row.test.mjs` (4 cases): neither adapter config seeds
+  a row; the HTTP discovered list equals the served catalog; the HTTP fallback list is empty; the
+  CLI discovered list equals the served catalog.
+- The vendor test that asserted *"the config-default row always stays selectable"* now asserts its
+  **absence**, and a new vendor test pins that the pseudo-route still resolves to `defaultModel`.
+
+### Locale
+
+**No locale key ever existed for that label** (measured: `config default` count = 0 in
+`locale/en.json`, `locale/ko.json`, `locale/zh.json`, `lib/locale-table.js`,
+`vendor/opencode/locale/en.json`, `vendor/opencode/locale/ko.json`). There was therefore no orphan
+translation to delete, and none was invented. `lib/locale-table.js` and the locale JSONs are
+unchanged by this change.
+
+### Notes
+
+- Version held at `rc.20` (bumped earlier in the session). No live profile value was written and
+  the running service was **not** restarted; the live picker keeps the old catalog until the next
+  restart.
+- Docs were brought to the measured rc.20 baseline in the same session: `docs/ROADMAP.md`,
+  `docs/HANDOFF.md`, and the closed-item table in `docs/ROADMAP-ARCHIVE.md` §2.
+
+## 0.0.1-rc.20 — automatic plaintext-key migration + EXAONE allowlist — 2026-11-14
+
+### What changed
+
+| Item | Before | After | Evidence |
+|---|---|---|---|
+| DeepInfra key | plaintext `apiKey:` in the live profile patch (line 140) | `credentialRef: DEEPINFRA_API_KEY` (line 142) | `~/.dsh/profiles/web/cordis.patch.yml`; backup `cordis.patch.yml.bak.before-plaintext-key-migration-20261113-183336` (mode 0600) |
+| EXAONE key | plaintext `apiKey:` in the live profile patch (line 164) | `credentialRef: EXAONE_API_KEY` (line 166) | same file; same backup |
+| Credential store | `refs: DEEPSEEK_API_KEY, OPENCODE_API_KEY` | `refs: … + DEEPINFRA_API_KEY, EXAONE_API_KEY` | `~/.dsh/.credentials.yaml` (mode 0600); `version:`/`records:` untouched |
+| Live allowlist | 6 routes, `exaone` absent | **7 routes**, `exaone/k-exaone_v2.5` added | `~/.dsh/profiles/web/cordis.patch.yml:63-64` |
+| Repo default allowlist | no `subagent-model-selection-settings` row | 7 routes incl. `exaone/k-exaone_v2.5` | `cordis.patch.yml` (this package's bundle layer) + `lib/allowlist.js` |
+| Router suite | 629 | **645** | `npm test` (16 new cases: 11 migration + 5 allowlist) |
+
+### The automatic migration (`lib/credential-migration.js`)
+
+The router now migrates a plaintext provider key into the DSH credential store **by itself**, at
+mount, when its OWN live config still carries one:
+
+1. **Trigger** — the router's live `vendorConfig` holds a plaintext `apiKey` for a managed row
+   (`dsh-deepinfra`, `dsh-exaone`). The live config is the trigger because it is what the running
+   service actually uses; the patch file is then edited to match, so the two cannot drift.
+2. **Backup** — the patch is copied to `cordis.patch.yml.bak.before-plaintext-key-migration-<ts>`
+   with mode **0600** before anything is touched.
+3. **Store** — the value is written into `~/.dsh/.credentials.yaml` under `refs:`, through the host
+   credential seam (`ctx.credentials.set(ref, value)`), which commits with the provider's own
+   atomic protocol (random-suffix sibling + rename, mode 0600, under the document's writer lock).
+4. **Confirm** — the ref is read back and must resolve to the same value.
+5. **Remove** — only then is the plaintext line replaced by `credentialRef: <ref>`.
+
+**The order is the safety property.** There is no env fallback on the live service, so a lost value
+is a lost route; a plaintext key is therefore never deleted before its store entry is confirmed.
+Every failure path leaves the plaintext line in place and logs a warning naming the **ref** (never
+a value). The edit is LINE-ORIENTED, not a YAML load/dump: the patch carries comments and an order
+that a rewrite would destroy, and the diff after the run was exactly the two intended lines.
+
+**Idempotent by construction.** With the plaintext lines gone the plan is empty and nothing is
+written — the steady state is a no-op, verified by re-running the one-shot script
+(`result: nothing to migrate`, no second backup).
+
+### The one-shot script (`scripts/migrate-plaintext-keys.mjs`)
+
+`--dry-run` (default) plans and reports; `--apply` performs the same four steps against a chosen
+`--patch` file and `--home`. The store write uses the **atomic YAML path** (the `yaml` Document
+`setIn(['refs', ref])` + `writeFileAtomic` + `withFileLock`), because the service's own write method
+is not reachable from a standalone script; the credential provider watches the file and picks the
+change up **without a restart**. `version:`, `records:` and every other entry survive byte for byte.
+
+### The EXAONE allowlist
+
+The measured refusal was `child LLM route "exaone/k-exaone_v2.5" is not allowed for this Session`.
+The route is now in the **live** allowlist and in the **repo-side default**, which is stated in two
+homes from one source: `lib/allowlist.js` (the list as data) and this package's `cordis.patch.yml`
+(the bundle layer a fresh profile mounts). A bundle layer applies BEFORE the profile's own patch and
+a patch REPLACES a row's whole config, so an operator's list wins wholesale — the default never
+fights the live list. `test/allowlist.test.mjs` pins the two homes against each other, parsing the
+YAML with the HOST's own parser so the file the test reads is the file the loader parses.
+
+### Notes for the owner
+
+- The two keys in the live profile were **disclosed in a transcript** (see `docs/FAILURE-LEDGER.md`
+  and ROADMAP P0-1). This migration moves them into the store; it does **not** rotate them. Rotate
+  at the provider and update the store refs.
+- The live patch file is read at boot: the new `credentialRef` lines take effect on the next
+  restart. The credential store is hot — the provider watches it, so a rotated value reaches the
+  next request without a restart.
+- `scripts/verify-mount.mjs` currently reports `PARITY: FAIL` against
+  `.runtime-measure/custom-router-e2e/baseline-web.json`. This is **pre-existing drift**, proved by
+  re-running the gate with this change reverted (identical result): the baseline is an UNTRACKED
+  artifact from 2026-11-07 that predates the host's `propose_action`/`team_task_*` tools and the
+  `deepinfra-anthropic` route. It is not a gate this change was asked to run, and it is not
+  affected by it.
+
+## 0.0.1-rc.19 — living-spec gates, four-preset smoke, Gemini replay 400 — 2026-11-14
+
+### Measured before → after
+
+| Surface | Before | After | Evidence |
+|---|---|---|---|
+| Router suite | 592 | **625** | `npm test` (22 refresh-expectation cases + 11 conformance cases) |
+| Conformance wires | 1 of 5 | **3 of 5** | anthropic-messages + google-generative-sse replay offline |
+| Stale docs | 12+ docs on rc.16/583/173-entry claims | **rc.19 baseline** | `docs:check` 232 docs / 1,695 links |
+| `verify:refresh` | PASS on 3 mounted routes | **PASS on 4 preset routes + expected rows** | `[expected] preset routes present: 4/4` |
+| `specs:check` | freshness only | freshness **+ watch-baseline age** | `watch: generatedAt …, 0d old (max 14d) — OK` |
+| DeepInfra pricing `verifiedAt` | 2026-11-13 (TTL 7d → hard-stale 2026-11-21) | **2026-11-14** | live catalog: 178 entries, 92 chat, 8 discounted (0.05–0.51) |
+| Gemini replay (router path) | HTTP 400 `Unknown name "thoughtSignature" at 'request.contents[5].parts[0].function_call'` | isolated real wire **200**, answer + finish `stop` | `vendor/antigravity/lib/wire.js`; vendor suite 190/190 |
+| Vendored versions | antigravity rc.13 / opencode rc.7 / deepinfra rc.13 | **rc.14 / rc.8 / rc.14**, peers `rc.19` | package manifests |
+
+### Living-spec gates
+
+- **Watch-baseline age (ROADMAP P1-5).** `scripts/verify-specs.mjs` gained
+  `loadWatchBaseline()` + `checkWatchBaseline()`: `specs/upstream.lock.json` is aged against
+  `--watch-max-age` (default **14 days**, i.e. two missed weekly cycles), warning by default so an
+  offline machine still passes, error with `--strict-watch` / `npm run verify:freshness:strict`. A
+  missing lock is a warning (an error under `--strict-watch`). The manual cadence and the three-step
+  runbook are in `specs/README.md`. No scheduler was added. 8 new tests.
+- **Pricing re-verification (P1-4).** The live catalog was re-read on 2026-11-14 and
+  `specs/pricing/deepinfra.json` now records the fresh measurement; the 7-day `ttlDays` is retained
+  because the owner never asked to move to the 30-day default. The stale facts in
+  `specs/providers/deepinfra.json` and the vendored `catalog.js` header (173/91/9) were corrected to
+  the new measurement (178/92/8) instead of being left as evidence for a different day.
+- **Four-preset smoke (P1-6).** `scripts/refresh-expectations.mjs` is a pure expectation table
+  (`ROUTES`, `evaluateRefreshRoute`, `evaluateRefresh`) and `scripts/verify-refresh-routes.mjs` now
+  mounts **all four** presets and judges the payload: EXAONE must list `k-exaone_v2.5`, Antigravity
+  must keep a Claude and a Gemini lane, OpenCode and DeepInfra must serve rows. An absent route is a
+  **failure**, not a skip. 22 unit tests, plus two end-to-end negatives (preset dropped from the
+  mount → exit 1; `k-exaone_v2.5` stripped → exit 1).
+
+### Defects the worker caught in the first draft of that gate
+
+Six real defects were found in the lead's initial implementation and fixed (recorded because they
+are the reason the gate is trustworthy): a never-read route counted as `present` (false green,
+`evaluateRefresh([])` printed 4/4); the "Gemini base row" check was actually a `/hydrogen/` match; a
+lost row was only checked on the **forced** read, so a stale cache could pass; positional read
+matching; no aggregate `ok`; and "route not mounted" printed for a never-read route. The new suite
+fails 18/22 against the original implementation.
+
+### Vendored Antigravity — the live Gemini 400
+
+A live child on `antigravity/gemini-4-hydrogen` failed at its second step with
+`HTTP 400 Invalid JSON payload received. Unknown name "thoughtSignature" at
+'request.contents[5].parts[0].function_call': Cannot find field.` The adapter had carried the opaque
+signature correctly through the stream and the shared pipe but replayed it **inside** `functionCall`;
+the wire returns it as a **part-level sibling**. `vendor/antigravity/lib/wire.js` now emits
+`{ functionCall: { name, args, id }, thoughtSignature }`, `test/wire.test.mjs` gained a deep-path
+regression that fails if the key appears anywhere under `functionCall` (and the old test that pinned
+the nested shape was removed), and an isolated real-wire replay proved 400 → 200. **State: applied
+pending restart** — the live unit (started 01:07:25 KST) still runs the pre-fix module.
+
+### Conformance fixtures (ROADMAP P2-4, closed)
+
+`test/conformance/` grew from one wire to three. `anthropic-messages.test.mjs` (6 tests) replays a
+recorded Messages stream — `message_start` usage (input 60 / cacheRead 10 / cacheWrite 20) merged with
+the output-only `message_delta`, two `signature_delta` fragments accumulating into one per-block
+signature, a fragmented `input_json_delta`, and the request-side rule that **both** tool results of one
+assistant turn land in ONE user message. `google-generative-sse.test.mjs` (5 tests) replays the
+`{response:{candidates,usageMetadata}}` envelope, proves `promptTokenCount` includes the cached tokens
+(`inputTokens` 100 of 120), promotes STOP-after-tool-call to `tool-calls`, and pins the signature path
+`[1].parts[0].thoughtSignature` with a recursive walk proving zero `thoughtSignature` keys beneath any
+`functionCall`. Each fixture carried a negative proof (breaking the binding made it fail; the vendor
+file was restored and hash-verified). **Uncovered remain `openai-responses` and
+`google-generative-ai`.**
+
+### Documentation freshness (ROADMAP P2-9, closed)
+
+Twelve docs plus `README.md`/`README.ko.md` were corrected to the rc.19 baseline — test counts, rc
+numbers, the DeepInfra catalog (178 entries / 92 chat / 8 discounted 0.05–0.51), host
+`0.2.2-rc.3`, live unit 01:07:25 KST. Two substantive findings: `PRESET-REGISTRY-STANDARD` §4 listed
+steps 2–3 as open while its header said the registry is derived (measured: `MODEL_PRESETS` **is**
+derived at `lib/client.src.js:2010`; the residual is `ROUTER_PROVIDERS`/`PICKER_ITEMS` only), and
+`CUSTOM-ROUTER-SERVICE-SPEC`'s claim that all three vendors are `link:` dependencies is false against
+the live profile. **C5 confirmed by measurement**: one `settings.section` in the shipped client,
+asserted by `test/client.test.mjs`; the vendor clients are unreachable dead code. `docs:check` green —
+232 documents / 1,695 links; `check-plugin-history` green.
+
+### Owner-instruction wave (same session, 02:00–03:00 KST)
+
+- **Post-restart live re-check (P1-2 closed):** the owner restarted the unit at 02:06:42 KST
+  (`MainPID 187920`). Router-path probes then passed on both wires — Gemini replayed a real 372-byte
+  `thoughtSignature` on a tool-call, read the result and completed the follow-up
+  (`turn/end completed`, zero 400 / `Cannot find field`); Claude carried two `bash` calls in one
+  assistant message with both results. The nested-signature 400 was not reproduced after the restart.
+- **Owner-approved deletions (P2-7 closed):** `vendor/antigravity/lib/subagent-opencode.js`
+  (sha256 `033d478b…`) removed together with its `"./subagent-opencode"` export entry (16 export keys
+  left, 0 dangling), and the broken profile symlink
+  `~/.dsh/profiles/web/node_modules/@nolit/dsh-opencode-v2` removed — symlink only, containing
+  directory inode unchanged, six remaining entries all resolve. Gates after: antigravity 190/190,
+  router green, `verify:presets` OK.
+- **Preset surface audit (T16):** measured matrix — antigravity: subagent provider + CLI worker +
+  tools/command; opencode: subagent provider + CLI worker + tool/command; deepinfra and exaone:
+  **model routes only** (`registerAdapter` and nothing else). Declarations already matched vendored
+  source in both directions; a new `test/preset-surfaces.test.mjs` pins that in both directions
+  (declared-but-absent **and** present-but-undeclared). The only gap is the live EXAONE allowlist
+  entry (owner, ROADMAP P1-3).
+- **Obsolete docs pruned (T18):** `FEATURE-SUMMARY.md` was the only document with no hand-written
+  inbound link and a version table that stopped at rc.17; it moved to `docs/archive/` with
+  depth-fixed links and a new `docs/archive/INDEX.md`. Nothing was deleted.
+- **Credential store (P0-2 agent side):** both vendored presets declare `credentialRef`
+  (`DEEPINFRA_API_KEY` / `EXAONE_API_KEY`), resolve it through `ctx.credentials.resolve()` at mount
+  and on `credentials/reference-updated`, with the precedence `explicit apiKey → store ref → env`
+  extracted as the pure `keyPrecedence` rule and pinned by tests (deepinfra 222 pass + 7 skip,
+  exaone 19/19, router 629/629). The **declaration layer** now lists the same precedence —
+  `auth.sources = [secret-field apiKey, credential-ref <REF>, env <REF>]` for both presets
+  (`lib/presets.js`), with `test/presets.test.mjs` updated in the same change — so
+  `verify:presets` and its mutation gate cover the store ref too. The seam is documented in
+  `docs/CREDENTIAL-STORE-MIGRATION.md` with the owner steps; no value appears in the repo. **Note:** two workers were dispatched on this
+  task and both exhausted context with zero writes before the lead measured the seam
+  (`dsh-credentials-local/lib/index.js:492`) and executed the bounded change.
+
+### Versions
+
+- Router `0.0.1-rc.19`; antigravity `0.0.1-rc.14` (wire fix), deepinfra `0.0.1-rc.14` (catalog
+  re-measurement), opencode `0.0.1-rc.8` (peer pin only), exaone unchanged at `0.0.1-rc.1`.
+- All four peer pins now read `0.0.1-rc.19`.
+
+## 0.0.1-rc.18 — subagent activation spec is flat again — 2026-11-13
+
+### Owner report
+
+세 세션(`b3ff706f`, `0ca4f190`, `fc5e45e7`)의 서브에이전트 호출이 막힌 원인을 실측하고
+보완한다. `opencode`/`agy_worker` 호출이 `Cannot read properties of undefined (reading 'id')`로
+실패하며, 권한(승인/샌드박스) 문제가 아니라 **벤더 위임 코드가 DSH 0.2.1-rc.2에서 제거된
+중첩 `request` 필드를 아직 보내고 있는 계약 불일치**다.
+
+### Measured
+
+| Surface | Before | Evidence |
+|---|---|---|
+| Live failure (session `b3ff706f`, 2026-11-13 22:16:55 KST) | `Error: opencode delegation could not start its child session: Cannot read properties of undefined (reading 'id')` | `tool/result` seq 95 |
+| `dsh-subagent` (0.2.2-rc.3) `startActivation(spec)` | reads `spec.parent.id` first (`lib/index.js:3024`); `startExternal()` destructures `spec.parent` (`:1584`) then `assertAdmitting(parent)` → `rootOf(undefined)` → `caller.id` | code read + `closingTeardownFor` (`:1898-1901`) |
+| Upgrade guide `v0.2.1-rc.2/subagent-activation-options` | "The nested `request` field is removed… pass `prompt`, `parent`, and optional execution settings directly" | installed DSH docs |
+| `vendor/opencode/lib/delegation.js` | sent `{provider,label,request:{prompt,parent,cwd},signal,delivery}` | measured live; test pinned `spec.request.parent` |
+| `vendor/antigravity/lib/cli-activation.js` | same nested shape for `agy_worker` / `/agy` | test pinned `spec.request.*` |
+| Host `subagent` explicit model errors (`fc5e45e7`) | **separate cause**: `child LLM route … is not allowed for this Session` | see below — not a permission decision |
+
+### What was wrong (two independent symptoms)
+
+1. **Contract mismatch (fixed here).** The vendored delegations were written against the
+   0.2.1-alpha.1 seam (`request: {…}`) and never migrated. `spec.parent` is `undefined`, so the
+   live service throws before any provider runs; the tool surfaces that error as a delegation
+   failure. Nothing in the dispatch gate is involved.
+2. **Frozen per-session model policy (not fixed by code).** The host records
+   `subagent/model-selection-policy` once at `agent/created` and never re-resolves it
+   (`dsh-tool-subagent/lib/model-selection-settings.js`). Sessions created before the live
+   `allowedModels` edit keep the old route ids (e.g. `0ca4f190` lists `antigravity/gemini-3.8-flash`,
+   `gemini-4-argon-{low,medium,high}` while the current catalog advertises `gemini-4-hydrogen` /
+   `gemini-4-argon` / `claude-opus-5-5`), so explicit selection is refused there. This is a DSH
+   design property, not the router's gate: a fresh top-level session (or omitting explicit
+   model selection) is the only remedy.
+
+### Fix
+
+- `vendor/opencode/lib/delegation.js`: `startChildSession()` builds a flat activation spec
+  (`provider`, `label`, `prompt`, `parent`, `signal`, `delivery`, optional `cwd`). `/ocode` uses
+  the same function.
+- `vendor/antigravity/lib/cli-activation.js`: `startCliChild()` builds the same flat spec for
+  `agy_worker` / `/agy`.
+- Tests updated to pin the flat contract, including the exact live read
+  (`spec.parent.id` / `spec.parent.session.header.cwd`) and the absence of `request`.
+- `lib/client.src.js` `OPENCODE_DOC_LIMITS`: the `claude-haiku-5-5` route now resolves its
+  documented Go limit; the combined free-model key was split into `beam-free` and
+  `iceman-contributor-free` (both null). `lib/client.js` rebuilt from the source.
+- `test/dual-mount-guard.test.mjs`: removed the three obsolete `dsh-opencode-v2` shim
+  export/locale parity tests and `SHIM_ROOT`; Phase E retired the shim and moved it to
+  `archive/`, so the guard would only measure archived code. The header records why.
+- `vendor/opencode/lib/index.js`: `/ocode` help no longer advertises a fallback-only saved
+  selection in managed mode; it names the provider route it will actually use.
+- `vendor/opencode/lib/index.js`: the `model` parameter text interpolated the compile-time
+  `DEFAULT_MODEL` even when the row configured another model, so the model read a route the child
+  would not run. `parameters(model)` now receives `cfg('model', DEFAULT_MODEL)`; clear/empty config
+  falls back to the same default the provider uses. The row's `config-reload` re-sync re-registers
+  the tool, so the text follows a settings change.
+- `scripts/build-presets.mjs`: `check:derive` compared `declarationSource()` (line + trailing
+  newline) with `DECLARATION_LINE` (a `/m` match that never captures the newline), so it FAILED on
+  a semantically identical tree forever and could not separate real drift from its own newline
+  (measured: `lengths 3760 vs 3761`, `equal ignoring trailing newline? true`,
+  `deep equal? true`). `declarationsAreCurrent()` now compares without the trailing newline;
+  `npm run check:derive` exits 0 and a changed declaration still fails it (`test/build-presets.test.mjs`).
+
+### Same-class drift found while answering “where else?”
+
+| Surface | Measured | Status |
+|---|---|---|
+| Live `subagent-model-selection-settings.allowedModels` | six routes, all registered; the parent/default route `deepseek-account/deepseek-flash` is absent. Live check on a fresh session: `list_subagent_models({provider:"deepseek-account"})` → `Error: LLM provider "deepseek-account" is not allowed for this Session` | **intentional** — owner confirmed 2026-11-13 that subagents are limited to Antigravity / OpenCode / DeepInfra; `deepseek-account` is deliberately excluded |
+| Session allowlists | creation-time snapshot; `0ca4f190` has 12 stale ids, `fc5e45e7` 6, current session 6 | DSH design; only a new top-level session picks up edits |
+| `lib/client.src.js` `OPENCODE_DOC_LIMITS` | key `claude-haiku-5.5`; the catalog route is `opencode-go/claude-haiku-5-5`, so `documentedLimit(row.route)` returned `null` and the UI printed `—` even though the docs list $15/$60/$20. The combined `crouton/beam/iceman` key can never be produced by `opencodeLimitKey` | **fixed** — dashed route key, combined key split into the two served free routes, `client.js` rebuilt; regression pinned in `test/client.test.mjs` |
+| `test/dual-mount-guard.test.mjs` | 3 failures: the test read `dsh-opencode-v2/` at the repo root, which Phase E moved to `archive/` | **fixed** — the retired shim's three export/locale parity tests and `SHIM_ROOT` were removed; the vendor-only guard remains |
+| `vendor/antigravity` CLI default `gemini-3.8-flash-low` | not in the profile's `dsh-antigravity.enabledModels` (that field filters the model route only, not the CLI), so no drift is proven; flagged as worth checking against the account catalog | unverified |
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| `vendor/opencode` `npm test` | **554 pass / 0 fail** |
+| `vendor/antigravity` `npm test` | **184 pass / 0 fail** |
+| `npm run check:derive` | **exit 0** — `sync-derive: current`, `build-presets: current (3 declarations)` |
+| Router `node --test test/*.test.mjs` | **535 pass / 0 fail** |
+| `npm run docs:check` | OK |
+
+### Live status
+
+The live profile symlinks this workspace, so the file change is on disk; the running
+`dsh-web.service` still holds the pre-fix module → **`applied pending restart`**. No restart was
+performed (owner-gated). Existing sessions keep the delegation failure until the daemon reloads.
+
+## 0.0.1-rc.18 (cont.) — living specs registry, freshness gate, conformance — 2026-11-14
+
+### Owner direction
+
+커스텀라우터의 강점은 프리셋 목록이 아니라 **API 규격·기능·가격이 바뀔 때마다
+DSH에 맞게 다시 규격화하는 업데이트 루프**다. 문서/규격은 한 번 쓰고 끝나면 안 되며,
+가격·할인(OpenCode/DeepInfra/OpenRouter)과 프로토콜/도구 호출 변경을 계속 잡아내야 한다.
+1+2단계(specs 레지스트리 + `verify:freshness`)를 먼저 깔고, 이어서 3단계(conformance
+fixture)까지 진행했다.
+
+### Phase 1+2 — `specs/` registry and freshness gate
+
+- **`specs/`** (machine-readable, 13 files):
+  - `protocols/` 5 wires (`openai-completions`, `openai-responses`,
+    `anthropic-messages`, `google-generative-sse`, `google-generative-ai`) with
+    `revision`, `verifiedAt`, `ttlDays`, canonical field mapping, capabilities,
+    serving adapters and notes.
+  - `providers/` 4 presets (antigravity, opencode, deepinfra, exaone) with
+    endpoint, models, capabilities, docs, pricing ref and verifiedAt.
+  - `pricing/` 4 files with `kind` (`subscription`/`flat`/`free`/`pay-per-token`/
+    `live-catalog`), source, ttlDays.
+  - `specs/README.md` is the schema and ownership contract.
+- **`scripts/verify-specs.mjs`** — schema + cross-reference + freshness.
+  Provider/pricing/protocol-with-adapters staleness is a hard failure; stale
+  protocol with no adapter is a warning. Flags `--root`, `--now`, `--warn`,
+  `--json`; exit 0/1/2. Defaults 90/90/30 days; equal TTL is fresh.
+- **`scripts/build-spec-matrix.mjs`** — deterministic
+  `docs/COMPATIBILITY-MATRIX.md` with a skeleton header; `--check` gate. The
+  Stale column takes the max age across provider, pricing and served protocol,
+  so the matrix cannot contradict the gate.
+- **`test/specs.test.mjs`** — 32 tests for boundaries, stale failures, missing
+  refs, `--warn`, `--json`, matrix render/check.
+- **package.json** — `specs:build`, `specs:check`, `verify:freshness`; `specs/`
+  added to published files.
+
+### Phase 3 — conformance fixture (OpenAI-completions)
+
+- `test/conformance/fixtures/openai-completions.sse` — one recorded stream with
+  reasoning, text, fragmented tool call, finish, cached/reasoning usage and
+  `[DONE]`.
+- `test/conformance/openai-completions.test.mjs` — drives the fixture through
+  **three** bindings: DeepInfra, EXAONE and OpenCode. Asserts an identical
+  canonical view (reasoning/text/tool id&name&arguments/finish/usage) and pins
+  the DeepInfra view literally. Zero-valued optional usage buckets are dropped:
+  OpenCode writes `cacheWriteTokens: 0` where DeepInfra omits it (documented
+  deviation, not a silent weakening).
+- `test/conformance/README.md` — how to add a fixture/revision when a wire
+  changes.
+- `npm test` now includes `test/conformance/*.test.mjs`.
+
+### QA findings applied
+
+- **Hydrogen (code): GREEN** — 32/32, CLI exit codes, boundary, matrix
+  determinism, regression fixes verified.
+- **Argon (design): major findings fixed** — `structuredOutput` was `true` in
+  the DeepInfra/OpenCode/EXAONE provider specs while no adapter sends
+  `response_format`; all three are now `false` at the provider level (the
+  protocol-level capability remains documented as unexercised). Antigravity
+  docs URL moved to `https://antigravity.google/docs/overview` (local measured
+  doc kept in notes); DeepInfra docs moved from `llms.txt` to
+  `https://docs.deepinfra.com`.
+- Reasoning vocabularies remain documented as wire-level, with per-route/
+  account caveats in each provider note (Antigravity catalog-dependent,
+  DeepInfra per-route tags, OpenCode variants).
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| Router `node --test test/*.test.mjs test/conformance/*.test.mjs` | **570/570 pass** |
+| `npm run specs:check` | exit 0 — 5 protocols, 4 providers, 4 pricing; matrix current |
+| `npm run verify:freshness` | exit 0 |
+| `stale probe at --now 2026-11-21` | exit 1 (pricing/deepinfra 8d > 7d) |
+| `--warn` at the same clock | exit 0 |
+| `npm run docs:check` | OK (229 docs, 1651 links) |
+| `check-plugin-history.mjs` | OK |
+
+No service restart was performed (owner restarts explicitly). The live profile
+was not edited by this work.
+
+## 0.0.1-rc.18 (cont.) — manual `spec:watch` upstream diff — 2026-11-14
+
+### Owner request
+
+4단계: `npm run spec:watch` — 등록된 공식 문서·체인지로그 URL의 해시 변경을 감지하고
+diff 리포트를 출력한다. **자동 스케줄러/크론은 임의로 등록하지 않고 수동 실행만** 한다.
+서비스 재시작도 하지 않는다.
+
+### What was added
+
+- **`specs/watch.json`** — 14 manually registered URLs:
+  - protocol docs: OpenAI OpenAPI mirror, Anthropic Messages, Google generateContent;
+  - changelogs: Anthropic release notes, Google Gemini API, OpenCode, EXAONE;
+  - provider docs: Antigravity, OpenCode models, DeepInfra, EXAONE endpoint/models;
+  - pricing/catalog: OpenCode plan docs, DeepInfra live models endpoint.
+  OpenAI's platform docs answer 403 to non-browser clients, so the entry uses the
+  official OpenAPI mirror and says so in `note`.
+- **`scripts/spec-watch.mjs`** — fetch → normalize → SHA-256 → compare → report.
+  - Conditional requests (`If-None-Match`/`If-Modified-Since`) from the lock;
+  - HTML → visible text (scripts/styles/comments/tags removed, entities decoded,
+    whitespace collapsed), CRLF/trailing-space normalization;
+  - JSON canonicalization: object keys sorted and id/name/key-bearing arrays
+    sorted, so a catalog that reorders its `data` array is not a false change
+    (measured on DeepInfra's `/v1/openai/models`);
+  - `specs/upstream.lock.json` baseline and git-ignored
+    `specs/.watch-cache/` normalized bodies for line diffs;
+  - diff lines are capped and sanitized (ANSI/control sequences removed) —
+    external docs are untrusted;
+  - flags `--update`, `--json`, `--fail-on-change`, `--only`, `--timeout`,
+    `--root`, `--now`; exit 0 clean/changed, 1 changed with
+    `--fail-on-change`, 2 hard error.
+- **`test/spec-watch.test.mjs`** — 12 offline tests: HTML normalization, JSON
+  canonicalization, diff cap/sanitize, new/changed/unchanged/304, optional vs
+  required errors, update writes lock+cache, JSON report.
+- **`npm run spec:watch`** added. **No cron, timer, scheduler or background job
+  is registered**; it runs only when invoked.
+- `specs/README.md` documents the manual workflow and exit codes.
+
+### Measured
+
+| Check | Result |
+|---|---|
+| Baseline `node scripts/spec-watch.mjs --update` | 14 watched, lock + 14 cache bodies written |
+| Second run | **14 watched, 0 changed, 0 new, 0 errors** |
+| `test/spec-watch.test.mjs` | 12/12 pass |
+| CLI `--fail-on-change` probe (local server) | changed → exit **1**, default → exit **0** |
+| Conditional 304 | unchanged without reading a body |
+| Router suite | 582/582 pass (570 + 12) |
+
+### Notes
+
+- `specs/upstream.lock.json` is committed as the baseline; the normalized body
+  cache is ignored. A changed hash without a cache body still reports the hash
+  change and says no diff is available.
+- This is deliberately **not** wired into `npm run verify`: it needs the network
+  and is a manual inspection tool, not a deterministic gate. `specs:check`
+  remains the offline freshness gate.
+
+## 0.0.1-rc.18 (cont.) — Antigravity Claude tool-result pairing — 2026-11-14
+
+### Measured failure
+
+A live `antigravity/claude-opus-5-5` subagent (session `429ac69e-...`, provider
+`antigravity`, model `claude-opus-5-5`, effort `high`) called `team_task_get`,
+got the result, and the next request failed with HTTP 400:
+
+`messages.2: tool_use ids were found without tool_result blocks immediately after:
+toolu_vrtx_012VW2MereBiEXACwqghD8mZ...`
+
+This was **not** OpenCode's Claude route and not a quota/auth failure. The DSH
+tool result is a first-class message (`role: 'tool'`, `toolCallId` on the
+message); the Antigravity wire only handled a synthetic `tool-result` content
+block, so the history reached Claude as `functionCall` with no
+`functionResponse`. Gemini tolerated it; the Anthropic lane did not.
+
+### Fix
+
+- `vendor/antigravity/lib/wire.js`: project a real tool message as
+  `functionResponse {name, response:{output}, id}`, resolving the name from the
+  preceding assistant tool-call id; keep the synthetic block path.
+- `vendor/antigravity/test/wire.test.mjs`: regression test using the real DSH
+  message shape.
+- Antigravity suite: **185/185 pass**.
+
+Status: `applied pending restart` for the live daemon (no restart performed);
+the fix is in the workspace symlink and will load on the owner's next restart.
+
+### Follow-up — the same wire also broke Gemini (2026-11-14)
+
+A Hydrogen child (`antigravity/gemini-4-hydrogen`) failed on the request after a tool call:
+
+`Function call is missing a thought_signature in functionCall parts ... function call
+default_api:team_task_list, position 6.`
+
+Two additional wire defects were measured and fixed:
+
+1. **Gemini thoughtSignature was discarded.** The Antigravity stream contract classified the signature
+   as an opaque part and dropped it; the next request replayed `functionCall` without it. The signature
+   now rides on the tool-call part, the shared `lib/stream` pipe keeps it on the assembled block
+   (`test/stream-pipe.test.mjs`), and `wire.js` replays it inside `functionCall`.
+2. **Consecutive tool results were split into separate user turns.** The Antigravity Claude lane needs
+   all results of one assistant turn in the same user message; two calls produced two user contents.
+   `toContents` now merges consecutive `functionResponse` parts into one user turn
+   (`vendor/antigravity/test/wire.test.mjs`).
+
+Suites: router **583/583**, antigravity **188/188**. Live verification of both paths is still pending
+the next owner restart; the running daemon predates these fixes.
+
+## 0.0.1-rc.18 (cont.) — EXAONE preset — 2026-11-13
+
+### Owner request
+
+`https://docs.exaone.ai/en/docs`를 읽고, 해당 모델의 API 키를 입력하면 사용할 수 있는
+프리셋을 커스텀라우터에 추가한다. 프리셋은 “설치 개념”으로 동작해야 한다(Add provider →
+활성화 → 키 입력).
+
+### Measured from the documentation
+
+| Fact | Value |
+|---|---|
+| Base URL | `https://api.exaone.ai` |
+| Chat route | `POST /v1/chat/completions`, OpenAI-compatible |
+| Auth | `Authorization: Bearer <API key>` |
+| Model | `k-exaone_v2.5` (only chat model) |
+| Context | 524,288 tokens; `input + max_tokens` must not exceed it |
+| Output | advertised up to 512K; a turn reserves `turnMaxTokens` (16,384) |
+| Reasoning | always on; `reasoning_effort` `low` / `high` / `max` (default `max`) |
+| Multi-turn | `chat_template_kwargs.preserve_thinking: true` recommended |
+| Streaming | `text/event-stream`, `data: [DONE]` |
+| Catalog | no model-listing endpoint documented → static declaration |
+
+### What was added
+
+- **Vendored provider** `vendor/exaone` (`@nolit/dsh-exaone`, `0.0.1-rc.1`):
+  OpenAI-compatible adapter on the router's shared stream pipe, SSE translation
+  for text / `reasoning_content` / fragmented tool calls, top-level
+  `usage.reasoning_tokens` projection, effort folding (`medium→high`,
+  `xhigh→max`), `preserve_thinking: true`, and HTTP error mapping
+  (`401 INVALID_CREDENTIAL`, `429 RATE_LIMIT`, `404 UNKNOWN_MODEL`, …).
+  A static catalog declares `k-exaone_v2.5` (524,288 context, efforts
+  low/high/max, default max).
+- **Preset** `exaone` in `lib/presets.js`: `kind: package`, row `dsh-exaone`,
+  provider `exaone`, endpoint `http · openai-completions · own · sse`,
+  auth `api-key` (`apiKey` secret field, `EXAONE_API_KEY` env fallback),
+  static catalog with one model, `catalogRoute /api/local/dsh-exaone/models`,
+  no subagent/CLI surfaces, billing `none` — the platform is **currently free
+  after application** (owner, 2026-11-13; may change), not subscription or
+  pay-as-you-go.
+- **Models-panel route** `POST /api/local/dsh-exaone/models` (one row, with its
+  saved enabled state) so the router's models tab renders and saves it through
+  the same `vendorConfig.dsh-exaone.enabledModels` path every vendor uses.
+- **Dashboard**: EXAONE card + Add-provider entry + API-key credential field
+  (`vendorConfig.dsh-exaone.apiKey`, write-only). Label/plan keys added to all
+  three locales and the generated locale table.
+- **Preset registry**: `packageUrls.exaone` for mounting without a profile
+  link; the router's `customRouter` seam now publishes `enabledPresets`.
+- **Drift gate**: a declared-but-not-enabled preset is a normal state (the
+  dashboard's Add provider writes the switch), so `verify:presets` now reads
+  `enabledPresets` and skips its runtime checks for disabled presets while the
+  static half still validates its declaration, descriptor and locale keys.
+
+### Owner correction and live check (2026-11-13)
+
+- EXAONE is **not a subscription**: applying currently grants free use (it may
+  change later). The plan label is now `planFree` (en “Free”, ko “무료”), and
+  `BILLING_PLAN_KEYS.none` maps to it; the picker description says so.
+- It is a **Korean-language / humanities-oriented** model, not a
+  science-specialized one; the picker description and the vendor README say
+  that instead of implying a coding model.
+- The live profile (`~/.dsh/profiles/web/cordis.patch.yml`, mtime 23:37:58) now
+  carries `presets.exaone: true` and a `vendorConfig.dsh-exaone.apiKey` value
+  (present, length 46 — never printed). The agent did not write it.
+- `verify:presets` booted an isolated copy of that profile and now checks EXAONE
+  at runtime: `providers: …, exaone, …` and **OK**.
+- A direct call to `https://api.exaone.ai/v1/chat/completions` with the stored
+  key returned **HTTP 200**, `model: k-exaone_v2.5`, a Korean answer and
+  `reasoning_tokens: 109`. A first attempt returned
+  `429 service is busy, too many concurrent requests(600)`; the retry succeeded.
+- The daemon was **not restarted** (`ActiveEnterTimestamp` 21:41:06), so the
+  running UI still lacks the new preset; it will appear after the owner's
+  restart.
+
+### Enabling it
+
+The live profile now enables EXAONE, so after the owner restarts the service it
+appears without an extra Add-provider step; the API key is already stored. A
+fresh profile enables it through **Add provider → EXAONE**.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| `vendor/exaone` `npm test` | **14/14 pass** |
+| Router `node --test test/*.test.mjs` | **535/535 pass** |
+| `vendor/opencode` / `vendor/antigravity` | 554/554, 184/184 pass |
+| `npm run verify:presets` | OK (EXAONE disabled → runtime skipped, static checked) |
+| `npm run verify:presets -- --patch <exaone enabled>` | OK — `providers: …, exaone, …` |
+| `npm run check:derive` | exit 0 |
+| `npm run check` | exit 0 |
+| `npm run docs:check` | OK |
+
+Status: **applied pending restart**; the running daemon keeps the old module set
+until the owner restarts it. The preset is not enabled in the live profile yet.
+
+## 0.0.1-rc.17 — google-generative-ai wire + derived endpoint enums — 2026-11-13
+
+### Owner instruction
+
+`preset-schema.js`의 프로토콜을 보강: `DSH_PROTOCOLS`/`WIRE_PROTOCOLS`에 `google-generative-ai`를
+추가하고, 누락된 엔드포인트 enum을 보강한 뒤 `npm run verify:presets`로 drift gate를 통과시킨다.
+(`/tmp/router-fix.txt` was measured first: it is a verbatim fragment of the file as it already
+stood, not a delta — it carried no instruction beyond the request text.)
+
+### What was measured first
+
+| Surface | Measured before | After |
+|---|---|---|
+| `DSH_PROTOCOLS` | `openai-completions`, `openai-responses`, `anthropic-messages` | **unchanged** (see below) |
+| `WIRE_PROTOCOLS` | 3 host wires + `google-generative-sse` | + `google-generative-ai` (5 total) |
+| `dsh-llm-pi-ai` `PROTOCOLS` (0.2.2-rc.1) | exactly **3** entries; Config `api: z.union(supportedProtocols())` | unchanged — a 4th name there is rejected at mount |
+| JSON Schema `endpoint.protocol` enum | hand-copied literal, **matched** the array by coincidence | **derived** from `WIRE_PROTOCOLS` |
+| JSON Schema enums (13 total) | hand-copied literals | **all derived** from their constant arrays |
+| vendored `Config` endpoint enum | **does not exist** — no `vendor/*/lib` settings surface declares one | unchanged |
+
+### The one deliberate deviation, and why
+
+The instruction said "add it to `DSH_PROTOCOLS` and `WIRE_PROTOCOLS`". Only the second was done.
+`DSH_PROTOCOLS` is the host-capability gate (`preset-schema.js`: a `route: 'pi-ai'` preset must name
+one of them). The installed `dsh-llm-pi-ai` implements three wires and validates its `api` field
+against that same table, so adding a fourth name would let a pi-ai-routed preset pass this validator
+and then fail to mount — a **false green** in the gate this task is meant to keep honest. The new
+wire is a vendor wire (`route: 'own'`), which is where `google-generative-sse` already lives.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| `npm test` | **533 pass / 0 fail** |
+| `npm run verify:presets` | **exit 0** — 3 presets, 3 descriptors, 3 locales; 5 providers / 6 commands / 6 tools unchanged |
+| `npm run verify:presets:mutation` | **17/17** drift classes caught |
+| `npm run check:derive` | **exit 1 — PRE-EXISTING, not from this change** (see below) |
+
+### Not done — pre-existing defect found, outside this task's file
+
+`check:derive` fails on `scripts/build-presets.mjs`'s `--check` half: `declarationSource()` appends
+`\n` but `DECLARATION_LINE` (a `/m` regex match) never captures the trailing newline, so
+`current !== wanted` can never become true. Proven by restoring pristine `HEAD` copies of both
+`lib/preset-schema.js` and `lib/client.src.js`: the same failure appears. Not fixed here — it is a
+different file from the assigned target and a build-script semantics change.
 
 ## 0.0.1-rc.16 — Phase E: one management path, no legacy vendor link on restart — 2026-11-13
 
@@ -493,7 +1174,7 @@ but 78.5% of Go Plus. That now surfaces as a proposal, and nothing changes until
 ### Test scope correction — the peer test no longer reaches into a sibling track
 
 `test/presets.test.mjs` compared this package's version against
-`../../dsh-opencode-v2/package.json`, a **sibling track**. That coupled every router `rc` bump
+`../../archive/dsh-opencode-v2/package.json`, a **sibling track**. That coupled every router `rc` bump
 to an edit outside this track's boundary, which the single-writer rule
 (`docs/RULES.md` §3.2) forbids — the router could not ship a new rc without an unauthorized
 write to another package. Owner instruction 2026-11-12: narrow the test to this track.

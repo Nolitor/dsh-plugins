@@ -55,8 +55,13 @@ test('the gate reports what it cannot see instead of implying full coverage', ()
   assert.ok(holes.some((hole) => /runtime registration/.test(hole)))
 })
 
-test('every preset carries an ordered usage route list', () => {
+test('every preset that reports usage carries an ordered usage route list', () => {
   for (const preset of PRESETS) {
+    const reportsUsage = !(preset.usage.billing.mode === 'none' && preset.usage.plan === 'unavailable')
+    if (!reportsUsage) {
+      assert.deepEqual(preset.usage.routes ?? [], [], preset.id + ': a preset that reports no usage has no route')
+      continue
+    }
     assert.ok(Array.isArray(preset.usage.routes), preset.id + ' must declare usage.routes')
     assert.ok(preset.usage.routes.length > 0, preset.id + ' must declare at least one usage route')
     for (const route of preset.usage.routes) {

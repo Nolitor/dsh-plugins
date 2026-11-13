@@ -121,24 +121,28 @@ export async function startCliChild(options) {
     )
   }
 
-  const request = {
-    parent: options.agent,
-    prompt: [{ type: 'text', text: prompt }],
-  }
-  const cwd = String(options.cwd ?? '').trim()
-  if (cwd !== '') request.cwd = cwd
+  // The activation spec is FLAT as of DSH 0.2.1-rc.2 (nested `request` was
+  // removed; upgrade-guide `v0.2.1-rc.2/subagent-activation-options`). The old
+  // shape leaves `spec.parent` undefined, so the host service throws
+  // "Cannot read properties of undefined (reading 'id')" in
+  // `startActivation()` before this provider is reached. Measured live
+  // 2026-11-13 on DSH 0.2.2-rc.3.
   const label = labelFromPrompt(prompt)
   const signal = options.signal ?? new AbortController().signal
+  const spec = {
+    provider: providerName,
+    label,
+    prompt: [{ type: 'text', text: prompt }],
+    parent: options.agent,
+    signal,
+    delivery: 'parent',
+  }
+  const cwd = String(options.cwd ?? '').trim()
+  if (cwd !== '') spec.cwd = cwd
 
   let activation
   try {
-    activation = await subagents.startActivation({
-      provider: providerName,
-      label,
-      request,
-      signal,
-      delivery: 'parent',
-    })
+    activation = await subagents.startActivation(spec)
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     throw new CliDelegationError(`could not start the Antigravity child session: ${detail}`, { cause: error })

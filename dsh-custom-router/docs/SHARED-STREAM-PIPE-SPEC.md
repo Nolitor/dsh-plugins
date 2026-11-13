@@ -1,24 +1,21 @@
 # Shared Stream Pipe — one extensible parser/emitter, hooks for provider edges
 
 <!-- skeleton:
-version: 0.0.1-rc.2
+version: 0.0.1-rc.3
 kind: spec
 status: active
-updated: 2026-11-08
-summary: Normative spec for one shared downstream pipeline (SSE decode, wire-part to StreamChunk, usage, finish, failure, cut/empty policy) owned by dsh-custom-router, with declarative descriptors and overridable hooks for the three measured provider edges. P1-P3 done (antigravity, deepinfra integrated).
+updated: 2026-11-14
+summary: Implemented spec (P1–P5 integrated; OpenCode shared-default residual is ROADMAP P2-2, parity fixtures P2-4). Normative spec for one shared downstream pipeline (SSE decode, wire-part to StreamChunk, usage, finish, failure, cut/empty policy) owned by dsh-custom-router, with declarative descriptors and overridable hooks for the three measured provider edges. Conformance covers openai-completions, anthropic-messages and google-generative-sse; openai-responses and google-generative-ai remain uncovered.
 -->
 
-> Status: **P1 implemented and unit-tested (2026-11-07); P2 `dsh-antigravity` integrated
-> (2026-11-07); P3 `dsh-deepinfra` integrated (2026-11-08).** P4 (`dsh-opencode-v2`) is next.
-> Supersedes the "implement M2/M3 per service" sentence in
-> [CUSTOM-ROUTER-ARCHITECTURE.md §3.1](./CUSTOM-ROUTER-ARCHITECTURE.md). Does not touch the
-> router engine (R0 still holds), any adapter instance, or any live state.
->
-> Shipped in `lib/stream/`: `index.js` (`normalizeStream`), `sse.js` (`readSseEvents`),
-> `usage.js` (`usageFrom`, `usageFromProjection`), `wire.js` (`finishReasonFor`),
-> `failure.js` (`fail`, `emptyCompletion`, `cutCompletion`, `abortedCompletion`).
-> Exported as `@nolit/dsh-custom-router/stream`. 286 tests in this package pass; two vendor
-> plugins now import the module (`dsh-antigravity`, `dsh-deepinfra`) and `dsh-opencode-v2` does not yet.
+> **IMPLEMENTED SPEC (2026-11-14).** P1–P5 are integrated; the “P4 is next” status is historical.
+> Residuals: OpenCode `pipe:'shared'` default ([ROADMAP.md](./ROADMAP.md) P2-2) and the remaining
+> conformance fixtures (P2-4) — `openai-responses` and `google-generative-ai` are still uncovered.
+
+> **Implemented status (2026-11-14).** P1–P5 are integrated. The OpenCode `pipe:'shared'`
+> default and the Anthropic/Google parity fixtures are the only residuals, tracked in
+> [ROADMAP.md](./ROADMAP.md) P2-2/P2-4. The implementation history below is evidence.
+> `verify:stream` runs 8/8 dispatch cases with zero vendor module loads.
 
 ## 1. Decision
 
@@ -241,17 +238,22 @@ Measured values:
 
 ## 7. Rollout — shared code, one provider at a time
 
+> **Historical rollout record (2026-11-14).** P1–P5 are delivered; the counts below are each
+> step's own measurement, not the current suite size (router suite is **625/625**). Live residuals
+> are the OpenCode `pipe:'shared'` default ([ROADMAP.md](./ROADMAP.md) P2-2) and the
+> Anthropic/Google parity fixtures (P2-4).
+
 | Step | Change | Risk | Gate |
 | :--- | :--- | :--- | :--- |
 | **P1** | Build `lib/stream/` + `./stream` export **inside this package**. Zero consumers. | none — no plugin imports it yet | the module's own unit suite green; the three vendor suites byte-identical to before |
-| **P2** | Integrate **`dsh-antigravity`** first — primary testbed | low: rarely used live, and it is the **only web-auth** upper pipeline, so it proves hook binding across the auth boundary | **done 2026-11-07** — 144/144; D3/D4/D6/D8 closed; `usageMetadata` proves `usageFrom`; the web-auth edge below was the finding |
-| **P3** | Integrate **`dsh-deepinfra`** | low: pure API, no daemon, no web auth | **done 2026-11-08** — 189/189 tests (+7 skip); D4/D6 closed, D8 kept; the fragmented tool-call branch and the `prompt+output` total are proven |
-| **P4** | Integrate **`dsh-opencode-v2`** last | high: most live traffic, largest surface | 453 tests green; replay `markerDeltas == 0` shapes identical; S2-3 prose gate; `classifyText` hook lands here |
-| **P5** | Parity suite: one recorded fixture per provider replayed through the shared core | — | the three streams produce the same `StreamChunk` shape for the same semantic class |
+| **P2** | Integrate **`dsh-antigravity`** first — primary testbed | low: rarely used live, and it is the **only web-auth** upper pipeline, so it proves hook binding across the auth boundary | **done 2026-11-07** — 144/144 at that time (now 190/190); D3/D4/D6/D8 closed; `usageMetadata` proves `usageFrom`; the web-auth edge below was the finding |
+| **P3** | Integrate **`dsh-deepinfra`** | low: pure API, no daemon, no web auth | **done 2026-11-08** — 189/189 at that time (now 217 pass / 7 skip); D4/D6 closed, D8 kept; the fragmented tool-call branch and the `prompt+output` total are proven |
+| **P4** | Integrate **`dsh-opencode-v2`** last | high: most live traffic, largest surface | **done** — 554/554 vendored; replay `markerDeltas == 0` shapes identical; S2-3 prose gate; `classifyText` hook lands here |
+| **P5** | Parity suite: one recorded fixture per provider replayed through the shared core | — | **done** — `test/conformance/` covers `openai-completions`, `anthropic-messages`, `google-generative-sse`; `openai-responses` and `google-generative-ai` remain uncovered |
 
 Rationale for the order: P2 exercises **web-auth + complete tool calls + separate reasoning
 bucket**; P3 exercises **bearer key + fragmented tool calls + folded reasoning**; only after
-both branches are proven does the high-traffic plugin move. Each step is a separate
+both branches are proven does the high-traffic plugin move. Each step was a separate
 owner-approved round. No version bump without owner instruction. `dsh-custom-router` stays a
 library outside `dsh.profile.bundles`.
 

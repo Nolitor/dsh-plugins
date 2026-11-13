@@ -1,0 +1,27 @@
+{
+  "id": "exaone",
+  "preset": "exaone",
+  "status": "active",
+  "protocol": "openai-completions",
+  "docs": "https://docs.exaone.ai/en/docs/k-exaone-2.5",
+  "verifiedAt": "2026-11-13",
+  "ttlDays": 90,
+  "endpoint": "https://api.exaone.ai/v1",
+  "models": [
+    "k-exaone_v2.5"
+  ],
+  "capabilities": {
+    "tools": true,
+    "reasoning": [
+      "low",
+      "high",
+      "max"
+    ],
+    "usage": true,
+    "cache": false,
+    "structuredOutput": false,
+    "vision": false
+  },
+  "pricing": "exaone",
+  "notes": "Single-model http preset (providerId 'exaone', modelPrefixes ['exaone'], protocol openai-completions, chatPath /chat/completions). Facts read from docs.exaone.ai on 2026-11-13 and encoded in vendor/exaone/lib/wire.js: the platform publishes ONE chat model (k-exaone_v2.5), OpenAI-compatible, context 524,288 tokens with the rule that input + max_tokens must not exceed it, SSE terminated by data: [DONE]. reasoning is always on and the effort ids are exactly low|high|max with max the default — an effort outside that set is not offered. The platform advertises tool calling and structured outputs, but this adapter sends no response_format, so structuredOutput is FALSE at the provider level: the capability is documented by the platform, not exercised by the router. cache is false: no cache accounting is documented or sent, and the wire reports no cached-token field. vision is false: the documented modality is text only. Structured details the adapter carries: reasoning text arrives as delta.reasoning_content and usage.reasoning_tokens is reported at the TOP level (not under completion_tokens_details), and multi-turn sends chat_template_kwargs.preserve_thinking: true. The platform publishes no catalog listing endpoint, so the model row is a STATIC declaration rather than a live catalog, and it will not update itself when EXAONE adds a model. Auth is an apiKey or EXAONE_API_KEY bearer token; no secret is recorded here. KEY SOURCE (2026-11-14): the credential is managed by the DSH credential store — the plugin declares a credentialRef defaulting to EXAONE_API_KEY and resolves it through the host credentials service; the profile patch may carry only that reference. Precedence: explicit apiKey -> store ref -> env var. See docs/CREDENTIAL-STORE-MIGRATION.md."
+}

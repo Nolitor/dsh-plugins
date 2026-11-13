@@ -1,0 +1,29 @@
+{
+  "id": "openai-completions",
+  "revision": 1,
+  "verifiedAt": "2026-11-13",
+  "ttlDays": 90,
+  "docs": "https://platform.openai.com/docs/api-reference/chat",
+  "streaming": "sse",
+  "canonical": {
+    "text": "choices[].delta.content",
+    "reasoning": "choices[].delta.reasoning_content",
+    "toolCalls": "choices[].delta.tool_calls[] (fragmented by index)",
+    "usage": "usage on the final chunk (stream_options.include_usage)",
+    "finish": "choices[].finish_reason"
+  },
+  "capabilities": {
+    "tools": true,
+    "reasoning": true,
+    "usage": true,
+    "cache": true,
+    "structuredOutput": true,
+    "vision": true
+  },
+  "adapters": [
+    "vendor/deepinfra/lib/adapter.js",
+    "vendor/exaone/lib/adapter.js",
+    "vendor/opencode/lib/http.js"
+  ],
+  "notes": "Protocol-level mapping, not a per-vendor guarantee. Measured deviations the shared pipe (lib/stream) absorbs: all three vendored adapters declare toolCallShape 'fragmented' and reuse the wire's own fragment ordinals (first fragment carries index/id/name with empty arguments; later fragments carry the argument slice only, id and name null/absent); reasoning arrives as delta.reasoning_content, and OpenCode renames it through its own alias list (vendor/opencode/lib/upstream-map.js REASONING_FIELDS) because some routes publish a different field name. EXAONE reports usage.reasoning_tokens at the TOP level instead of completion_tokens_details.reasoning_tokens, so its adapter projects the value before the one shared usage writer runs; DeepInfra adds usage.estimated_cost. The usage-bearing chunk can carry choices: [] (measured on DeepInfra), so usage must never be read only when a delta is present. Cache is reported as usage.prompt_tokens_details.cached_tokens and must be split out of prompt_tokens. structuredOutput is the protocol's capability (response_format), NOT something the current router exercises: no vendored adapter sends response_format today. content_filter maps to a failure code (CONTENT_FILTERED), never to a clean stop."
+}

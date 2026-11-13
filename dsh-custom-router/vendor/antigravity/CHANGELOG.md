@@ -4,11 +4,93 @@
 version: 1.4
 kind: report
 status: active
-updated: 2026-11-13
+updated: 2026-11-14
 summary: Engineering history for @nolit/dsh-antigravity, including the rc.6 fix for empty stored answers and the route-gated usage chip. Created 2026-11-05 by merging the CLI worker surface of @nolit/dsh-antigravity-cli with the HTTP model route proven in @nolit/dsh-antigravity-directsdk, plus a settings section, a usage chip and per-surface switches.
 -->
 
-Current version: `0.0.1-rc.12`
+Current version: `0.0.1-rc.14`
+
+## 0.0.1-rc.14 — 2026-11-14 (router peer rc.19)
+
+### The replayed `thoughtSignature` was nested inside `functionCall`
+
+rc.13 began carrying the stream's per-call `thoughtSignature` through to the request so Gemini would
+stop demanding it. It was replayed **inside** the `functionCall` object, which is not a field of
+`FunctionCall`: Gemini accepted the fixed-signature error but rejected the payload itself. A live
+child on `antigravity/gemini-4-hydrogen` failed with HTTP 400:
+
+`Invalid JSON payload received. Unknown name "thoughtSignature" at
+'request.contents[5].parts[0].function_call': Cannot find field.`
+
+The wire shape is the point: `thoughtSignature` is a sibling of `functionCall` on the **part**, never
+a member of the call. An isolated replay of the real request body measured both directions — before
+the fix 400 with the message above, after it 200 with an answer and `finish_reason` `stop`.
+
+- `lib/wire.js`: the signature is emitted on the part that carries `functionCall`, not inside it.
+- `test/wire.test.mjs`: deep-path regression that fails if the key appears anywhere under
+  `functionCall`, so the nesting cannot silently return.
+- `peerDependencies['@nolit/dsh-custom-router']`: `0.0.1-rc.18` → `0.0.1-rc.19`.
+
+Suite: 190 pass.
+
+## 0.0.1-rc.13 — 2026-11-13 (router peer rc.18)
+
+### The managed-child activation spec was still nested
+
+`startCliChild()` sent `startActivation({provider,label,request:{parent,prompt,cwd},signal,delivery})`.
+DSH 0.2.1-rc.2 removed the nested `request` field and `startActivation()` now reads `spec.parent.id`
+first, so every `agy_worker` / `/agy` call failed before the provider ran:
+
+`Error: could not start the Antigravity child session: Cannot read properties of undefined (reading 'id')`
+
+Measured live on DSH 0.2.2-rc.3 (session `b3ff706f`, `opencode`; same shape in this package).
+This is a contract mismatch, not a permission/dispatch-gate decision.
+
+- `lib/cli-activation.js`: the spec is flat (`provider`, `label`, `prompt`, `parent`, `signal`,
+  `delivery`, optional `cwd`); `peerDependencies['@nolit/dsh-custom-router']` → `0.0.1-rc.18`.
+- `test/cli-worker.test.mjs`: pins the flat spec, including `spec.parent.id` reachability and the
+  absence of `request`.
+
+Suite: 188 pass.
+
+### Claude on this host: the DSH tool message was not a tool-result block
+
+Measured 2026-11-14 on a live `antigravity/claude-opus-5-5` subagent (session
+`429ac69e-0985-4504-9e5c-bfd61865b0b9`). The child called `team_task_get`, the
+result was delivered, and the next request failed with HTTP 400:
+
+`messages.2: tool_use ids were found without tool_result blocks immediately after:
+toolu_vrtx_012VW2MereBiEXACwqghD8mZ. Each tool_use block must have a corresponding
+tool_result block in the next message.`
+
+Root cause: the harness sends a tool result as a first-class message
+(`role: 'tool'`, `toolCallId` on the MESSAGE, text content). `toContents()` only
+recognised a synthetic `tool-result` content block, so the real message was
+projected as a plain user text part and the preceding `functionCall` had no
+`functionResponse`. Gemini tolerated that history; the Anthropic-backed Claude
+lane validates the pairing and rejected the request.
+
+- `lib/wire.js`: tool messages with a message-level `toolCallId` now emit
+  `functionResponse {name, response:{output}, id}`, resolving the function name
+  from the preceding assistant tool-call blocks; the synthetic content-block
+  form still works.
+- `test/wire.test.mjs`: regression test with the real DSH message shape.
+
+Suite: 185 pass.
+
+### Gemini: thoughtSignature replayed; consecutive tool results grouped
+
+Measured 2026-11-14 on `antigravity/gemini-4-hydrogen` (session `15c5200b-...`): after a
+`team_task_list` call, the next request failed with HTTP 400:
+
+`Function call is missing a thought_signature in functionCall parts ... function call
+default_api:team_task_list, position 6.`
+
+- `stream-contract.js` now carries the per-call `thoughtSignature` into the tool-call part instead of
+  discarding it; `lib/stream` keeps it on the assembled block; `wire.js` replays it on `functionCall`.
+- `toContents()` now merges consecutive tool results for one assistant turn into a single user
+  content with multiple `functionResponse` parts (required by the Anthropic/Claude lane).
+- Tests: `stream-contract.test.mjs`, `wire.test.mjs`, `test/stream-pipe.test.mjs`; full suite **188**.
 
 ## 0.0.1-rc.12 — 2026-11-13 (router peer rc.13)
 

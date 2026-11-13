@@ -20,15 +20,16 @@
  *   A route that is mounted is not a route that works (F-45), so this calls the
  *   real handler and inspects the real `Response`.
  *
- * WHAT IS ASSERTED PER ROUTE
- *   - the route is registered at its documented path
+ * WHAT IS ASSERTED PER ROUTE (the table lives in `refresh-expectations.mjs`)
+ *   - the route is registered at its documented path — all FOUR presets, so an
+ *     absent route is a failure, not a skip: these are the serving path now
  *   - both calls answer 200 with JSON
- *   - the forced call's payload is a real catalog (non-empty rows, or a documented
- *     empty-with-error state that is reported rather than hidden)
+ *   - the payload keeps the preset's expected model rows on BOTH reads: a Claude
+ *     and a Gemini base row (plus the Hydrogen lane) for Antigravity, a served
+ *     row for OpenCode and DeepInfra, and `k-exaone_v2.5` for EXAONE
  *
- * Exit codes: 0 every mounted route answered, 1 a route failed, 2 the harness could
- * not run. A vendor whose route is absent (its row did not mount) is reported as
- * SKIP and does not fail the gate — a missing optional surface is data.
+ * Exit codes: 0 every expectation held, 1 an expected route fact is missing, 2 the harness could
+ * not run.
  *
  * Usage: node scripts/verify-refresh-routes.mjs [--keep] [--profile-dir <dir>]
  *
@@ -39,6 +40,7 @@ import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import { ROUTES, evaluateRefresh } from './refresh-expectations.mjs'
 import { buildIsolatedHome, dshRoot } from './iso-home.mjs'
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -59,18 +61,11 @@ const fail = (message) => {
 }
 
 /**
- * The routes this gate speaks to, and how to read a row count out of each answer.
- *
- * A route is listed with the payload field that proves it carries a CATALOG, not
- * an error object: `models` for the flat routes, `groups` for Antigravity (whose
- * rows are grouped by usage family).
+ * The routes this gate speaks to live in `refresh-expectations.mjs` (pure, unit
+ * tested): the four presets, and the model rows each one must keep serving. A
+ * route that disappears or stops listing its expected row fails this gate —
+ * "registered" and "mounted" are not "still serving the right route".
  */
-const ROUTES = Object.freeze([
-  { preset: 'antigravity', path: '/api/local/dsh-antigravity/models', rows: (body) => (Array.isArray(body?.groups) ? body.groups.reduce((sum, group) => sum + (Array.isArray(group?.models) ? group.models.length : 0), 0) : 0) },
-  { preset: 'opencode', path: '/api/local/opencode-v2/model-settings', rows: (body) => (Array.isArray(body?.models) ? body.models.length : 0) },
-  { preset: 'deepinfra', path: '/api/local/deepinfra/models', rows: (body) => (Array.isArray(body?.models) ? body.models.length : 0) },
-])
-
 // ---------------------------------------------------------------------------
 // 1. Isolated home (the live `~/.dsh` is never opened for writing)
 // ---------------------------------------------------------------------------
@@ -133,7 +128,7 @@ try {
   await ctx.plugin(plugin, {
     strict: true,
     profileDir: profileOut,
-    presets: { antigravity: true, deepinfra: true, opencode: true },
+    presets: { antigravity: true, deepinfra: true, opencode: true, exaone: true },
     vendorConfig,
   })
 } catch (error) {
@@ -184,38 +179,45 @@ const call = async (path, force) => {
   return { status: response.status, body, text, ms: Date.now() - started }
 }
 
-let failures = 0
-line('')
+// Read every route first (plain, then forced), then judge the reads as data.
+const reads = []
 for (const spec of ROUTES) {
   const plain = await call(spec.path, false)
-  if (plain.skipped === true) {
-    line(`[${spec.preset}] SKIP — route not mounted (${spec.path})`)
+  const forced = plain.skipped === true ? { skipped: true } : await call(spec.path, true)
+  reads.push({ preset: spec.preset, plain, forced })
+}
+
+const verdict = evaluateRefresh(reads)
+let failures = verdict.failures.length
+const readByPreset = new Map(reads.map((read) => [read.preset, read]))
+line('')
+for (const [index, result] of verdict.results.entries()) {
+  const spec = ROUTES[index]
+  const forced = readByPreset.get(result.preset)?.forced
+  if (!result.present) {
+    // The verdict owns the reason: "not mounted" and "never read" are
+    // different regressions and the log must say which one happened.
+    line(`[${result.preset}] FAIL — ${result.failures[0] ?? `route ${result.path} did not answer`}`)
     continue
   }
-  const forced = await call(spec.path, true)
-  const plainRows = plain.body === undefined ? -1 : spec.rows(plain.body)
-  const forcedRows = forced.body === undefined ? -1 : spec.rows(forced.body)
-  const ok = plain.status === 200 && forced.status === 200 && plain.body !== undefined && forced.body !== undefined
-  if (!ok) failures += 1
-  line(`[${spec.preset}] ${ok ? 'PASS' : 'FAIL'} ${spec.path}`)
-  line(`   plain  : HTTP ${plain.status} rows=${plainRows} (${plain.ms}ms)`)
-  line(`   forced : HTTP ${forced.status} rows=${forcedRows} (${forced.ms}ms)`)
-  // The forced answer must be a catalog, not an error object dressed as one.
-  if (forced.body !== undefined && forcedRows === 0) {
+  line(`[${result.preset}] ${result.ok ? 'PASS' : 'FAIL'} ${result.path}`)
+  line(`   plain  : HTTP ${result.plain.status} rows=${result.plain.rows} (${result.plain.ms}ms)`)
+  line(`   forced : HTTP ${result.forced.status} rows=${result.forced.rows} (${result.forced.ms}ms)`)
+  for (const check of result.checks) {
+    // The two reads are reported separately: a lane that is served from the
+    // cache but gone after the forced re-read is a stale cache, and the
+    // message says which read lost it.
+    line(`   ${check.ok ? 'ok  ' : 'MISS'}  ${check.label} (plain: ${check.plain ? 'yes' : 'no'} / forced: ${check.forced ? 'yes' : 'no'})`)
+  }
+  if (forced.body !== undefined && result.forced.rows === 0) {
     const note = forced.body?.error ?? forced.body?.err ?? forced.body?.catalogError ?? forced.body?.discoveryError
     line(`   forced payload carries no rows${note === undefined ? '' : ' — reported: ' + String(note).slice(0, 120)}`)
   }
   if (forced.body?.models === undefined && forced.body?.groups === undefined) {
     line(`   forced payload keys: ${Object.keys(forced.body ?? {}).join(', ')}`)
   }
-  // Name the grouped base rows: a catalog that answered but omitted Hydrogen would
+  // Name the grouped base rows: a catalog that answered but omitted a lane would
   // still be "200 with rows", so the gate reports WHAT it read, not just how many.
-  // DeepInfra publishes a per-row `promotion`; a row with none MUST NOT read as
-  // a 0% discount (the client bug fixed on 2026-11-13). Count both sides here so
-  // a live regression is visible without opening the browser.
-  // OpenCode serves ONE plan per tab. A Hydrogen route exists on the Zen plan,
-  // so a Go-scoped answer legitimately omits it; report the plan split rather
-  // than letting "no hydrogen" read as a catalog defect.
   if (Array.isArray(forced.body?.models) && spec.preset === 'opencode') {
     const plans = {}
     for (const model of forced.body.models) {
@@ -231,12 +233,19 @@ for (const spec of ROUTES) {
     line(`   promotion: ${withPromo} discounted, ${nullPromo} at list price (of ${forced.body.models.length})`)
     line(`   response carries a promotion count: ${forced.body.promotionCount ?? '(none)'}`)
   }
+  if (Array.isArray(forced.body?.models) && spec.preset === 'exaone') {
+    line(`   models: ${forced.body.models.map((model) => String(model?.id)).join(', ')}`)
+  }
   if (Array.isArray(forced.body?.groups)) {
     const bases = forced.body.groups.flatMap((group) => (Array.isArray(group?.models) ? group.models.map((model) => model.id) : []))
     line(`   bases  : ${bases.join(', ')}`)
     line(`   hydrogen present: ${bases.some((id) => /hydrogen/.test(String(id)))}`)
   }
 }
+
+line('')
+line(`[expected] preset routes present: ${verdict.present}/${verdict.expected}`)
+for (const failure of verdict.failures) line(`   MISSING ${failure}`)
 
 writeFileSync(LOG_PATH, bootLog.join(''))
 line('')
@@ -250,8 +259,8 @@ try {
 if (!KEEP) isolated.dispose()
 
 if (failures > 0) {
-  line(`\nFAIL — ${failures} route(s) did not answer`)
+  line(`\nFAIL — ${failures} expected route fact(s) missing`)
   process.exit(1)
 }
-line('\nPASS — every mounted model route answered a plain and a forced read')
+line('\nPASS — all four preset routes answered and kept their expected model rows')
 process.exit(0)

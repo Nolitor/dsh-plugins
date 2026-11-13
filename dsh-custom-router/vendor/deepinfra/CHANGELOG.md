@@ -4,14 +4,29 @@
 version: 1.6
 kind: report
 status: active
-updated: 2026-11-13
+updated: 2026-11-14
 summary: Every change to this track with measured before/after: the 0.0.1-rc.1 adapter, five brief assumptions the live API contradicted, the 0.2.0 production integration, the 0.2.1 architecture correction (config-layer credentials, model selection UI, production registration), 0.0.1-rc.10 — P3 migration of the downstream half onto the shared stream pipe (D4/D6 closed, docs basis recorded), and 0.0.1-rc.11 — an opt-in second route on DeepInfra's native Anthropic Messages endpoint with our own SSE parser (no pi-ai).
 -->
 
 > History for this plugin only (RULES §6.1). Measurements that outlive one plugin belong in
 > root `docs/`. Every entry states what was measured, not what was intended.
 
-Current version: `0.0.1-rc.13`
+Current version: `0.0.1-rc.14`
+
+## 0.0.1-rc.14 — 2026-11-14 (router peer rc.19)
+
+Live catalog re-measured 2026-11-14 (the previous 173 entries / 91 chat / 9 discounted figures were
+the 2026-11-04 measurement, not a change caused by this session):
+
+- **178 entries, 119,966 bytes, 92 chat-tagged, 8 chat routes discounted (0.05–0.51).**
+- All 92 chat routes still carry `context_length`, and `max_tokens === context_length` on every one
+  of them — the derivation the adapter's context/reasoning metadata depends on has not drifted.
+- Tag histogram: chat 92, vlm 54, vision 54, prompt_cache 46, reasoning 67, reasoning_effort 36,
+  embed 25, tts 13, image-gen 27, video-gen 14, stt 7.
+
+No adapter behaviour changed.
+
+- **`peerDependencies['@nolit/dsh-custom-router']`: `0.0.1-rc.18` → `0.0.1-rc.19`.**
 
 ## 0.0.1-rc.13 — 2026-11-13 (router peer rc.13)
 

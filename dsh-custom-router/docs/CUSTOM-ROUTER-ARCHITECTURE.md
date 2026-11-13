@@ -138,8 +138,8 @@ flowchart LR
 | Wire | OpenAI `/chat/completions` | Google `/v1internal:streamGenerateContent?alt=sse` | OpenAI `/chat/completions` |
 | Control plane | local `opencode serve` daemon | `cloudcode-pa` + `daily-cloudcode-pa` (2 hosts) | none |
 | Auth chain | `apiKey` → `OPENCODE_API_KEY` → `/api/credential` (oauth > key) | token file `refresh_token` → OAuth refresh; **no key path** | UI secret → `DEEPINFRA_API_KEY` |
-| Catalog | control plane + durable cache + `data/index.json` ranking | `fetchAvailableModels` + quota, 15-min TTL | public `/models`, 30-min TTL, 173 rows |
-| Plan / promotion | `go|zen` prefix + `NEW_MODEL_DAYS=7` + New badge | weekly / 5h quota buckets | `metadata.discount` 8/91 + `/v1/request-costs` |
+| Catalog | control plane + durable cache + `data/index.json` ranking | `fetchAvailableModels` + quota, 15-min TTL | public `/models`, 30-min TTL, 178 entries / 92 chat routes |
+| Plan / promotion | `go|zen` prefix + `NEW_MODEL_DAYS=7` + New badge | weekly / 5h quota buckets | `metadata.discount` 8/92 + `/v1/request-costs` |
 | Usage | `session export` / usage limits, disjoint buckets | response usage + quota summary | trailing SSE usage chunk + exact cost |
 | Cost | reported / ledger + cost pill | account quota | **derived locally, labelled estimated** |
 | Local API | — | `/api/local/*` | `/api/local/deepinfra/*` |
@@ -246,7 +246,7 @@ three current plugins succeed because they implement M2/M3 **inside** it.
 
 - [CUSTOM-ROUTER-SERVICE-SPEC.md](./CUSTOM-ROUTER-SERVICE-SPEC.md), [CUSTOM-ROUTER-PROTOCOL-STANDARD.md](./CUSTOM-ROUTER-PROTOCOL-STANDARD.md), [CUSTOM-ROUTER-PRESET-SURFACE.md](./CUSTOM-ROUTER-PRESET-SURFACE.md)
 - [UI-SLOT-ARCHITECTURE.md](../../docs/UI-SLOT-ARCHITECTURE.md), [PLUGIN-STYLE-STANDARD.md](../../docs/PLUGIN-STYLE-STANDARD.md), [RULES.md](../../docs/RULES.md)
-- [dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md](../../dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md), [FAILURE-LEDGER.md](../../docs/FAILURE-LEDGER.md)
+- [dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md](../../archive/dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md), [FAILURE-LEDGER.md](../../docs/FAILURE-LEDGER.md)
 
 ## Cross-reference
 

@@ -217,7 +217,7 @@ test('the HTTP adapter serves the snapshot without the daemon, then swaps in a f
   adapter.discoverOnce = async () => ({ models: [{ ...MODEL, name: 'Renamed Model' }] })
   adapter.warmStart()
   const listed = await adapter.listModels('opencode-http-agent')
-  assert.equal(listed[1].name, MODEL.name, 'the snapshot answers before the boot probe lands')
+  assert.equal(listed[0].name, MODEL.name, 'the snapshot answers before the boot probe lands')
 
   await new Promise((resolve) => setTimeout(resolve, 20))
   assert.deepEqual(emitted, [['llm/models-updated', 'opencode-http-agent']])

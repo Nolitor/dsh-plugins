@@ -148,7 +148,7 @@ test('provider config defaults keep upstream keys plus exportTimeoutMs', () => {
   assert.equal(parsed.exportTimeoutMs.get(), 60000)
   assert.equal(parsed.localSessionTitles.get(), true)
   assert.equal(parsed.autoDiscoverModels.get(), true)
-  assert.deepEqual(parsed.models.get(), [{ id: 'default', opencodeModel: '', name: 'OpenCode (config default)' }])
+  assert.deepEqual(parsed.models.get(), [], 'the config table seeds no row: the synthetic "OpenCode (config default)" entry is gone')
 })
 
 // ---------------------------------------------------------------------------
@@ -357,7 +357,7 @@ function makeAdapter(script, overrides = {}) {
   const config = fakeConfig({
     opencodePath: 'opencode', auto: true, attach: '', pure: false, thinking: true, cwd: '/tmp',
     timeoutMs: 1800000, stderrMaxBytes: 65536, forwardEnv: ['PATH'], extraArgs: [],
-    models: [{ id: 'default', opencodeModel: '', name: 'OpenCode (config default)' }],
+    models: [],
     brief: 'BRIEF', localSessionTitles: false, autoDiscoverModels: false,
     discoveryTimeoutMs: 60000, discoveryCacheMs: 300000, exportTimeoutMs: 60000, ...overrides,
   })

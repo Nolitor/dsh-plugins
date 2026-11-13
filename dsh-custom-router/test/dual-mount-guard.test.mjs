@@ -3,8 +3,10 @@
  * model-only vendor must never occupy a tool or command name.
  *
  * The measured facts this pins (2026-11-10):
- *   - `vendor/opencode` is the real OpenCode package, owned by the router;
- *     `dsh-opencode-v2` is now only a re-export shim over it;
+ *   - `vendor/opencode` is the real OpenCode package, owned by the router. The
+ *     legacy `dsh-opencode-v2` re-export shim was retired by Phase E
+ *     (2026-11-13) and moved to `archive/`, so its export/locale parity tests
+ *     were removed with it; the vendored copy is now the only OpenCode package;
  *   - a preset's rows all resolve to that preset's own package (or to the host
  *     shared subagent row), so a switch of mount target cannot leave one row
  *     pointing at the old package;
@@ -26,9 +28,6 @@ import { DEEPINFRA_DRIVER } from '../vendor/deepinfra/lib/driver.js'
 
 /** The router package root (`dsh-custom-router/`), resolved from this file. */
 const ROUTER_ROOT = new URL('../', import.meta.url)
-/** The shim track root (`dsh-opencode-v2/`), a sibling of the router. */
-const SHIM_ROOT = new URL('../../dsh-opencode-v2/', import.meta.url)
-
 /** Read and parse one JSON file by URL. */
 function readJson(url) {
   return JSON.parse(readFileSync(url, 'utf8'))
@@ -144,49 +143,6 @@ test('the vendored opencode package is private and never published separately', 
   const pkg = readJson(new URL('vendor/opencode/package.json', ROUTER_ROOT))
   assert.equal(pkg.private, true, 'vendor/opencode must stay private: it ships inside the router')
   assert.equal(typeof pkg.name, 'string', 'the vendored package still declares its name')
-})
-
-test('the dsh-opencode-v2 shim re-exports only existing lib modules', () => {
-  const pkg = readJson(new URL('package.json', SHIM_ROOT))
-  assert.equal(pkg.name, '@nolit/dsh-opencode-v2', 'the shim package identity is pinned')
-
-  const exportsMap = pkg.exports ?? {}
-  const libExports = Object.entries(exportsMap)
-    .map(([key, value]) => ({ key, target: targetOf(value) }))
-    .filter(({ target }) => typeof target === 'string' && /^\.\/lib\/[^/]+\.js$/.test(target))
-
-  assert.equal(libExports.length, 7, 'the shim re-exports exactly seven lib modules')
-
-  for (const { key, target } of libExports) {
-    const absolute = resolveTarget(SHIM_ROOT, target)
-    assert.ok(existsSync(absolute), `shim export "${key}" targets "${target}", which does not exist on disk`)
-
-    // The shim is a re-export by definition: a lib file that starts holding its
-    // own copy is the drift this guard exists to catch.
-    const source = readFileSync(absolute, 'utf8')
-    assert.match(
-      source,
-      /^export \* from '@nolit\/dsh-custom-router\/vendor\/opencode/,
-      `shim module "${target}" is not a re-export of the vendored package`,
-    )
-  }
-})
-
-test('every shim export target exists, including the locale JSON', () => {
-  const pkg = readJson(new URL('package.json', SHIM_ROOT))
-  for (const [key, value] of Object.entries(pkg.exports ?? {})) {
-    const target = targetOf(value)
-    if (typeof target !== 'string') continue
-    assert.ok(existsSync(resolveTarget(SHIM_ROOT, target)), `shim export "${key}" -> "${target}" is missing`)
-  }
-})
-
-test('the shim locale copies do not drift from the vendored locale', () => {
-  for (const name of ['en.json', 'ko.json']) {
-    const fromShim = readJson(new URL(`locale/${name}`, SHIM_ROOT))
-    const fromVendor = readJson(new URL(`vendor/opencode/locale/${name}`, ROUTER_ROOT))
-    assert.deepEqual(fromShim, fromVendor, `${name} drifted between the shim and the vendored copy`)
-  }
 })
 
 test('the model-only DeepInfra vendor occupies no tool or command name', () => {

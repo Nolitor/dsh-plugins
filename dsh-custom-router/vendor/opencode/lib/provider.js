@@ -74,6 +74,18 @@ export const Config = Schema.object({
   stderrMaxBytes: Schema.number().default(65536).volatile(),
   forwardEnv: Schema.array(Schema.string()).default(FORWARD_ENV_DEFAULT).volatile(),
   extraArgs: Schema.array(Schema.string()).default([]).volatile(),
+  /**
+   * The operator's OWN route table. It seeds NO row.
+   *
+   * This array used to carry one synthetic entry (id `default`, named after the
+   * OpenCode configuration default). That entry is NOT a model id: it was
+   * prepended to the picker's provider group as if it were a served route. It
+   * is gone from every list and from the config default.
+   *
+   * The `default` PSEUDO-ROUTE still resolves server-side, and that behaviour
+   * is unchanged: `resolveOpencodeModel` maps it to the empty `-m` value, so
+   * `opencode run` applies its own configuration.
+   */
   models: Schema.array(
     Schema.object({
       id: Schema.string(),
@@ -81,7 +93,7 @@ export const Config = Schema.object({
       name: Schema.string().default(''),
     }),
   )
-    .default([{ id: 'default', opencodeModel: '', name: 'OpenCode (config default)' }])
+    .default([])
     .volatile(),
   /**
    * Optional neutral preface for a batch run. Empty by default: the adapter
@@ -543,22 +555,16 @@ export class OpencodeLlmAdapter {
   async listModels(provider) {
     const discovered = await this.discover()
     if (discovered && discovered.models.length > 0) {
-      return [
-        {
-          provider,
-          id: 'default',
-          name: 'OpenCode (config default)',
-          description: 'OpenCode agent, spawned headless per generation',
-          inputModalities: ['text'],
-        },
-        ...discovered.models.map((m) => ({
-          provider,
-          id: m.id,
-          name: m.name,
-          description: 'OpenCode agent, spawned headless per generation',
-          inputModalities: ['text'],
-        })),
-      ]
+      // No synthetic `default` row: the picker shows the served catalog only.
+      // The `default` pseudo-route still resolves on the wire
+      // (`resolveOpencodeModel`), it is just not ADVERTISED as a model.
+      return discovered.models.map((m) => ({
+        provider,
+        id: m.id,
+        name: m.name,
+        description: 'OpenCode agent, spawned headless per generation',
+        inputModalities: ['text'],
+      }))
     }
     return this.config.models.get().map((entry) => ({
       provider,

@@ -138,6 +138,13 @@ export function readEvent(payload) {
     }
     if (kind === 'tool-call') {
       const call = part.functionCall
+      // Gemini 3/4 require the opaque thoughtSignature to be replayed with the
+      // functionCall; without it the NEXT request is HTTP 400 ("Function call is
+      // missing a thought_signature..."). It rides on the part (or, defensively,
+      // on the call), and the shared pipe keeps it on the tool-call block.
+      const signature = typeof part.thoughtSignature === 'string' && part.thoughtSignature !== ''
+        ? part.thoughtSignature
+        : typeof call.thoughtSignature === 'string' && call.thoughtSignature !== '' ? call.thoughtSignature : undefined
       parts.push({
         kind: 'tool-call',
         // The provider may omit an id; it is synthesized once, here, so the
@@ -147,11 +154,13 @@ export function readEvent(payload) {
         // Complete calls: arguments are already an object, and the pipe
         // stringifies them exactly once (the host contract is a raw JSON string).
         arguments: call.args ?? {},
+        ...(signature === undefined ? {} : { thoughtSignature: signature }),
       })
       continue
     }
-    // `thoughtSignature` and any future unknown part are ignored, as measured:
-    // the signature is opaque and must not reach the transcript.
+    // A free-standing `thoughtSignature` part is ignored; a signature attached
+    // to a functionCall is preserved because the next request must replay it.
+    // Any other future unknown part is ignored.
   }
 
   const metadata = (payload?.response ?? payload)?.usageMetadata

@@ -1,0 +1,8 @@
+{
+  "provider": "opencode",
+  "kind": "flat",
+  "source": "https://opencode.ai/docs/console/go",
+  "verifiedAt": "2026-11-13",
+  "ttlDays": 30,
+  "notes": "A fixed plan with a per-request allowance, not per-token rates: Go is billed monthly and carries 5-hour / weekly / monthly windows plus a per-model monthly dollar limit, and Zen is prepaid credits charged per request. presets.js declares billing mode 'flat' with a per-request window, and the plan card is read from the router's plan-usage route rather than from a rate table, so no rate is copied here. The Go / Go Plus / Go Team tiers and their limits are vendor figures that change without notice; re-check the linked plan page before trusting a limit. Model coverage per tier is catalog-dependent."
+}

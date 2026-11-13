@@ -174,6 +174,8 @@ export async function loadVendorModules({ profileDir, importModule = defaultImpo
   }
 
   packageUrls.deepinfra = vendorUrl('deepinfra/lib/index.js')
+  // EXAONE is model-only: no bridge module is needed, only the mount URL.
+  packageUrls.exaone = vendorUrl('exaone/lib/index.js')
 
   return { modules, errors, packageUrls }
 }

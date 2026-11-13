@@ -3,10 +3,12 @@
 <!-- skeleton:
 version: 0.0.1-rc.1
 kind: spec
-status: active
+status: blocked
 updated: 2026-11-06
-summary: Owner-approved plan B: a separate plugin-owned Settings-Models (Custom) surface, with per-service tool presets, credential interception vs separate input, install/web-auth checks, and OpenCode plan detection.
+summary: Specification only, not implemented (ROADMAP P2-6, owner-gated). Owner-approved plan B: a separate plugin-owned Settings-Models (Custom) surface, with per-service tool presets, credential interception vs separate input, install/web-auth checks, and OpenCode plan detection.
 -->
+
+> **SPECIFICATION ONLY (2026-11-14).** This surface is not implemented; it is [ROADMAP.md](./ROADMAP.md) P2-6, blocked on owner approval. Do not read the gates below as current work.
 
 > Status: **specification only.** Owner decision 2026-11-06, confirmed 2026-11-06: **a new
 > separate surface (plan B)** — not tabs inside the
@@ -71,7 +73,7 @@ It never reaches into another plugin's namespace unasked (RULES.md §3).
 | Service | Measured check chain | Where |
 | :--- | :--- | :--- |
 | Antigravity | `agy` binary must exist and `agy models` must list models ("proving the sign-in works"); the credential file `~/.gemini/antigravity-cli/{jetski-standalone-,}antigravity-oauth-token` must contain a `refresh_token`; `POST oauth2.googleapis.com/token` refreshes it; **no API-key path** (`GEMINI_API_KEY` does not authenticate). 401 on generation triggers one refresh+retry; `invalid_grant` means revoked/rotated. | [dsh-antigravity/README.md](../vendor/antigravity/README.md) §1–2; `lib/auth.js` 27–46, 118–161; `lib/adapter.js:259` |
-| OpenCode v2 | `opencodePath` (PATH or absolute, systemctl-safe), `opencode serve` daemon reachable or spawnable; `GET /api/credential` returns stored entries; rank active `oauth` before `key`; 401 forces one refresh. | `dsh-opencode-v2/lib/http.js` 1124–1245, 1168–1191; [dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md](../../dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md) |
+| OpenCode v2 | `opencodePath` (PATH or absolute, systemctl-safe), `opencode serve` daemon reachable or spawnable; `GET /api/credential` returns stored entries; rank active `oauth` before `key`; 401 forces one refresh. | `dsh-opencode-v2/lib/http.js` 1124–1245, 1168–1191; [dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md](../../archive/dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md) |
 
 **These checks must live in each service's preset**, not in a central place: the binary path, the
 token file, and the credential-store integration id are service-specific. A preset that activates
@@ -157,7 +159,7 @@ switch mounts that service's row; removing it disposes only that service's route
 **DeepInfra tab**
 1. `apiKey` (typed secret) or `DEEPINFRA_API_KEY` env present; report source (`ui|env|none`).
 2. Public `GET /v1/openai/models` reachable (no auth); report chat-route count.
-3. Promotions: `promotionOf()` count (8/91 measured), `/v1/request-costs` reachable.
+3. Promotions: `promotionOf()` count (8/92 measured 2026-11-14), `/v1/request-costs` reachable.
 4. No agent-install check — pure fetch; say so explicitly.
 
 ### 3.4 Credential precedence (normative, per service)
@@ -199,8 +201,8 @@ credential works without its service's own readiness probe.
 - [CUSTOM-ROUTER-SERVICE-SPEC.md](./CUSTOM-ROUTER-SERVICE-SPEC.md), [CUSTOM-ROUTER-PROTOCOL-STANDARD.md](./CUSTOM-ROUTER-PROTOCOL-STANDARD.md)
 - [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md) — composition diagrams + normative per-service module contract
 - [UI-SLOT-ARCHITECTURE.md](../../docs/UI-SLOT-ARCHITECTURE.md), [RULES.md](../../docs/RULES.md), [DSH-HARNESS-POLICY.md](../../docs/DSH-HARNESS-POLICY.md)
-- [dsh-antigravity/README.md](../vendor/antigravity/README.md), [dsh-opencode-v2/README.md](../../dsh-opencode-v2/README.md), [dsh-deepinfra/README.md](../vendor/deepinfra/README.md)
-- [dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md](../../dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md), [dsh-opencode-v2/docs/OPENCODE-V2-SURFACE-MEASUREMENT.md](../../dsh-opencode-v2/docs/OPENCODE-V2-SURFACE-MEASUREMENT.md)
+- [dsh-antigravity/README.md](../vendor/antigravity/README.md), [dsh-opencode-v2/README.md](../../archive/dsh-opencode-v2/README.md), [dsh-deepinfra/README.md](../vendor/deepinfra/README.md)
+- [dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md](../../archive/dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md), [dsh-opencode-v2/docs/OPENCODE-V2-SURFACE-MEASUREMENT.md](../../archive/dsh-opencode-v2/docs/OPENCODE-V2-SURFACE-MEASUREMENT.md)
 - Installed `@deepseek-ai/dsh-credentials`, `dsh-credentials-local`, `dsh-client-ui-settings*`, `dsh-llm-deepseek-api-key`
 
 ## Cross-reference

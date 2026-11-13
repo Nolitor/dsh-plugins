@@ -280,6 +280,9 @@ export const PRESETS = Object.freeze([
       mode: 'api-key',
       sources: Object.freeze([
         Object.freeze({ kind: 'secret-field', name: 'apiKey' }),
+        // The managed path: the value lives in `~/.dsh/.credentials.yaml` `refs:`
+        // and is resolved by reference (see CREDENTIAL-STORE-MIGRATION.md).
+        Object.freeze({ kind: 'credential-ref', name: 'DEEPINFRA_API_KEY' }),
         Object.freeze({ kind: 'env', name: 'DEEPINFRA_API_KEY' }),
       ]),
     }),
@@ -305,6 +308,68 @@ export const PRESETS = Object.freeze([
     usage: Object.freeze({ record: 'deepinfra-cost', plan: 'unavailable', billing: Object.freeze({ mode: 'pay-per-token' }), routes: Object.freeze([
       Object.freeze({ path: '/api/local/deepinfra/cost/summary', normalize: 'normalizeDeepinfraUsage' }),
     ]) }),
+  }),
+  Object.freeze({
+    id: 'exaone',
+    name: 'EXAONE',
+    kind: 'package',
+    // Vendored single-package preset: one row, no shared rows.
+    package: '@nolit/dsh-custom-router/vendor/exaone',
+    row: 'dsh-exaone',
+    entries: Object.freeze([Object.freeze({ row: 'dsh-exaone' })]),
+    providerId: 'exaone',
+    modelPrefixes: Object.freeze(['exaone']),
+    endpoint: Object.freeze({
+      // docs.exaone.ai (read 2026-11-13): OpenAI-compatible chat completions.
+      mode: 'http',
+      protocol: 'openai-completions',
+      route: 'own',
+      baseUrl: 'https://api.exaone.ai/v1',
+      chatPath: '/chat/completions',
+      transport: 'sse',
+    }),
+    auth: Object.freeze({
+      mode: 'api-key',
+      sources: Object.freeze([
+        Object.freeze({ kind: 'secret-field', name: 'apiKey' }),
+        // The managed path: resolved from the DSH credential store by reference.
+        Object.freeze({ kind: 'credential-ref', name: 'EXAONE_API_KEY' }),
+        Object.freeze({ kind: 'env', name: 'EXAONE_API_KEY' }),
+      ]),
+    }),
+    // EXAONE publishes one chat model and no catalog listing endpoint, so the
+    // model row is declared data (the same static-catalog shape a declaration
+    // uses) and the vendored adapter resolves exact-route metadata from it.
+    catalog: Object.freeze({
+      mode: 'static',
+      layers: Object.freeze([
+        Object.freeze({
+          source: 'override',
+          models: Object.freeze([
+            Object.freeze({
+              id: 'k-exaone_v2.5',
+              name: 'K-EXAONE 2.5',
+              contextWindow: 524288,
+              maxTokens: 524288,
+              input: Object.freeze(['text']),
+              reasoning: true,
+            }),
+          ]),
+        }),
+      ]),
+    }),
+    catalogRoute: '/api/local/dsh-exaone/models',
+    switches: Object.freeze([]),
+    surfaces: Object.freeze({
+      model: Object.freeze({ adapter: true }),
+      subagent: null,
+      cli: null,
+      batch: null,
+      tools: Object.freeze([]),
+      commands: Object.freeze([]),
+      skill: null,
+    }),
+    usage: Object.freeze({ record: 'exaone-usage', plan: 'unavailable', billing: Object.freeze({ mode: 'none' }) }),
   }),
 ])
 

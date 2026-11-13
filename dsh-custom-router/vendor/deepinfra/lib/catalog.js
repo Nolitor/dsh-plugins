@@ -1,20 +1,21 @@
 /**
  * DeepInfra model catalog: fetch, cache, and project onto host metadata.
  *
- * Measured 2026-11-04 against https://api.deepinfra.com/v1/openai/models:
- *   - PUBLIC: HTTP 200 with no Authorization header, 173 entries, 116,954 bytes.
+ * Measured 2026-11-14 against https://api.deepinfra.com/v1/openai/models (and
+ * first measured 2026-11-04):
+ *   - PUBLIC: HTTP 200 with no Authorization header, 178 entries, 119,966 bytes.
  *     A cold start therefore never fails on auth; a missing key only fails the
  *     first completion.
- *   - 91 chat-tagged routes. Every one of the 91 carries `context_length`,
+ *   - 92 chat-tagged routes. Every one of the 92 carries `context_length`,
  *     `max_tokens` and a `pricing` object -- the brief expected 57 of 148 to
  *     have no context_length; that count came from all entries, not chat routes.
- *   - On all 91 routes `max_tokens === context_length`. There is no separate
+ *   - On all 92 routes `max_tokens === context_length`. There is no separate
  *     output cap in the catalog, so the "hard 16,384 output cap" in the brief is
  *     NOT a catalog fact: HTTP accepts max_tokens well above it (see wire.js).
- *   - Tags: chat 91, vlm 52, vision 52, prompt_cache 45, reasoning 66,
- *     reasoning_effort 36, embed 25, tts 13, image-gen 27, video-gen 10, stt 7.
+ *   - Tags: chat 92, vlm 54, vision 54, prompt_cache 46, reasoning 67,
+ *     reasoning_effort 36, embed 25, tts 13, image-gen 27, video-gen 14, stt 7.
  *   - `metadata.discount` is a fraction to subtract (0.3 => pay 70%), present on
- *     9 chat routes. Verified by fitting provider-reported cost.
+ *     8 chat routes (0.05-0.51). Verified by fitting provider-reported cost.
  */
 
 /** Catalog endpoint. Public; no credential needed. */
@@ -226,7 +227,7 @@ export function toResolvedModelInfo(provider, entry, options = {}) {
   const tags = Array.isArray(entry.metadata?.tags) ? entry.metadata.tags : []
   const contextWindow = positiveInteger(entry.metadata?.context_length)
   if (contextWindow !== undefined) info.context = { contextWindow }
-  // The catalog's max_tokens EQUALS context_length on all 91 chat routes, so it
+  // The catalog's max_tokens EQUALS context_length on all 92 chat routes, so it
   // describes capacity, not a per-response cap. Advertising it as defaultMaxTokens
   // would reserve the whole window for one completion. The reservation comes from
   // the caller's turn policy instead.
@@ -245,8 +246,8 @@ export function toResolvedModelInfo(provider, entry, options = {}) {
  * Promotional pricing for one route.
  *
  * The catalog publishes exactly one promotion signal: `metadata.discount`, a
- * fraction of list price the operator does not pay. Measured 2026-11-04 on the 91
- * chat routes: 8 carry a discount, from 0.10 (pay 90%) to 0.75 (pay 25%). There is
+ * fraction of list price the operator does not pay. Re-measured 2026-11-14 on the
+ * 92 chat routes: 8 carry a discount, from 0.05 (pay 95%) to 0.51 (pay 49%). There is
  * no "featured" or "promo" tag — the tag vocabulary is capability only
  * (chat, vision, vlm, reasoning, reasoning_effort, prompt_cache, embed, tts,
  * stt, image-gen, video-gen), so a promotion MUST be derived from the discount.

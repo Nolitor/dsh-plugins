@@ -1,0 +1,31 @@
+{
+  "id": "deepinfra",
+  "preset": "deepinfra",
+  "status": "active",
+  "protocol": "openai-completions",
+  "docs": "https://docs.deepinfra.com",
+  "verifiedAt": "2026-11-14",
+  "ttlDays": 90,
+  "endpoint": "https://api.deepinfra.com/v1/openai",
+  "models": [
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+  ],
+  "capabilities": {
+    "tools": true,
+    "reasoning": [
+      "none",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "usage": true,
+    "cache": true,
+    "structuredOutput": false,
+    "vision": true
+  },
+  "pricing": "deepinfra",
+  "notes": "Single-route http preset (providerId 'deepinfra', modelPrefixes ['deepinfra'], protocol openai-completions, chatPath /chat/completions). A SECOND protocol is available behind an opt-in switch: an Anthropic-compatible Messages mount at https://api.deepinfra.com/anthropic/v1/messages registered as its own provider id 'deepinfra-anthropic' (plugin config anthropicRoute: true, default OFF, no settings UI), served by vendor/deepinfra/lib/anthropic-adapter.js — so this file's 'protocol' names the DEFAULT route only, and the Anthropic route is why protocols/anthropic-messages.json lists a deepinfra adapter. models is a measured ENABLED subset (the operator's enabledModels), not the catalog: the public catalog at https://api.deepinfra.com/v1/openai/models returned 178 entries with 92 chat-tagged routes when measured 2026-11-14, so the served set changes without warning and always comes from the live catalog. CATALOG-DEPENDENT capabilities: cache is true because the catalog tags prompt_cache on 46 chat routes and usage reports prompt_tokens_details.cached_tokens, but only the tagged routes cache; vision is true because 54 routes are tagged vision/vlm and the catalog projects image into inputModalities — a non-tagged route is text-only; reasoning lists the provider's accepted `reasoning_effort` enum (none|minimal|low|medium|high|xhigh|max; anything else is HTTP 422), NOT a per-route guarantee: the catalog advertises efforts only on reasoning/reasoning_effort-tagged routes (74 of 92) while the adapter accepts an effort on ANY route (measured: a non-tagged route produced 50 reasoning deltas for effort 'high'), so this is the wire's vocabulary and the advertised subset stays catalog-dependent. structuredOutput is FALSE at the provider level because this adapter sends no response_format (documented as not sent/not parsed); the protocol's OpenAI capability is not exercised here. Auth is a single bearer key (apiKey or DEEPINFRA_API_KEY); no secret is recorded in this file. KEY SOURCE (2026-11-14): the credential is managed by the DSH credential store — the plugin declares a credentialRef defaulting to DEEPINFRA_API_KEY and resolves it through the host credentials service; the profile patch may carry only that reference. Precedence: explicit apiKey -> store ref -> env var. See docs/CREDENTIAL-STORE-MIGRATION.md."
+}

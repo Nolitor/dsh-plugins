@@ -1,0 +1,5 @@
+data: {"response":{"candidates":[{"content":{"parts":[{"text":"think ","thought":true}],"role":"model"}}],"usageMetadata":{"promptTokenCount":120,"candidatesTokenCount":0,"thoughtsTokenCount":5,"cachedContentTokenCount":20,"totalTokenCount":125}}}
+
+data: {"response":{"candidates":[{"content":{"parts":[{"text":"answer"}],"role":"model"}}],"usageMetadata":{"promptTokenCount":120,"candidatesTokenCount":12,"thoughtsTokenCount":5,"cachedContentTokenCount":20,"totalTokenCount":137}}}
+
+data: {"response":{"candidates":[{"content":{"parts":[{"thoughtSignature":"sig_replay_1","functionCall":{"name":"lookup","args":{"q":"x"},"id":"call_g1"}}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":120,"candidatesTokenCount":30,"thoughtsTokenCount":5,"cachedContentTokenCount":20,"totalTokenCount":155}}}

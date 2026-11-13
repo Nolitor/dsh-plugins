@@ -1,0 +1,27 @@
+{
+  "id": "google-generative-sse",
+  "revision": 1,
+  "verifiedAt": "2026-11-13",
+  "ttlDays": 90,
+  "docs": "https://ai.google.dev/api/generate-content",
+  "streaming": "sse",
+  "canonical": {
+    "text": "response.candidates[0].content.parts[].text",
+    "reasoning": "response.candidates[0].content.parts[].text where part.thought === true",
+    "toolCalls": "response.candidates[0].content.parts[].functionCall (complete, args is an object)",
+    "usage": "response.usageMetadata (cumulative across frames: promptTokenCount / candidatesTokenCount / thoughtsTokenCount / cachedContentTokenCount / totalTokenCount)",
+    "finish": "response.candidates[0].finishReason"
+  },
+  "capabilities": {
+    "tools": true,
+    "reasoning": true,
+    "usage": true,
+    "cache": true,
+    "structuredOutput": false,
+    "vision": true
+  },
+  "adapters": [
+    "vendor/antigravity/lib/adapter.js"
+  ],
+  "notes": "Antigravity's wire: POST https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse, served by route 'own' (see lib/presets.js endpoint.protocol). The provider streams WHOLE parts rather than deltas — a frame carries a full {text} or a complete functionCall — so the adapter owns block start/delta/end indexing and the descriptor is toolCallShape 'complete' (no fragment ordinals). Two consequences measured 2026-11-05: usageMetadata is CUMULATIVE across frames (never sum it), and thoughtsTokenCount sits outside candidatesTokenCount, so the total only reconciles under the prompt+output+reasoning formula. promptTokenCount INCLUDES cache hits, so cachedContentTokenCount must be split out. Reasoning requires thinkingConfig.includeThoughts; effort is encoded in the model id suffix because the server IGNORES generationConfig.thinkingConfig.thinkingLevel. Images ride as inlineData {mimeType, data}, and a model without image support answers UNSUPPORTED_OPTION instead of silently dropping the image. structuredOutput is NOT claimed: this vendor endpoint has no responseSchema/responseMimeType path in the adapter, and no measurement supports it. cache here means cache-token REPORTING (cachedContentTokenCount); no cache write/control is sent."
+}

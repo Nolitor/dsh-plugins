@@ -1,15 +1,16 @@
 # Custom Router — Protocol Normalisation Standard
 
 <!-- skeleton:
-version: 0.0.1-rc.1
+version: 0.0.1-rc.2
 kind: spec
 status: active
-updated: 2026-11-06
-summary: Standard-LLM-contract baseline and measured capability gaps first, then per-service wire/auth/catalog differences and the normative StreamChunk mapping.
+updated: 2026-11-14
+summary: Standard-LLM-contract baseline and measured capability gaps first, then per-service wire/auth/catalog differences and the normative StreamChunk mapping. Catalog facts re-measured 2026-11-14 (DeepInfra 178 entries / 92 chat routes / 8 discounted) at router 0.0.1-rc.19 and host DSH 0.2.2-rc.3.
 -->
 
-> Status: **specification** derived from measured source, 2026-11-06. Runtime: DSH `0.2.2-rc.1`,
-> `@deepseek-ai/dsh-llm@0.2.2-rc.1`. No code, profile, or version is changed by this document.
+> Status: **specification** derived from measured source, 2026-11-06; catalog rows re-measured
+> 2026-11-14. Runtime: DSH `0.2.2-rc.3`, `@deepseek-ai/dsh-llm@0.2.2-rc.3`, router
+> `0.0.1-rc.19`. No code, profile, or version is changed by this document.
 > Parent: [CUSTOM-ROUTER-SERVICE-SPEC.md](./CUSTOM-ROUTER-SERVICE-SPEC.md).
 > Per-plugin evidence stays in each track's `CHANGELOG.md` / `UPSTREAM-COMPAT.md`; this document
 > holds only the cross-service contract (RULES.md §6.1).
@@ -17,7 +18,7 @@ summary: Standard-LLM-contract baseline and measured capability gaps first, then
 ## 1. Standard baseline first — then why a fit-specific layer is needed
 
 **Read [CUSTOM-ROUTER-SERVICE-SPEC.md §1](./CUSTOM-ROUTER-SERVICE-SPEC.md) before this section.**
-That section measures the installed `@deepseek-ai/dsh-llm@0.2.2-rc.1` runtime: it already
+That section measures the installed `@deepseek-ai/dsh-llm@0.2.2-rc.3` runtime: it already
 provides `registerAdapter` (all-or-nothing, disposer + atomic `replace`),
 `registerConfigurableProviders`, `registerModelDiscovery`, the full `LlmAdapter` lifecycle,
 dispatch, retry policy and attribution. `dsh-llm-pi-ai` is a **dormant, settings-driven dynamic
@@ -49,7 +50,7 @@ metadata. So this is a **capability gap**, not a stylistic fit:
 | :--- | :--- | :--- |
 | one OpenAI-compatible endpoint per profile | Antigravity speaks Google `streamGenerateContent` with a **separate control host** | **NO** |
 | one `apiKeyEnv` / stored credential per profile | OpenCode ranks **oauth before key** via `GET /api/credential`; Antigravity refreshes an OAuth token file | **NO** |
-| a settings-supplied model list | DeepInfra has a **public 173-row catalog with per-model pricing**; OpenCode has a plan/ranking data index; Antigravity has an account quota summary | **PARTIAL** |
+| a settings-supplied model list | DeepInfra has a **public 178-entry catalog (92 chat routes) with per-model pricing**; OpenCode has a plan/ranking data index; Antigravity has an account quota summary | **PARTIAL** |
 | a single wire request shape | reasoning is `effort-field` / `model-id-suffix` / `ordered-id`; usage is `session export` / response / **trailing chunk**; cost is reported / quota / **derived** | **NO** |
 | one adapter instance for many profiles | three different control planes, credential ranks and cost semantics would make every field conditional | **no** ([DEEPINFRA-ADAPTER-BRIEF.md §6](../vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md)) |
 
@@ -60,7 +61,7 @@ routes register together, real isolated + browser boots clean, standard `deepsee
 re-enabled pi-ai both survive). Coexistence is not sufficiency: [DSH-HARNESS-POLICY.md §1.1](../../docs/DSH-HARNESS-POLICY.md)
 already declares `llm-pi-ai` **deprecated and not restored**. A second router layer *beside*
 the harness is not needed and is the decommissioned `dsh-subrouter` mistake
-([OPENCODE-MODEL-SERVING-PLAN.md §1](../../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md)).
+([OPENCODE-MODEL-SERVING-PLAN.md §1](../../archive/dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md)).
 
 ### 1.2 What this standard fixes
 
@@ -76,13 +77,13 @@ control, retry policy and attribution headers.
 
 | Axis | OpenCode v2 | Antigravity | DeepInfra |
 | :--- | :--- | :--- | :--- |
-| Provider id | `opencode-http-agent` ([http.js:2367](../../dsh-opencode-v2/lib/http.js)) | `antigravity` (`PROVIDER_ID`, [index.js:44](../vendor/antigravity/lib/index.js)) | `deepinfra` (`PROVIDER_ID`, [index.js:30](../vendor/deepinfra/lib/index.js)) |
+| Provider id | `opencode-http-agent` ([http.js:2367](../../archive/dsh-opencode-v2/lib/http.js)) | `antigravity` (`PROVIDER_ID`, [index.js:44](../vendor/antigravity/lib/index.js)) | `deepinfra` (`PROVIDER_ID`, [index.js:30](../vendor/deepinfra/lib/index.js)) |
 | Generation endpoint | `POST {baseURL}/chat/completions` (`chatPath` default `/chat/completions`) | `POST {baseUrl}/v1internal:streamGenerateContent?alt=sse` ([wire.js:21](../vendor/antigravity/lib/wire.js)) | `POST {base}/chat/completions` ([wire.js:23](../vendor/deepinfra/lib/wire.js)) |
 | Wire family | OpenAI-compatible chat completions (SSE) | Google `streamGenerateContent` SSE (functionCall / functionResponse, `systemInstruction`) | OpenAI-compatible chat completions (SSE) |
 | Base URL source | `GET /api/provider/{id}` → `settings.baseURL`, with `backendBaseUrl` override | `daily-cloudcode-pa.googleapis.com` (generation) vs `cloudcode-pa.googleapis.com` (control) — **two hosts** | `https://api.deepinfra.com/v1/openai` (config/env/default precedence) |
 | Credential | `GET /api/credential` ranking: active **oauth** before **key**; fallback `OPENCODE_API_KEY` | token file `~/.gemini/antigravity-cli/{jetski-standalone-,}oauth-token` + `POST oauth2.googleapis.com/token` refresh | one bearer `DEEPINFRA_API_KEY`, or Settings `role('secret')` field |
 | Control plane | local `opencode serve` daemon (attach first, spawn if needed) | `loadCodeAssist` / `fetchAvailableModels` / `retrieveUserQuotaSummary` | none (pure fetch) |
-| Catalog | durable `opencode-models.json` + `https://opencode.ai/data/index.json` ranking, plan namespacing (`opencode-go/*`) | account model list + quota summary, TTL 15 min | `GET /v1/openai/models` — **public, no key**, 173 entries / 91 chat routes, per-row pricing |
+| Catalog | durable `opencode-models.json` + `https://opencode.ai/data/index.json` ranking, plan namespacing (`opencode-go/*`) | account model list + quota summary, TTL 15 min | `GET /v1/openai/models` — **public, no key**, 178 entries / 92 chat routes, per-row pricing (8 discounted, 0.05–0.51) |
 | Reasoning control | `reasoningEffort` on the route; `#variant` suffix on delegation ids | **separate model ids** per effort, grouped into ONE base model whose `reasoning.efforts` list every served level (measured 2026-11-13: `gemini-4-hydrogen` serves `low/medium/high/**xhigh**`; earlier three-level accounts serve `low/-medium/-high`); F-40 in [FAILURE-LEDGER.md](../../docs/FAILURE-LEDGER.md) | `reasoning_effort` ordered ids `none\|minimal\|low\|medium\|high\|xhigh\|max` |
 | Reasoning channel | `reasoning` events / `reasoning_content` | thinking blocks (not echoed back) | `delta.reasoning_content` → `reasoning-delta` |
 | Usage source | `session export` (v2 emits no `step_finish`) | response usage + quota | trailing usage-only SSE chunk; `stream_options.include_usage` defaults true |
@@ -257,10 +258,10 @@ exists to close; each stays a `dsh-<track>/CHANGELOG.md` entry until its migrati
 | D8 | antigravity, deepinfra | empty completion → throw (AG) vs in-band `finish{kind:'error'}` (DI); no single policy | N5 |
 
 - `dsh-deepinfra` declares `engines.dsh >=0.2.2-alpha.3 <0.3.0` while the other two declare
-  `>=0.2.2-alpha.2 <0.3.0`; runtime `0.2.2-rc.1` satisfies both. Harmonisation is a version-owner
+  `>=0.2.2-alpha.2 <0.3.0`; runtime `0.2.2-rc.3` satisfies both. Harmonisation is a version-owner
   decision, not a spec change.
 - OpenCode v2 stage-2 canonical parser and Antigravity stage-2 quota UX are gated on owner
-  S6 soak confirmation ([dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../../dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md),
+  S6 soak confirmation ([dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../../archive/dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md),
   [dsh-antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md](../vendor/antigravity/docs/ANTIGRAVITY-STAGE-PLAN.md)).
 - `@nolit/dsh-subrouter` remains an active (uninstalled) track pending the owner's P-4
   install-or-archive decision. This standard supersedes its *concept*, not its files.
@@ -272,7 +273,7 @@ exists to close; each stays a `dsh-<track>/CHANGELOG.md` entry until its migrati
 - [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md) — composition diagrams + normative per-service module contract
 - [dsh-deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](../vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md), [dsh-deepinfra/UPSTREAM-COMPAT.md](../vendor/deepinfra/UPSTREAM-COMPAT.md)
 - [RULES.md](../../docs/RULES.md), [FAILURE-LEDGER.md](../../docs/FAILURE-LEDGER.md), [PLUGIN-CONSOLIDATION.md](../../docs/PLUGIN-CONSOLIDATION.md)
-- Installed `@deepseek-ai/dsh-llm@0.2.2-rc.1` `lib/types/index.d.ts` and `types.d.ts`
+- Installed `@deepseek-ai/dsh-llm@0.2.2-rc.3` `lib/types/index.d.ts` and `types.d.ts`
 
 ## Cross-reference
 

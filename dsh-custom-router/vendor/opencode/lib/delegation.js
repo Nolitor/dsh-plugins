@@ -218,20 +218,24 @@ export async function startChildSession(options) {
   }
   const blocks = promptBlocks(prompt)
   const controller = signal === undefined || signal === null ? new AbortController() : null
-  const request = {
+  // The activation spec is FLAT as of DSH 0.2.1-rc.2, which removed the nested
+  // `request` field (upgrade-guide `v0.2.1-rc.2/subagent-activation-options`).
+  // Sending the old `request: {prompt,parent,cwd}` leaves `spec.parent`
+  // undefined and the host service fails in `startActivation()` with
+  // "Cannot read properties of undefined (reading 'id')" before any provider
+  // runs. Measured live 2026-11-13 on DSH 0.2.2-rc.3.
+  const spec = {
+    provider: providerName,
+    label: String(label ?? '').trim() || activationLabel({ prompt }),
     prompt: blocks,
     parent,
-    ...(typeof cwd === 'string' && cwd.trim() !== '' ? { cwd: cwd.trim() } : {}),
+    signal: signal ?? controller.signal,
+    delivery: CHILD_DELIVERY,
   }
+  if (typeof cwd === 'string' && cwd.trim() !== '') spec.cwd = cwd.trim()
   let activation
   try {
-    activation = await subagents.startActivation({
-      provider: providerName,
-      label: String(label ?? '').trim() || activationLabel({ prompt }),
-      request,
-      signal: signal ?? controller.signal,
-      delivery: CHILD_DELIVERY,
-    })
+    activation = await subagents.startActivation(spec)
   } catch (error) {
     throw new DelegationError(
       'start-failed',

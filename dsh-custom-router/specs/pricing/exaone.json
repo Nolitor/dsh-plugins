@@ -1,0 +1,8 @@
+{
+  "provider": "exaone",
+  "kind": "free",
+  "source": "owner",
+  "verifiedAt": "2026-11-13",
+  "ttlDays": 30,
+  "notes": "Currently free after application (owner statement, 2026-11-13); this MAY CHANGE, and no rate card is published in the docs that were read. The route is Korean-language / humanities-oriented rather than a science-specialised one. Because the price is an owner statement and not a vendor catalog, the 30-day ttlDays forces a periodic re-confirmation; a free tier that turns paid would otherwise be invisible. Access still requires an applied-for API key, so 'free' does not mean unauthenticated. No key, account id or quota is recorded here."
+}

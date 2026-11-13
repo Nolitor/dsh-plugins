@@ -249,7 +249,7 @@ export async function* normalizeStream(options = {}) {
   /** The fully accumulated block, never a placeholder. */
   function finalBlock(block) {
     if (block.kind === 'tool-call') {
-      return { type: 'tool-call', id: block.id || `call_${block.index}`, name: block.name, arguments: block.arguments }
+      return { type: 'tool-call', id: block.id || `call_${block.index}`, name: block.name, arguments: block.arguments, ...(typeof block.thoughtSignature === 'string' && block.thoughtSignature !== '' ? { thoughtSignature: block.thoughtSignature } : {}) }
     }
     return { type: block.kind, text: block.text }
   }
@@ -288,7 +288,7 @@ export async function* normalizeStream(options = {}) {
         : part.arguments === undefined || part.arguments === null ? '' : JSON.stringify(part.arguments)
       const index = allocate()
       const id = part.id || `call_${index}`
-      const block = { kind: 'tool-call', index, id, name: part.name ?? '', arguments: args, closed: false }
+      const block = { kind: 'tool-call', index, id, name: part.name ?? '', arguments: args, closed: false, ...(typeof part.thoughtSignature === 'string' && part.thoughtSignature !== '' ? { thoughtSignature: part.thoughtSignature } : {}) }
       blocks.set(index, block)
       started.add(index)
       yield { type: 'block-start', index, blockType: 'tool-call' }

@@ -103,7 +103,7 @@ Measured in `dsh-llm/lib/index.js`:
 
 A second "router engine" inside `dsh-custom-router` would duplicate exactly this and break the
 measured coexistence proof (S1-S8 in the parent spec). This is the `dsh-subrouter` failure
-recorded in [dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md](../../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md): it sat
+recorded in [dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md](../../archive/dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md): it sat
 *beside* the harness and lost retry, attribution, and discovery. **Rule R0: the custom router
 uses `ctx.llm.registerAdapter`; it never owns a second routing table.**
 
@@ -166,7 +166,7 @@ no browser boot, no generation turn, no version/rc change.
 ## 10. References
 
 - [CUSTOM-ROUTER-SERVICE-SPEC.md](./CUSTOM-ROUTER-SERVICE-SPEC.md), [CUSTOM-ROUTER-ARCHITECTURE.md](./CUSTOM-ROUTER-ARCHITECTURE.md), [CUSTOM-ROUTER-PROTOCOL-STANDARD.md](./CUSTOM-ROUTER-PROTOCOL-STANDARD.md), [CUSTOM-ROUTER-PRESET-SURFACE.md](./CUSTOM-ROUTER-PRESET-SURFACE.md), [PLAN-AND-USAGE-SPEC.md](./PLAN-AND-USAGE-SPEC.md), [PRESET-SCHEMA-AND-EXTENSION.md](./PRESET-SCHEMA-AND-EXTENSION.md)
-- [dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md](../../dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md), [docs/RULES.md](../../docs/RULES.md), [docs/DSH-RC1-PLUGIN-DELTA.md](../../docs/DSH-RC1-PLUGIN-DELTA.md)
+- [dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md](../../archive/dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md), [docs/RULES.md](../../docs/RULES.md), [docs/DSH-RC1-PLUGIN-DELTA.md](../../docs/DSH-RC1-PLUGIN-DELTA.md)
 
 ## Cross-reference
 

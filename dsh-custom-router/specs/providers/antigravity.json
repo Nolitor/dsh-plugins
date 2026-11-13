@@ -1,0 +1,30 @@
+{
+  "id": "antigravity",
+  "preset": "antigravity",
+  "status": "active",
+  "protocol": "google-generative-sse",
+  "docs": "https://antigravity.google/docs/overview",
+  "verifiedAt": "2026-11-13",
+  "ttlDays": 90,
+  "endpoint": "https://cloudcode-pa.googleapis.com",
+  "models": [
+    "gemini-4-hydrogen",
+    "gemini-4-argon",
+    "claude-opus-5-5"
+  ],
+  "capabilities": {
+    "tools": true,
+    "reasoning": [
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+    ],
+    "usage": true,
+    "cache": false,
+    "structuredOutput": false,
+    "vision": true
+  },
+  "pricing": "antigravity",
+  "notes": "Web-auth subscription preset (providerId 'antigravity', modelPrefixes ['antigravity'], protocol google-generative-sse on the vendor's own adapter). models lists BASE ids only; the picker shows one row per base with an effort selector, and the live list is whatever /v1internal:fetchAvailableModels returns for the ACCOUNT — measured on the daily host as 23 conversation models across gemini-4-hydrogen, gemini-4-argon, gemini-3.8-flash, gemini-3.5-flash-lite, gemini-3-flash, gemini-3.1-flash-lite, gemini-2.5-pro, claude-sonnet-5-5, claude-opus-5-5 and gpt-oss-120b (the control host returns 26 ids and no Hydrogen), so treat these three as a measured subset, not a fixed catalog. reasoning is the vendor-reported effort SUFFIX set, not a fixed enum: effort is encoded in the model id suffix because the server ignores thinkingConfig.thinkingLevel, gemini-4-hydrogen also serves xhigh, and a level the account does not serve returns 404 (an unserved level folds onto the nearest served one), so the effort list is per-model and catalog-dependent. UNVERIFIED: cache is declared false here only because the router sends no cache write/control on this wire, even though usageMetadata does report cachedContentTokenCount — cache-token REPORTING exists, cache CONTROL does not; structuredOutput is false and NOT verified as supported by this vendor endpoint (no responseSchema/responseMimeType path in the adapter); vision is true for the Gemini/Claude families, but the account also serves gpt-oss-120b with no image support, so image acceptance is per-model. Auth is a web-auth OAuth token file, never an API key; no secret is recorded in this file. The measured local reference is vendor/antigravity/docs/ANTIGRAVITY-DIRECTSDK-MEASUREMENT.md."
+}

@@ -96,7 +96,7 @@ function makeAdapter(discovered, overrides = {}) {
     stderrMaxBytes: 65536,
     forwardEnv: ['PATH'],
     extraArgs: [],
-    models: [{ id: 'default', opencodeModel: '', name: 'OpenCode (config default)' }],
+    models: [],
     brief: 'BRIEF',
     localSessionTitles: false,
     autoDiscoverModels: true,

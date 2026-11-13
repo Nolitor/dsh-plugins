@@ -1,0 +1,8 @@
+{
+  "provider": "antigravity",
+  "kind": "subscription",
+  "source": "owner",
+  "verifiedAt": "2026-11-13",
+  "ttlDays": 90,
+  "notes": "A web-auth Antigravity plan covers usage, so per-request billing is $0 while the plan holds. The router reads the PLAN, not a rate card: presets.js declares billing mode 'subscription' with three windows (5h, weekly, monthly) and the settings tab shows the account's weekly + 5-hour limits from retrieveUserQuotaSummary. Plan facts (limits, model coverage) are the vendor's and change without notice; no per-token price exists to copy into this repo. No credential or account id is recorded here."
+}

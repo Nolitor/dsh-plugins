@@ -131,7 +131,7 @@ before any surface exists are answered by a smaller, machine-checked model in
 | :--- | :--- | :--- | :--- |
 | **Delivery** | `kind` | `package` (code-backed, mounted as a child plugin) or `declaration` (JSON data only, no package) | the three vendors are npm packages; a loopback OpenAI endpoint needs no code |
 | **Authentication** | `auth.mode` + ordered `auth.sources` | `api-key`, `web-auth`, `local-socket`, `none`; sources `secret-field`, `env`, `credential-ref`, `token-file`, `daemon-endpoint` | credentials service's two spaces (`CredentialRef` vs `CredentialRecord`), vendor token files, `GET /api/credential` |
-| **Endpoint** | `endpoint.mode`, `.protocol`, `.route`, `.baseUrl`, `.transport` | modes `http`, `local-http`, `daemon`; protocols `openai-completions`, `openai-responses`, `anthropic-messages`, `google-generative-sse`; routes `pi-ai`, `own`; transports `sse`, `websocket`, `websocket-cached`, `auto` | `dsh-llm-pi-ai` `PROTOCOLS` + `transport`; Antigravity's Google SSE wire; localhub `127.0.0.1:8080/v1` |
+| **Endpoint** | `endpoint.mode`, `.protocol`, `.route`, `.baseUrl`, `.transport` | modes `http`, `local-http`, `daemon`; protocols `openai-completions`, `openai-responses`, `anthropic-messages`, `google-generative-sse`, `google-generative-ai`; routes `pi-ai`, `own`; transports `sse`, `websocket`, `websocket-cached`, `auto` | `dsh-llm-pi-ai` `PROTOCOLS` (three host wires only) + `transport`; the two Google vendor wires (`google-generative-sse` = Antigravity's `v1internal:streamGenerateContent`, `google-generative-ai` = the `generateContent` family); localhub `127.0.0.1:8080/v1` |
 
 ### 2.3.2 Measured instances
 
@@ -140,6 +140,7 @@ before any surface exists are answered by a smaller, machine-checked model in
 | `antigravity` | package `@nolit/dsh-antigravity` | `http` · `google-generative-sse` · `own` · `sse` · `daily-cloudcode-pa.googleapis.com` (catalog + generation; `loadCodeAssist` also answers on the control host — measured 2026-11-13: the control host omits every Hydrogen route) | `web-auth`: token-file → `refreshToken` → `clientSecret` → env `ANTIGRAVITY_REFRESH_TOKEN` |
 | `opencode` | package `@nolit/dsh-opencode-v2` | `daemon` · `openai-completions` · `own` · `sse` · `/chat/completions` | `web-auth`: daemon `/api/credential` → `apiKey` → `password` → env `OPENCODE_API_KEY` |
 | `deepinfra` | package `@nolit/dsh-deepinfra` | `http` · `openai-completions` · `own` · `sse` · `api.deepinfra.com/v1/openai` | `api-key`: `apiKey` → env `DEEPINFRA_API_KEY` |
+| `exaone` | package `@nolit/dsh-custom-router/vendor/exaone` | `http` · `openai-completions` · `own` · `sse` · `api.exaone.ai/v1` | `api-key`: `apiKey` → env `EXAONE_API_KEY` |
 
 A `declaration` example ships as `DECLARATION_EXAMPLE` (loopback `local-http`, `auth: none`,
 `catalog: static`) — the shape an operator fills when no package is involved.

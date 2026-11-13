@@ -9,7 +9,7 @@ summary: Stage-1 stabilisation gate for @nolit/dsh-antigravity, the measured S1�
 -->
 
 > Status: **stage 1 machine-decidable criteria PASS** · S6 soak **UNKNOWN (owner-confirmed)** ·
-> Sibling: [dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../../dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md) · Evidence:
+> Sibling: [dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../../archive/dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md) · Evidence:
 > [CHANGELOG](../CHANGELOG.md), [FAILURE-LEDGER](../../docs/FAILURE-LEDGER.md)
 
 ## 1. Why this document exists

@@ -1,0 +1,9 @@
+{
+  "version": "0.0.1-rc.18",
+  "name": "@nolit/dsh-custom-router",
+  "description": {
+    "en": "Multi-provider LLM router: Antigravity, OpenCode, DeepInfra, and EXAONE (currently free) presets.",
+    "ko": "다중 LLM 라우터: Antigravity, OpenCode, DeepInfra, EXAONE(현재 무료) 프리셋을 단일 진입점에서 관리합니다."
+  },
+  "usage": "라우팅 설정에서 프로바이더별 프리셋을 선택하여 경로를 구성합니다."
+}

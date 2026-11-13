@@ -9,8 +9,10 @@
  * The model below is measured, not invented:
  *   - protocols and transports: `dsh-llm-pi-ai` `PROTOCOLS` / `transport`
  *     (`openai-completions`, `openai-responses`, `anthropic-messages`;
- *     `sse`, `websocket`, `websocket-cached`, `auto`) plus the Google wire the
- *     Antigravity route speaks (`google-generative-sse`);
+ *     `sse`, `websocket`, `websocket-cached`, `auto`) plus the two Google wires
+ *     a vendor route speaks (`google-generative-sse` for Antigravity's
+ *     `v1internal:streamGenerateContent`, `google-generative-ai` for the
+ *     `generateContent` family);
  *   - auth sources: the credentials service's two spaces (`CredentialRef` =
  *     env/store value, `CredentialRecord` = grant) plus vendor token files and
  *     a daemon control-plane credential (`GET /api/credential`);
@@ -25,15 +27,31 @@
 /** How the preset is delivered. */
 export const PRESET_KINDS = Object.freeze(['package', 'declaration'])
 
-/** Wire protocols the host itself implements (routable through PiAiAdapter). */
+/**
+ * Wire protocols the host itself implements (routable through PiAiAdapter).
+ *
+ * MEASURED, do not extend on request alone: `dsh-llm-pi-ai` (0.2.2-rc.1) builds
+ * its route table as three entries and its Config validates `api` against
+ * `z.union(supportedProtocols())`. A fourth name here would let a `route:'pi-ai'`
+ * preset pass this validator and then fail to mount in the host — a false green,
+ * which is exactly what the drift gate exists to prevent.
+ */
 export const DSH_PROTOCOLS = Object.freeze([
   'openai-completions',
   'openai-responses',
   'anthropic-messages',
 ])
 
-/** Every wire protocol a preset may name (host-native plus measured vendor wires). */
-export const WIRE_PROTOCOLS = Object.freeze([...DSH_PROTOCOLS, 'google-generative-sse'])
+/**
+ * Every wire protocol a preset may name (host-native plus measured vendor wires).
+ *
+ * The vendor wires are served by a `route: 'own'` adapter, not by the host, so
+ * they belong here and NOT in {@link DSH_PROTOCOLS}: `google-generative-sse` is
+ * Antigravity's `v1internal:streamGenerateContent`, `google-generative-ai` is
+ * the `generateContent`/`streamGenerateContent` family a Google-compatible
+ * vendor endpoint speaks.
+ */
+export const WIRE_PROTOCOLS = Object.freeze([...DSH_PROTOCOLS, 'google-generative-sse', 'google-generative-ai'])
 
 /** Host transport modes. */
 export const TRANSPORTS = Object.freeze(['sse', 'websocket', 'websocket-cached', 'auto'])
@@ -405,7 +423,29 @@ export function validateModelCost(cost, { partial = false } = {}) {
 /**
  * JSON Schema mirror of {@link validatePresetModel}, for external tools and
  * documentation. Draft-07 subset; the JS validator stays the source of truth.
+ *
+ * Every `enum` below is DERIVED from the exported constant array it mirrors
+ * (never hand-copied): a hand-copied enum is a second source of truth that
+ * silently disagrees the first time a wire is added, which is the drift class
+ * `verify:presets` is meant to catch. Spread at construction keeps the schema
+ * a plain JSON value (frozen arrays are fine for `Object.freeze`).
  */
+const ENUMS = Object.freeze({
+  PRESET_KINDS: [...PRESET_KINDS],
+  ENDPOINT_MODES: [...ENDPOINT_MODES],
+  WIRE_PROTOCOLS: [...WIRE_PROTOCOLS],
+  WIRE_SERVERS: [...WIRE_SERVERS],
+  TRANSPORTS: [...TRANSPORTS],
+  AUTH_MODES: [...AUTH_MODES],
+  AUTH_SOURCES: [...AUTH_SOURCES],
+  CATALOG_MODES: [...CATALOG_MODES],
+  CATALOG_LAYERS: [...CATALOG_LAYERS],
+  PROBE_KINDS: [...PROBE_KINDS],
+  PROBE_SHAPES: [...PROBE_SHAPES],
+  PLAN_STATES: [...PLAN_STATES],
+  BILLING_MODES: [...BILLING_MODES],
+})
+
 export const PRESET_JSON_SCHEMA = Object.freeze({
   $schema: 'http://json-schema.org/draft-07/schema#',
   $id: 'https://nolit.dev/dsh-custom-router/preset.schema.json',
@@ -416,7 +456,7 @@ export const PRESET_JSON_SCHEMA = Object.freeze({
   properties: {
     id: { type: 'string', pattern: '^[a-z][a-z0-9-]*$' },
     name: { type: 'string' },
-    kind: { enum: ['package', 'declaration'] },
+    kind: { enum: ENUMS.PRESET_KINDS },
     package: { type: 'string', pattern: '^@[a-z0-9-]+/[a-z0-9-]+(?:/[a-z0-9-]+)*$' },
     row: { type: 'string', pattern: '^[a-z][a-z0-9-]*$' },
     entries: {
@@ -438,26 +478,26 @@ export const PRESET_JSON_SCHEMA = Object.freeze({
       type: 'object',
       required: ['mode', 'protocol', 'route', 'baseUrl'],
       properties: {
-        mode: { enum: ['http', 'local-http', 'daemon'] },
-        protocol: { enum: ['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-sse'] },
-        route: { enum: ['pi-ai', 'own'] },
+        mode: { enum: ENUMS.ENDPOINT_MODES },
+        protocol: { enum: ENUMS.WIRE_PROTOCOLS },
+        route: { enum: ENUMS.WIRE_SERVERS },
         baseUrl: { type: 'string' },
         chatPath: { type: 'string', pattern: '^/' },
-        transport: { enum: ['sse', 'websocket', 'websocket-cached', 'auto'] },
+        transport: { enum: ENUMS.TRANSPORTS },
       },
     },
     auth: {
       type: 'object',
       required: ['mode', 'sources'],
       properties: {
-        mode: { enum: ['api-key', 'web-auth', 'local-socket', 'none'] },
+        mode: { enum: ENUMS.AUTH_MODES },
         sources: {
           type: 'array',
           items: {
             type: 'object',
             required: ['kind'],
             properties: {
-              kind: { enum: ['secret-field', 'env', 'credential-ref', 'token-file', 'daemon-endpoint'] },
+              kind: { enum: ENUMS.AUTH_SOURCES },
               name: { type: 'string' },
             },
           },
@@ -468,7 +508,7 @@ export const PRESET_JSON_SCHEMA = Object.freeze({
       type: 'object',
       required: ['mode', 'layers'],
       properties: {
-        mode: { enum: ['live', 'cached', 'static'] },
+        mode: { enum: ENUMS.CATALOG_MODES },
         layers: {
           type: 'array',
           minItems: 1,
@@ -476,10 +516,10 @@ export const PRESET_JSON_SCHEMA = Object.freeze({
             type: 'object',
             required: ['source'],
             properties: {
-              source: { enum: ['upstream', 'probe', 'override'] },
+              source: { enum: ENUMS.CATALOG_LAYERS },
               providers: { type: 'array', items: { type: 'string' } },
-              kind: { enum: ['api', 'web-auth'] },
-              shape: { enum: ['openai', 'anthropic', 'vendor'] },
+              kind: { enum: ENUMS.PROBE_KINDS },
+              shape: { enum: ENUMS.PROBE_SHAPES },
               namespace: { type: 'string' },
               endpoint: { type: 'string', pattern: '^/' },
               ttlMs: { type: 'number' },
@@ -502,12 +542,12 @@ export const PRESET_JSON_SCHEMA = Object.freeze({
       required: ['record', 'plan'],
       properties: {
         record: { type: 'string', minLength: 1 },
-        plan: { enum: ['available', 'unavailable'] },
+        plan: { enum: ENUMS.PLAN_STATES },
         billing: {
           type: 'object',
           required: ['mode'],
           properties: {
-            mode: { enum: ['subscription', 'flat', 'pay-per-token', 'none'] },
+            mode: { enum: ENUMS.BILLING_MODES },
             service: { type: 'string' },
             windows: { type: 'array', items: { type: 'object', required: ['label'] } },
           },

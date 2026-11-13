@@ -11,7 +11,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { apply, outputSchema } from '../lib/index.js'
+import { apply, DEFAULT_MODEL, outputSchema, parameters } from '../lib/index.js'
 import { FALLBACK_ENV } from '../lib/delegation.js'
 
 /** A config object exposing schemastery Volatiles (`.get()` readers). */
@@ -106,6 +106,24 @@ test('the tool output is the activation shape, not a bare-run report', () => {
   assert.equal(schema.additionalProperties, false)
 })
 
+test('the model parameter names the configured model, never only the compile-time default', () => {
+  // Regression 2026-11-13: the prompt interpolated DEFAULT_MODEL unconditionally,
+  // so a settings change left the model reading a route the child would not use.
+  const live = parameters('opencode-go/kimi-k3#high').model.description
+  assert.match(live, /currently opencode-go\/kimi-k3#high/)
+  assert.doesNotMatch(live, new RegExp(DEFAULT_MODEL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  // Absent or empty config falls back to the same default the provider uses.
+  assert.match(parameters('').model.description, new RegExp(`currently ${DEFAULT_MODEL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
+  assert.match(parameters(undefined).model.description, new RegExp(DEFAULT_MODEL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+})
+
+test('the registered tool advertises the live configured model', async () => {
+  const subagents = fakeSubagents()
+  const { ctx, tools } = hostContext({ subagents })
+  await apply(ctx, fakeConfig({ model: 'opencode-go/kimi-k3#high' }))
+  assert.match(tools[0].parameters.properties.model.description, /currently opencode-go\/kimi-k3#high/)
+})
+
 test('the opencode tool starts a child session and returns its id immediately', async () => {
   const subagents = fakeSubagents()
   const { ctx, tools } = hostContext({ subagents })
@@ -124,9 +142,12 @@ test('the opencode tool starts a child session and returns its id immediately', 
   assert.equal(spec.label, 'Fix parser')
   assert.equal(spec.delivery, 'parent')
   assert.equal(spec.signal, controller.signal)
-  assert.equal(spec.request.parent, PARENT)
-  assert.deepEqual(spec.request.prompt, [{ type: 'text', text: 'do the task' }])
-  assert.equal(Object.hasOwn(spec.request, 'cwd'), false)
+  // DSH 0.2.1-rc.2 removed the nested `request` field; the live service reads
+  // `spec.parent.id` first (regression: every call failed with a TypeError).
+  assert.equal(Object.hasOwn(spec, 'request'), false)
+  assert.equal(spec.parent, PARENT)
+  assert.deepEqual(spec.prompt, [{ type: 'text', text: 'do the task' }])
+  assert.equal(Object.hasOwn(spec, 'cwd'), false)
 
   const rendered = tools[0].output.render({}, value)[0].text
   assert.match(rendered, /child-42/)
@@ -138,7 +159,7 @@ test('an explicit cwd rides the activation request', async () => {
   const { ctx, tools } = hostContext({ subagents })
   await apply(ctx, fakeConfig({}))
   await tools[0].execute({ prompt: 'p', cwd: '/repo/sub' }, { agent: PARENT, signal: new AbortController().signal })
-  assert.equal(subagents.starts[0].request.cwd, '/repo/sub')
+  assert.equal(subagents.starts[0].cwd, '/repo/sub')
 })
 
 test('per-call overrides are refused in child mode, never silently dropped', async () => {
@@ -219,6 +240,15 @@ test('the documented emergency fallback still works only under its env switch', 
   }
 })
 
+test('/ocode help names the managed route model, not a fallback-only saved selection', async () => {
+  const subagents = fakeSubagents()
+  const { ctx, commands } = hostContext({ subagents })
+  await apply(ctx, fakeConfig({ model: 'opencode-go/kimi-k3#high' }))
+  const result = await commands[0].handler({ rawInput: '', agent: PARENT, signal: new AbortController().signal })
+  assert.equal(result.kind, 'success')
+  assert.match(result.text, /Current: model opencode-go\/kimi-k3#high/)
+})
+
 test('/ocode starts a child session and reports the id', async () => {
   const subagents = fakeSubagents({ childId: 'child-77' })
   const { ctx, commands } = hostContext({ subagents })
@@ -237,8 +267,8 @@ test('/ocode starts a child session and reports the id', async () => {
   assert.match(result.text, /child-77/)
   assert.match(result.text, /completion notice/)
   assert.equal(subagents.starts.length, 1)
-  assert.equal(subagents.starts[0].request.parent, PARENT)
-  assert.deepEqual(subagents.starts[0].request.prompt, [{ type: 'text', text: 'refactor the parser' }])
+  assert.equal(subagents.starts[0].parent, PARENT)
+  assert.deepEqual(subagents.starts[0].prompt, [{ type: 'text', text: 'refactor the parser' }])
 })
 
 test('/ocode rejects per-run overrides in child mode', async () => {

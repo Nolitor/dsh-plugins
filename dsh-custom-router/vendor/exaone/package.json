@@ -1,0 +1,54 @@
+{
+  "name": "@nolit/dsh-exaone",
+  "version": "0.0.1-rc.1",
+  "private": true,
+  "description": "EXAONE API Platform model route for DeepSeek Harness: a single `exaone` provider serving k-exaone_v2.5 through the OpenAI-compatible /v1/chat/completions endpoint, with a UI-first bearer key and streaming reasoning/tool calls.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "cordis",
+    "exaone",
+    "llm-adapter",
+    "openai-compatible"
+  ],
+  "license": "MIT",
+  "author": "nolit",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json",
+    "./adapter": {
+      "default": "./lib/adapter.js"
+    },
+    "./catalog": {
+      "default": "./lib/catalog.js"
+    },
+    "./wire": {
+      "default": "./lib/wire.js"
+    },
+    "./stream-contract": {
+      "default": "./lib/stream-contract.js"
+    }
+  },
+  "files": [
+    "lib/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24.9",
+    "dsh": ">=0.2.2-alpha.3 <0.3.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check lib/index.js && node --check lib/adapter.js && node --check lib/catalog.js && node --check lib/wire.js && node --check lib/stream-contract.js && node --check lib/map.js"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-llm": "^0.2.2-alpha.3",
+    "@deepseek-ai/schemastery": "~3.18.4"
+  }
+}

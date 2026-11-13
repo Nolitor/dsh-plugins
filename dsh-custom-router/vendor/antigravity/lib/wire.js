@@ -36,12 +36,52 @@ export function toContents(messages, explicitSystem) {
   const systemParts = []
   if (explicitSystem) systemParts.push(explicitSystem)
 
+  // A DSH tool result is a first-class message (`role: 'tool'` with the call id
+  // on the MESSAGE), not a `tool-result` content block. The Anthropic-backed
+  // Claude lane on this host validates the tool_use -> tool_result pairing and
+  // rejects a history where the response is missing; measured 2026-11-14 on
+  // claude-opus-5-5: "messages.2: tool_use ids were found without tool_result
+  // blocks immediately after". Resolve the function name from the preceding
+  // assistant tool-call blocks so the response can be paired by id.
+  const toolNames = new Map()
+  for (const message of messages ?? []) {
+    if (message?.role !== 'assistant' || !Array.isArray(message.content)) continue
+    for (const block of message.content) {
+      if (block?.type === 'tool-call' && typeof block.id === 'string' && typeof block.name === 'string') {
+        toolNames.set(block.id, block.name)
+      }
+    }
+  }
+
+  /** Append a functionResponse, merging consecutive tool results into one user turn. */
+  const appendResponse = (functionResponse) => {
+    const last = contents[contents.length - 1]
+    if (last?.role === 'user' && Array.isArray(last.parts) && last.parts.length > 0
+      && last.parts.every((part) => part.functionResponse !== undefined)) {
+      last.parts.push({ functionResponse })
+      return
+    }
+    contents.push({ role: 'user', parts: [{ functionResponse }] })
+  }
+
   for (const message of messages ?? []) {
     const role = message?.role
     if (role === 'system') {
       const text = textOf(message.content)
       if (text) systemParts.push(text)
       continue
+    }
+    if (role === 'tool' && typeof message.toolCallId === 'string' && message.toolCallId !== '') {
+      const hasBlock = Array.isArray(message.content) && message.content.some((block) => block?.type === 'tool-result')
+      if (!hasBlock) {
+        const name = toolNames.get(message.toolCallId) ?? 'tool'
+        appendResponse({
+          name,
+          response: { output: textOf(message.content) },
+          id: message.toolCallId,
+        })
+        continue
+      }
     }
     const parts = partsOf(message)
     if (parts.length === 0) continue
@@ -101,12 +141,21 @@ function partsOf(message) {
         break
       }
       case 'tool-call':
+        // The opaque thoughtSignature is a PART-level sibling of functionCall,
+        // never a field inside it. Measured 2026-11-14 on gemini-4-hydrogen-low
+        // (isolated home): the inbound part is `{ thoughtSignature, functionCall:
+        // { name, args, id } }`, and replaying the signature inside functionCall
+        // is HTTP 400 "Unknown name \"thoughtSignature\" at
+        // 'request.contents[N].parts[0].function_call': Cannot find field."
         parts.push({
           functionCall: {
             name: block.name,
             args: parseArguments(block.arguments),
             id: block.id ?? undefined,
           },
+          ...(typeof block.thoughtSignature === 'string' && block.thoughtSignature !== ''
+            ? { thoughtSignature: block.thoughtSignature }
+            : {}),
         })
         break
       case 'tool-result':

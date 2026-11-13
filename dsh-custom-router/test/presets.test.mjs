@@ -12,17 +12,32 @@ import { readFile } from 'node:fs/promises'
 
 import * as presetsModule from '../lib/presets.js'
 import {
+  AUTH_MODES,
+  AUTH_SOURCES,
+  CATALOG_MODES,
   DECLARATION_EXAMPLE,
   DSH_PROTOCOLS,
+  PLAN_STATES,
+  PRESET_KINDS,
   PRESETS,
   TOOL_SUBAGENT_ROW,
+  TRANSPORTS,
+  WIRE_PROTOCOLS,
   findPreset,
   validateEntries,
   validatePreset,
   validatePresets,
 } from '../lib/presets.js'
 import { planApplications, presetEntries } from '../lib/index.js'
-import { PRESET_JSON_SCHEMA } from '../lib/preset-schema.js'
+import {
+  BILLING_MODES,
+  CATALOG_LAYERS,
+  ENDPOINT_MODES,
+  PRESET_JSON_SCHEMA,
+  PROBE_KINDS,
+  PROBE_SHAPES,
+  WIRE_SERVERS,
+} from '../lib/preset-schema.js'
 
 test('the three measured presets validate cleanly', () => {
   const verdict = validatePresets(PRESETS)
@@ -129,7 +144,10 @@ test('the common data model covers delivery, auth and endpoint for every preset'
   }
   const deepinfra = findPreset('deepinfra')
   assert.equal(deepinfra.auth.mode, 'api-key')
-  assert.deepEqual(deepinfra.auth.sources.map((source) => source.kind), ['secret-field', 'env'])
+  assert.deepEqual(deepinfra.auth.sources.map((source) => source.kind), ['secret-field', 'credential-ref', 'env'])
+  const exaonePreset = findPreset('exaone')
+  assert.deepEqual(exaonePreset.auth.sources.map((source) => source.kind), ['secret-field', 'credential-ref', 'env'])
+  assert.equal(exaonePreset.auth.sources[1].name, 'EXAONE_API_KEY')
   const antigravity = findPreset('antigravity')
   assert.equal(antigravity.auth.mode, 'web-auth')
   assert.equal(antigravity.auth.sources[0].kind, 'token-file')
@@ -167,6 +185,50 @@ test('the JSON Schema mirror names the required fields', () => {
     ['auth', 'catalog', 'endpoint', 'id', 'kind', 'providerId', 'row', 'usage'].sort(),
   )
   assert.equal(PRESET_JSON_SCHEMA.properties.endpoint.properties.protocol.enum.includes('google-generative-sse'), true)
+})
+
+test('the schema enums are derived from the constant arrays, not hand-copied', () => {
+  // Why a test rather than trust: a hand-copied enum is a second source of
+  // truth, and the first wire added to an array (2026-11-13: the
+  // `google-generative-ai` vendor wire) is exactly when the two disagree.
+  const props = PRESET_JSON_SCHEMA.properties
+  const endpoint = props.endpoint.properties
+  const pairs = [
+    [props.kind.enum, PRESET_KINDS],
+    [endpoint.mode.enum, ENDPOINT_MODES],
+    [endpoint.protocol.enum, WIRE_PROTOCOLS],
+    [endpoint.route.enum, WIRE_SERVERS],
+    [endpoint.transport.enum, TRANSPORTS],
+    [props.auth.properties.mode.enum, AUTH_MODES],
+    [props.auth.properties.sources.items.properties.kind.enum, AUTH_SOURCES],
+    [props.catalog.properties.mode.enum, CATALOG_MODES],
+    [props.catalog.properties.layers.items.properties.source.enum, CATALOG_LAYERS],
+    [props.catalog.properties.layers.items.properties.kind.enum, PROBE_KINDS],
+    [props.catalog.properties.layers.items.properties.shape.enum, PROBE_SHAPES],
+    [props.usage.properties.plan.enum, PLAN_STATES],
+    [props.usage.properties.billing.properties.mode.enum, BILLING_MODES],
+  ]
+  for (const [mirror, source] of pairs) assert.deepEqual([...mirror], [...source])
+})
+
+test('the two Google wires are vendor wires, never host protocols', () => {
+  // The host gate (`route: 'pi-ai'`) must stay exactly as wide as the installed
+  // `dsh-llm-pi-ai` route table; a vendor wire promoted into it would let a
+  // preset pass this validator and fail to mount.
+  assert.deepEqual([...WIRE_PROTOCOLS], [
+    'openai-completions', 'openai-responses', 'anthropic-messages',
+    'google-generative-sse', 'google-generative-ai',
+  ])
+  for (const wire of ['google-generative-sse', 'google-generative-ai']) {
+    assert.equal(WIRE_PROTOCOLS.includes(wire), true)
+    assert.equal(DSH_PROTOCOLS.includes(wire), false)
+  }
+  const candidate = structuredClone(PRESETS[0])
+  candidate.endpoint.protocol = 'google-generative-ai'
+  candidate.endpoint.route = 'pi-ai'
+  const verdict = validatePreset(candidate)
+  assert.equal(verdict.ok, false)
+  assert.match(verdict.errors.join(' '), /requires a host protocol/)
 })
 
 // ---- entries: the rows one preset mounts (2026-11-07) ----------------------

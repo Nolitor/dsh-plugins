@@ -1,0 +1,25 @@
+{
+  "id": "openai-responses",
+  "revision": 1,
+  "verifiedAt": "2026-11-13",
+  "ttlDays": 90,
+  "docs": "https://platform.openai.com/docs/api-reference/responses",
+  "streaming": "sse",
+  "canonical": {
+    "text": "response.output_text.delta",
+    "reasoning": "response.reasoning_summary_text.delta",
+    "toolCalls": "response.function_call_arguments.delta[] (fragmented by item_id/output_index)",
+    "usage": "response.usage on response.completed",
+    "finish": "response.status / response.incomplete_details on response.completed"
+  },
+  "capabilities": {
+    "tools": true,
+    "reasoning": true,
+    "usage": true,
+    "cache": true,
+    "structuredOutput": true,
+    "vision": true
+  },
+  "adapters": [],
+  "notes": "DECLARED ONLY: no router adapter serves this wire today (adapters is empty), so none of the mapping below is measured through this repository. The canonical paths are the Responses API event names, not a normalized contract this codebase has verified: text arrives as response.output_text.delta, reasoning as reasoning-summary item deltas (detailed reasoning items are NOT normalized and have no host chunk field), tool arguments as response.function_call_arguments.delta addressed by item_id/output_index, usage on response.completed, and the terminal state is response.status plus response.incomplete_details rather than a finish_reason string. There is no [DONE] sentinel. capabilities are protocol-family defaults from the public docs; cache (usage.input_tokens_details.cached_tokens), structuredOutput (text.format json_schema) and vision are not verified against any adapter here. Adding an adapter for this wire requires its own conformance fixture and a revision bump if the canonical fields change."
+}
