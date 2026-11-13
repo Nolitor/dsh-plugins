@@ -978,17 +978,20 @@ window.__ModuleLoader__.load({
           CostPill,
         ),
       )
-      ctx.slots.inject('settings.section', () =>
-        ctx.slots.register(
-          {
-            name: 'settings.section',
-            id: 'opencode-v2',
-            order: 60,
-            label: () => t('nav'),
-          },
-          OpenCodeModelSection,
-        ),
-      )
+      // NO settings.section (C5, owner decision D-3, BLUEPRINT Phase C).
+      //
+      // The model catalogue, the plan choice and the selection save belong to the
+      // ROUTER's settings section: the router mounts this plugin and its
+      // `opencode` preset descriptor already declares the same catalog route, the
+      // same `enabledModels` row and the same plan actions. Registering this
+      // section too rendered TWO pages that wrote the same row through two code
+      // paths — the duplicate the absorption removes.
+      //
+      // `OpenCodeModelSection` stays EXPORTED, unmounted: it is the reference
+      // implementation of the plan UI and the source of the row semantics the
+      // router tab reproduces (`model-settings`, `model-settings/apply`,
+      // `model-settings/ranking/refresh`). Mounting it again would re-create the
+      // second section this decision removed.
     }
 
     exports.apply = apply

@@ -10,6 +10,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { PRESETS } from '../lib/presets.js'
+import { presetSettings } from '../lib/preset-derive.js'
 import {
   LOCALES,
   checkGeneratedArtifacts,
@@ -31,7 +32,15 @@ function clone(value) {
 
 /** The pristine registries, freshly cloned. */
 function pristine() {
-  return { presets: clone(PRESETS), descriptors: clone(readModelPresets()), locales: clone(readLocales()) }
+  // `derive` is always supplied: without it the gate states that it could not
+  // check "descriptor IS the derivation" (a hole), and a suite that ran that way
+  // would be testing a weaker gate than the one shipped.
+  return {
+    presets: clone(PRESETS),
+    descriptors: clone(readModelPresets()),
+    locales: clone(readLocales()),
+    derive: presetSettings,
+  }
 }
 
 test('the shipped registries pass the static drift gate', () => {
@@ -142,4 +151,31 @@ test('every locale declares every key the UI asks for', () => {
 test('the generated artefacts are current with their sources', () => {
   const verdict = checkGeneratedArtifacts()
   assert.equal(verdict.ok, true, 'stale build: ' + verdict.problems.join('; '))
+})
+
+test('a descriptor fact that is not the derivation is refused — the second-registry regression', () => {
+  // The page cannot build a descriptor by hand any more; if one appears anyway,
+  // the fact it invented is what used to drift silently (STANDARD §4 steps 2–3).
+  const input = pristine()
+  input.descriptors[0].row = 'dsh-antigravity-old'
+  const verdict = checkPresetRegistry(input)
+  assert.equal(verdict.ok, false)
+  assert.ok(verdict.problems.some((problem) => /not what the derivation produces/.test(problem)))
+})
+
+test('a catalog route that is really the usage feed is refused for a non-model route', () => {
+  const input = pristine()
+  // Simulate the measured pre-rc.16 shape: the tab opened the FIRST usage route.
+  input.descriptors[0].route = '/api/local/dsh-antigravity/usage'
+  const verdict = checkPresetRegistry(input)
+  assert.equal(verdict.ok, false)
+  assert.ok(verdict.problems.some((problem) => /not what the derivation produces/.test(problem)))
+})
+
+test('without the derivation the gate says so instead of passing silently', () => {
+  const input = pristine()
+  delete input.derive
+  const verdict = checkPresetRegistry(input)
+  assert.equal(verdict.ok, true, 'consistency checks still run')
+  assert.ok(verdict.holes.some((hole) => /descriptor-equals-derivation/.test(hole)))
 })

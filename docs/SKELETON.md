@@ -130,19 +130,19 @@
 - **1.0** · active · 2026-11-06 · [archive/dsh-subrouter/docs/INDEX.md](../archive/dsh-subrouter/docs/INDEX.md)
   Generated per-subproject index for @nolit/dsh-subrouter: every document this track owns, one line each.
 
-## boot (newest 5 of 55)
+## boot (newest 5 of 56)
 
 - **active** · INDEX.md · [card](../bootcards/INDEX.md)
   Newest-first list of dated boot cards.
+- **active** · 2026-11-13T1151+0900.md · [card](../bootcards/2026-11-13T1151+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-13T1151+0900. Older cards are historical.
 - **active** · 2026-11-13T0949+0900.md · [card](../bootcards/2026-11-13T0949+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-13T0949+0900. Older cards are historical.
 - **active** · 2026-11-10T2257+0900.md · [card](../bootcards/2026-11-10T2257+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-10T2257+0900. Older cards are historical.
 - **active** · 2026-11-10T1954+0900.md · [card](../bootcards/2026-11-10T1954+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-10T1954+0900. Older cards are historical.
-- **active** · 2026-11-08T2020+0900.md · [card](../bootcards/2026-11-08T2020+0900.md)
-  Next-section work order. Each track now owns a docs/HANDOFF.md with ordered stages; this card carries the priority order, the owner-only blockers, and the measured gates for the 2026-11-08 session.
 
 ---
 
-39 workspace docs (55 boot cards), 0 with problems, 6 subprojects.
+39 workspace docs (56 boot cards), 0 with problems, 6 subprojects.

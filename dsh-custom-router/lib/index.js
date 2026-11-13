@@ -33,6 +33,7 @@
  * @module @nolit/dsh-custom-router/plugin
  */
 import { PRESETS, validatePresets } from './presets.js'
+import { presetSettingsList } from './preset-derive.js'
 import { createVendorBridges } from './bridges/index.js'
 import { mergeCatalog } from './catalog.js'
 import { probePreset } from './probe.js'
@@ -234,8 +235,18 @@ export function planApplications(config = {}, presets = PRESETS) {
  */
 function presetScopedConfig(preset, vendorConfig) {
   const scoped = vendorConfig !== null && typeof vendorConfig === 'object' ? vendorConfig : {}
+  // `preset.row` first (it is the row that carries the selection), then EVERY
+  // row the preset declares. rc.16 moved OpenCode's `preset.row` from the CLI
+  // row (`dsh-opencode-v2`) to the model row (`dsh-opencode-v2-http`) so the
+  // browser descriptor can be derived from it; a profile saved before that
+  // still has only the CLI row key, and it must keep resolving rather than
+  // reporting a configured preset as unconfigured.
   const byRow = scoped[preset.row]
   if (byRow !== undefined) return byRow
+  for (const entry of Array.isArray(preset?.entries) ? preset.entries : []) {
+    if (typeof entry?.row !== 'string') continue
+    if (scoped[entry.row] !== undefined) return scoped[entry.row]
+  }
   const legacy = scoped[preset.id]
   if (legacy !== undefined) return legacy
   return {}
@@ -487,6 +498,13 @@ export async function apply(ctx, config = {}, presets = PRESETS) {
   try {
     ctx?.provide?.('customRouter', {
       presets,
+      // The derived browser settings (labelKey/planKey/metered/row/route/
+      // usageRoutes/surface), one entry per preset, in declaration order. A page
+      // reads THIS instead of hand-copying a second registry: it is the same
+      // derivation `preset-drift.js` validates, so a new id-only preset appears
+      // in settings and on the dashboard with no second edit (STANDARD §4
+      // steps 2–3). Data only — no hook that returns elements travels here.
+      presetSettings: presetSettingsList(presets),
       vendorProbes: vendorProbes ?? {},
       route: (query) => resolveRoute(query, presets),
       probe: (preset, options = {}) => probePreset(preset, probeOptions(preset, {

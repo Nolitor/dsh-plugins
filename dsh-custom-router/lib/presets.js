@@ -150,15 +150,27 @@ export const PRESETS = Object.freeze([
     id: 'opencode',
     name: 'OpenCode v2',
     kind: 'package',
-    package: '@nolit/dsh-opencode-v2',
-    row: 'dsh-opencode-v2',
+    // Phase E (2026-11-13): the preset points at the VENDORED slot, not at the
+    // legacy `@nolit/dsh-opencode-v2` profile link. Antigravity and DeepInfra
+    // were vendored 2026-11-08; OpenCode was the last preset still resolved
+    // through the profile, which is exactly the second management path the
+    // consolidation removes. `vendor/opencode/package.json` still declares
+    // `name: @nolit/dsh-opencode-v2` and the same export map, so the entry
+    // specifiers below are unchanged. Rollback: set the `packages.opencode`
+    // override back to the profile link (blueprint §4).
+    package: '@nolit/dsh-custom-router/vendor/opencode',
+    // The row that carries this preset's `enabledModels`. For OpenCode that is
+    // the `/http` row — the native model router — NOT the CLI row that shares
+    // its package name. Stated once here so the browser descriptor (derived in
+    // `preset-derive.js`) and the save path can never disagree (rc.16).
+    row: 'dsh-opencode-v2-http',
     // Three rows, and the two OpenCode rows carry DIFFERENT live configs: the
     // index row is the CLI/delegation surface, the `/http` row is the native
     // model router. Mounting only the first is why `opencode-http-agent` was
     // missing (measured 2026-11-07).
     entries: Object.freeze([
       Object.freeze({ row: 'dsh-opencode-v2' }),
-      Object.freeze({ row: 'dsh-opencode-v2-http', specifier: '@nolit/dsh-opencode-v2/http' }),
+      Object.freeze({ row: 'dsh-opencode-v2-http', specifier: '@nolit/dsh-custom-router/vendor/opencode/http' }),
       Object.freeze({
         row: 'tool-subagent-opencode',
         specifier: TOOL_SUBAGENT_ROW,
@@ -191,6 +203,10 @@ export const PRESETS = Object.freeze([
         Object.freeze({ source: 'probe', kind: 'api', shape: 'vendor', endpoint: '/api/model', ttlMs: 300000 }),
       ]),
     }),
+    // The settings tab opens THIS route: OpenCode's catalog (provider/model
+    // list) is `/model-settings`, while its FIRST usage route is the plan
+    // window. Declaring it here keeps the tab on the model list (rc.16).
+    catalogRoute: '/api/local/opencode-v2/model-settings',
     switches: Object.freeze([
       Object.freeze({ name: 'enabled', module: 'index', role: 'master' }),
       Object.freeze({ name: 'modelServing', module: 'http', role: 'model' }),
@@ -273,6 +289,9 @@ export const PRESETS = Object.freeze([
         Object.freeze({ source: 'probe', kind: 'api', shape: 'openai', endpoint: '/models', ttlMs: 1800000 }),
       ]),
     }),
+    // The MODEL LIST, not the cost summary: the settings tab opens this route.
+    // (`usage.routes` below is the cost card, a different question.)
+    catalogRoute: '/api/local/deepinfra/models',
     switches: Object.freeze([]),
     surfaces: Object.freeze({
       model: Object.freeze({ adapter: true }),

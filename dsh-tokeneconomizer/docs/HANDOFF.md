@@ -1,11 +1,11 @@
 # TokenEconomizer — Handoff
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: report
 status: active
-updated: 2026-11-08
-summary: Stage-by-stage handoff for @nolit/dsh-tokeneconomizer at 0.0.1-rc.1 — the shipped devstats card, the pending-restart state, and the version/CHANGELOG mismatch that a release decision must resolve.
+updated: 2026-11-13
+summary: Stage-by-stage handoff for @nolit/dsh-tokeneconomizer at 0.0.1-rc.2 — the shipped devstats card, the pending-restart state, and the version/CHANGELOG state re-measured 2026-11-13 (the 11-08 change is recorded and the version is rc.2; CHANGELOG.md is still absent from files[]).
 -->
 
 > History lives in [CHANGELOG.md](../CHANGELOG.md). This file is the **forward** view.
@@ -14,9 +14,9 @@ summary: Stage-by-stage handoff for @nolit/dsh-tokeneconomizer at 0.0.1-rc.1 —
 
 | Item | Measured value |
 | :--- | :--- |
-| Package | `@nolit/dsh-tokeneconomizer@0.0.1-rc.1` |
+| Package | `@nolit/dsh-tokeneconomizer@0.0.1-rc.2` |
 | Last code commit | `2b668ad` 2026-11-08 — devstats card redesigned for the DSH settings seat |
-| Tests | `npm test` → **140 tests, 139 pass, 0 fail, 1 skipped** (the skip is the opt-in engine fixture) |
+| Tests | `npm test` → **141 pass, 0 fail** (re-measured 2026-11-13) |
 | Live state | modules loaded — `lib/client.js` mtime 11:28:51 is before the 11:53:42 service start; live *visual* check still outstanding |
 
 ## 2. Done
@@ -36,11 +36,12 @@ Two measurements that disagree with the rc convention (global `AGENTS.md` §6):
 
 | Surface | Measured |
 | :--- | :--- |
-| `package.json` version | `0.0.1-rc.1`, unchanged since `52db3e3` (2026-11-06) |
+| `package.json` version | `0.0.1-rc.2` (re-measured 2026-11-13; the 11-08 devstats change has since been followed by two `rc.2` CHANGELOG entries on 2026-11-11) |
 | CHANGELOG | has a `2026-11-08` devstats entry, no `rc` heading for it |
 
-Owner decision needed: bump `rc` for the 11-08 change, or state that this track's `rc` counts
-differently. Agents must not bump the numeric part.
+**Resolved 2026-11-13 by measurement:** the version is now `0.0.1-rc.2` and the CHANGELOG carries two
+`rc.2` entries dated 2026-11-11, so the 11-08 change is no longer unrecorded. Agents must not bump
+the numeric part.
 
 **Also measured — `CHANGELOG.md` is absent from `files[]`.** `npm pack` produces a 27-file
 tarball, and `tar -tzf … | grep CHANGELOG` returns nothing. Same F-55 class as Sidebar Manager: the

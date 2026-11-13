@@ -941,9 +941,10 @@ test('the three presets are descriptors: shared chrome, preset-only hooks', asyn
     assert.equal(typeof preset.load, 'function')
     assert.equal(typeof preset.labelKey, 'string')
     assert.equal(typeof preset.row, 'string')
-    // Adding a fourth preset needs only a descriptor: no `planKey`-style vendor
-    // branch may be reachable from the section, so metered is a flag.
-    assert.equal(preset.metered === undefined || preset.metered === true, true)
+    // rc.16: `metered` is DERIVED from the billing mode, so it is always a
+    // boolean — never absent. Adding a fourth preset still needs no edit in the
+    // section: no `planKey`-style vendor branch is reachable from it.
+    assert.equal(preset.metered, preset.id === 'deepinfra')
   }
   assert.equal(presets.find((preset) => preset.id === 'deepinfra').metered, true)
   assert.equal(presets.filter((preset) => preset.metered === true).length, 1)

@@ -194,8 +194,9 @@ test('the plan expands a multi-row preset into one row per entry', () => {
     'dsh-opencode-v2-http',
     'tool-subagent-opencode',
   ])
-  // The preset-level package/row stay for back-compat.
-  assert.equal(plan.active[0].specifier, '@nolit/dsh-opencode-v2')
+  // The preset-level package/row stay for back-compat. Phase E (2026-11-13):
+  // the opencode preset resolves from the VENDORED slot, not the profile link.
+  assert.equal(plan.active[0].specifier, '@nolit/dsh-custom-router/vendor/opencode')
 })
 
 test('mount config is looked up by entry.row, not by preset id', () => {
@@ -302,9 +303,13 @@ test('a partially failed row set releases only the children that mounted', async
   const ctx = fakeCtx()
   // The preset's own row mounts; the /http row fails; the shared row mounts
   // again. Only rows 1 and 3 may be disposed.
+  // Match the /http subpath, not a frozen package name: Phase E (2026-11-13)
+  // moved the opencode preset to the vendored slot, and this fixture only needs
+  // to identify the model-router row that fails.
+  const resolve = (_anchor, specifier) => (specifier.endsWith('/http') ? BOOM : FIXTURE)
   const dispose = await apply(ctx, {
     presets: { opencode: true },
-    resolve: (_anchor, specifier) => (specifier === '@nolit/dsh-opencode-v2/http' ? BOOM : FIXTURE),
+    resolve,
     vendorModules: {},
   })
   assert.equal(ctx.mounted.length, 3)
@@ -444,9 +449,11 @@ test('the router own bundle does not block its vendored provider rows', async ()
 })
 
 test('a subpath specifier of a started bundle is skipped too', async () => {
-  // '@nolit/dsh-opencode-v2/http' belongs to the '@nolit/dsh-opencode-v2' bundle:
-  // a prefix match, not an equality match.
-  const ctx = fakeCtx({ startedBundles: ['@nolit/dsh-opencode-v2'] })
+  // The '/http' entry belongs to the preset's own bundle: a prefix match, not
+  // an equality match. Read the package from the declaration so Phase E's move
+  // to the vendored slot cannot make this test assert on a stale literal.
+  const opencodePackage = PRESETS.find((preset) => preset.id === 'opencode').package
+  const ctx = fakeCtx({ startedBundles: [opencodePackage] })
   await apply(ctx, {
     presets: { opencode: true },
     resolve: () => FIXTURE,
@@ -459,7 +466,7 @@ test('a subpath specifier of a started bundle is skipped too', async () => {
   assert.equal(skipped.length, 2)
   assert.match(ctx.warnings.join('\n'), /row "dsh-opencode-v2" of preset "opencode" skipped/)
   assert.match(ctx.warnings.join('\n'), /row "dsh-opencode-v2-http" of preset "opencode" skipped/)
-  assert.match(ctx.warnings.join('\n'), /"@nolit\/dsh-opencode-v2" is already a started bundle/)
+  assert.ok(ctx.warnings.join('\n').includes(`"${opencodePackage}" is already a started bundle`))
 })
 
 test('an unrelated started bundle does not block any row', async () => {

@@ -4,8 +4,8 @@
 version: 1.1
 kind: report
 status: active
-updated: 2026-11-11
-summary: Stage-by-stage handoff for @nolit/dsh-sidebar-manager at 0.0.1-rc.1 — the token-stylesheet migration, the drift gate that must run before any version-up, the version/CHANGELOG mismatch, and the open UI audit items from the 2026-11-11 /ui review (hairline tokens, derived font steps, CJK wrapping, row action order), plus the deferred toast elevated-surface decision (D1).
+updated: 2026-11-13
+summary: Stage-by-stage handoff for @nolit/dsh-sidebar-manager at 0.0.1-rc.2 — the token-stylesheet migration, the drift gate that must run before any version-up, the version/CHANGELOG mismatch, and the open UI audit items from the 2026-11-11 /ui review (hairline tokens, derived font steps, CJK wrapping, row action order), plus the deferred toast elevated-surface decision (D1).
 -->
 
 > History lives in `CHANGELOG.md`, which is **not listed in this package's `files[]`** (see S1).
@@ -16,9 +16,9 @@ summary: Stage-by-stage handoff for @nolit/dsh-sidebar-manager at 0.0.1-rc.1 —
 
 | Item | Measured value |
 | :--- | :--- |
-| Package | `@nolit/dsh-sidebar-manager@0.0.1-rc.1` |
+| Package | `@nolit/dsh-sidebar-manager@0.0.1-rc.2` |
 | Last code commit | `86cfb66` 2026-11-08 — DSH token UI applied to the workspace manager |
-| Tests | `npm test` → **162/162 pass** |
+| Tests | `npm test` → **167/167 pass** (re-measured 2026-11-13) |
 | Publishable | yes — tarball 50 files, prerelease needs `--tag` |
 | Drift audit | `node scripts/audit-installed-vs-packaged.mjs` → `LIVE_EQUALS_WORKSPACE_WITH_LOCAL_UTM_ARTIFACT`, `utmDriftDetected: true` |
 
@@ -35,12 +35,13 @@ summary: Stage-by-stage handoff for @nolit/dsh-sidebar-manager at 0.0.1-rc.1 —
 
 | Surface | Measured |
 | :--- | :--- |
-| `package.json` version | `0.0.1-rc.1`, unchanged since `bfc691c` (2026-11-06) |
+| `package.json` version | `0.0.1-rc.2` (re-measured 2026-11-13; was `0.0.1-rc.1` since `bfc691c` 2026-11-06) |
 | `docs/` in `package.json#files` | yes (listed) |
 | `CHANGELOG.md` in `package.json#files` | **absent** |
 
-The 11-08 change is recorded in the CHANGELOG, but the version was not bumped and the CHANGELOG is
-not in the published file list.
+Re-measured 2026-11-13: the version **has since been bumped to `0.0.1-rc.2`**, so the original
+mismatch is closed — but `CHANGELOG.md` is **still absent** from `package.json#files`, so the bumped
+release still ships without its history. Only the second half of the 11-08 finding remains open.
 
 Measured on 2026-11-08: `npm pack` on this track produces a **51-file** tarball and
 `tar -tzf … | grep CHANGELOG` returns **nothing** — the file is genuinely absent from the artifact.

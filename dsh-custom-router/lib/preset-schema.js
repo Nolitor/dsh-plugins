@@ -116,6 +116,14 @@ export function validatePresetModel(preset) {
   if (typeof preset.id !== 'string' || !KEBAB.test(preset.id)) add('id must be a kebab-case identifier')
   if (preset.name !== undefined && typeof preset.name !== 'string') add('name must be a string when present')
   if (typeof preset.row !== 'string' || !KEBAB.test(preset.row)) add('row must be a loader row id')
+  // STANDARD §3 `catalogRoute`: optional, because it is DERIVABLE. It exists so
+  // a preset whose catalog and usage feeds live on different routes (OpenCode:
+  // `/model-settings` vs `/plan-usage`) states the right one instead of the
+  // derivative guessing. When present it must already be a local panel route.
+  if (preset.catalogRoute !== undefined
+    && (typeof preset.catalogRoute !== 'string' || !preset.catalogRoute.startsWith('/api/local/'))) {
+    add('catalogRoute must be a local panel route (/api/local/…) when present')
+  }
   if (typeof preset.providerId !== 'string' || preset.providerId === '') add('providerId must be a non-empty string')
   if (preset.modelPrefixes !== undefined) {
     if (!Array.isArray(preset.modelPrefixes) || preset.modelPrefixes.length === 0) {

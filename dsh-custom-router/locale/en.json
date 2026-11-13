@@ -138,5 +138,9 @@
   "planAllowanceShort": "allow.",
   "planDocLimit": "monthly limit (doc)",
   "planNoUsage": "No per-model usage recorded locally yet.",
-  "planLocalNote": "Local ledger only — may differ from the account total. Documented limits as of 2026-11-07."
+  "planLocalNote": "Local ledger only — may differ from the account total. Documented limits as of 2026-11-07.",
+  "modelsPlanTitle": "Plan",
+  "modelsOtherPlan": "{n} models on the other plan",
+  "modelsRefreshRanking": "Refresh ranking",
+  "saveFailed": "Save failed"
 }

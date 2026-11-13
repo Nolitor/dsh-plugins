@@ -1,11 +1,11 @@
 # Notify for Chrome — Handoff
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: report
 status: active
-updated: 2026-11-08
-summary: Stage-by-stage handoff for @nolit/dsh-notify at 0.0.1-rc.4 — the shipped Chrome-notification surface, the pending-restart state, and the two recorded follow-ups (host settings, stale prototype doc).
+updated: 2026-11-13
+summary: Stage-by-stage handoff for @nolit/dsh-notify at 0.0.1-rc.5 — the shipped Chrome-notification surface, the pending-restart state, and the two recorded follow-ups (host settings, stale prototype doc).
 -->
 
 > History lives in [CHANGELOG.md](../CHANGELOG.md). This file is the **forward** view.
@@ -14,10 +14,10 @@ summary: Stage-by-stage handoff for @nolit/dsh-notify at 0.0.1-rc.4 — the ship
 
 | Item | Measured value |
 | :--- | :--- |
-| Package | `@nolit/dsh-notify@0.0.1-rc.4` |
+| Package | `@nolit/dsh-notify@0.0.1-rc.5` |
 | Last code commit | `d9d0d47` 2026-11-08 — settings card and peak chip aligned with DSH |
-| Tests | `npm test` → **70/70 pass** |
-| Publishable | yes — tarball 38 files, prerelease needs `--tag` |
+| Tests | `npm test` → **72/72 pass** (re-measured 2026-11-13) |
+| Publishable | yes — tarball 39 files (re-measured 2026-11-13), prerelease needs `--tag` |
 | Live state | modules loaded — `lib/client.src.js` mtime 11:30:26 is before the 11:53:42 service start; live *visual* check still outstanding |
 
 ## 2. Done

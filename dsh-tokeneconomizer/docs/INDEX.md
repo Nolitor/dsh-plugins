@@ -23,7 +23,7 @@ summary: Generated per-subproject index for @nolit/dsh-tokeneconomizer: every do
 | 1.2 | report | active | 2026-11-11 | [CHANGELOG.md](../CHANGELOG.md) | Engineering history for @nolit/dsh-tokeneconomizer. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after. |
 | 1.3 | spec | active | 2026-10-31 | [ARCHITECTURE.md](ARCHITECTURE.md) | Measured DSH 0.2.2 extension points, per-event lifecycle contract, tool-mask semantics, DSH trace reader schema, prior-session recall through the harness FTS5 service, the observe/apply mode split, host-local in-memory features, tiered memory, state and ledger formats, and verified limits. |
 | 1.1 | spec | active | 2026-11-08 | [DEV-STATISTICS.md](DEV-STATISTICS.md) | Read-only per-turn/per-step developer statistics for TokenEconomizer: the measured before/after surface, the DSH rc.1 ledger vocabulary it copies, the settings.section seat choice, the derivation rules, and the card's DSH settings-surface rules. |
-| 1.0 | report | active | 2026-11-08 | [HANDOFF.md](HANDOFF.md) | Stage-by-stage handoff for @nolit/dsh-tokeneconomizer at 0.0.1-rc.1 — the shipped devstats card, the pending-restart state, and the version/CHANGELOG mismatch that a release decision must resolve. |
+| 1.1 | report | active | 2026-11-13 | [HANDOFF.md](HANDOFF.md) | Stage-by-stage handoff for @nolit/dsh-tokeneconomizer at 0.0.1-rc.2 — the shipped devstats card, the pending-restart state, and the version/CHANGELOG state re-measured 2026-11-13 (the 11-08 change is recorded and the version is rc.2; CHANGELOG.md is still absent from files[]). |
 | 1.2 | spec | active | 2026-10-31 | [IN_MEMORY_FEATURES.md](IN_MEMORY_FEATURES.md) | Architecture of the host-local features of the DSH bridge: tool-result hash deduplication, the KV-cache-safe prompt slot with its constant routing text, the loop breaker with its advisory thinking watchdog, the turn-based tiered memory, the observe/apply mode split, and the full configuration reference. |
 | 1.0 | index | active | 2026-11-13 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-tokeneconomizer: every document this track owns, one line each. |
 | 1.3 | spec | active | 2026-10-31 | [OPERATIONS.md](OPERATIONS.md) | Bootstrap with its bounded install-time migration, profile install and FTS recall activation, guarded cold start, purge, verification, rollback, the configuration reference, and the live-state rules for the DSH TokenEconomizer bridge. |
@@ -43,10 +43,10 @@ summary: Generated per-subproject index for @nolit/dsh-tokeneconomizer: every do
 
 ## report
 
+- **1.1** · active · 2026-11-13 · [HANDOFF.md](HANDOFF.md)
+  Stage-by-stage handoff for @nolit/dsh-tokeneconomizer at 0.0.1-rc.2 — the shipped devstats card, the pending-restart state, and the version/CHANGELOG state re-measured 2026-11-13 (the 11-08 change is recorded and the version is rc.2; CHANGELOG.md is still absent from files[]).
 - **1.2** · active · 2026-11-11 · [CHANGELOG.md](../CHANGELOG.md)
   Engineering history for @nolit/dsh-tokeneconomizer. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
-- **1.0** · active · 2026-11-08 · [HANDOFF.md](HANDOFF.md)
-  Stage-by-stage handoff for @nolit/dsh-tokeneconomizer at 0.0.1-rc.1 — the shipped devstats card, the pending-restart state, and the version/CHANGELOG mismatch that a release decision must resolve.
 
 ## measurement
 

@@ -21,13 +21,16 @@
  * Exit codes: 0 every mutation was caught, 1 at least one survived (a gap),
  *             2 the harness could not run.
  */
-import { readFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 
 import { PRESETS } from '../lib/presets.js'
-import { checkPresetRegistry, readModelPresets } from '../lib/preset-drift.js'
+import { PRESETS as DECLARED } from '../lib/presets.js'
+import { checkDeriveMirror, checkGeneratedArtifacts, checkPresetRegistry, readModelPresets } from '../lib/preset-drift.js'
+import { presetSettings } from '../lib/preset-derive.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const VERBOSE = process.argv.includes('--verbose')
@@ -136,6 +139,39 @@ const MUTATIONS = [
       return input
     },
   },
+
+  // ---- rc.16: the DERIVED registry -------------------------------------
+  {
+    id: 'M11-derived-facts-not-from-the-declaration',
+    // STANDARD §4 steps 2–3: the descriptor must be a FUNCTION of the backend
+    // declaration. A page-side fact that the derivation did not produce is
+    // exactly the second registry rc.16 removed, and it is silent.
+    why: 'a descriptor fact the derivation would not produce (a hand-copied row/route)',
+    apply: (input) => {
+      input.descriptors[0].row = 'dsh-antigravity-old'
+      return input
+    },
+  },
+  {
+    id: 'M12-catalog-route-taken-from-the-usage-feed',
+    // The measured defect that blanked the OpenCode tab: the catalog route and
+    // the first usage route are different questions.
+    why: 'a catalog route derived from the first usage route instead of the model list',
+    apply: (input) => {
+      input.descriptors[1].route = input.descriptors[1].usageRoutes[0].path
+      input.descriptors[1]._usageOnly = true
+      return input
+    },
+  },
+  {
+    id: 'M13-metered-not-derived-from-billing',
+    why: 'metered flipped against the declared billing mode',
+    apply: (input) => {
+      const deepinfra = input.descriptors.find((descriptor) => descriptor.id === 'deepinfra')
+      deepinfra.metered = false
+      return input
+    },
+  },
 ]
 
 /** Structured deep clone that keeps functions by reference. */
@@ -164,7 +200,7 @@ const cases = []
 let failures = 0
 
 const base = pristine()
-const baseline = checkPresetRegistry(base)
+const baseline = checkPresetRegistry({ ...base, derive: presetSettings })
 if (!baseline.ok) {
   process.stderr.write('verify-presets-mutation: the UNMUTATED registries already fail the gate:\n')
   for (const problem of baseline.problems) process.stderr.write('  - ' + problem + '\n')
@@ -182,7 +218,7 @@ if (base.descriptors.length !== base.presets.length) {
 
 for (const mutation of MUTATIONS) {
   const input = mutation.apply(pristine())
-  const verdict = checkPresetRegistry(input)
+  const verdict = checkPresetRegistry({ ...input, derive: presetSettings })
   const caught = !verdict.ok
   // A case must be caught for the RIGHT reason: the reported problem has to
   // mention the preset it damaged, otherwise a mutation could "pass" because an
@@ -197,17 +233,90 @@ for (const mutation of MUTATIONS) {
   }
 }
 
+// --------------------------------------------- derived-registry (file) cases
+// These mutate FILES, not in-memory registries: the claim "the browser registry
+// is derived" is a property of the sources, so it is proven on a temp copy.
+
+/**
+ * Run the file-level checks against a temp copy of the package.
+ * @param {(root: string) => void} mutate - damages the copy.
+ * @returns {{caught: boolean, problems: string[], id: string}} the verdict.
+ */
+function fileCase(id, mutate, run) {
+  const dir = mkdtempSync(join(tmpdir(), 'cr-gate-'))
+  try {
+    mkdirSync(join(dir, 'lib'), { recursive: true })
+    mkdirSync(join(dir, 'locale'), { recursive: true })
+    for (const name of ['preset-derive.js', 'preset-drift.js', 'presets.js', 'preset-schema.js', 'client.src.js', 'client.js', 'locale-table.js']) {
+      copyFileSync(join(root, 'lib', name), join(dir, 'lib', name))
+    }
+    for (const name of ['en', 'ko', 'zh']) copyFileSync(join(root, 'locale', name + '.json'), join(dir, 'locale', name + '.json'))
+    if (mutate !== undefined) mutate(dir)
+    const verdict = run(dir)
+    return { id, caught: !verdict.ok, problems: verdict.problems }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+const fileCases = []
+fileCases.push(fileCase('F1-hand-written-descriptor-table', (dir) => {
+  const path = join(dir, 'lib', 'client.src.js')
+  const source = readFileSync(path, 'utf8')
+  writeFileSync(path, source.replace(
+    'const MODEL_PRESETS = Object.freeze(deriveModelPresets(PRESET_DECLARATIONS))',
+    "const MODEL_PRESETS = Object.freeze([{ id: 'antigravity' }])",
+  ))
+}, checkGeneratedArtifacts))
+
+fileCases.push(fileCase('F2-stale-baked-declarations', (dir) => {
+  const path = join(dir, 'lib', 'client.src.js')
+  const source = readFileSync(path, 'utf8')
+  const reread = DECLARED.map((preset) => ({ ...preset, usage: { ...preset.usage, billing: { mode: 'none' } } }))
+  const literal = JSON.stringify(JSON.stringify(reread))
+  writeFileSync(path, source.replace(/const PRESET_DECLARATIONS = Object\.freeze\(JSON\.parse\(".*"\)\)/, 'const PRESET_DECLARATIONS = Object.freeze(JSON.parse(' + literal + '))'))
+}, checkGeneratedArtifacts))
+
+fileCases.push(fileCase('F3-derivation-mirror-drift', (dir) => {
+  const path = join(dir, 'lib', 'client.src.js')
+  const source = readFileSync(path, 'utf8')
+  writeFileSync(path, source.replace("return 'vendor' + camelOf(preset?.id ?? 'preset')", "return 'vendor' + camelOf(preset?.id ?? 'preset') + 'X'"))
+}, checkDeriveMirror))
+
+fileCases.push(fileCase('F4-descriptor-fact-not-derived', (dir) => {
+  const declaration = { ...DECLARED[0], row: 'dsh-elsewhere' }
+  const descriptor = presetSettings(declaration)
+  return checkPresetRegistry({
+    presets: [DECLARED[0]],
+    descriptors: [{ ...descriptor, row: 'dsh-elsewhere' }],
+    locales: { en: JSON.parse(readFileSync(join(dir, 'locale', 'en.json'), 'utf8')) },
+  })
+}, (dir) => checkPresetRegistry({
+  presets: [{ ...DECLARED[0] }],
+  descriptors: [{ ...presetSettings(DECLARED[0]), row: 'dsh-elsewhere' }],
+  locales: { en: JSON.parse(readFileSync(join(dir, 'locale', 'en.json'), 'utf8')) },
+})))
+
+const fileFailures = fileCases.filter((item) => !item.caught)
+if (VERBOSE || fileFailures.length > 0) {
+  for (const item of fileCases) {
+    process.stdout.write((item.caught ? 'caught   ' : 'SURVIVED ') + item.id + '\n')
+    for (const problem of item.problems.slice(0, 2)) process.stdout.write('         → ' + problem + '\n')
+  }
+}
+
 // -------------------------------------------------------------------- report
 
-const caughtCount = cases.length - failures
-process.stdout.write('\npreset drift-gate mutation: ' + caughtCount + '/' + cases.length + ' drift classes caught\n')
-for (const item of cases) {
+const caughtCount = cases.length - failures + fileCases.filter((item) => item.caught).length
+const total = cases.length + fileCases.length
+process.stdout.write('\npreset drift-gate mutation: ' + caughtCount + '/' + total + ' drift classes caught\n')
+for (const item of [...cases, ...fileCases]) {
   const mark = item.caught ? 'caught  ' : 'SURVIVED'
   process.stdout.write('  ' + mark + ' ' + item.id + '\n')
 }
 
-if (failures > 0) {
-  process.stderr.write('\nGATE GAP: ' + failures + ' drift class(es) pass the gate unnoticed\n')
+if (failures + fileFailures.length > 0) {
+  process.stderr.write('\nGATE GAP: ' + (failures + fileFailures.length) + ' drift class(es) pass the gate unnoticed\n')
   process.exit(1)
 }
 process.stdout.write('\nOK: every documented drift class is rejected by the gate\n')

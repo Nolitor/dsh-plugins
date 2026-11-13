@@ -70,9 +70,16 @@ test('every t() key the view calls exists in both dictionaries', () => {
   assert.deepEqual([...called].filter((key) => !en.has(key)), [], 'no English gap')
 })
 
-test('the panel still registers exactly one settings section', () => {
-  assert.equal((SRC.match(/name: 'settings\.section'/g) ?? []).length, 1)
-  assert.match(SRC, /id: 'opencode-v2'/)
-  assert.match(SRC, /order: 60/)
+test('C5: the panel registers NO settings section — the router owns that page', () => {
+  // Owner decision D-3 (BLUEPRINT Phase C): the router's settings section is the
+  // single place the model catalogue, the plan choice and the selection save
+  // live. A second `settings.section` here rendered a duplicate page writing the
+  // same `enabledModels` row through a second code path.
+  assert.equal((SRC.match(/name: 'settings\.section'/g) ?? []).length, 0, 'no settings.section may be registered')
+  assert.doesNotMatch(SRC, /slots\.inject\('settings\.section'/, 'the registration must be gone, not just renamed')
+  // The component stays exported as the reference plan UI the router tab mirrors.
+  assert.match(SRC, /function OpenCodeModelSection\(/)
+  // The composer pill is still this plugin's own surface.
+  assert.match(SRC, /conversation\.input\.right/)
   assert.deepEqual(JSON.parse(JSON.stringify([...SRC.matchAll(/const inject = (\[[^\]]*\])/g)].map((m) => m[1]))), ["['slots', 'locale']"])
 })

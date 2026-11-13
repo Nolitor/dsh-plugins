@@ -32,7 +32,8 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { PRESETS, validatePresets } from '../lib/presets.js'
-import { checkGeneratedArtifacts, checkPresetRegistry, readLocales, readModelPresets } from '../lib/preset-drift.js'
+import { checkDeriveMirror, checkGeneratedArtifacts, checkPresetRegistry, readLocales, readModelPresets } from '../lib/preset-drift.js'
+import { presetSettings } from '../lib/preset-derive.js'
 
 const argv = process.argv.slice(2)
 const flag = (name, fallback) => {
@@ -53,6 +54,8 @@ const problems = []
 // that `lib/client.js` is what `lib/client.src.js` builds to.
 const artifacts = checkGeneratedArtifacts()
 for (const problem of artifacts.problems) problems.push(`artifacts: ${problem}`)
+const mirror = checkDeriveMirror()
+for (const problem of mirror.problems) problems.push(`mirror: ${problem}`)
 
 let staticVerdict
 try {
@@ -60,6 +63,9 @@ try {
     presets: PRESETS,
     descriptors: readModelPresets(),
     locales: readLocales(),
+    // The derivation is supplied so the gate can prove each descriptor IS the
+    // derived one (STANDARD §4 steps 2–3), not merely consistent with it.
+    derive: presetSettings,
   })
   for (const problem of staticVerdict.problems) problems.push(`registry: ${problem}`)
 } catch (error) {

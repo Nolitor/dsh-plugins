@@ -188,8 +188,10 @@ test('every package preset declares its measured entry set', () => {
   )
   // The /http row is the SAME package under a different export subpath: it is
   // the native model router, and mounting only the index row drops
-  // `opencode-http-agent` entirely (measured 2026-11-07).
-  assert.equal(opencode.entries[1].specifier, '@nolit/dsh-opencode-v2/http')
+  // `opencode-http-agent` entirely (measured 2026-11-07). Phase E (2026-11-13)
+  // moved the package to the vendored slot, so the assertion follows the
+  // declaration: the rule is "same package + /http subpath", not a frozen name.
+  assert.equal(opencode.entries[1].specifier, `${opencode.package}/http`)
   assert.equal(opencode.entries[2].specifier, TOOL_SUBAGENT_ROW)
 
   // A single-package preset still carries one entry, so every preset has the
@@ -335,7 +337,10 @@ test('gating the OpenCode CLI surface does not touch model serving', () => {
   const opencode = findPreset('opencode')
   assert.equal(opencode.surfaces.model.adapter, true)
   assert.equal(opencode.providerId, 'opencode-http-agent')
-  assert.equal(opencode.row, 'dsh-opencode-v2')
+  // rc.16: `row` is the row that carries `enabledModels` (the /http model
+  // router), because the browser descriptor is DERIVED from it. The CLI row is
+  // still the one that mounts under the package name — see `entries` below.
+  assert.equal(opencode.row, 'dsh-opencode-v2-http')
   // The /http row is a separate entry with its own config.
   const rows = opencode.entries.map((entry) => entry.row)
   assert.ok(rows.includes('dsh-opencode-v2-http'), 'the model row stays declared')

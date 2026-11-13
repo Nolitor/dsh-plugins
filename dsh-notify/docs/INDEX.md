@@ -35,7 +35,7 @@ summary: Generated per-subproject index for @nolit/dsh-notify: every document th
 | 1.0 | boot | historical | 2026-10-24 | [BOOT-CARD.md](BOOT-CARD.md) | The track-local boot card used when dsh-notify was its own workspace; superseded by workspace bootcards/. |
 | 1.0 | spec | reference | 2026-10-23 | [deepseek-peak-spec.md](deepseek-peak-spec.md) | Feature spec for the DeepSeek billing-window indicator: peak/off-peak boundaries, display, and refresh rules. |
 | 1.0 | spec | reference | 2026-10-23 | [dsh-harness-notify-spec.md](dsh-harness-notify-spec.md) | Feature spec for DSH harness notifications: which harness events notify, and how delivery is deduplicated. |
-| 1.0 | report | active | 2026-11-08 | [HANDOFF.md](HANDOFF.md) | Stage-by-stage handoff for @nolit/dsh-notify at 0.0.1-rc.4 — the shipped Chrome-notification surface, the pending-restart state, and the two recorded follow-ups (host settings, stale prototype doc). |
+| 1.1 | report | active | 2026-11-13 | [HANDOFF.md](HANDOFF.md) | Stage-by-stage handoff for @nolit/dsh-notify at 0.0.1-rc.5 — the shipped Chrome-notification surface, the pending-restart state, and the two recorded follow-ups (host settings, stale prototype doc). |
 | 1.0 | index | active | 2026-11-13 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-notify: every document this track owns, one line each. |
 | 1.0 | reference | reference | 2026-10-24 | [RECOVERY-NOTES.md](RECOVERY-NOTES.md) | What was restored into this track, how it was restored, and which pieces are still missing. |
 | 1.0 | policy | historical | 2026-10-23 | [WORK-PROTOCOL.md](WORK-PROTOCOL.md) | Track-local work protocol covering git flags and the header/skeleton index convention; now owned by workspace docs/RULES.md. |
@@ -58,10 +58,10 @@ summary: Generated per-subproject index for @nolit/dsh-notify: every document th
 
 ## report
 
+- **1.1** · active · 2026-11-13 · [HANDOFF.md](HANDOFF.md)
+  Stage-by-stage handoff for @nolit/dsh-notify at 0.0.1-rc.5 — the shipped Chrome-notification surface, the pending-restart state, and the two recorded follow-ups (host settings, stale prototype doc).
 - **2.0** · active · 2026-11-11 · [CHANGELOG.md](../CHANGELOG.md)
   Engineering history for Notify for Chrome (formerly DSH Notify Web). Seeded from git history on 2026-11-04; entries after that date record what changed, why, and the measured before/after, per docs/RULES.md 6.1.
-- **1.0** · active · 2026-11-08 · [HANDOFF.md](HANDOFF.md)
-  Stage-by-stage handoff for @nolit/dsh-notify at 0.0.1-rc.4 — the shipped Chrome-notification surface, the pending-restart state, and the two recorded follow-ups (host settings, stale prototype doc).
 - **1.0** · measured · 2026-10-24 · [2026-10-24-linux-desktop-verification.md](2026-10-24-linux-desktop-verification.md)
   Linux/Pop!_OS desktop verification of @nolit/dsh-notify: what was checked and the result of each check.
 - **1.0** · historical · 2026-10-23 · [2026-10-23-deployment-strategy-review.md](2026-10-23-deployment-strategy-review.md)

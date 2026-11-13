@@ -138,5 +138,9 @@
   "planAllowanceShort": "허용량",
   "planDocLimit": "월 한도(문서)",
   "planNoUsage": "로컬에 기록된 모델별 사용량이 없습니다.",
-  "planLocalNote": "로컬 기록 기준 — 계정 전체와 다를 수 있습니다. 문서 한도는 2026-11-07 기준."
+  "planLocalNote": "로컬 기록 기준 — 계정 전체와 다를 수 있습니다. 문서 한도는 2026-11-07 기준.",
+  "modelsPlanTitle": "플랜",
+  "modelsOtherPlan": "다른 플랜 {n}개 모델",
+  "modelsRefreshRanking": "순위 새로고침",
+  "saveFailed": "저장 실패"
 }

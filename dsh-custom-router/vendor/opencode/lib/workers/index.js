@@ -136,12 +136,19 @@ export function renderWorkerResult(result) {
  * Registrations are effects: unloading the plugin reverts both.
  * @param {object} ctx - host context.
  * @param {object} config - plugin config.
- * @returns {Promise<void>} resolves after registration.
+ * @returns {Promise<(() => void) | undefined>} the registration's disposer, or
+ *   `undefined` when the switch is off (nothing was registered).
+ *
+ * The disposer is RETURNED rather than discarded (rc.16, surface supervisor):
+ * a surface that cannot be withdrawn is a surface the live `cli`/`enabled`
+ * switch cannot take down without a restart — the exact defect the supervisor
+ * exists to close (ledger F-46). Cordis registrations are effects, so this is
+ * the same undo the host would perform on unload.
  */
 export async function registerCliWorker(ctx, config, dispatch = null) {
-  if (!config.workerEnabled.get()) return
+  if (!config.workerEnabled.get()) return undefined
   const { defineTool } = await import('@deepseek-ai/dsh-tools')
-  ctx.tools.register(
+  const registration = ctx.tools.register(
     defineTool({
       name: 'cli_worker',
       description: DESCRIPTION,
@@ -172,5 +179,5 @@ export async function registerCliWorker(ctx, config, dispatch = null) {
       }),
     }),
   )
-
+  return typeof registration === 'function' ? registration : () => {}
 }

@@ -180,6 +180,25 @@ six commands and five providers; one provider id; credentials and usage ledger u
 
 ### Phase E — retirement
 
+**Measured 2026-11-13 (owner instruction: single management path).** The runtime no longer
+reads the legacy `@nolit/dsh-opencode-v2` profile link at all: the `opencode` preset's
+`package` and its `/http` entry both point at `@nolit/dsh-custom-router/vendor/opencode`, and
+`loadVendorModules()` imports the vendored files by URL instead of resolving through the
+profile. `verify:presets` still reports the same **5 providers / 6 commands / 6 tools**, so the
+switch is registry-neutral. What remains below is **state**, not runtime: the legacy file can
+now be removed from the profile without a code change.
+
+| Step | State 2026-11-13 |
+| :--- | :--- |
+| E0 — runtime independence | **done** — no `lib/` code resolves `@nolit/dsh-opencode-v2` from the profile; a test asserts nothing is read from `profileDir` |
+| E1 | **open** — `vendor/antigravity/lib/subagent-opencode.js` still has no importer measured |
+| E2 | **deferred** — the `dsh-opencode-v2/` directory stays until the owner approves archiving; it is a 7-file re-export shim with no runtime role |
+| E3 | **deferred** — docs move with E2 |
+
+The live profile still declares the legacy link (`~/.dsh/profiles/web/package.json`). Removing
+it is a **live-state write** and needs owner approval; nothing in this package breaks if it is
+removed.
+
 | Step | Action |
 | :--- | :--- |
 | E1 | Delete `vendor/antigravity/lib/subagent-opencode.js` (leftover, no importer measured) |

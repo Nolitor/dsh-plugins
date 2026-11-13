@@ -21,11 +21,23 @@
  * `scripts/verify-presets-mutation.mjs` proves each check fails on its drift.
  */
 import { readFileSync } from 'node:fs'
+
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+/** The script that bakes `PRESET_DECLARATIONS` into `lib/client.src.js`. */
+import { PRESETS } from './presets.js'
+
+/**
+ * The facts a browser descriptor must take from the derivation, never declare.
+ *
+ * This is the registry contract STANDARD §3 defines; a page may add only the UI
+ * hooks (`load`, `saveValue`, `renderRowExtras`).
+ */
+export const DERIVED_FACTS = Object.freeze(['id', 'row', 'route', 'usageRoutes', 'labelKey', 'planKey', 'metered'])
 
 /** Every locale the browser table is generated from. */
 export const LOCALES = Object.freeze(['en', 'ko', 'zh'])
@@ -131,6 +143,11 @@ export function checkPresetRegistry(input) {
   for (const preset of presets) {
     if (typeof preset?.id === 'string' && !presetById.has(preset.id)) presetById.set(preset.id, preset)
   }
+  // The derivation, when the caller supplies it (it always can: the module is
+  // pure). Without it the checks below still run, but "is this descriptor the
+  // DERIVED one" — the property that makes a second registry impossible — is
+  // reported as a hole instead of silently passing.
+  const derive = typeof input?.derive === 'function' ? input.derive : null
 
   const seenDescriptors = new Map()
   for (const descriptor of descriptors) {
@@ -223,6 +240,37 @@ export function checkPresetRegistry(input) {
       }
     }
 
+    // --- §4 steps 2–3: the descriptor IS the derivation ----------------------
+    // rc.16 removed the second registry by deriving every fact from the
+    // declaration. That holds only if a page cannot smuggle a hand-written fact
+    // back in: a descriptor whose row/route/labels differ from the derivation is
+    // the old table wearing a new shape.
+    if (derive !== null) {
+      const derived = derive(preset)
+      for (const key of DERIVED_FACTS) {
+        const actual = descriptor[key]
+        const expected = derived[key]
+        // `usageRoutes` is compared by value: the derivation returns fresh
+        // frozen objects on every call.
+        const same = key === 'usageRoutes'
+          ? JSON.stringify(actual ?? null) === JSON.stringify(expected ?? null)
+          : actual === expected
+        if (!same) {
+          problems.push(`${id}: descriptor ${key}=${JSON.stringify(actual)} is not what the derivation produces (${JSON.stringify(expected)}) — a hand-written fact is the second registry rc.16 removed (STANDARD §4 steps 2–3)`)
+        }
+      }
+      // The catalog route must LIST MODELS. When the derivation had to fall back
+      // to the usage feed, the route has to look like a model list; otherwise the
+      // declaration must name `catalogRoute` explicitly (the measured defect that
+      // blanked the OpenCode tab).
+      const expectedDerived = derived
+      const usagePaths = (expectedDerived.usageRoutes ?? []).map((route) => route.path)
+      if (usagePaths.length > 0 && expectedDerived.route === usagePaths[0] && preset?.catalogRoute === undefined
+        && !/models|model-settings|catalog/.test(expectedDerived.route)) {
+        problems.push(`${id}: catalog route "${expectedDerived.route}" is the usage feed, not a model list — declare catalogRoute (STANDARD §3)`)
+      }
+    }
+
     // --- §2 #5: every locale carries the keys the UI asks for ---------------
     for (const keyName of ['labelKey', 'planKey']) {
       const key = descriptor[keyName]
@@ -259,6 +307,9 @@ export function checkPresetRegistry(input) {
   // checked" — BLUEPRINT §13.0). Rendered usage and per-vendor normalizer
   // behaviour are exercised by the suite, not here.
   const holes = [
+    ...(derive === null
+      ? ['descriptor-equals-derivation: no `derive` supplied, so a hand-written fact could not be detected']
+      : []),
     'runtime registration (providers/tools/commands/switches) — needs the isolated boot in scripts/verify-presets.mjs',
     'rendered element tree and the real usage payloads — covered by test/client.test.mjs, not by this registry diff',
   ]
@@ -312,8 +363,25 @@ export function checkGeneratedArtifacts(root = ROOT) {
   if (bundle.includes('__CR_I18N__')) {
     problems.push('lib/client.js still contains the __CR_I18N__ placeholder — rerun scripts/build-client.mjs')
   }
-  if (source.includes('const MODEL_PRESETS = Object.freeze([') && !source.split('const MODEL_PRESETS').length) {
-    problems.push('lib/client.src.js declares no MODEL_PRESETS array')
+  if (!/^\s*const MODEL_PRESETS = Object\.freeze\(deriveModelPresets\(PRESET_DECLARATIONS\)\)$/m.test(source)) {
+    problems.push('lib/client.src.js no longer DERIVES MODEL_PRESETS from PRESET_DECLARATIONS — a hand-written descriptor table is the second registry rc.16 removed')
+  }
+  // 3. The baked declarations are identical to lib/presets.js.
+  const baked = readPresetDeclarations(root)
+  if (baked === undefined) {
+    problems.push('lib/client.src.js has no `const PRESET_DECLARATIONS = …` line — run scripts/build-presets.mjs')
+  } else {
+    const wanted = projectionOf(PRESETS)
+    const actual = projectionOf(baked)
+    if (JSON.stringify(actual) !== JSON.stringify(wanted)) {
+      const wantedIds = wanted.map((preset) => preset.id)
+      const actualIds = actual.map((preset) => preset.id)
+      problems.push(
+        JSON.stringify(actualIds) === JSON.stringify(wantedIds)
+          ? 'lib/client.src.js PRESET_DECLARATIONS is STALE versus lib/presets.js (same ids, different facts) — run scripts/build-presets.mjs'
+          : `lib/client.src.js declares [${actualIds.join(', ')}] but lib/presets.js declares [${wantedIds.join(', ')}] — run scripts/build-presets.mjs`,
+      )
+    }
   }
   // Compare the two files modulo the one region the build replaces: everything
   // outside the baked I18N literal must be byte-identical.
@@ -324,4 +392,104 @@ export function checkGeneratedArtifacts(root = ROOT) {
   }
 
   return { ok: problems.length === 0, problems }
+}
+
+/**
+ * The declarations baked into the browser bundle.
+ *
+ * `scripts/build-presets.mjs` writes them from `lib/presets.js`, so they are a
+ * generated artefact, not an input. A missing or unparsable line is reported by
+ * `checkGeneratedArtifacts()`.
+ * @param {string} [root] - package root.
+ * @returns {object[]|undefined} the baked declarations, or undefined.
+ */
+export function readPresetDeclarations(root = ROOT) {
+  const source = readFileSync(join(root, 'lib', 'client.src.js'), 'utf8')
+  const match = /^\s*const PRESET_DECLARATIONS = Object\.freeze\(JSON\.parse\((".*")\)\)$/m.exec(source)
+  if (match === null) return undefined
+  try {
+    return JSON.parse(JSON.parse(match[1]))
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The comparable projection of a declaration.
+ *
+ * A hosted package (the M2 guest repo) legitimately re-orders or omits fields
+ * it does not show; what must never differ is the JOIN — the id, the row the
+ * save path writes, the usage routes and the declared surfaces.
+ * @param {readonly object[]} presets - declarations.
+ * @returns {object[]} the projection.
+ */
+export function projectionOf(presets) {
+  return presets.map((preset) => ({
+    id: preset.id,
+    row: preset.row,
+    catalogRoute: preset.catalogRoute ?? null,
+    usage: {
+      plan: preset?.usage?.plan,
+      billing: preset?.usage?.billing ?? {},
+      routes: preset?.usage?.routes ?? [],
+    },
+    surfaces: preset?.surfaces
+      ? {
+        model: preset.surfaces.model ?? null,
+        subagent: preset.surfaces.subagent ?? null,
+        cli: preset.surfaces.cli ?? null,
+        batch: preset.surfaces.batch ?? null,
+        tools: preset.surfaces.tools ?? [],
+        commands: preset.surfaces.commands ?? [],
+      }
+      : null,
+  }))
+}
+
+/**
+ * Articles the derivation block claims, verified by byte comparison.
+ *
+ * `lib/client.src.js` mirrors `lib/preset-derive.js` because the page loader
+ * cannot import ESM. The claim "this is a mirrored copy" is checked here rather
+ * than trusted: any edit to one side without the other fails the gate.
+ * @param {string} [root] - package root.
+ * @returns {{ok: boolean, problems: string[]}} the verdict.
+ */
+export function checkDeriveMirror(root = ROOT) {
+  const problems = []
+  let canonical
+  try {
+    canonical = readFileSync(join(root, 'lib', 'preset-derive.js'), 'utf8')
+  } catch (error) {
+    return { ok: false, problems: ['cannot read lib/preset-derive.js: ' + error.message] }
+  }
+  const client = readFileSync(join(root, 'lib', 'client.src.js'), 'utf8')
+  // Modulo comments, the block must be the canonical module with `export`
+  // removed. Comments are stripped so the mirror can carry the page-specific
+  // explanation of WHY the copy exists without failing its own check.
+  const expected = stripCode(canonical)
+  const begin = client.indexOf('    // ---- BEGIN DERIVED PRESET REGISTRY')
+  const end = client.indexOf('    // ---- END DERIVED PRESET REGISTRY')
+  if (begin < 0 || end < 0) {
+    return { ok: false, problems: ['lib/client.src.js carries no BEGIN/END DERIVED PRESET REGISTRY markers'] }
+  }
+  const actual = stripCode(client.slice(begin, end))
+  if (actual !== expected) {
+    problems.push('lib/client.src.js derivation block drifted from lib/preset-derive.js — run node scripts/sync-derive.mjs')
+  }
+  return { ok: problems.length === 0, problems }
+}
+
+/** Remove comments and collapse whitespace, so a mirror is compared by CODE. */
+export function stripCode(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .split('\n')
+    .map((line) => line.replace(/\/\/.*$/, '').trim())
+    .filter((line) => line !== '')
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\bexport\s+(const|function)\b/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
 }

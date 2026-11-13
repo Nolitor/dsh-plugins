@@ -39,6 +39,7 @@ import { WORKER_BACKENDS } from './workers/backends.js'
 import { registerCliWorker } from './workers/index.js'
 import { OpenCodeSubagentProvider } from './subagent.js'
 import { createCostStore, parseCost, sharedCostLedger } from './cost.js'
+import { optionalService } from './optional-service.js'
 
 /** Host plugin name; must match package.json `name` and the cordis.patch.yml row id. */
 export const name = 'dsh-opencode-v2'
@@ -467,33 +468,86 @@ export function outputSchema() {
  * @param {{kind: string, subagentId: string, summary: string}} value - the canonical value.
  * @returns {string} the rendered text.
  */
+
+/**
+ * Model-facing text for one tool value: the started child id, or the labelled
+ * emergency-fallback report.
+ * @param {{kind: string, subagentId: string, summary: string}} value - the canonical value.
+ * @returns {string} the rendered text.
+ */
 export function renderActivation(value) {
   if (value.kind === 'fallback') return fallbackText(value.summary)
   return activationText({ provider: value.provider, childId: value.subagentId })
 }
 
 /**
- * Plugin body: register the `opencode` tool, and `/opencode` when a commands
- * service is composed. All registrations are effects — unloading the plugin
- * reverts them automatically.
+ * Plugin body — the SURFACE SUPERVISOR.
+ *
+ * Owner decision (BLUEPRINT §2.2 / Phase C): this plugin converges onto the
+ * Antigravity supervisor shape instead of registering everything once in
+ * `apply()`. One `parts` map, one `syncAll`, and four independent sync
+ * functions, so a live switch flip re-registers ONLY the surface it owns:
+ *
+ *   syncModel()     the `opencode-http-agent` route lives on the `/http` row;
+ *                   this row owns no model registration (it is reported, not
+ *                   registered, so `installed()` is honest about the topology)
+ *   syncCli()       the `opencode` tool + the `/ocode` command  (gated by `cli`)
+ *   syncWorker()    the `cli_worker` batch tool                 (gated by `cli` + `workerEnabled`)
+ *   syncSubagent()  the `subagent_opencode` provider             (gated by `subagent`)
+ *
+ * WHY THIS MATTERS (ledger F-46): volatile settings writes do NOT re-run
+ * `apply()`. Before this change a `cli`/`enabled` flip needed a
+ * `dsh-web.service` restart. `ctx.on('app-boot/config-reload', syncAll)` re-runs
+ * the idempotent syncs on the event the host emits after recomposition, so a
+ * flip now takes effect in the live session.
+ *
+ * IDEMPOTENCE IS THE WHOLE CONTRACT: every sync checks `parts` before
+ * registering and releases the part it owns before re-registering a changed
+ * definition. `syncAll` is therefore safe to call any number of times, which is
+ * what makes the reload listener safe.
+ *
+ * @param {object} ctx - cordis context.
+ * @param {object} config - validated plugin config (volatile fields are getters).
+ * @returns {() => void} disposer releasing every surface and listener.
  */
 export async function apply(ctx, config) {
-  // The subagent service is optional and is acquired later through `ctx.inject`
-  // (a Cordis context throws on an undeclared service read). Keeping the
-  // acquired handle here lets the tool and command decide between a managed
-  // child session and the explicit refusal — never an untracked spawn.
-  let subagents = null
-
-  // The router's CLI dispatch control plane, when this plugin is mounted by
-  // @nolit/dsh-custom-router. Acquired through `ctx.inject` like every other
-  // service here: a child's plain `ctx.get()` cannot see a service its parent
-  // fiber provided (measured 2026-11-08), and a standalone mount never gets it.
+  /** Services acquired from deferred sub-contexts. */
+  const services = {}
+  /** The router's CLI dispatch control plane, once available. */
   let dispatch = null
+  /**
+   * The host's tool constructor (`@deepseek-ai/dsh-tools` `defineTool`).
+   *
+   * Kept OUTSIDE `services`: that map is refilled by every `bind()` from the
+   * injected sub-context, and a module export is not a service — storing it
+   * there lost it on the next binding (measured while landing the supervisor).
+   */
+  let defineToolOf = null
+  /** Installed surfaces, keyed so each can be released independently. */
+  const parts = new Map()
+  /** Long-lived disposers (injection bindings + the reload listener). */
+  const disposers = []
+  /** Live config readers, applied to gates on every sync. */
+  const gating = { master: true, cli: true, subagent: true, worker: true }
 
-  // Surface gates (2026-11-07, unified with dsh-antigravity): `enabled` is the
-  // master, `cli` gates the delegation tool + `/ocode` + `cli_worker`, and
-  // `subagent` keeps owning only the delegation provider. Registration happens
-  // once at load, so a settings change applies on the next plugin load.
+  const warn = (message) => {
+    try { ctx?.logger?.warn?.(message) } catch { /* logging is advisory */ }
+  }
+  /** One warning per key: syncAll runs on every reload. */
+  const warned = new Set()
+  const warnOnce = (key, message) => {
+    if (warned.has(key)) return
+    warned.add(key)
+    warn(message)
+  }
+
+  /**
+   * Read a volatile config value without assuming the schema is materialised.
+   *
+   * A unit-test config (a plain object of getters) and a live cordis config
+   * (a reactive accessor) both answer through `get()`. `?? fallback` is used by
+   * callers when a missing schema must not disable a surface.
+   */
   const cfg = (key, fallback) => {
     const entry = config?.[key]
     if (entry !== null && typeof entry === 'object' && typeof entry.get === 'function') {
@@ -502,13 +556,74 @@ export async function apply(ctx, config) {
     }
     return entry === undefined ? fallback : entry
   }
-  const masterOn = cfg('enabled', true) !== false
-  const cliOn = masterOn && cfg('cli', true) !== false
 
-  // Resolved lazily so the module stays importable (and unit-testable)
-  // without the host toolchain installed; the host always provides it.
-  const { defineTool } = await import('@deepseek-ai/dsh-tools')
-  const opencodeTool = defineTool({
+  /** Re-read the switches the gates depend on. */
+  const refreshGates = () => {
+    gating.master = cfg('enabled', true) !== false
+    gating.cli = gating.master && cfg('cli', true) !== false
+    gating.subagent = gating.master && cfg('subagent', true) !== false
+    gating.worker = gating.cli && cfg('workerEnabled', true) !== false
+  }
+
+  /** Release one installed surface. */
+  const release = (key) => {
+    const disposer = parts.get(key)
+    if (disposer === undefined) return
+    parts.delete(key)
+    try { disposer() } catch { /* already released */ }
+  }
+
+  /** Release every surface (plugin unload). */
+  const releaseAll = () => {
+    for (const key of [...parts.keys()].reverse()) release(key)
+  }
+
+  /**
+   * Register one surface under a key, replacing a previously installed one.
+   *
+   * `install` returns the disposer, or undefined when the surface is not
+   * applicable. A throwing install leaves the surface ABSENT (and warns): one
+   * broken surface must never take the others down.
+   */
+  const install = (key, installer, onError) => {
+    release(key)
+    try {
+      const disposer = installer()
+      // A registration that answers nothing still OCCUPIES the surface: storing
+      // a no-op disposer is what makes the `parts.has(key)` guard idempotent.
+      // (Storing nothing made every syncAll re-register — duplicated tools.)
+      parts.set(key, typeof disposer === 'function' ? disposer : () => {})
+    } catch (error) {
+      onError(error)
+    }
+  }
+
+  // ------------------------------------------------------------ model route
+  /**
+   * The model route is mounted by the `/http` row (`modelServing` there).
+   * This row must NOT register it a second time — a duplicate provider id is a
+   * hard mount failure — but its presence is part of `installed()`.
+   */
+  const syncModel = () => {
+    if (!gating.master) {
+      parts.delete('model')
+      return
+    }
+    // Recorded as an observation, never a registration: the provider belongs to
+    // the `/http` row and lives in ITS parts map.
+    parts.set('model', () => {})
+  }
+
+  // ---------------------------------------------------------------- CLI tool
+  /**
+   * The `opencode` delegation tool.
+   *
+   * Owner decision D-2 (2026-11-10, kept): the admission gate stays on this
+   * tool for sandbox-policy consistency even in managed-child mode. No special
+   * case is added here — the gate is enforced by the router's dispatch seam
+   * (`dispatch.gate`) that the provider already consults.
+   */
+  const buildTool = (defineTool) => defineTool({
     name: 'opencode',
     description: DESCRIPTION,
     parameters: parameters(),
@@ -520,7 +635,7 @@ export async function apply(ctx, config) {
       const providerName = providerNameOf(config)
       // With the managed path available, per-call overrides are refused rather
       // than silently dropped: the child runs on the configured route.
-      if (subagents !== null) {
+      if (services.subagents !== undefined) {
         const unsupported = unsupportedChildArgs(args)
         if (unsupported.length > 0) {
           throw new Error(
@@ -530,7 +645,7 @@ export async function apply(ctx, config) {
           )
         }
         const started = await startChildSession({
-          subagents,
+          subagents: services.subagents,
           providerName,
           label: activationLabel({ title: args.title, prompt: args.prompt }),
           prompt: args.prompt,
@@ -573,194 +688,397 @@ export async function apply(ctx, config) {
     }),
   })
 
-  // Conflict guard: a second live row (e.g. the legacy @quonaro plugin) may
-  // already own the `opencode` tool name. The host throws on duplicate tool
-  // registration, which would abort the whole plugin row; yield the tool and
-  // keep the commands/worker half usable instead.
-  const existing = cliOn && typeof ctx?.tools?.get === 'function' ? ctx.tools.get('opencode') : undefined
-  if (!cliOn) {
-    // CLI surface switched off by `enabled`/`cli`: the tool and `/ocode` are absent.
-  } else if (existing) {
-    ctx?.logger?.warn?.(
-      'dsh-opencode-v2: tool "opencode" is already registered by another plugin; '
-      + 'skipping tool registration (commands and cli_worker still load).',
-    )
-  } else {
-    try {
-      ctx.tools.register(opencodeTool)
-    } catch (error) {
-      ctx?.logger?.warn?.(
-        `dsh-opencode-v2: tool "opencode" registration failed: ${error instanceof Error ? error.message : String(error)}`,
-      )
+  /** The `/ocode` command definition. */
+  const buildCommand = () => ({
+    name: 'ocode',
+    input: { hint: '<task>   (/ocode models lists the catalog)' },
+    description:
+      'Start a managed OpenCode child session for one task. Usage: /ocode <task>. The result arrives as a completion notice; /ocode models lists the catalog and /ocode --help shows the usage.',
+    handler: async ({ rawInput, agent, signal }) => {
+      const { options, task, unknown } = parseOcodeInput(rawInput)
+      if (unknown.length > 0) return { kind: 'error', text: `Unknown option: --${unknown[0]}\n\n${OCODE_USAGE}` }
+      if (task === 'models' || options.models) {
+        const listing = await listOpencodeModels(ctx, config, process.cwd())
+        return { kind: listing.ok ? 'success' : 'error', text: listing.text || '(no models reported)' }
+      }
+      if (task === '' || options.help) {
+        const saved = await readSelection('ocode')
+        const model = saved.model ?? cfg('model', DEFAULT_MODEL)
+        return {
+          kind: 'success',
+          text: `${OCODE_USAGE}\n\nCurrent: model ${model}\nModel list: \`opencode models\``,
+        }
+      }
+      const providerName = providerNameOf(config)
+      // Managed child session: the route is the provider's configured one, so
+      // per-run overrides are refused instead of silently ignored.
+      if (services.subagents !== undefined) {
+        const rejected = []
+        if (options.model !== undefined) rejected.push('--model')
+        if (options.timeout !== undefined) rejected.push('--timeout')
+        if (options.json) rejected.push('--json')
+        if (rejected.length > 0) {
+          return {
+            kind: 'error',
+            text: 'Child-session mode runs on the plugin-configured OpenCode route, so '
+              + `${rejected.join(', ')} cannot be honored here. Set the route in the plugin config, `
+              + 'or keep using /ocode models to inspect the available models.',
+          }
+        }
+        const started = await startChildSession({
+          subagents: services.subagents,
+          providerName,
+          label: activationLabel({ prompt: task }),
+          prompt: task,
+          parent: agent,
+          signal,
+        })
+        return { kind: 'success', text: activationText(started) }
+      }
+      // No managed child is possible: the explicit emergency switch is the only
+      // path that may spawn a bare process.
+      if (!fallbackEnabled()) {
+        return { kind: 'error', text: unavailableMessage(providerName) }
+      }
+      const saved = await readSelection('ocode')
+      const model = String(options.model ?? saved.model ?? cfg('model', DEFAULT_MODEL))
+      const timeoutMs = options.timeout === undefined ? undefined : Number(options.timeout)
+      if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+        return { kind: 'error', text: `Invalid --timeout "${options.timeout}". Use milliseconds.` }
+      }
+      const result = await runOpencode(ctx, config, {
+        prompt: task,
+        cwd: process.cwd(),
+        ownerSession: agent?.session,
+        track: dispatch?.track,
+        model,
+        timeoutMs,
+      })
+      if (result.exitCode >= 0) await writeSelection('ocode', { model }).catch(() => {})
+      const body = renderResult(result)
+      const reasoning = result.reasoning ? `\n\n--- reasoning ---\n${result.reasoning}` : ''
+      const raw = options.json ? `\n\n--- raw ---\n${JSON.stringify(result, null, 2)}` : ''
+      return { kind: result.ok ? 'success' : 'error', text: fallbackText(`${body}${reasoning}${raw}`) }
+    },
+  })
+
+  /** CLI surface: tool + command. Re-synced on every config reload. */
+  const syncCli = () => {
+    if (!gating.cli || services.tools === undefined) {
+      release('cli-tool')
+      release('cli-command')
+      if (!gating.cli) return
+      // A CLI switch is on but the tool registry is not composed yet: nothing to
+      // register, and the deferred `tools` binding will call syncAll when it is.
+      return
+    }
+    if (typeof defineToolOf !== 'function') return
+    // Conflict guard: a second live row (e.g. the legacy @quonaro plugin) may
+    // already own the `opencode` tool name. The host throws on duplicate tool
+    // registration, which would abort the whole plugin row; yield the tool and
+    // keep the commands/worker half usable instead.
+    //
+    // This row's OWN registration is not a conflict: `parts.has('cli-tool')`
+    // already returned above, so a tool this row installed cannot reach here —
+    // but a registry that answers `get()` from a shared table would otherwise
+    // make the supervisor refuse to restore its own tool after a release.
+    const owned = parts.has('cli-tool') || (typeof services.tools.get !== 'function')
+    const existing = owned ? undefined : services.tools.get('opencode')
+    if (existing) {
+      warnOnce('tool-opencode', 'dsh-opencode-v2: tool "opencode" is already registered by another plugin; '
+        + 'skipping tool registration (commands and cli_worker still load).')
+    } else if (!parts.has('cli-tool')) {
+      install('cli-tool', () => services.tools.register(buildTool(defineToolOf)),
+        (error) => warn(`dsh-opencode-v2: tool "opencode" registration failed: ${error instanceof Error ? error.message : String(error)}`))
+    }
+    // A host whose registry does not undo a registration on release (`get()`
+    // still answers after the disposer ran) would leave a withdrawn tool live:
+    // the host's own contract is that `register` returns an effect. Nothing to
+    // do here — `install`'s disposer is the host's — but the guard above must
+    // not treat it as a foreign owner on the next sync.
+    if (services.commands === undefined) {
+      release('cli-command')
+      return
+    }
+    if (!parts.has('cli-command')) {
+      install('cli-command', () => services.commands.register(buildCommand()),
+        (error) => warn(`dsh-opencode-v2: /ocode registration failed: ${error instanceof Error ? error.message : String(error)}`))
     }
   }
 
-  // The router's dispatch seam. Deferred, exactly like `subagents`: it is
-  // provided by the router row during that row's own apply, so an eager read at
-  // plugin load sees nothing.
-  ctx.inject(['customRouter'], (scoped) => {
-    dispatch = scoped.customRouter?.cliDispatch ?? null
-    return () => {
-      dispatch = null
+  /**
+   * Worker surface: `cli_worker`.
+   *
+   * `registerCliWorker` is ASYNC (it resolves `defineTool` before registering),
+   * so this sync is async too and `syncAll` awaits it. Registering it without
+   * awaiting left the tool absent for the caller that had just applied the
+   * plugin — measured while landing the supervisor: `apply()` resolved before
+   * `cli_worker` existed. The helper applies `workerEnabled` itself and returns
+   * no disposer, so the surface is claimed once and released when the gate
+   * closes (the pre-supervisor contract, now reconciled instead of run once).
+   */
+  const syncWorker = async () => {
+    if (!gating.worker || services.tools === undefined) {
+      release('cli-worker')
+      return
     }
-  })
+    if (parts.has('cli-worker')) return
+    // Claim first: two concurrent syncs must not both register. The claim is
+    // replaced by the real disposer below, and dropped again if the switch
+    // declined (a false claim would report a surface that does not exist).
+    parts.set('cli-worker', () => {})
+    try {
+      const dispose = await registerCliWorker(ctx, config, dispatch)
+      if (typeof dispose !== 'function') release('cli-worker')
+      else parts.set('cli-worker', dispose)
+    } catch (error) {
+      release('cli-worker')
+      warn(`dsh-opencode-v2: cli_worker registration failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
 
-  ctx.inject(['commands'], (commandCtx) => {
-    if (!cliOn) return
-    commandCtx.commands.register({
-      name: 'ocode',
-      input: { hint: '<task>   (/ocode models lists the catalog)' },
-      description:
-        'Start a managed OpenCode child session for one task. Usage: /ocode <task>. The result arrives as a completion notice; /ocode models lists the catalog and /ocode --help shows the usage.',
-      handler: async ({ rawInput, agent, signal }) => {
-        const { options, task, unknown } = parseOcodeInput(rawInput)
-        if (unknown.length > 0) return { kind: 'error', text: `Unknown option: --${unknown[0]}\n\n${OCODE_USAGE}` }
-        if (task === 'models' || options.models) {
-          const listing = await listOpencodeModels(ctx, config, process.cwd())
-          return { kind: listing.ok ? 'success' : 'error', text: listing.text || '(no models reported)' }
+  /**
+   * Subagent surface: the delegation provider.
+   *
+   * NOTE (measured 2026-11-05): reading an undeclared service THROWS on a real
+   * Cordis host, and an `optionalService` wrapper swallowed that throw, so the
+   * merged provider never registered while an old package's provider shadowed
+   * it — the merge looked done and was not. The service is therefore acquired
+   * through a deferred sub-context and registered from there.
+   */
+  const buildProvider = (service, providerName) => {
+    // The CLI child spends on the same account as the HTTP route, so its usage
+    // feeds the SAME persisted ledger the cost pill reads.
+    const cliLedger = sharedCostLedger('opencode-http-agent', {
+      store: createCostStore({
+        profileDir: ctx?.get?.('profileContext')?.dir,
+        dshHome: process.env.DSH_HOME,
+      }),
+    })
+    return new OpenCodeSubagentProvider(providerName, ctx, {
+      opencodePath: cfg('opencodePath', 'opencode'),
+      model: cfg('model', DEFAULT_MODEL),
+      agent: cfg('agent', ''),
+      auto: cfg('auto', true),
+      timeoutMs: cfg('subagentTimeoutMs', 900000),
+      disposeGraceMs: cfg('subagentDisposeGraceMs', 5000),
+      env: cfg('subagentEnv', {}),
+      // Router control plane: refuse a restricted session before any argv is
+      // built, and keep the handle reclaimable if that session is torn down
+      // mid-run. Both are absent under a standalone (non-router) mount.
+      // Pass the identity through UNWRAPPED: the provider already hands the
+      // parent Agent, and the router's `gate` normalizes Agent-or-Session
+      // itself. Wrapping it a second time produced `{agent:{session:Agent}}`,
+      // which normalized to `undefined` and silently ALLOWED a restricted
+      // session (measured regression, 2026-11-08).
+      gate: (subject) => dispatch?.gate?.(subject),
+      track: (session, handle, label) => dispatch?.track?.(session, handle, label),
+      // One row per completed CLI run: the wire reports `step_finish` steps,
+      // never estimated_cost, so this is a token-only record (costUsd null).
+      recordUsage: ({ usage, model }) => {
+        if (usage === null || typeof usage !== 'object') return
+        const tokens = {
+          input: usage.input ?? 0,
+          output: usage.output ?? 0,
+          reasoning: usage.reasoning ?? 0,
+          cache_read: usage.cacheRead ?? 0,
+          cache_write_5m: 0,
+          cache_write_1h: 0,
         }
-        if (task === '' || options.help) {
-          const saved = await readSelection('ocode')
-          const model = saved.model ?? config.model.get()
-          return {
-            kind: 'success',
-            text: `${OCODE_USAGE}\n\nCurrent: model ${model}\nModel list: \`opencode models\``,
-          }
-        }
-        const providerName = providerNameOf(config)
-        // Managed child session: the route is the provider's configured one, so
-        // per-run overrides are refused instead of silently ignored.
-        if (subagents !== null) {
-          const rejected = []
-          if (options.model !== undefined) rejected.push('--model')
-          if (options.timeout !== undefined) rejected.push('--timeout')
-          if (options.json) rejected.push('--json')
-          if (rejected.length > 0) {
-            return {
-              kind: 'error',
-              text: 'Child-session mode runs on the plugin-configured OpenCode route, so '
-                + `${rejected.join(', ')} cannot be honored here. Set the route in the plugin config, `
-                + 'or keep using /ocode models to inspect the available models.',
-            }
-          }
-          const started = await startChildSession({
-            subagents,
-            providerName,
-            label: activationLabel({ prompt: task }),
-            prompt: task,
-            parent: agent,
-            signal,
-          })
-          return { kind: 'success', text: activationText(started) }
-        }
-        // No managed child is possible: the explicit emergency switch is the
-        // only path that may spawn a bare process.
-        if (!fallbackEnabled()) {
-          return { kind: 'error', text: unavailableMessage(providerName) }
-        }
-        const saved = await readSelection('ocode')
-        const model = String(options.model ?? saved.model ?? config.model.get())
-        const timeoutMs = options.timeout === undefined ? undefined : Number(options.timeout)
-        if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
-          return { kind: 'error', text: `Invalid --timeout "${options.timeout}". Use milliseconds.` }
-        }
-        const result = await runOpencode(ctx, config, {
-          prompt: task,
-          cwd: process.cwd(),
-          ownerSession: agent?.session,
-          track: dispatch?.track,
-          model,
-          timeoutMs,
-        })
-        if (result.exitCode >= 0) await writeSelection('ocode', { model }).catch(() => {})
-        const body = renderResult(result)
-        const reasoning = result.reasoning ? `\n\n--- reasoning ---\n${result.reasoning}` : ''
-        const raw = options.json ? `\n\n--- raw ---\n${JSON.stringify(result, null, 2)}` : ''
-        return { kind: result.ok ? 'success' : 'error', text: fallbackText(`${body}${reasoning}${raw}`) }
+        cliLedger.record(undefined, model, parseCost({ opencode: { tokens } }))
       },
     })
-  })
+  }
 
-  // The isolated batch worker ships with the same plugin. It belongs to the CLI
-  // surface, so `enabled`/`cli` gate it alongside the tool and `/ocode`.
-  if (cliOn) await registerCliWorker(ctx, config, dispatch)
-
-  // Subagent delegation provider, merged from @nolit/dsh-subagent-opencode
-  // (2026-11-05) so one package owns every OpenCode surface. Gated on its own
-  // switch: a profile that wants only the chat route can turn delegation off.
-  // The subagent surface was merged from @nolit/dsh-subagent-opencode, but
-  // reading the `subagents` service without declaring it THROWS on a real Cordis host.
-  // `optionalService` swallowed that throw, so the merged provider never
-  // registered while the old package's provider shadowed it — the merge looked
-  // done and was not. Acquire the service through a deferred sub-context and
-  // register there; the disposer releases it with the plugin.
-  ctx.inject(['subagents'], (scoped) => {
-    const service = scoped.subagents
-    subagents = service
-    const clear = () => {
-      if (subagents === service) subagents = null
+  const syncSubagent = () => {
+    if (!gating.subagent || services.subagents === undefined) {
+      release('subagent')
+      return
     }
-    if (!masterOn || config.subagent.get() === false) return clear
-    const providerName = config.subagentProviderName.get() || 'opencode'
+    if (parts.has('subagent')) return
+    const service = services.subagents
+    const providerName = cfg('subagentProviderName', 'opencode') || 'opencode'
     // A profile that still carries the superseded package must not lose a
     // provider silently: yield with a warning so the operator removes the old
     // row, which is the real fix.
     const taken = typeof service.getProvider === 'function' ? service.getProvider(providerName) : undefined
     if (taken) {
-      ctx.logger?.warn?.('opencode-v2: a subagent provider named "' + providerName + '" is already registered; skipping the merged one (remove @nolit/dsh-subagent-opencode)')
-      return clear
+      warnOnce('provider-' + providerName, 'opencode-v2: a subagent provider named "' + providerName
+        + '" is already registered; skipping the merged one (remove @nolit/dsh-subagent-opencode)')
+      return
+    }
+    install('subagent', () => {
+      const provider = buildProvider(service, providerName)
+      const registration = service.registerProvider(provider)
+      return typeof registration === 'function' ? registration : () => {}
+    }, (error) => warn(`opencode-v2: subagent provider registration failed: ${error instanceof Error ? error.message : String(error)}`))
+  }
+
+  /** Reconcile every surface against the live config. Idempotent. */
+  // Awaited by every caller: `syncWorker` resolves an ESM import before it can
+  // register, so a fire-and-forget syncAll would report a surface that does not
+  // exist yet. Syncs are ordered (CLI before worker) because both write into the
+  // same tool registry.
+  const syncAll = async () => {
+    refreshGates()
+    syncModel()
+    syncCli()
+    await syncWorker()
+    syncSubagent()
+  }
+
+  /** Diagnostic: what this row currently has installed (BLUEPRINT Phase C6). */
+  const installed = () => ({
+    model: parts.has('model'),
+    cliTool: parts.has('cli-tool'),
+    cliCommand: parts.has('cli-command'),
+    worker: parts.has('cli-worker'),
+    subagent: parts.has('subagent'),
+    // The dispatch seam is the router's, not this row's: reporting it lets a
+    // missing gate be diagnosed from the mount instead of from argv.
+    dispatch: dispatch !== null,
+  })
+
+  /**
+   * Acquire one service group through deferred injection.
+   *
+   * A Cordis child cannot see a parent-provided service through `ctx.get()`
+   * (measured 2026-11-08), so every service this row needs arrives here. The
+   * disposer releases ONLY the surfaces that owned these services: re-running
+   * syncAll during disposal would re-register a surface mid-teardown.
+   * @param {string[]} deps - service names.
+   */
+  const bind = (deps) => {
+    if (typeof ctx.inject !== 'function') {
+      readDirect(deps)
+      return
     }
     try {
-      // The CLI child spends on the same account as the HTTP route, so its
-      // usage feeds the SAME persisted ledger the cost pill reads. The shared
-      // instance prevents the two rows from clobbering each other's snapshot.
-      const cliLedger = sharedCostLedger('opencode-http-agent', {
-        store: createCostStore({
-          profileDir: ctx?.get?.('profileContext')?.dir,
-          dshHome: process.env.DSH_HOME,
-        }),
+      const off = ctx.inject(deps, (scoped) => {
+        for (const dep of deps) {
+          // Only a service the sub-context ACTUALLY composes replaces the slot.
+          // Assigning `undefined` over an already-bound service would unbind a
+          // working surface (measured: a fixture that answers only `commands`
+          // and `subagents` blanked `tools`).
+          if (scoped?.[dep] !== undefined) services[dep] = scoped[dep]
+        }
+        // The injection callback may not be async: the host does not await it.
+        // The sync is still awaited internally so its ordering holds.
+        void syncAll().catch((error) => warn(`dsh-opencode-v2: surface sync failed: ${error instanceof Error ? error.message : String(error)}`))
+        return () => {
+          for (const dep of deps) services[dep] = undefined
+          if (deps.includes('tools')) release('cli-tool')
+          if (deps.includes('commands')) release('cli-command')
+          if (deps.includes('subagents')) release('subagent')
+        }
       })
-      const provider = new OpenCodeSubagentProvider(providerName, ctx, {
-        opencodePath: config.opencodePath.get(),
-        model: config.model.get(),
-        agent: config.agent.get(),
-        auto: config.auto.get(),
-        timeoutMs: config.subagentTimeoutMs.get(),
-        disposeGraceMs: config.subagentDisposeGraceMs.get(),
-        env: config.subagentEnv.get(),
-        // Router control plane: refuse a restricted session before any argv is
-        // built, and keep the handle reclaimable if that session is torn down
-        // mid-run. Both are absent under a standalone (non-router) mount.
-        // Pass the identity through UNWRAPPED: the provider already hands the
-        // parent Agent, and the router's `gate` normalizes Agent-or-Session
-        // itself. Wrapping it a second time here produced `{agent:{session:Agent}}`,
-        // which normalized to `undefined` and silently ALLOWED a restricted
-        // session (measured regression, 2026-11-08).
-        gate: (subject) => dispatch?.gate?.(subject),
-        track: (session, handle, label) => dispatch?.track?.(session, handle, label),
-        // One row per completed CLI run: the wire reports `step_finish` steps,
-        // never estimated_cost, so this is a token-only record (costUsd null).
-        recordUsage: ({ usage, model }) => {
-          if (usage === null || typeof usage !== 'object') return
-          const tokens = {
-            input: usage.input ?? 0,
-            output: usage.output ?? 0,
-            reasoning: usage.reasoning ?? 0,
-            cache_read: usage.cacheRead ?? 0,
-            cache_write_5m: 0,
-            cache_write_1h: 0,
-          }
-          cliLedger.record(undefined, model, parseCost({ opencode: { tokens } }))
-        },
-      })
-      const release = service.registerProvider(provider)
-      return () => {
-        clear()
-        if (typeof release === 'function') release()
-      }
+      if (typeof off === 'function') disposers.push(off)
     } catch (error) {
-      ctx.logger?.warn?.(`opencode-v2: subagent provider registration failed: ${error instanceof Error ? error.message : String(error)}`)
-      return clear
+      warn(`dsh-opencode-v2: deferred injection of ${deps.join(', ')} failed: ${error instanceof Error ? error.message : String(error)}`)
     }
-  })
+  }
+
+  /**
+   * Hosts without deferred injection expose their services directly on `ctx`.
+   *
+   * Reading an undeclared service on a real Cordis context THROWS, so each read
+   * is guarded: the absence simply leaves that surface uninstalled (measured
+   * 2026-11-08 — an unguarded read aborted the whole row).
+   * @param {string[]} deps - service names.
+   */
+  const readDirect = (deps) => {
+    for (const dep of deps) {
+      let value
+      try {
+        value = ctx?.[dep]
+      } catch {
+        // An undeclared service read throws on a real Cordis context.
+        value = undefined
+      }
+      if (value !== undefined) services[dep] = value
+    }
+    void syncAll().catch((error) => warn(`dsh-opencode-v2: surface sync failed: ${error instanceof Error ? error.message : String(error)}`))
+  }
+
+  /**
+   * The router's dispatch control plane, bound independently of `bind()`.
+   *
+   * `customRouter` is provided by the router row during ITS apply: a profile
+   * that mounts this row without the router must not wait for it forever, and a
+   * profile that does mount it must pick the seam up as soon as it appears.
+   */
+  const bindDispatch = () => {
+    if (typeof ctx.inject !== 'function') return
+    try {
+      const off = ctx.inject(['customRouter'], (scoped) => {
+        dispatch = scoped.customRouter?.cliDispatch ?? null
+        // The worker and the provider read `dispatch` at call time, so only a
+        // surface that captured it at registration needs re-installing.
+        release('cli-worker')
+        syncWorker()
+        return () => { dispatch = null }
+      })
+      if (typeof off === 'function') disposers.push(off)
+    } catch (error) {
+      warn(`dsh-opencode-v2: router dispatch seam unavailable: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  // The tool constructor is resolved lazily so the module stays importable (and
+  // unit-testable) without the host toolchain installed; the host provides it.
+  // It is loaded BEFORE the bindings because `bind()` fills `services` from the
+  // injected sub-context, and a tool constructor is a module export rather than
+  // a service: loading it afterwards would be overwritten by the next bind.
+  try {
+    const { defineTool } = await import('@deepseek-ai/dsh-tools')
+    if (typeof defineTool === 'function') defineToolOf = defineTool
+  } catch (error) {
+    warn(`dsh-opencode-v2: @deepseek-ai/dsh-tools unavailable: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  bind(['tools'])
+  bind(['commands'])
+  bind(['subagents'])
+  bindDispatch()
+
+  // Hosts (and test fixtures) that expose services directly on `ctx` instead of
+  // through deferred injection: a last resort, never an override of a service
+  // that WAS bound. Without it a composition that answers only some injections
+  // loses the ones it does expose.
+  //
+  // READ RULE (test/service-inject-gate.test.mjs): a read of a service this
+  // module does not declare is a HARD mount failure — cordis throws and the row
+  // dies. `tools` IS declared above; `commands` and `subagents` are not, so they
+  // are reached through the optional reader and a guarded read respectively.
+  if (services.tools === undefined && ctx.tools !== undefined) services.tools = ctx.tools
+  if (services.commands === undefined) {
+    const commands = optionalService(ctx, 'commands')
+    if (commands !== undefined) services.commands = commands
+  }
+  if (services.subagents === undefined) {
+    const subagents = optionalService(ctx, 'subagents')
+    if (subagents !== undefined) services.subagents = subagents
+  }
+
+  // Volatile config updates do NOT re-run apply(); the host announces the
+  // completed recompose instead, and that is when the switches must be
+  // re-read (ledger F-46: without this a cli/enabled flip needed a restart).
+  try {
+    const off = ctx.on?.('app-boot/config-reload', syncAll)
+    if (typeof off === 'function') disposers.push(off)
+  } catch (error) {
+    warn(`dsh-opencode-v2: config-reload listener unavailable: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  // The load-time sync is AWAITED: `apply()` must not resolve while a surface it
+  // is responsible for is still being registered (measured: an unawaited worker
+  // made `cli_worker` absent immediately after apply).
+  await syncAll()
+
+  return () => {
+    releaseAll()
+    for (const off of disposers.splice(0).reverse()) {
+      try { off() } catch { /* a failing disposer must not block the rest */ }
+    }
+  }
 }

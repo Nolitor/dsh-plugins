@@ -1,4 +1,4 @@
-/** Vendor module loader: resolves through the profile and imports file URLs. */
+/** Vendor module loader: every provider resolves from the package, never the profile. */
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -9,18 +9,14 @@ import {
   resolveThroughChain,
 } from '../lib/vendor-modules.js'
 
-const FILES = new Map([
-  ['@nolit/dsh-opencode-v2/package.json', '/v/opencode/package.json'],
-  ['@nolit/dsh-opencode-v2/http', '/v/opencode/lib/http.js'],
-  ['@nolit/dsh-opencode-v2', '/v/opencode/lib/index.js'],
-])
-
+// Phase E (2026-11-13): OpenCode joined Antigravity and DeepInfra in the
+// vendored slot, so a profile that cannot resolve the legacy link must still
+// load every provider. The fake resolver therefore serves NOTHING.
 function fakeResolve(profileDir, specifier) {
-  if (!FILES.has(specifier)) throw new Error(`Cannot find module '${specifier}'`)
-  return FILES.get(specifier)
+  throw new Error(`Cannot find module '${specifier}'`)
 }
 
-test('vendored providers load internally; OpenCode still resolves through the profile', async () => {
+test('every provider loads from the vendored slot, even with an empty profile', async () => {
   const seen = []
   const { modules, packageUrls, errors } = await loadVendorModules({
     profileDir: '/profile',
@@ -31,10 +27,13 @@ test('vendored providers load internally; OpenCode still resolves through the pr
   assert.match(modules.antigravity.auth.url, /\/vendor\/antigravity\/lib\/auth\.js$/)
   assert.match(modules.antigravity.settings.url, /\/vendor\/antigravity\/lib\/settings\.js$/)
   assert.match(modules.antigravity.catalog.url, /\/vendor\/antigravity\/lib\/catalog\.js$/)
-  assert.equal(modules.opencode.http.url, 'file:///v/opencode/lib/http.js')
-  assert.equal(modules.opencode.shared.url, 'file:///v/opencode/lib/shared.js')
+  // The measured regression Phase E removes: these used to be '/v/opencode/…'
+  // (resolved from the profile). They must now be the package's own vendor dir.
+  assert.match(modules.opencode.http.url, /\/vendor\/opencode\/lib\/http\.js$/)
+  assert.match(modules.opencode.shared.url, /\/vendor\/opencode\/lib\/shared\.js$/)
+  assert.match(packageUrls.opencode, /\/vendor\/opencode\/lib\/index\.js$/)
   assert.match(packageUrls.deepinfra, /\/vendor\/deepinfra\/lib\/index\.js$/)
-  assert.equal(seen.includes('file:///v/opencode/lib/shared.js'), true)
+  assert.equal(seen.some((url) => url.startsWith('file:///profile')), false, 'nothing is read from the profile')
 })
 
 test('a missing vendor is reported, the others still load', async () => {

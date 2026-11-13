@@ -1,11 +1,11 @@
 # Custom Router — Handoff
 
 <!-- skeleton:
-version: 1.5
+version: 1.6
 kind: report
 status: active
 updated: 2026-11-13
-summary: Handoff for @nolit/dsh-custom-router at 0.0.1-rc.14 — Phase B is now recorded as IN PROGRESS (B-1 and B-2 measured delivered, B-3's OpenCode descriptor case added this round after a re-measurement found it was never in verify:stream); the round also delivered the model-list refresh contract (vendor ?refresh=1, two buttons, one bus), six measured vendor defects (catalog host, xhigh round-trip, promotion coercion, disabled routes, two test-isolation leaks), a live route gate (verify:refresh), the preset-registry audit recorded for a future one-place preset addition, and the doc corrections that closed C1 (llm-pi-ai active by default, router does not force it) and adopted the DSH credential-store policy for API keys; records the preparation state for N3 and the S-steps.
+summary: Handoff for @nolit/dsh-custom-router at 0.0.1-rc.16 — Phase E (2026-11-13) made the router the single management path: the opencode preset and its /http entry point at the vendored slot and loadVendorModules() no longer resolves the legacy @nolit/dsh-opencode-v2 profile link, so a restart loads no legacy vendor link; verify:presets is unchanged at 5 providers / 6 commands / 6 tools. The round also removed the injected DSH-update-response sections from the opencode-v2, notify and sidebar-manager handoffs, deleted an untracked deepinfra handoff that held only that plan, and restored the opencode-v2 handoff after finding a bad-paste corruption. Earlier state: Phase B in progress, the model-list refresh contract, six measured vendor defects, the preset-registry drift gate (rc.15) and the live route gate.
 -->
 
 > History lives in [CHANGELOG.md](../CHANGELOG.md). This file is the **forward** view: stage order,
@@ -15,10 +15,10 @@ summary: Handoff for @nolit/dsh-custom-router at 0.0.1-rc.14 — Phase B is now 
 
 | Item | Measured value |
 | :--- | :--- |
-| Package | `@nolit/dsh-custom-router@0.0.1-rc.14` (vendors: antigravity `rc.12`, deepinfra `rc.13`, opencode `rc.6`; every peer pinned `0.0.1-rc.13`) |
+| Package | `@nolit/dsh-custom-router@0.0.1-rc.16` (vendors: antigravity `rc.12`, deepinfra `rc.13`, opencode `rc.6`; every peer pinned `0.0.1-rc.16`) |
 | Last commit | `8ea7044` (tokeneconomizer hairline) — this round is the working tree, committed as the round's own commit |
 | Host | DSH `0.2.2-rc.1` (measured: `@deepseek-ai/dsh/package.json`) |
-| Tests | `npm test` → **509/509**; antigravity **184**, deepinfra **217**, vendored OpenCode **546** |
+| Tests | `npm test` → **533/533**; antigravity **184**, deepinfra **217**, vendored OpenCode **551** (all re-measured 2026-11-13) |
 | Live route gate | `npm run verify:refresh` → **PASS** (3/3 routes, isolated `DSH_HOME`) |
 | Docs | `docs:check` OK (38 workspace / 12 pending / 6 tracks, 1,531 links) |
 
@@ -89,6 +89,32 @@ force it; API-key input is managed through the DSH system store.
 | 4 | Live profile is **not yet compliant** with D5 | — | `~/.dsh/profiles/web/cordis.patch.yml:155` still holds the DeepInfra key as a plaintext `apiKey:`; the document says so instead of claiming compliance |
 
 **C1 is closed as a documentation fix; the key migration (item 4) is open** — see N5 below.
+
+### 1d. This round (2026-11-13) — Phase E: one management path
+
+Owner instruction: 레거시 관리 정책 폐기 — remove the leftover handoff / update-response content
+from `dsh-opencode-v2`, `dsh-antigravity` and `dsh-deepinfra`, and make `dsh-custom-router` the
+single management path so that a restart no longer loads a legacy vendor link.
+
+| Surface | Before | After |
+|---|---|---|
+| `presets.js` opencode `package` | `@nolit/dsh-opencode-v2` (profile link) | `@nolit/dsh-custom-router/vendor/opencode` |
+| opencode `/http` entry | `@nolit/dsh-opencode-v2/http` | `@nolit/dsh-custom-router/vendor/opencode/http` |
+| `loadVendorModules()` opencode | resolved **through the profile** | imports `vendor/opencode/lib/{http,shared}.js` |
+| antigravity / deepinfra | vendored 2026-11-08 | unchanged |
+
+The asymmetry was the defect: two providers were already vendored and OpenCode was the last preset
+still resolved from the profile — the second management path. `verify:presets` reports the same
+**5 providers / 6 commands / 6 tools** before and after, so the switch is registry-neutral.
+
+**Legacy management removed:** the `DSH 업데이트 대응 보강 계획` sections in
+`dsh-opencode-v2/docs/HANDOFF.md`, `dsh-notify/docs/HANDOFF.md` and
+`dsh-sidebar-manager/docs/HANDOFF.md`, plus the untracked
+`vendor/deepinfra/docs/HANDOFF.md` that existed only to hold that plan (and misattributed
+`daily-cloudcode-pa` — an Antigravity host — to DeepInfra).
+
+**Not done, needs owner approval:** the live profile still *declares* the legacy link. Nothing reads
+it, so removing it is safe, but it is a profile edit. No restart was performed.
 
 ## 2. Stages (in order)
 
@@ -190,13 +216,13 @@ explicitly. No live write was made — migrating the key is a profile edit that 
 
 ```bash
 cd dsh-custom-router
-npm test                    # 509 (router surface)
+npm test                    # 533 (router surface)
 npm run verify              # check + test + verify:stream (8/8)
 npm run verify:presets      # preset parity against the live profile
 npm run verify:refresh      # NEW: real routes, isolated DSH_HOME, plain + ?refresh=1
 (cd vendor/antigravity && node --test test/*.test.mjs)   # 184
 (cd vendor/deepinfra  && node --test test/*.test.mjs)    # 217
-(cd vendor/opencode   && node --test test/*.test.mjs)    # 546
+(cd vendor/opencode   && node --test test/*.test.mjs)    # 551
 ```
 
 `npm test` only runs `test/*.test.mjs`; the three vendor suites are separate commands. A run that
@@ -328,6 +354,6 @@ Phase F).
 3. **Phase C** — vendored OpenCode surface supervisor (`syncAll` + `app-boot/config-reload` parity
    with Antigravity), registry binding for `cli_worker`, one dashboard UI.
 4. **Phase D** — switch the preset to the vendored slot, cut the profile link, preset-only boot.
-5. **Phase E** — retire the shim/old track after one release.
+5. **Phase E** — runtime independence **done 2026-11-13** (no code resolves the legacy profile link); shim archiving deferred to owner approval.
 6. **Phase F** — canonical parser default + oracle, Anthropic/Responses protocol seam, 2.2.6
    job/session P0–P5, compatibility fields (`requireReasoning`, thinking/effort updates).

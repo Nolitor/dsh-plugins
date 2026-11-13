@@ -7,9 +7,11 @@
  * vendor's own `modelsFromApiPayload` so the bridge never re-implements the
  * route/plan/name-disambiguation rules.
  *
- * Reused vendor exports:
- *   - `@nolit/dsh-opencode-v2/http` → `authHeader`, `serviceStateCandidates`
- *   - `lib/shared.js` (resolved by path) → `modelsFromApiPayload`
+ * Reused vendor exports (both from the vendored slot since Phase E, 2026-11-13;
+ * the modules still live in a package named `@nolit/dsh-opencode-v2`, but they
+ * are loaded from `vendor/opencode`, not from the profile link):
+ *   - `vendor/opencode/lib/http.js` → `authHeader`, `serviceStateCandidates`
+ *   - `vendor/opencode/lib/shared.js` → `modelsFromApiPayload`
  *
  * Flexible slots (`vendorConfig.opencode`, reactive or plain):
  *   baseUrl?      daemon URL (else the state file)

@@ -144,7 +144,11 @@ export const I18N = {
     "planAllowanceShort": "allow.",
     "planDocLimit": "monthly limit (doc)",
     "planNoUsage": "No per-model usage recorded locally yet.",
-    "planLocalNote": "Local ledger only — may differ from the account total. Documented limits as of 2026-11-07."
+    "planLocalNote": "Local ledger only — may differ from the account total. Documented limits as of 2026-11-07.",
+    "modelsPlanTitle": "Plan",
+    "modelsOtherPlan": "{n} models on the other plan",
+    "modelsRefreshRanking": "Refresh ranking",
+    "saveFailed": "Save failed"
   },
   "ko": {
     "meta": {
@@ -286,7 +290,11 @@ export const I18N = {
     "planAllowanceShort": "허용량",
     "planDocLimit": "월 한도(문서)",
     "planNoUsage": "로컬에 기록된 모델별 사용량이 없습니다.",
-    "planLocalNote": "로컬 기록 기준 — 계정 전체와 다를 수 있습니다. 문서 한도는 2026-11-07 기준."
+    "planLocalNote": "로컬 기록 기준 — 계정 전체와 다를 수 있습니다. 문서 한도는 2026-11-07 기준.",
+    "modelsPlanTitle": "플랜",
+    "modelsOtherPlan": "다른 플랜 {n}개 모델",
+    "modelsRefreshRanking": "순위 새로고침",
+    "saveFailed": "저장 실패"
   },
   "zh": {
     "meta": {
@@ -428,6 +436,10 @@ export const I18N = {
     "planAllowanceShort": "额度",
     "planDocLimit": "月限额（文档）",
     "planNoUsage": "本地尚无按模型的用量记录。",
-    "planLocalNote": "仅本地账本，可能与账户总量不同。文档限额截至 2026-11-07。"
+    "planLocalNote": "仅本地账本，可能与账户总量不同。文档限额截至 2026-11-07。",
+    "modelsPlanTitle": "套餐",
+    "modelsOtherPlan": "另一套餐有 {n} 个模型",
+    "modelsRefreshRanking": "刷新排名",
+    "saveFailed": "保存失败"
   }
 }

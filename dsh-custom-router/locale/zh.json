@@ -138,5 +138,9 @@
   "planAllowanceShort": "额度",
   "planDocLimit": "月限额（文档）",
   "planNoUsage": "本地尚无按模型的用量记录。",
-  "planLocalNote": "仅本地账本，可能与账户总量不同。文档限额截至 2026-11-07。"
+  "planLocalNote": "仅本地账本，可能与账户总量不同。文档限额截至 2026-11-07。",
+  "modelsPlanTitle": "套餐",
+  "modelsOtherPlan": "另一套餐有 {n} 个模型",
+  "modelsRefreshRanking": "刷新排名",
+  "saveFailed": "保存失败"
 }

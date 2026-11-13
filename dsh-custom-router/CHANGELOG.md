@@ -1,12 +1,76 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.15
+version: 0.0.1-rc.16
 kind: report
 status: active
 updated: 2026-11-13
 summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events) and rc.15 with the preset-registry drift gate (static registry diff, `usageRoutes` on every preset, and a mutation harness that proves each drift class is rejected).
 -->
+
+## 0.0.1-rc.16 — Phase E: one management path, no legacy vendor link on restart — 2026-11-13
+
+### Owner instruction
+
+레거시 관리 정책 폐기: dsh-opencode-v2 / dsh-antigravity / dsh-deepinfra에 남은 불필요한
+핸드오프·업데이트 대응 내용을 제거하고, 모든 관리를 `dsh-custom-router`로 단일화한다. 재시작 시
+레거시 벤더 링크/로드가 완전히 배제되어야 한다. 라이브 `~/.dsh/profiles/web` 과 3080 서비스에는
+손대지 않는다.
+
+### What was measured first
+
+| Surface | Measured before | After |
+|---|---|---|
+| `presets.js` opencode `package` | `@nolit/dsh-opencode-v2` (profile link) | `@nolit/dsh-custom-router/vendor/opencode` |
+| opencode `/http` entry specifier | `@nolit/dsh-opencode-v2/http` (profile) | `@nolit/dsh-custom-router/vendor/opencode/http` |
+| `loadVendorModules()` opencode | resolved `@nolit/dsh-opencode-v2` **through the profile** | imports `vendor/opencode/lib/{http,shared}.js` by URL |
+| runtime reads of the legacy link | yes (`lib/vendor-modules.js`) | **none** — a test asserts nothing is read from `profileDir` |
+| antigravity / deepinfra | already vendored 2026-11-08 | unchanged |
+| injected "DSH 업데이트 대응" sections | 4 files | **removed** (see below) |
+
+The asymmetry was the point: two of the three providers were already vendored, and OpenCode was the
+last preset still resolved through a profile link — the second management path.
+
+### Registry-neutral, proven
+
+`verify:presets` after the switch: `providers: deepseek-account, antigravity, deepinfra,
+deepinfra-anthropic, opencode-http-agent` — **5 providers / 6 commands / 6 tools**, identical to the
+pre-change baseline. The vendored package declares `name: @nolit/dsh-opencode-v2` and the same export
+map, so no import path changed shape.
+
+### Legacy management removed
+
+| File | Action |
+|---|---|
+| `dsh-opencode-v2/docs/HANDOFF.md` | `## 5. DSH 업데이트 대응 보강 계획` removed. The working tree was also found **corrupted** (literal `NNN:` line prefixes from an earlier bad paste); restored from `HEAD` before editing |
+| `dsh-notify/docs/HANDOFF.md` | `## 4. DSH 업데이트 대응 보강 계획` removed (the only working-tree change); section renumbered |
+| `dsh-sidebar-manager/docs/HANDOFF.md` | `## 6. DSH 업데이트 대응 보강 계획` removed; that block also told readers a `systemctl restart dsh-web.service` is mandatory, which contradicts the live-state rule |
+| `vendor/deepinfra/docs/HANDOFF.md` | **deleted** — an untracked file created only to hold the update-response plan. It also asserted DeepInfra's catalog comes from `daily-cloudcode-pa`, which is the **Antigravity** host, and described an rc.11 that does not match this tree. Nothing linked to it |
+
+### Tests
+
+533/533 (vendored suites 184 / 217 / 551 also green). Four assertions were tied to a frozen package literal rather than to the rule they guard;
+each now reads the declaration, so a future move cannot leave a stale expectation behind:
+
+| Test | Was | Now |
+|---|---|---|
+| `dual-mount-guard` anchor | literal package compare | follows `preset.package` (rule: same package or host row) |
+| `presets` entry set | `'@nolit/dsh-opencode-v2/http'` | `` `${opencode.package}/http` `` |
+| `index` plan expansion | literal | literal updated to the vendored slot, with the Phase E reason recorded |
+| `index` partial-failure fixture | matched the frozen specifier | matches the `/http` subpath |
+| `index` started-bundle prefix | literal bundle name | bundle name read from `PRESETS` |
+| `vendor-modules` | asserted the profile resolution | asserts the vendored resolution and that `profileDir` is never read |
+
+### Not done — needs owner approval (live-state writes)
+
+- The live profile still declares `@nolit/dsh-opencode-v2` as a `link:`. Nothing reads it now, so
+  removing it is safe, but it is a profile edit.
+- No restart of `dsh-web.service` was performed, and `~/.dsh/profiles/web` was read only.
+
+### Phase E state
+
+E0 (runtime independence) **done**; E1 open; E2/E3 deferred pending owner approval to archive
+`dsh-opencode-v2/`. Recorded in [OPENCODE-ABSORPTION-BLUEPRINT.md](docs/OPENCODE-ABSORPTION-BLUEPRINT.md) §Phase E.
 
 ## 0.0.1-rc.15 — N3: the preset-registry drift gate actually gates — 2026-11-13
 

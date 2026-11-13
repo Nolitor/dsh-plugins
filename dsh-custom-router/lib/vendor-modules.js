@@ -28,7 +28,6 @@
  */
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 
 /** Default file loader; injectable so tests never touch the filesystem. */
 const defaultImport = (url) => import(url)
@@ -126,10 +125,18 @@ export function resolveThroughChain({ profileDir, installAnchor, anchors = [], s
 /**
  * Load the vendor modules the bridges need.
  *
- * Antigravity and DeepInfra are **vendored inside this package** (2026-11-08):
- * their source moved under `vendor/` and their profile links were removed. They
- * resolve from `import.meta.url`, never from the profile. OpenCode remains an
- * external active track, so it still resolves through the profile.
+ * All three providers are **vendored inside this package** and resolve from
+ * `import.meta.url`, never from the profile:
+ *
+ * - Antigravity and DeepInfra were vendored 2026-11-08.
+ * - OpenCode was the last one still resolved through the profile's
+ *   `@nolit/dsh-opencode-v2` link. Phase E (2026-11-13) moved it to the
+ *   vendored slot too, so a restart no longer depends on the legacy link
+ *   existing in the profile at all. Rollback: set the `packages.opencode`
+ *   override to the profile link (blueprint §4).
+ *
+ * `profileDir` stays a required argument: the loader keeps reporting which
+ * profile it was asked to serve, and the resolution helpers below still use it.
  * @param {object} options - `{ profileDir, installAnchor?, anchors?, importModule?, resolvePackage? }`.
  * @returns {Promise<{modules: object, errors: {vendor: string, message: string}[], packageUrls: Record<string, string>}>} loaded modules.
  */
@@ -141,7 +148,6 @@ export async function loadVendorModules({ profileDir, importModule = defaultImpo
   const errors = []
   const packageUrls = {}
   const vendorUrl = (path) => new URL(`../vendor/${path}`, import.meta.url).href
-  const load = async (specifier) => importModule(pathToFileURL(resolvePackage(profileDir, specifier)).href)
 
   try {
     modules.antigravity = {
@@ -155,14 +161,14 @@ export async function loadVendorModules({ profileDir, importModule = defaultImpo
   }
 
   try {
-    const pkgFile = resolvePackage(profileDir, '@nolit/dsh-opencode-v2/package.json')
     modules.opencode = {
-      http: await load('@nolit/dsh-opencode-v2/http'),
-      // `modelsFromApiPayload` lives in `lib/shared.js`, which the package does not
-      // export; a file URL bypasses the export map (bridge-only, no vendor edit).
-      shared: await importModule(pathToFileURL(join(dirname(pkgFile), 'lib', 'shared.js')).href),
+      http: await importModule(vendorUrl('opencode/lib/http.js')),
+      // `modelsFromApiPayload` lives in `lib/shared.js`, which the package's
+      // export map does not expose; loading the vendored file URL directly is
+      // the same bypass the profile path used, now without the profile.
+      shared: await importModule(vendorUrl('opencode/lib/shared.js')),
     }
-    packageUrls.opencode = pathToFileURL(resolvePackage(profileDir, '@nolit/dsh-opencode-v2')).href
+    packageUrls.opencode = vendorUrl('opencode/lib/index.js')
   } catch (error) {
     errors.push({ vendor: 'opencode', message: error instanceof Error ? error.message : String(error) })
   }
