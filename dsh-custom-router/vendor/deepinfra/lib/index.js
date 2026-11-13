@@ -171,7 +171,12 @@ export function apply(ctx, config) {
     const ref = credentialRefName()
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(ref)) return ''
     try {
-      const credentials = optional(ctx, 'credentials')
+      // `get(name)` reads a mounted service WITHOUT an inject requirement
+      // (cordis:1345). A bare property read of a service this plugin does not
+      // inject throws "cannot get property ... without inject" (cordis:1257),
+      // and swallowing that error silently disabled the key. Both presets
+      // inject only `llm`, so this accessor is the correct one.
+      const credentials = ctx?.get?.('credentials')
       const found = await credentials?.resolve?.(ref)
       return typeof found?.value === 'string' ? found.value : ''
     } catch (error) {
