@@ -22,23 +22,45 @@ const stamp = `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.g
 const id = `${stamp}`
 const note = process.argv.slice(2).join(' ').trim()
 
-// Artifact file names carry the package version, so the path is derived from
-// package.json instead of being pinned here (a pinned version silently prints
-// "missing" after every bump).
-const plugins = [
-  ['Korean locale', 'dsh-korean-locale/package.json', 'nolit-dsh-korean-locale'],
-  ['Sidebar Manager', 'dsh-sidebar-manager/package.json', 'nolit-dsh-sidebar-manager'],
-  ['Notify Web', 'dsh-notify/package.json', 'nolit-dsh-notify-web'],
-  ['OpenCode v2', 'dsh-opencode-v2/package.json', 'nolit-dsh-opencode-v2'],
-]
-const lines = []
-for (const [label, pkgPath, artifactName] of plugins) {
-  if (!existsSync(join(root, pkgPath))) continue
-  const pkg = readJson(pkgPath)
-  const artifactPath = join(root, `artifacts/${artifactName}-${pkg.version}.tgz`)
-  const hash = existsSync(artifactPath) ? createHash('sha256').update(readFileSync(artifactPath)).digest('hex') : 'missing'
-  lines.push(`| ${label} | \`${pkg.name}@${pkg.version}\` | \`${pkg.engines?.dsh ?? 'n/a'}\` | \`${hash}\` |`)
+// Every active track is discovered, not pinned: a pinned list silently drops tracks
+// and prints a stale artifact path after every version bump.
+const tracks = readdirSync(root, { withFileTypes: true })
+  .filter((e) => e.isDirectory() && e.name.startsWith('dsh-') && existsSync(join(root, e.name, 'package.json')))
+  .map((e) => e.name)
+  .sort()
+
+const artifactDir = join(root, 'artifacts')
+const trackRows = []
+const docRows = []
+for (const track of tracks) {
+  const pkg = readJson(`${track}/package.json`)
+  const base = String(pkg.name).replace(/^@[^/]+\//, '')
+  const artifact = existsSync(artifactDir)
+    ? readdirSync(artifactDir).find((f) => f.startsWith(`${base}-${pkg.version}.`)) || null
+    : null
+  const hash = artifact ? createHash('sha256').update(readFileSync(join(artifactDir, artifact))).digest('hex') : 'missing'
+  trackRows.push(`| ${track} | \`${pkg.name}@${pkg.version}\` | \`${pkg.engines?.dsh ?? 'n/a'}\` | \`${hash}\` |`)
+
+  const isSubmodule = existsSync(join(root, track, '.git'))
+  const git = (args) => isSubmodule
+    ? run('git', ['-C', join(root, track), ...args])
+    : run('git', [...args, '--', track])
+  const has = (...rels) => (rels.some((rel) => existsSync(join(root, track, rel))) ? 'yes' : '—')
+  const last = git(['log', '-1', '--format=%h %ad', '--date=short']) || 'untracked'
+  const dirty = git(['status', '--porcelain']).split('\n').filter(Boolean).length
+  docRows.push(`| ${track}${isSubmodule ? ' *(submodule)*' : ''} | ${has('docs/INDEX.md', 'README.md')} | ${has('docs/HANDOFF.md', 'HANDOFF.md')} | ${has('CHANGELOG.md')} | \`${last}\` | ${dirty} |`)
 }
+
+const koreanCoverage = (() => {
+  try { return JSON.parse(readFileSync(join(root, 'dsh-korean-locale/data/coverage.json'), 'utf8')) } catch { return null }
+})()
+
+const liveBundles = (() => {
+  try {
+    const profile = JSON.parse(readFileSync(`${process.env.HOME}/.dsh/profiles/web/package.json`, 'utf8'))
+    return (profile.dsh?.profile?.bundles ?? []).map((b) => (typeof b === 'string' ? b : b.name)).join(', ')
+  } catch { return 'unreadable' }
+})()
 
 const card = `# DSH Plugins — Boot Card ${stamp}
 
@@ -90,25 +112,26 @@ ${note ? `Latest session note: ${note}\n\n` : ''}## 1. Non-negotiable rules
 | Node | \`${run('node', ['--version'])}\` |
 | Cordis | \`${(() => { try { return JSON.parse(readFileSync(`${process.env.HOME}/.local/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/package.json`, 'utf8')).version } catch { return 'from installed DSH' } })()}\` |
 | Live profile | \`~/.dsh/profiles/web\` (read-only from this sandbox) |
-| Active bundles | base, web-app, auto-review, agent-team-profile, Korean locale, Sidebar Manager |
+| Active profile bundles | \`${liveBundles}\` |
 
 ## 3. Managed plugins and artifacts
 
 | Plugin | Version | \`engines.dsh\` | Artifact SHA-256 |
 |---|---|---|---|
-${lines.join('\n')}
+${trackRows.join('\n')}
+
+## 3b. Per-subproject documents and commits
+
+| Track | docs/INDEX | docs/HANDOFF | CHANGELOG | last commit | dirty files |
+| :--- | :--: | :--: | :--: | :--- | --: |
+${docRows.join('\n')}
 
 ## 4. Current policies and known deltas
 
-- DSH 0.2.2-alpha.2 changed **manifest/engine enforcement** to include prereleases for the
-  declared window; all three plugins pin \`>=0.2.2-alpha.2 <0.3.0\`.
-- Korean pack refreshed to **68 namespaces / 3,019 keys**, en/zh key and placeholder parity 0.
-- Notify v0.1.6: auto permission request once per page; OS notification success suppresses
-  toast; denied/insecure/error falls back to toast + tab title + sound.
-- Sidebar Manager is functionally healthy on alpha.2. Its installed tree can carry UTM changes;
-  always baseline-measure before a version-up (current measured version 0.1.2, 126/126 tests). Forge/Worktree coupling
-  needs advisory preflight (no hard block): \`.agents/worktrees\` observation, cwd/handoff audit,
-  worktree identity/lifecycle mapping.
+- Running DSH is \`${run('dsh', ['--version'])}\`; every track states its engine window in §3.
+- Korean pack: **${koreanCoverage ? `${koreanCoverage.namespaces} namespaces / ${Number(koreanCoverage.keys).toLocaleString('en-US')} keys` : 'coverage unreadable'}** against \`${koreanCoverage ? koreanCoverage.source.commit : 'unknown'}\`; en/zh key and placeholder parity 0; \`npm run verify\` green. Re-extract with \`node dsh-korean-locale/scripts/extract-dictionaries.mjs\`.
+- Locale coverage is not self-verifying: \`verify.mjs\` checks internal consistency only, so a namespace the extractor misses stays green while the GUI falls back to English. rc.3 exposed five such namespaces (variable payload, three-argument registration, \`client.page.js\`).
+- Per-track document and commit state is §3b; a non-zero dirty count is uncommitted work from an earlier session, not a defect of the current one.
 
 ## 5. Key documents
 
@@ -125,11 +148,15 @@ ${lines.join('\n')}
 ## 6. Verification commands
 
 \`\`\`bash
-(cd dsh-korean-locale && npm run verify)
-(cd dsh-sidebar-manager && npm test)
-(cd dsh-notify && npm test)
+${tracks.map((t) => {
+  let scripts = null
+  try { scripts = readJson(`${t}/package.json`).scripts ?? null } catch {}
+  const name = scripts?.verify ? 'verify' : scripts?.test ? 'test' : null
+  return name ? `(cd ${t} && npm run ${name})` : `# ${t}: no test/verify script`
+}).join('\n')}
 node scripts/audit-promoted-state.mjs
 node scripts/audit-installed-vs-packaged.mjs
+\`\`\`
 \`\`\`
 `
 writeFileSync(join(root, 'bootcards', `${id}.md`), card)

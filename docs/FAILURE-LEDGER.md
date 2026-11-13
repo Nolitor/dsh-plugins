@@ -9,7 +9,7 @@
 > activate"). **Rule:** a staged change is source under `staging/`, never an installable
 > package; and a release needs the `S6` soak, measured by
 > `scripts/opencode-v2-stabilisation-status.sh`, not by a passing suite. See
-> [dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md).
+> [dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../archive/dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md).
 > **Second, related:** the cost pill was gated on a MODEL id prefix, so other routers serving
 > `opencode-go/*` showed it. **Rule:** ownership is the provider id the package registers,
 > never a model name it does not control.

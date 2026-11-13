@@ -22,7 +22,6 @@
 | `dsh-command-skill/` | [dsh-command-skill/docs/INDEX.md](../dsh-command-skill/docs/INDEX.md) |
 | `dsh-custom-router/` | [dsh-custom-router/docs/INDEX.md](../dsh-custom-router/docs/INDEX.md) |
 | `dsh-notify/` | [dsh-notify/docs/INDEX.md](../dsh-notify/docs/INDEX.md) |
-| `dsh-opencode-v2/` | [dsh-opencode-v2/docs/INDEX.md](../dsh-opencode-v2/docs/INDEX.md) |
 | `dsh-sidebar-manager/` | [dsh-sidebar-manager/docs/INDEX.md](../dsh-sidebar-manager/docs/INDEX.md) |
 | `dsh-tokeneconomizer/` | [dsh-tokeneconomizer/docs/INDEX.md](../dsh-tokeneconomizer/docs/INDEX.md) |
 | `dsh-korean-locale/` (submodule) | separate repository — read `dsh-korean-locale/README.md` there |
@@ -41,6 +40,8 @@
 
 ## spec
 
+- **1.0** · active · 2026-11-04 · [archive/dsh-opencode-v2/ARCHITECTURE.md](../archive/dsh-opencode-v2/ARCHITECTURE.md)
+  Module map, control-plane vs serving boundary, credential resolution, slot contract and ledger ownership for @nolit/dsh-opencode-v2, aligned with the same host standards now documented in dsh-deepinfra/ARCHITECTURE.md.
 - **1.1** · active · 2026-10-31 · [docs/dsh-plugin-runtime-spec.md](./dsh-plugin-runtime-spec.md)
   DSH plugin runtime specification: manifest, bundle patch, services, lifecycle, client factory, and the measured "declared but unexported inject" activation failure.
 - **1.1** · reference · 2026-10-31 · [docs/plugin-boot-card.md](./plugin-boot-card.md)
@@ -50,14 +51,20 @@
 
 ## report
 
+- **1.2** · active · 2026-11-13 · [archive/dsh-opencode-v2/docs/HANDOFF.md](../archive/dsh-opencode-v2/docs/HANDOFF.md)
+  Stage-by-stage handoff for @nolit/dsh-opencode-v2 at 0.0.1-rc.5 — the delivered CLI-subagent work, the router dispatch-policy revision, the three open stage-1 observations that need an owner verdict, and the gated stage-2 parser swap. Re-measured 2026-11-13 for the S-work handoff: the track is a 7-file re-export shim whose suite lives in dsh-custom-router/vendor/opencode, `npm test` now reports the real 546/546 instead of a hollow 0/0, and the stale router peer pin (rc.11 vs the shipped rc.15) is corrected.
 - **1.0** · measured · 2026-11-13 · [docs/DSH-RC2-PLUGIN-DELTA.md](./DSH-RC2-PLUGIN-DELTA.md)
   Measured diff between the installed 0.2.2-rc.1 runtime and the published 0.2.2-rc.2 release, limited to plugin/extension surfaces, with per-track impact, breaking-change exposure, and the Korean locale coverage gap.
 - **1.0** · active · 2026-11-13 · [docs/DSH-UPDATE-ISSUE.md](./DSH-UPDATE-ISSUE.md)
   What breaks or silently degrades when the DSH host version moves — the measured version pins across every tracked plugin, the peer/schemas/engine ranges that already disagree with the running host, the cordis and schemastery coupling, the client-bundle rebuild boundary, and the infrastructure dependencies (Lightpanda daemon, dsh-web service, credential store, provider CLIs) that an upgrade must re-verify rather than assume.
+- **1.7** · active · 2026-11-10 · [archive/dsh-opencode-v2/CHANGELOG.md](../archive/dsh-opencode-v2/CHANGELOG.md)
+  Engineering history for @nolit/dsh-opencode-v2, including the completed subagent merge, the 0.0.2-rc.2 cleanup, the rc.4 cost-chip seat migration, the managed child-session delegation cutover, and the OpenCode 2.2.6 isolated compatibility measurement.
 - **1.1** · active · 2026-11-10 · [docs/HANDOFF.md](./HANDOFF.md)
   Workspace-level progress roll-up — per-track state, the ordered cross-track next actions, the owner decisions that block them, and the measured gates that say whether a track is releasable.
 - **1.2** · active · 2026-11-08 · [docs/PLUGIN-CONSOLIDATION.md](./PLUGIN-CONSOLIDATION.md)
   Why the per-surface plugins were folded into one package per vendor, then how Antigravity and DeepInfra were absorbed into @nolit/dsh-custom-router on 2026-11-08, and what a future agent must check before reinstalling any of them.
+- **1.0** · completed · 2026-11-07 · [archive/dsh-opencode-v2/docs/OPENCODE-INSTALL-CLEANUP-LOG-20261107.md](../archive/dsh-opencode-v2/docs/OPENCODE-INSTALL-CLEANUP-LOG-20261107.md)
+  Executed cleanup of the legacy OpenCode 0.0.55 install and stale OpenCode caches, with before/after paths and quarantine location.
 - **1.1** · archived · 2026-11-06 · [archive/dsh-subrouter/CHANGELOG.md](../archive/dsh-subrouter/CHANGELOG.md)
   Engineering history for @nolit/dsh-subrouter. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
 - **1.0** · archived · 2026-11-05 · [archive/dsh-antigravity-directsdk/CHANGELOG.md](../archive/dsh-antigravity-directsdk/CHANGELOG.md)
@@ -74,15 +81,43 @@
   Engineering history for @nolit/dsh-subagent-antigravity. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
 - **1.0** · active · 2026-11-04 · [archive/dsh-subagent-opencode/CHANGELOG.md](../archive/dsh-subagent-opencode/CHANGELOG.md)
   Engineering history for @nolit/dsh-subagent-opencode. Seeded from git history on 2026-11-04 when the owner made per-plugin history mandatory (docs/RULES.md 6.1); entries after that date follow the same rule — what changed, why, and the measured before/after.
+- **2.2** · active · 2026-11-03 · [archive/dsh-opencode-v2/VERIFICATION.md](../archive/dsh-opencode-v2/VERIFICATION.md)
+  Current verification rounds for the opencode-v2 plugin, v0.7.4 and later, through v0.0.1, 0.0.1-rc.1, 0.0.1-rc.2, 0.0.1-rc.3, 0.0.1-rc.4 (protocol tokens scrubbed by delimiter shape, not by the DSML text; worst-case one-character feeding 42 -> 3 -> 1, the remaining 1 a measurement-regex false positive), 0.0.1-rc.5 (synthetic probes rejected as evidence; lib/trace.js records real-traffic shape), 0.0.1-rc.6 (the rc.5 trace measured hasSystem=false on 29/29 real requests and a 58.6% leak rate; system-role messages now keep the system slot and empty tool results keep their call id) and 0.0.1-rc.7 (rc.6 traffic: 155 requests, hasSystem=true 155/155, 56 (36.1%) still leaking mostly in reasoning because only the content channel was classified; reasoning now goes through the same classifier, replay recovers 21 calls and 3 of 6 stalled steps; 295/295) and 0.0.1-rc.8 (assistant history is prose only: the wire no longer carries `<thinking>` wrappers or rendered `[tool call ...]` echoes, -38.7% / -50.3% body size on two recorded sessions, and bare element closers are scrubbed; 298/298) and 0.0.1-rc.9 (the per-turn reservation is separated from the route capability: `defaultMaxTokens` is 16384 instead of the route's `limit.output`, restoring usable context from 55.0% to 80.0% of a 1M window / 91.8% message capacity; the reported "41M cacheRead" was measured to be a 2026-10-29 session, not current code, and was not changed; 305/305). Older rounds live in VERIFICATION-ARCHIVE.md.
 - **1.0** · measured · 2026-11-03 · [docs/DSH-0.2.2-ALPHA.3-PLUGIN-VERIFICATION.md](./DSH-0.2.2-ALPHA.3-PLUGIN-VERIFICATION.md)
   Per-plugin verification against DSH 0.2.2-alpha.3 (excluding opencode-v2) — measured mount state, test results, Korean locale delta, notify settings restyle, sidebar/UTM harness and TE KV-cache interaction.
+- **1.0** · active · 2026-11-01 · [archive/dsh-opencode-v2/VERIFICATION-ARCHIVE.md](../archive/dsh-opencode-v2/VERIFICATION-ARCHIVE.md)
+  Historical verification rounds for the opencode-v2 plugin, v0.3.7 through v0.7.3. Current rounds live in VERIFICATION.md.
+- **3.2** · active · 2026-11-01 · [archive/dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md](../archive/dsh-opencode-v2/docs/OPENCODE-MODEL-SERVING-PLAN.md)
+  Post-mortem of the subrouter detour and the nested-harness HTTP route, the permanent autonomous pure-router policy, the subrouter decommission, the direct OpenAI-compatible backend pattern, the measured live 400 MissingSessionID + 401 revoked-key defects, the measurable per-account model allow-list with its settings tab, the 0.6.0 client-half activation defect that killed the web shell, the 0.7.3 stream-cut/inline-tag defects with their measured fix, the 0.7.6 split-marker hold gap that still printed the notation on screen, and the 0.8.0 boundary pipeline that deletes the tag scanner and types every delta from its wire field.
 - **1.0** · completed · 2026-10-29 · [docs/DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md](./DSH-0.2.2-ALPHA.2-RUNTIME-REPORT.md)
   Runtime measurement and optimization report for the three original plugins on DSH 0.2.2-alpha.2.
 
 ## measurement
 
+- **1.0** · measured · 2026-11-07 · [archive/dsh-opencode-v2/docs/OPENCODE-220-TO-226-DELTA.md](../archive/dsh-opencode-v2/docs/OPENCODE-220-TO-226-DELTA.md)
+  Full 2.2.0-to-2.2.6 upstream delta by surface, including five DB migrations, background-job persistence, schedules, artifacts, and measured limits.
+- **1.1** · measured · 2026-11-07 · [archive/dsh-opencode-v2/docs/OPENCODE-226-COMPATIBILITY-MEASUREMENT.md](../archive/dsh-opencode-v2/docs/OPENCODE-226-COMPATIBILITY-MEASUREMENT.md)
+  Measured OpenCode 2.2.6 compatibility and host installation state without changing live DSH or the OpenCode service; legacy 0.0.55 and stale caches were later cleaned up.
+- **1.0** · measured · 2026-11-07 · [archive/dsh-opencode-v2/docs/OPENCODE-PROTOCOL-FLEXIBILITY-GAP.md](../archive/dsh-opencode-v2/docs/OPENCODE-PROTOCOL-FLEXIBILITY-GAP.md)
+  Read-only comparison of the plugin's provider-protocol handling against OpenCode 2.2.0-2.2.6 provider/protocol changes.
 - **1.0** · measured · 2026-11-05 · [archive/dsh-subagent-local/VERIFICATION.md](../archive/dsh-subagent-local/VERIFICATION.md)
   Measured verification for the experimental local-delegation plugin: unit suite, syntax checks, isolated DSH_HOME composition, real rc.1 boot, and browser checks.
+- **1.0** · active · 2026-11-04 · [archive/dsh-opencode-v2/RECIPE-CAPABILITY-DELTA.md](../archive/dsh-opencode-v2/RECIPE-CAPABILITY-DELTA.md)
+  Capability delta between deepseek-ai/deepseek-recipe (Rust/Python model-serving library) and the local @nolit/dsh-opencode-v2 plugin. Measured against plugin HEAD dab7240 (0.0.1-rc.10), 359 passing tests, and 24,150 lines of recorded adapter trace (6,727 requests through 2026-11-04). Recipe is a model-side conversion/encoding library with no Node binding, so it cannot replace the plugin's transport; four of its capabilities are still adoptable as specs, three as code. Recommends six cheap changes ranked by measured impact, and rejects a runtime sidecar at current scope.
+- **1.0** · active · 2026-11-04 · [archive/dsh-opencode-v2/UPSTREAM-COMPAT.md](../archive/dsh-opencode-v2/UPSTREAM-COMPAT.md)
+  Per-upstream-version comparison record for @nolit/dsh-opencode-v2 — the surfaces this plugin actually touches, the exact source artifact each column was read from (release tag, not master), and the verdict per surface. Applied to 0.2.2-alpha.3. Future versions append a row; "no problem" without this table is not a verification.
+- **1.1** · active · 2026-11-03 · [archive/dsh-opencode-v2/POST-UPGRADE-MEASUREMENT.md](../archive/dsh-opencode-v2/POST-UPGRADE-MEASUREMENT.md)
+  Post-upgrade measurement of DSH 0.2.2-alpha.3 with 0.0.1-rc.9 — the cut fix is live (21 transport cuts, 21 host retries), the catalog publishes declared modalities for 50/50 routes, and the per-turn completion reservation was separated from the route capability so usable context rose from 55.0% to 80.0% of a 1M window. Records one falsified claim: the reported 41M cacheRead belongs to a 2026-10-29 session, not current code.
+- **1.1** · superseded · 2026-11-03 · [archive/dsh-opencode-v2/ROUTE-HEALTH-REPORT.md](../archive/dsh-opencode-v2/ROUTE-HEALTH-REPORT.md)
+  Measured cause and fix for two reported defects in 0.0.1-rc.8 — responses ending mid-reasoning (finish_reason absent, reported as a clean stop so the host never retried) and the served-model picker lacking modality/reasoning metadata (inputModalities hardcoded to ["text"], which made dsh-subagent refuse image input). Includes the falsified hypothesis that variant settings could be forwarded to the wire. SUPERSEDED on the usage section — see POST-UPGRADE-MEASUREMENT.md.
+- **1.0** · active · 2026-11-03 · [archive/dsh-opencode-v2/SETTINGS-AUDIT.md](../archive/dsh-opencode-v2/SETTINGS-AUDIT.md)
+  Audit of the two settings surfaces for this plugin — the auto-generated "OpenCode Go (direct)" form (registerConfigurableProviders, 40 volatile fields) and the hand-written "OpenCode V2" section (plan + allow-list + ranking). Confirms both work (allow-list filters, plan gate, ranking 18 models, 12/12 profile routes valid) and finds three defects, the concrete one being password/apiKey missing role('secret'), proven with the host's own redactSecrets().
+- **1.0** · active · 2026-11-03 · [archive/dsh-opencode-v2/UPGRADE-ALPHA3-MEASUREMENT.md](../archive/dsh-opencode-v2/UPGRADE-ALPHA3-MEASUREMENT.md)
+  Pre-upgrade measurement of DSH 0.2.2-alpha.2 to 0.2.2-alpha.3 — installed the release into an isolated prefix, mounted @nolit/dsh-opencode-v2 against the alpha.3 host, registered its adapter into the alpha.3 LlmRuntime, listed the live catalog and streamed a real model. Verdict: no upgrade blocker; the only new obligation is that alpha.3 auto-review sends purpose/sessionId, which the adapter satisfies.
+- **1.1** · measured · 2026-10-30 · [archive/dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md](../archive/dsh-opencode-v2/docs/OPENCODE-V2-HTTP-API-MEASUREMENT.md)
+  Measured the OpenCode v2.2.0 HTTP server (130 endpoints, SSE event stream) and later corrected the DSH adapter policy: session/prompt is an OpenCode agent harness, so pure model serving uses the OpenAI-compatible backend directly and the local server only for catalog/provider/credential control.
+- **1.3** · measured · 2026-10-30 · [archive/dsh-opencode-v2/docs/OPENCODE-V2-SURFACE-MEASUREMENT.md](../archive/dsh-opencode-v2/docs/OPENCODE-V2-SURFACE-MEASUREMENT.md)
+  Measured opencode v2.2.0 CLI surface: event schema, session-export tokens, removed flags, and per-model reasoning variants (re-measured 2026-10-30, preflight rules); corrects the 0919 boot card.
 
 ## policy
 
@@ -95,13 +130,30 @@
 
 ## design
 
+- **1.0** · draft · 2026-11-07 · [archive/dsh-opencode-v2/docs/OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md](../archive/dsh-opencode-v2/docs/OPENCODE-226-JOB-SESSION-INTEGRATION-ROADMAP.md)
+  Planned, read-only-derived integration options for OpenCode 2.2.6 session_part/job APIs with @nolit/dsh-opencode-v2, with efficiency hypotheses and measurement gates.
+- **1.0** · active · 2026-11-07 · [archive/dsh-opencode-v2/docs/OPENCODE-V2-IMPROVEMENT-SPEC-20261107.md](../archive/dsh-opencode-v2/docs/OPENCODE-V2-IMPROVEMENT-SPEC-20261107.md)
+  Today's next plugin change — canonical recipe parser behind an opt-in seam with a prose-preservation fix; 2.2.6 job/session work is deferred.
 - **1.1** · active · 2026-11-05 · [docs/UI-SLOT-ARCHITECTURE.md](./UI-SLOT-ARCHITECTURE.md)
   Owner-approved placement rule for token/usage surfaces — global header for the tk system ledger, conversation.input.right for per-provider composer chips — with the measured slot seats; opencode-v2 migrated in 0.0.2-rc.4, DeepInfra and tk still pending.
+- **1.0** · active · 2026-11-04 · [archive/dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](../archive/dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md)
+  Stage plan for @nolit/dsh-opencode-v2 — what "stabilised" means as a measurable gate, then stage 2 (move the canonical recipe-derived protocol parser into this single package) and stage 3 (ship the conformance oracle in the test suite). Replaces the deleted beta package. Records the exact defects that block promotion, the acceptance thresholds taken from recorded traffic, the rollback route, and who is allowed to open a stage.
+- **2.0** · implemented · 2026-10-29 · [archive/dsh-opencode-v2/docs/CLI-WORKER-PLUGIN-DESIGN.md](../archive/dsh-opencode-v2/docs/CLI-WORKER-PLUGIN-DESIGN.md)
+  The built-in `cli_worker` tool inside @nolit/dsh-opencode-v2 — role split between the HTTP conversation pipeline and one-shot CLI batch workers (OpenCode, Codex, Claude Code), with the tool contract, isolation, artifact collection, and verification plan for an internal module rather than a separate plugin.
+
+## reference
+
+- **1.1** · draft · 2026-11-07 · [archive/dsh-opencode-v2/docs/OPENCODE-INSTALL-CLEANUP-RUNBOOK.md](../archive/dsh-opencode-v2/docs/OPENCODE-INSTALL-CLEANUP-RUNBOOK.md)
+  Approval-gated upgrade runbook for consolidating OpenCode 2.2.6 as the only active installation; legacy and cache cleanup already executed.
 
 ## readme
 
 - **2.3** · active · 2026-11-08 · [README.md](../README.md)
   Workspace entry point: plugin track layout by measured lifecycle (active / spec / verify-only), per-subproject document homes, live profile wiring, agent boot chain.
+- **4.2** · active · 2026-11-07 · [archive/dsh-opencode-v2/README.ko.md](../archive/dsh-opencode-v2/README.ko.md)
+  Operator manual for @nolit/dsh-opencode-v2 — a native DSH LLM adapter that streams from OpenAI-compatible backends (OpenCode Go) while the DSH agent loop keeps ownership of tools, history and workspace. Covers the three switchable surfaces (model serving/router via opencode-http-agent, subagent provider, CLI: opencode tool + /ocode + cli_worker), their on/off switches, Tier A request guards derived from deepseek-recipe, the legacy-provider collision guard, verified prerequisites (CLI version, web auth and token store, PATH resolution), the release ladder, installation, and the measured OpenCode 2.2.6 compatibility boundary. Engineering history lives in CHANGELOG.md.
+- **4.2** · active · 2026-11-07 · [archive/dsh-opencode-v2/README.md](../archive/dsh-opencode-v2/README.md)
+  Operator manual for @nolit/dsh-opencode-v2 — a native DSH LLM adapter that streams from OpenAI-compatible backends (OpenCode Go) while the DSH agent loop keeps ownership of tools, history and workspace. Covers the three switchable surfaces (model serving/router via opencode-http-agent, subagent provider, CLI: opencode tool + /ocode + cli_worker), their on/off switches, Tier A request guards derived from deepseek-recipe, the legacy-provider collision guard, verified prerequisites (CLI version, web auth and token store, PATH resolution), the release ladder, installation, and the measured OpenCode 2.2.6 compatibility boundary. Engineering history lives in CHANGELOG.md.
 - **1.1** · archived · 2026-11-06 · [archive/dsh-subrouter/README.md](../archive/dsh-subrouter/README.md)
   Implementation detail for @nolit/dsh-subrouter. Root record and open defects: ../OPENCODE-MODEL-SERVING-PLAN.md
 - **1.0** · archived · 2026-11-05 · [archive/dsh-antigravity-cli/README.md](../archive/dsh-antigravity-cli/README.md)
@@ -119,10 +171,12 @@
 
 ## index
 
+- **1.1** · reference · 2026-11-14 · [archive/README.md](../archive/README.md)
+  What lives under archive/ (seven absorbed tracks: directsdk, antigravity-cli, subagent-antigravity, subagent-opencode, subrouter, subagent-local, opencode-v2), the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
+- **1.0** · active · 2026-11-13 · [archive/dsh-opencode-v2/docs/INDEX.md](../archive/dsh-opencode-v2/docs/INDEX.md)
+  Generated per-subproject index for @nolit/dsh-opencode-v2: every document this track owns, one line each.
 - **1.6** · active · 2026-11-08 · [HISTORY.md](../HISTORY.md)
   The main plugin-history chain for this workspace — vendor merges, archived tracks, the 2026-11-08 Antigravity/DeepInfra absorption into the Custom Router, llm-pi-ai re-enablement, the unauthorized live-service restart incident and its standing rule, version ladders, live-state debt, and the measured disposal gate.
-- **1.1** · reference · 2026-11-07 · [archive/README.md](../archive/README.md)
-  What lives under archive/ (six absorbed tracks: directsdk, antigravity-cli, subagent-antigravity, subagent-opencode, subrouter, subagent-local), the measured bar a track must clear before it is moved here, and the rule that nothing here is installed by any profile.
 - **1.0** · active · 2026-11-07 · [archive/dsh-subagent-local/docs/INDEX.md](../archive/dsh-subagent-local/docs/INDEX.md)
   Generated per-subproject index for @nolit/dsh-subagent-local: every document this track owns, one line each.
 - **4.0** · active · 2026-11-06 · [AGENTS.md](../AGENTS.md)
@@ -130,19 +184,19 @@
 - **1.0** · active · 2026-11-06 · [archive/dsh-subrouter/docs/INDEX.md](../archive/dsh-subrouter/docs/INDEX.md)
   Generated per-subproject index for @nolit/dsh-subrouter: every document this track owns, one line each.
 
-## boot (newest 5 of 56)
+## boot (newest 5 of 59)
 
 - **active** · INDEX.md · [card](../bootcards/INDEX.md)
   Newest-first list of dated boot cards.
+- **active** · 2026-11-14T0515+0900.md · [card](../bootcards/2026-11-14T0515+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-14T0515+0900. Older cards are historical.
+- **active** · 2026-11-14T0409+0900.md · [card](../bootcards/2026-11-14T0409+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-14T0409+0900. Older cards are historical.
+- **active** · 2026-11-14T0106+0900.md · [card](../bootcards/2026-11-14T0106+0900.md)
+  Dated session card (tier 5). This card hands the next session the Custom Router roadmap as a subagent-executable task graph: P0 owner-gated key work, P1 route/spec verification, P2 architecture backlog, with model routing, write scopes, dependencies and gates. It supersedes the generic 2026-11-13 card.
 - **active** · 2026-11-13T1151+0900.md · [card](../bootcards/2026-11-13T1151+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-13T1151+0900. Older cards are historical.
-- **active** · 2026-11-13T0949+0900.md · [card](../bootcards/2026-11-13T0949+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-11-13T0949+0900. Older cards are historical.
-- **active** · 2026-11-10T2257+0900.md · [card](../bootcards/2026-11-10T2257+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-11-10T2257+0900. Older cards are historical.
-- **active** · 2026-11-10T1954+0900.md · [card](../bootcards/2026-11-10T1954+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-11-10T1954+0900. Older cards are historical.
 
 ---
 
-39 workspace docs (56 boot cards), 0 with problems, 6 subprojects.
+65 workspace docs (59 boot cards), 0 with problems, 5 subprojects.

@@ -35,14 +35,14 @@ An undecided shared document belongs in `pending-docs/`, never in `docs/` (RULES
 
 ## Active plans
 
-- [dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md) — stage 1 (stabilisation) in progress; stages 2–3 gated on it. Check with `scripts/opencode-v2-stabilisation-status.sh`.
+- [archive/dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md](archive/dsh-opencode-v2/docs/OPENCODE-V2-STAGE-PLAN.md) — stage 1 (stabilisation) in progress; stages 2–3 gated on it. Check with `scripts/opencode-v2-stabilisation-status.sh`.
 - [dsh-custom-router/vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md](dsh-custom-router/vendor/deepinfra/docs/DEEPINFRA-ADAPTER-BRIEF.md) — vendored integration reference; the five keyed questions are answered by the measured build.
 
 ## Latest boot card
 
 <!-- LATEST_BOOT_CARD:START -->
-Latest boot card: [bootcards/2026-11-13T1151+0900.md](bootcards/2026-11-13T1151+0900.md)
-Generated: 2026-11-13T1151+0900 (KST)
+Latest boot card: [bootcards/2026-11-14T0515+0900.md](bootcards/2026-11-14T0515+0900.md)
+Generated: 2026-11-14T0515+0900 (KST)
 Read only this latest card by default; older cards are historical evidence.
 <!-- LATEST_BOOT_CARD:END -->
 
