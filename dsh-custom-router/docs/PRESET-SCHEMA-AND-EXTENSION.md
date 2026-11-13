@@ -137,7 +137,7 @@ before any surface exists are answered by a smaller, machine-checked model in
 
 | Preset | kind | endpoint | auth |
 | :--- | :--- | :--- | :--- |
-| `antigravity` | package `@nolit/dsh-antigravity` | `http` · `google-generative-sse` · `own` · `sse` · `cloudcode-pa.googleapis.com` | `web-auth`: token-file → `refreshToken` → `clientSecret` → env `ANTIGRAVITY_REFRESH_TOKEN` |
+| `antigravity` | package `@nolit/dsh-antigravity` | `http` · `google-generative-sse` · `own` · `sse` · `daily-cloudcode-pa.googleapis.com` (catalog + generation; `loadCodeAssist` also answers on the control host — measured 2026-11-13: the control host omits every Hydrogen route) | `web-auth`: token-file → `refreshToken` → `clientSecret` → env `ANTIGRAVITY_REFRESH_TOKEN` |
 | `opencode` | package `@nolit/dsh-opencode-v2` | `daemon` · `openai-completions` · `own` · `sse` · `/chat/completions` | `web-auth`: daemon `/api/credential` → `apiKey` → `password` → env `OPENCODE_API_KEY` |
 | `deepinfra` | package `@nolit/dsh-deepinfra` | `http` · `openai-completions` · `own` · `sse` · `api.deepinfra.com/v1/openai` | `api-key`: `apiKey` → env `DEEPINFRA_API_KEY` |
 

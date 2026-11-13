@@ -83,7 +83,7 @@ control, retry policy and attribution headers.
 | Credential | `GET /api/credential` ranking: active **oauth** before **key**; fallback `OPENCODE_API_KEY` | token file `~/.gemini/antigravity-cli/{jetski-standalone-,}oauth-token` + `POST oauth2.googleapis.com/token` refresh | one bearer `DEEPINFRA_API_KEY`, or Settings `role('secret')` field |
 | Control plane | local `opencode serve` daemon (attach first, spawn if needed) | `loadCodeAssist` / `fetchAvailableModels` / `retrieveUserQuotaSummary` | none (pure fetch) |
 | Catalog | durable `opencode-models.json` + `https://opencode.ai/data/index.json` ranking, plan namespacing (`opencode-go/*`) | account model list + quota summary, TTL 15 min | `GET /v1/openai/models` — **public, no key**, 173 entries / 91 chat routes, per-row pricing |
-| Reasoning control | `reasoningEffort` on the route; `#variant` suffix on delegation ids | **separate model ids** per effort (`gemini-3.8-flash-low/-medium/-high`); F-40 in [FAILURE-LEDGER.md](../../docs/FAILURE-LEDGER.md) | `reasoning_effort` ordered ids `none\|minimal\|low\|medium\|high\|xhigh\|max` |
+| Reasoning control | `reasoningEffort` on the route; `#variant` suffix on delegation ids | **separate model ids** per effort, grouped into ONE base model whose `reasoning.efforts` list every served level (measured 2026-11-13: `gemini-4-hydrogen` serves `low/medium/high/**xhigh**`; earlier three-level accounts serve `low/-medium/-high`); F-40 in [FAILURE-LEDGER.md](../../docs/FAILURE-LEDGER.md) | `reasoning_effort` ordered ids `none\|minimal\|low\|medium\|high\|xhigh\|max` |
 | Reasoning channel | `reasoning` events / `reasoning_content` | thinking blocks (not echoed back) | `delta.reasoning_content` → `reasoning-delta` |
 | Usage source | `session export` (v2 emits no `step_finish`) | response usage + quota | trailing usage-only SSE chunk; `stream_options.include_usage` defaults true |
 | Cost source | reported / ledger (`cost.js`, `cost-pill.js`) | account quota, not per-token USD | **derived locally** from catalog `pricing{}`; labelled estimated |
@@ -162,7 +162,8 @@ interface ServiceProtocolDescriptor {
   }
   reasoning: {
     control: 'effort-field' | 'model-id-suffix' | 'ordered-id'
-    ids: string[]                    // ordered opaque ids (N6)
+    ids: string[]                    // ordered opaque ids (N6) — every level the
+                                     // account SERVES, not a fixed three
     channel: string                  // wire field -> reasoning-delta
   }
   usage: { source: string; trailingChunk: boolean }

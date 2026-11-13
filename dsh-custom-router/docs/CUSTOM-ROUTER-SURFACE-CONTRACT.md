@@ -1,14 +1,15 @@
 # Custom Router — Surface Contract (M13–M16) and Provider-Preset Migration
 
 <!-- skeleton:
-version: 0.0.1-rc.1
+version: 0.0.1-rc.2
 kind: spec
 status: draft
-updated: 2026-11-07
-summary: Normative contract for the four surfaces a provider preset must declare (CLI worker, subagent provider, tool/command, skill invocation), plus the measured baseline, the protocol-lane rule (reuse PiAiAdapter for DSH-supported wires, own adapter otherwise), and the migration that folds @nolit/dsh-subagent-local into the provider plugins and then into the router preset layer.
+updated: 2026-11-13
+summary: Normative contract for the four surfaces a provider preset must declare (CLI worker, subagent provider, tool/command, skill invocation), plus the measured baseline, the protocol-lane rule (reuse PiAiAdapter for DSH-supported wires, own adapter otherwise), the corrected position that llm-pi-ai is active by default and the router never forces that row, the API-key policy that keys live in the DSH system credential store, and the migration that folds @nolit/dsh-subagent-local into the provider plugins and then into the router preset layer.
 -->
 
-> Status: **draft, owner decisions recorded 2026-11-07; no code changed by this document.** It names
+> Status: **draft, owner decisions recorded 2026-11-07, D4 corrected and D5 added 2026-11-13; no code
+> changed by this document.** It names
 > only APIs and behaviours that were measured on the running rc.1 host, on the npm tarballs of the
 > official Claude/Codex bundles, or on this workspace's packages. It never restates R0: the router
 > still owns no routing table and never registers an adapter on another plugin's behalf.
@@ -20,12 +21,27 @@ summary: Normative contract for the four surfaces a provider preset must declare
 | D1 | **Integration of already-implemented plugin features comes first.** DSH itself only ships the Claude/Codex CLI surface; Antigravity and OpenCode were built to the same spec. | M13–M16 describe surfaces that already exist in the three tracks; nothing new is invented here. |
 | D2 | **Same-model precedence is the user's toggle in the DSH plugin settings**, not an automatic ranking. | A preset declares its surfaces and lets the settings switch decide; no precedence engine is specified. |
 | D3 | **Outside the usable range, the plugin provides the addition.** | A preset may add surfaces the host does not have; each is declared, gated and disposable. |
-| D4 | **A protocol DSH supports is routed through that supported path**, not through a second parser. `llm-pi-ai` stays disabled; its adapter is imported. | §5 defines the two protocol lanes. |
+| D4 | **A protocol DSH supports is routed through that supported path**, not through a second parser. `llm-pi-ai` is **active by default** (re-enabled 2026-11-08); the router **imports** its adapter and never forces the row on or off. | §5 defines the two protocol lanes. |
 | — | **Retirement on host upgrade is deferred** (owner: not this step). | Recorded in §7 as undecided; no stand-down rule is fixed here. |
+| D5 | **API keys are entered through the DSH system-managed credential store**, not written into a preset or the profile patch in plaintext. | §5.1 states the policy; the preset `auth.sources` already model it. |
 
-Measured reason for D4 (owner statement, confirmed against the package): `llm-pi-ai` pins the model
-catalog that existed when the developer published the release, so it cannot serve a model added
-afterwards. The provider plugins carry a live catalog; the protocol engine is still worth reusing.
+**D4 corrected 2026-11-13.** This row previously read "`llm-pi-ai` stays disabled; its adapter is
+imported", which merged two separate ideas and contradicted the measured live state:
+
+| Idea | Status | Evidence |
+|---|---|---|
+| (a) never build a second parser when DSH supports the wire | **still holds** | this contract, §5 lane A |
+| (b) the `llm-pi-ai` row is disabled | **false since 2026-11-08** | [DSH-HARNESS-POLICY §1.1](../../docs/DSH-HARNESS-POLICY.md); the live patch carries no `llm-pi-ai` disable entry |
+
+Measured 2026-11-13 in `~/.dsh/profiles/web/cordis.patch.yml`: there is **no** `- id: llm-pi-ai`
+patch entry at all — only a comment recording the owner's 2026-11-08 decision. The row is therefore
+at its **bundle default, which is enabled**, with zero configured routes. The router neither
+contributes nor removes that entry: see §5.2.
+
+Measured history for (a): `llm-pi-ai` ships the model catalog that existed when the release was
+published, so it cannot serve a model added afterwards. The provider plugins carry a live catalog;
+the protocol engine is still worth reusing. That is a reason to **import the adapter**, not a reason
+to disable the row.
 
 ## 2. Measured baseline
 
@@ -110,12 +126,74 @@ Normative rules:
 3. **Protocol lane A (DSH-supported wire):** `openai-completions`, `openai-responses`,
    `anthropic-messages`. The adapter is `PiAiAdapter` imported from `@deepseek-ai/dsh-llm-pi-ai`
    (exported symbol; constructed with `{profiles, resolveApiKey, auth, prepareHeaders,
-   resolveAttachments, resolveImageAccess, onReplayDegrade}`). `llm-pi-ai` itself stays disabled.
+   resolveAttachments, resolveImageAccess, onReplayDegrade}`). The import is a **code dependency on
+   the installed package**, not on the row being mounted by this package — `llm-pi-ai` is active by
+   default (D4), but the router does not depend on that and does not enforce it (§5.2).
 4. **Protocol lane B (non-standard wire):** the provider owns an adapter built on the shared stream
    pipe (`@nolit/dsh-custom-router/stream`), e.g. Antigravity's Google SSE, OpenCode's control-plane
    quirks. This is the only place a provider-specific parser is legitimate.
 5. Lane A does **not** import a model catalog from `llm-pi-ai`: the live catalog stays with the
    provider plugin (D4).
+
+### 5.1 API keys — DSH system-managed credential store (D5, 2026-11-13)
+
+**Policy.** A preset never holds a key literal. An API key is entered once and then lives in the
+**DSH system credential store** (`@deepseek-ai/dsh-credentials`, backed by
+`@deepseek-ai/dsh-credentials-local`), keyed by a credential reference. The preset only *declares*
+which source it reads, in precedence order.
+
+Normative rules:
+
+1. **The store is the source of truth.** Reads go through the `credentials` service, whose two key
+   spaces answer two different questions (measured in `dsh-credentials/lib/index.js`):
+   - a **`CredentialRef`** — "what is behind this environment-variable name": the provider-managed
+     store **first**, then ambient fallbacks (process environment, `.env` files);
+   - a **`CredentialKey`** — "what credential does this plugin hold for this id" (an authorization
+     grant has no environment to read from, so the record's presence *is* the fact).
+2. **A secret field is never sent to the browser.** Secret-valued config carries
+   `role('secret')`; the settings service strips it from every wire read and answers a
+   `{paths, set}` sidecar instead, so the UI can render "설정됨 / 미설정" without receiving the
+   value ([`lib/settings-schema.js`](../lib/settings-schema.js)).
+3. **`auth.sources` is the only place a key origin is named**, drawn from
+   `AUTH_SOURCES` (`secret-field` · `env` · `credential-ref` · `token-file` · `daemon-endpoint`) in
+   [`lib/preset-schema.js`](../lib/preset-schema.js). A new preset adds a source entry, not a
+   setter.
+4. **An empty stored value is absent everywhere.** The service's seam-wide rule: `resolve` skips a
+   blank and `describe` reports it unconfigured, so a blank never masquerades as a configured
+   secret. A preset must render that state as *unconfigured*, never as a zero or a fake success.
+5. **Writes go through the service's write path**, not a direct file edit. For a grant the only
+   correct write is a read-decide-replace under one lock (`modifyRecord`), because a token refresh
+   depends on the current value. A caller that overwrites the file directly races every refresh.
+6. **Change notification is event-driven.** Providers emit `credentials/reference-updated` (ref
+   half) and `credentials/record-updated` (record half) only **after** the write or reload
+   committed. A preset that caches a resolved key must listen for these instead of polling.
+7. **Compliance status — measured, not assumed.** The promoted policy is that keys belong in the
+   store. The **live profile has not migrated yet**: `~/.dsh/profiles/web/cordis.patch.yml` still
+   carries the DeepInfra key as a plaintext `apiKey:` field in the vendor row config. That is
+   exactly what rules 1–5 exist to remove; migration is tracked as an open item in
+   [HANDOFF.md](./HANDOFF.md), and this document does not claim the live state is compliant.
+
+Presets whose auth is not a bare key are unaffected: `web-auth` presets read `token-file` /
+`daemon-endpoint` sources (Antigravity, OpenCode) and `none` presets declare no sources at all.
+
+### 5.2 The router does not force the `llm-pi-ai` row
+
+**`llm-pi-ai` is active by default.** The owner re-enabled it on 2026-11-08; the row starts dormant
+with zero routes and `deepseek-account` stays the default route
+([DSH-HARNESS-POLICY §1.1](../../docs/DSH-HARNESS-POLICY.md)).
+
+That status is **the host's, not this package's**. Concretely:
+
+| The router … | Because |
+|---|---|
+| never adds `- id: llm-pi-ai` / `disabled: true` to a profile | forcing the row off would contradict the owner's 2026-11-08 decision |
+| never adds an enabling entry either | the bundle default already enables it; a redundant entry would look like router ownership of a host row |
+| never writes `llm-pi-ai.providers` | route configuration there is the operator's, via Settings → Models |
+| imports `PiAiAdapter` from the package and runs with zero routes configured | lane A needs the **code**, not a mounted row (§5 rule 3) |
+| leaves an operator who disables the row unbroken, for surfaces that do not use lane A | lane B presets never touch it |
+
+If a future host release changes the default to disabled, the router must still not force it:
+the correct action is to report the delta, not to patch the profile.
 
 ## 6. M16 — Skill invocation surface
 
@@ -153,9 +231,10 @@ usage:   {record: UsageReading, plan: PlanVerdict | unavailable}
 Not decided in this step: retirement on host upgrade, the mounted surface (M10), and the skill
 taxonomy for non-CLI providers.
 
-**Data model (2026-11-07):** every preset fills the common model in
+**Data model (2026-11-07; auth policy restated 2026-11-13):** every preset fills the common model in
 [`lib/preset-schema.js`](../lib/preset-schema.js): `kind` (`package` vs JSON `declaration`), `auth`
-(`api-key` / `web-auth` / `local-socket` / `none` with ordered sources) and `endpoint`
+(`api-key` / `web-auth` / `local-socket` / `none` with ordered sources — a key source resolves
+through the DSH credential store, §5.1) and `endpoint`
 (`http` / `local-http` / `daemon`, protocol, route, transport, base URL). Catalog and pricing
 synchronize in three layers — upstream pi-ai snapshot → API/web-auth probe → preset/local override —
 merged field by field with provenance (`lib/catalog.js`); routing resolves a model id by
@@ -232,6 +311,12 @@ existing `cli_worker`/`agy_cli` contract intact. Measured: 151/151 (antigravity)
   `commands.register`, `skills.register`.
 - Protocol lanes: `PROTOCOLS` and the exported `supportedProtocols`/`PiAiAdapter` in the installed
   `dsh-llm-pi-ai` package.
+- `llm-pi-ai` row status (§5.2): `grep -n "pi-ai" ~/.dsh/profiles/web/cordis.patch.yml` — 2026-11-13
+  result: one comment line, no patch entry, therefore the enabled bundle default.
+- Credential store (§5.1): `@deepseek-ai/dsh-credentials` `CredentialProvider` source (the two key
+  spaces, the empty-is-absent rule, `modifyRecord`, `credentials/reference-updated` /
+  `credentials/record-updated`), `@deepseek-ai/dsh-credentials-local` as the provider, and
+  `AUTH_SOURCES`/`role('secret')` in this package.
 - Skill contract: live `cordis inspect` Service `skills`; the validation trap is reproduced in
   `projects/total_skill/src/command.js`.
 

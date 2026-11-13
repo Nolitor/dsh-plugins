@@ -1,12 +1,349 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.11
+version: 0.0.1-rc.13
 kind: report
 status: active
-updated: 2026-11-11
-summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy.
+updated: 2026-11-13
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events).
 -->
+
+## 0.0.1-rc.13 — model-serving list refresh: cache bypass, two buttons, one bus — 2026-11-13
+
+Owner question that started this: 커스텀 라우터 모델서빙 리스트가 왜 업데이트가 안 되고 있는지,
+로직이 애당초 없는 건지. Measured answer: **there was no refresh logic at all.**
+
+### Measured before (live source, 2026-11-13)
+
+| Surface | What it did | Evidence |
+|---|---|---|
+| Models tab (`CustomRouterModels`) | loaded the 3 preset routes ONCE in a `useEffect(..., [])` and never again | `lib/client.src.js` mount effect, single dependency array `[]` |
+| Models tab events | none: `inject` listed `slots, locale, configForms`; `ctx.remote.$on` count was **0** | grep over `lib/client.js` |
+| Models tab timers/focus | none: no `setInterval`/`setTimeout`/`visibilitychange`/`focus` | grep over `lib/client.js` |
+| Models tab manual refresh | none: the toolbar had only search / select-all / clear | rendered tree |
+| Dashboard (`CustomRouterDashboard`) | its own `refreshTick`, refreshed its own feeds only | `setRefreshTick` existed here alone |
+| Vendor routes | TTL caches with no bypass: antigravity 15 min, opencode 5 min, deepinfra 30 min | `catalogTtlMs` / `discoveryCacheMs` / `DEFAULT_CATALOG_TTL_MS` |
+| Vendor force parameter | `?refresh=1` existed only on `opencode plan-usage` and `ranking/refresh` | grep over the three servers |
+| Latent defect | `setReload(read)` passed `read` as a React **updater**, so `reload` became `undefined` and the dashboard header button threw `reload is not a function` on every click | reproduced by the new test, then fixed to `setReload(() => read)` |
+
+### Design (the three structures the owner ordered)
+
+1. **Backend cache bypass** — every vendor model route accepts `?refresh=1` and drops its own
+   cache before reading:
+   - `vendor/antigravity/lib/server.js` `models`: `invalidate()` (the `catalog.invalidate()` seam
+     the adapter already used after `models/apply`), then `catalog.all()`.
+   - `vendor/deepinfra/lib/server.js` `models`: new `invalidateCatalog` dependency, threaded from
+     `vendor/deepinfra/lib/index.js` where the closure cache lives (`cache = undefined`).
+   - `vendor/opencode/lib/http.js` `model-settings`: `await adapter.catalog.refresh()` inside a
+     try/catch — a failed probe must not fail the read; the lifecycle's last good snapshot stays
+     authoritative.
+   - A malformed URL is a plain read in all three (`isForced`/`isForcedRequest` never throw), so
+     the fast path cannot turn a read into a 500.
+2. **A refresh button on BOTH surfaces** — the models tab toolbar gains its own control
+   (`data-action="refresh-models"`), the dashboard header keeps its own; both disable while a
+   refresh is in flight and show the existing `refreshing` locale string.
+3. **One bus keeps them in sync** — `onRefresh`/`requestRefresh` (module-level, exported) is the
+   single announcement point. Each surface subscribes and refreshes itself; neither owns the
+   other. The payload carries `force`: a **button press** is `force: true` (bypass caches), an
+   **event-driven refresh** is `force: false` (re-read what the vendor already revalidated, never
+   spend an upstream request). The host events the standard Models settings section already
+   treats as invalidations now feed the same bus: `llm/adapters-updated`,
+   `llm/models-updated`, `settings/document-updated`, `credentials/record-updated`,
+   `credentials/reference-updated`.
+
+`remote` is now a **declared** inject (`['slots','locale','configForms','remote']`): an
+undeclared service read on a real cordis context throws, so an undeclared read would have left
+every host event unsubscribed while the unit tests stayed green — the same class of defect the
+settings-schema note records for an exported-Config omission.
+
+### Verification
+
+- `npm test`: **507 pass / 0 fail** (was 507 pass before this entry; the count is unchanged
+  because new cases were added while two stale assertions were rewritten).
+- New tests prove each structure rather than asserting intent:
+  - mount load carries **no** `refresh=1`; one `requestRefresh({force:true})` issues exactly
+    three forced `POST`s with body `{}`;
+  - one host event (`llm/models-updated`) re-reads three routes with **no** `refresh=1`;
+  - a single announcement driven through both mounted surfaces refreshes the models tab AND the
+    dashboard feeds (the antigravity route is read once per surface, both forced);
+  - the dashboard header button publishes a forced refresh;
+  - vendor units: `?refresh=1` invalidates once and a plain read invalidates zero times
+    (antigravity, deepinfra), `?refresh=1` probes once and a plain read probes zero times, and a
+    failing forced probe still answers 200 (opencode).
+- The stub React in `test/client.test.mjs` was made dependency-aware (a real `useEffect`
+  contract) and two surfaces now get separate hook stores; without that, a re-render re-issued
+  every fetch and these tests could not distinguish "one announcement = one refresh" from a
+  render loop.
+
+### Follow-up defect found from the owner's live check (same session)
+
+The owner reported three things after the patch. Measured answers:
+
+1. **"안티그래비티 탭에 하이드로겐 모델이 없다"** — correct, and NOT a refresh failure.
+   `gemini-4-hydrogen` is an **OpenCode** catalog route (`opencode/gemini-4-hydrogen`). The
+   Antigravity upstream (`cloudcode-pa:v1internal:fetchAvailableModels`, HTTP 200, live token)
+   returns **20 models and none of them is hydrogen**: `gemini-3.1-flash-lite`,
+   `gemini-3.8-flash-tiered`, `gemini-2.5-pro`, `gemini-2.5-flash{,-lite,-thinking}`,
+   `gemini-3-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-image`,
+   `claude-sonnet-5-5-{low,medium,high}`, `claude-opus-5-5-{low,medium,high}`, `gpt-oss-120b`.
+   Running the real `parseCatalog` → `groupModels` over that payload yields the same two groups
+   the panel shows and no hydrogen. A refresh can only surface what the upstream serves.
+2. **"오픈코드 모델은 업데이트 된거 맞아?"** — yes. `opencode-models.json` holds 58 probed rows
+   (savedAt 2026-11-12T23:53Z) including `opencode/gemini-4-hydrogen` and `-carbon`, and
+   `?refresh=1` genuinely calls `CatalogLifecycle.refresh()` (proven by the probe-count test).
+3. **"딥인프라 할인되는 모델과 할인 없는 모델 모두 할인으로 표시되는 버그"** — a REAL bug, fixed here.
+
+#### The promotion bug
+
+`PriceBlock` computed the badge percentage as:
+
+```js
+const promoPercent = price !== null && Number.isFinite(Number(price.promoPercent))
+  ? Number(price.promoPercent) : null
+```
+
+`price.promoPercent` is `null` for a full-price row, and **`Number(null) === 0`, which is
+finite** — so the null survived as `0`, `promoPercent !== null` passed, and every row rendered a
+`0% 할인` badge. The footer's `promoCount` used the same coercion, so it counted every row.
+Measured on the live catalog: **168 of 177** entries published no `metadata.discount`, 91 chat
+rows of which only **8** carry a real one — the panel badged all 91.
+
+Fixed with one shared helper `promoPercentOf(price)` (exported for the regression test) used by
+BOTH the row badge and the footer count: a percentage exists only when the value is a finite
+number **greater than 0**; `null`/`undefined`/`0`/`"0"`/`NaN`/negative are "no promotion", never
+zero. The server side was already correct (`promotionOf()` returns `null` for
+`discount: 0` and for a missing discount — verified against the same live payload), so the defect
+was client-only.
+
+Verified against the real 177-entry catalog: live chat rows 91, provider-discounted 8, rows that
+now badge 8, and the one `discount: 0` row badges nothing.
+
+Suite: **509 pass / 0 fail** (+2 regression gates: the helper's null/zero/NaN/negative cases, and
+a render test where one discounted and one full-price row must produce exactly one badge and a
+footer count of 1).
+
+### ROOT CAUSE of the missing Hydrogen — my measurement was wrong, the code was too
+
+The owner's screenshot showed a full Antigravity list including Hydrogen, which contradicted my
+"the upstream does not serve it" claim. Re-measuring found **two** separate defects in my own work:
+
+1. **My probe used the wrong host.** I hardcoded `cloudcode-pa.googleapis.com`; the plugin's
+   `DEFAULT_BASE_URL` is `daily-cloudcode-pa.googleapis.com`. Measured side by side on the same
+   token:
+
+   | Host | Models | Hydrogen |
+   |---|---|---|
+   | `cloudcode-pa.googleapis.com` | 26 | **none** |
+   | `daily-cloudcode-pa.googleapis.com` | 31 | **4** (`-low/-medium/-high/-xhigh`) |
+
+   Five consecutive calls to the daily host returned 31 models and 4 Hydrogen ids every time, so
+   this is not upstream flapping.
+
+2. **The plugin itself had the same bug.** `createCatalog().rpc()` read
+   `configValue(config,'controlBaseUrl') || 'https://cloudcode-pa.googleapis.com'` — a hardcoded
+   literal that **ignored `baseUrl` entirely**, even though `settings.js` exports
+   `DEFAULT_CONTROL_BASE_URL` and `DEFAULT_BASE_URL`. So the catalog was fetched from the host
+   that does not serve Hydrogen: `createCatalog().all()` returned 19 rows with no Hydrogen while
+   a direct probe of the daily host returned 31 ids / 23 conversation models / 4 Hydrogen.
+   `agy models` printed Hydrogen because the CLI uses the daily host.
+
+   Fixed: resolution order is now explicit `controlBaseUrl` → `baseUrl` → `DEFAULT_CONTROL_BASE_URL`.
+   After the fix `createCatalog().all()` returns **23 rows including all four Hydrogen levels**,
+   and the `/models` route groups them as ONE `gemini-4-hydrogen` row with 4 variants.
+
+### Three more defects found by that re-measure
+
+| # | Defect | Evidence | Fix |
+|---|---|---|---|
+| A | `splitEffort` only knew `low/medium/high` | `gemini-4-hydrogen-xhigh` became its OWN base row beside `gemini-4-hydrogen`, so one model appeared twice and its checkbox wrote an incomplete variant set | the pattern now covers `xhigh/max/minimal/none/maximal`; Hydrogen collapses to one row with 4 variants |
+| B | `EFFORT_NAMES` had 3 levels | an `xhigh` variant would render as the raw id | added the levels the account serves |
+| C | a withdrawn route was offered as a model | `gemini-4-carbon-disabled` carries a `displayName` but no quota | `-disabled` ids are filtered out |
+
+### Test-suite isolation defect (pre-existing, blocked a clean run)
+
+`vendor/opencode` failed 6–8 tests depending on the machine, with or without this session's
+changes: `adapterFor()` and `makeAdapter()` omitted `catalogPath`, so the store fell back to
+`$DSH_HOME/cache/opencode-models.json` — **the operator's live catalog**. Tests then asserted
+against whatever the live probe had last saved (`resolveModel` read `1000000` from the live
+snapshot vs `32768` from the fixture) and the "one discovery probe" count was `0` because
+`discover()` answered from a seeded live snapshot. Both helpers now use a throwaway
+`catalogPath`. `node scripts/check-dsh-isolation.mjs` only inspects `dsh` launchers, which is why
+this slipped through.
+
+Suite totals after every fix: **antigravity 180, deepinfra 217, opencode 546, router 509 — all
+pass, 0 fail.**
+
+### Owner correction: I widened a regex instead of honouring the F-40 contract
+
+The owner's objection, and it was right: 안티그래비티는 모델 추론옵션이 모델과 동일하게 리스트로 떠서 각
+모델을 대분류하고 추론을 선택하면 해당 모델을 선택할 수 있게 설정해야 하는데, 기존 로직을 무시하고 그냥 xhigh로
+단순 지정했다.
+
+What I had done was add `xhigh` to `splitEffort`'s regex and stop there. That made the panel **show**
+an XHigh row, but the repository already had a written contract for this exact problem — **F-40** in
+`docs/FAILURE-LEDGER.md`, restated in `docs/CUSTOM-ROUTER-PROTOCOL-STANDARD.md` §4.1:
+
+| F-40 requirement | What I had done |
+|---|---|
+| Group suffixed ids into **one base model** | regex widened only |
+| Expose the suffixes as `reasoning.efforts` | not checked |
+| **Reverse the mapping on the way out** | not checked — and it was broken |
+
+Concretely, `wire.js:modelForEffort()` did
+`effort === 'xhigh' || effort === 'max' ? 'high' : effort`, so selecting **XHigh sent High over the
+wire**. Verified before the fix:
+
+```
+effort low      -> gemini-4-hydrogen-low
+effort medium   -> gemini-4-hydrogen-medium
+effort high     -> gemini-4-hydrogen-high
+effort xhigh    -> gemini-4-hydrogen-high   <-- accepted but not honoured
+```
+
+`EFFORT_ORDER` also still held three entries, so `indexOf('xhigh')` was `-1` and sorted the highest
+level ahead of `low`; and the base name was never trimmed of its level, so the row read
+`Gemini 4 Hydrogen (XHigh)` instead of grouping as one category.
+
+Fixed per the contract:
+
+- `EFFORT_ORDER` and the display-name trim now cover `minimal/none/low/medium/high/xhigh/maximal/max`.
+- `modelForEffort()` collapses `xhigh`/`max` **only when the catalog does not carry that exact
+  level**, so a three-level account keeps the old safe folding and Hydrogen round-trips.
+- Verified output: one `Gemini 4 Hydrogen` row, `reasoning.efforts` =
+  `low/medium/high/xhigh` (names Low/Medium/High/XHigh), `defaultEffort: low` (the owner's
+  lowest-level rule, not the first catalog row).
+
+Four new F-40 regression tests: every served level round-trips, an unserved level still folds, the
+grouped row advertises four ordered efforts with a trimmed name, and an unlisted level can never
+sort ahead of a known one.
+
+**Documentation was also stale, which the owner called out.** Updated:
+`docs/CUSTOM-ROUTER-PROTOCOL-STANDARD.md` §2 (the reasoning row now says "every level the account
+serves", cites the measured Hydrogen xhigh case) and §4 (`reasoning.ids` is not a fixed three);
+`docs/MODEL-LIST-REFRESH.md` gains §6a with the full contract and both defects.
+
+### Owner audit: three things I had claimed but not done
+
+The owner's question — 딥인프라도 버그 수정하지 않았어? 근데 왜 그것과 관련한거나 오픈코드나 딥인프라
+새로고침도 없어서 실제 업데이트 안된 부분에 대해서도 기록하지 않았지? 그리고 프리셋이 계속 추가될텐데 3개만
+업데이트되고 신규로 추가되는 프리셋은 업데이트 또 별도로 해야하나? — exposed three separate gaps.
+
+**1. "Verified" meant "fixture-verified".** The `?refresh=1` bypass for DeepInfra and OpenCode had
+unit tests over stub catalogs. A stub cannot prove that a network fetch, a daemon probe or a
+durable cache file was re-read; only the Antigravity path had been re-measured live (and only
+because an earlier mistake forced it). The document said "verified" without marking the difference.
+
+Now measured live — `npm run verify:refresh` (`scripts/verify-refresh-routes.mjs`) boots the real
+`web` profile into a throwaway `DSH_HOME`, reads the host's own route table, and calls each route
+plain and forced:
+
+| Preset | Plain | Forced | Content |
+|---|---|---|---|
+| antigravity | 200, 10 grouped rows | 200, 10 | bases include **`gemini-4-hydrogen`** |
+| opencode | 200, 32 rows | 200, 32 | all `go`; Hydrogen absent (Zen, `otherPlanCount: 26`) |
+| deepinfra | 200, 91 rows | 200, 91 | **8 discounted / 83 list price**, `promotionCount: 8` |
+
+That last row is also the first live confirmation that the promotion fix works end to end: before
+it, all 83 full-price rows badged `0%`.
+
+**2. The "a refresh does not fix this" cases were never recorded.** They are now, in
+`docs/MODEL-LIST-REFRESH.md` §7: a model absent from the **prompt** while present in the **tab** is
+an `enabledModels` fact (`catalog.list()` filters, `catalog.all()` does not); OpenCode's Hydrogen is
+a **plan** fact; and a preset with no tab/usage card is a **registry** fact.
+
+**3. Adding a preset still touches five places, two of them silently.** Measured by reading every
+consumer of both registries: `lib/presets.js`, `lib/client.src.js` `MODEL_PRESETS`,
+`lib/client.src.js` `fetchUsageFeeds` (a literal array of three vendors), the expected-id array in
+`test/inventory-metadata.test.mjs:151`, and the locale tables. Forgetting #2 or #3 produces **no
+error at all** — the preset is simply never rendered and never counted. `fetchUsageFeeds` is the
+worst: it also decides which routes a refresh touches, so a fourth preset would be invisible to the
+refresh contract too.
+
+Registered as [docs/PRESET-REGISTRY-STANDARD.md](docs/PRESET-REGISTRY-STANDARD.md): the measured
+five-place audit, the normative descriptor contract (`catalogRoute`, ordered `usageRoutes`,
+`load`/`saveValue`, `metered`, …), and the ordered six-step plan to make a preset a one-place
+addition. Per the owner's decision this round, the design is **recorded, not implemented**; the
+interim rule is "touch all five and say so in the CHANGELOG".
+
+### Status
+
+`applied pending restart` — the rebuilt `lib/client.js` and the three vendor libraries are on
+disk; the running `dsh-web.service` still serves the previous build until it is restarted (owner
+action; not restarted here). The promotion fix is client-only, so it reaches the page with the
+same restart (or a client-bundle HMR reload).
+
+## 0.0.1-rc.12 — two-track plan evidence — 2026-11-12
+
+Owner correction, in two steps:
+
+> billing_source는 요청 다 끝나고 응답 와이어에 찍히는 **사후 데이터**잖아 …
+> 첫 요청 전에도 동작할 수 있게 [프로필/토큰 메타데이터 기반 기본 플랜 정의 + 사후
+> billing_source로 실시간 보정/동기화(Sync)] **투 트랙**으로 설계해야지.
+
+> 사용자에게 플랜을 1차적으로 받고 이후에 보정치가 생기면 **사용자 동의 후** 요금제를
+> 바꿔야 할거 아니냐
+
+An earlier attempt in this session derived the account tier from the durable cost ledger.
+That was wrong: the ledger is empty on a cold start, so a pre-dispatch verdict would have had
+no input at all, and on a warm profile it would have rewritten a decision already taken. The
+ledger-based module was deleted, `lib/plan.js` was reverted, and the design was rebuilt around
+when each piece of evidence actually exists.
+
+### Measured: no pre-request source names a tier
+
+| Candidate | Result |
+|---|---|
+| Console OAuth token | opaque `st_…`, 39 chars, not a JWT |
+| `credential.json` metadata | `type, server, access, refresh, expires, accountID, email, orgID, orgName` — no plan |
+| `GET /zen/go/v1/usage` | 200, `{rolling,weekly,monthly}` — proves a window set exists, names no tier |
+| `/zen/go/v1/{subscription,plan,plans,billing,account,me,limits}` | all 404 |
+| `/zen/v1/{usage,subscription,me}` | all 404 |
+| `/console/api/v2/{me,orgs,members,subscription,billing,plan,usage}` | all 404 |
+| `/console/api/orgs` | 200, no plan field |
+| MCP `get_context` / `get_usage` / tool list (11 tools) | no plan anywhere; `budgets: []` |
+
+### Track A — declared baseline judges before dispatch
+
+`judgePlan()` now accepts the operator's declaration as the pre-dispatch basis and tags the
+verdict: `degraded[]` records that the tier is *declared*, not measured. Nothing declared and
+nothing measured is `unknown`, never a guessed `match`.
+
+### Track B — the receipt proposes, consent applies
+
+New `proposeCorrection({declaredPlan, billingSources, sampleCount})` returns
+`{status: 'none'|'agree'|'propose', proposal: {field:'activePlan', from, to, requiresConsent:true}}`.
+A receipt can therefore never become the account tier inside the verdict; the only path into the
+declaration is an operator-consented `settings.update` on the row's own volatile field.
+
+**Live case this closes:** the profile declares `activePlan: go` while 9279 of 9279 sourced
+requests billed as `go-plus`, and the documented-limit check puts `kimi-k3.1-pro` at 314% of Go
+but 78.5% of Go Plus. That now surfaces as a proposal, and nothing changes until it is applied.
+
+`lib/plan.js` no longer derives `accountPlan` from `billingSources` at all.
+
+### Test scope correction — the peer test no longer reaches into a sibling track
+
+`test/presets.test.mjs` compared this package's version against
+`../../dsh-opencode-v2/package.json`, a **sibling track**. That coupled every router `rc` bump
+to an edit outside this track's boundary, which the single-writer rule
+(`docs/RULES.md` §3.2) forbids — the router could not ship a new rc without an unauthorized
+write to another package. Owner instruction 2026-11-12: narrow the test to this track.
+
+The check now covers the three vendored providers this package actually owns
+(`vendor/antigravity`, `vendor/opencode`, `vendor/deepinfra`, all part of
+`@nolit/dsh-custom-router`). Cross-track drift stays `verify:presets`' job, which boots the
+real profile and diffs the live registries instead of reading a neighbour's manifest.
+
+Non-vacuity proven: setting `vendor/deepinfra` back to `rc.11` fails the test
+(`1 fail`), removing the mutation passes again. `dsh-opencode-v2/package.json` was never
+modified in this session.
+
+### Verification
+
+- `npm test` → **502/502** (was 493 before this session; +9 two-track tests)
+- `test/plan.test.mjs` → 21 tests, including "a receipt does NOT become the account tier" and
+  "a cold start has no receipt and proposes nothing"
+- `npm run check` → pass; `docs:check` → 1494 links, 6 indexes OK
 
 ## 0.0.1-rc.11 (cont.) — border fallback — 2026-11-11
 

@@ -50,6 +50,10 @@
 
 ## report
 
+- **1.0** · measured · 2026-11-13 · [docs/DSH-RC2-PLUGIN-DELTA.md](./DSH-RC2-PLUGIN-DELTA.md)
+  Measured diff between the installed 0.2.2-rc.1 runtime and the published 0.2.2-rc.2 release, limited to plugin/extension surfaces, with per-track impact, breaking-change exposure, and the Korean locale coverage gap.
+- **1.0** · active · 2026-11-13 · [docs/DSH-UPDATE-ISSUE.md](./DSH-UPDATE-ISSUE.md)
+  What breaks or silently degrades when the DSH host version moves — the measured version pins across every tracked plugin, the peer/schemas/engine ranges that already disagree with the running host, the cordis and schemastery coupling, the client-bundle rebuild boundary, and the infrastructure dependencies (Lightpanda daemon, dsh-web service, credential store, provider CLIs) that an upgrade must re-verify rather than assume.
 - **1.1** · active · 2026-11-10 · [docs/HANDOFF.md](./HANDOFF.md)
   Workspace-level progress roll-up — per-track state, the ordered cross-track next actions, the owner decisions that block them, and the measured gates that say whether a track is releasable.
 - **1.2** · active · 2026-11-08 · [docs/PLUGIN-CONSOLIDATION.md](./PLUGIN-CONSOLIDATION.md)
@@ -126,19 +130,19 @@
 - **1.0** · active · 2026-11-06 · [archive/dsh-subrouter/docs/INDEX.md](../archive/dsh-subrouter/docs/INDEX.md)
   Generated per-subproject index for @nolit/dsh-subrouter: every document this track owns, one line each.
 
-## boot (newest 5 of 54)
+## boot (newest 5 of 55)
 
 - **active** · INDEX.md · [card](../bootcards/INDEX.md)
   Newest-first list of dated boot cards.
+- **active** · 2026-11-13T0949+0900.md · [card](../bootcards/2026-11-13T0949+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-13T0949+0900. Older cards are historical.
 - **active** · 2026-11-10T2257+0900.md · [card](../bootcards/2026-11-10T2257+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-10T2257+0900. Older cards are historical.
 - **active** · 2026-11-10T1954+0900.md · [card](../bootcards/2026-11-10T1954+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-10T1954+0900. Older cards are historical.
 - **active** · 2026-11-08T2020+0900.md · [card](../bootcards/2026-11-08T2020+0900.md)
   Next-section work order. Each track now owns a docs/HANDOFF.md with ordered stages; this card carries the priority order, the owner-only blockers, and the measured gates for the 2026-11-08 session.
-- **active** · 2026-11-08T0902+0900.md · [card](../bootcards/2026-11-08T0902+0900.md)
-  Session card. Anthropic Messages protocol lane (shared hooks + DeepInfra direct route, opt-in) and CLI-subagent patches (model selection, usage ledger, absolute path) landed; live profile has anthropicRoute:true and the restart is the owner's. Lists every unresolved item with its measured state.
 
 ---
 
-37 workspace docs (54 boot cards), 0 with problems, 6 subprojects.
+39 workspace docs (55 boot cards), 0 with problems, 6 subprojects.

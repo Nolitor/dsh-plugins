@@ -5,7 +5,7 @@ version: 1.1
 kind: report
 status: active
 updated: 2026-11-11
-summary: Stage-by-stage handoff for @nolit/dsh-sidebar-manager at 0.0.1-rc.1 — the token-stylesheet migration, the drift gate that must run before any version-up, the version/CHANGELOG mismatch, and the open UI audit items from the 2026-11-11 /ui review (hairline tokens, derived font steps, CJK wrapping, row action order).
+summary: Stage-by-stage handoff for @nolit/dsh-sidebar-manager at 0.0.1-rc.1 — the token-stylesheet migration, the drift gate that must run before any version-up, the version/CHANGELOG mismatch, and the open UI audit items from the 2026-11-11 /ui review (hairline tokens, derived font steps, CJK wrapping, row action order), plus the deferred toast elevated-surface decision (D1).
 -->
 
 > History lives in `CHANGELOG.md`, which is **not listed in this package's `files[]`** (see S1).
@@ -118,6 +118,16 @@ in the rule, not in the code (`skills/ui` commit `1a8f87b`, ledger row `host-dri
 4. **B1** — widen the interval between group cards, keep the row interval tight.
 5. **A4 + A5** — validate `group.color` against the label tokens or map it to one; replace
    `opacity:.75` with a label token.
+
+### 5.5 Open — elevated-surface spec on the toast (deferred, owner-scoped)
+
+| # | Item | Where | Measured |
+| :-- | :--- | :--- | :--- |
+| D1 | Toast pairs a hairline border with a shadow; `docs/web-styling.md` requires elevated surfaces to set `border: 0` and take `box-shadow: var(--dsw-elevation-panel)` (the 0.5px stroke is the shadow's first layer). Decide whether `.smNotice` should move to `border:0` + `--dsw-elevation-panel`, or stay a bordered non-elevated notice. | `.smNotice` `lib/client.js` 664 | measured 2026-11-11: `border:var(--dsh-hairline-width,.5px) solid var(--dsw-alias-settings-card-stroke)` **and** `box-shadow:var(--dsw-shadow-lv2)` in one rule — exactly the pairing the spec rejects. The legacy `--dsw-shadow-lv2` is not from the elevation family (`--dsw-elevation-panel` / `-prominent` / `-soft` all exist and are unused here). |
+
+Owner disposition (2026-11-11): this toast is `dsh-sidebar-manager`'s own action-feedback surface,
+so it is this plugin's isolated debt — not a shared-host concern. Recorded here so it is not lost
+with a chat scrollback; **no code change has been made for it.**
 
 Each of these needs a `test/*.test.mjs` case in the same change, per the existing contract-test
 pattern (the 2026-11-03 typography migration set it).
