@@ -2,16 +2,23 @@
  * Provider driver contract — the single shape every provider driver must satisfy.
  *
  * A driver is declarative: descriptor data, pure hooks, surface names, and the
- * activation switches that mount it. This module is a leaf — it imports nothing,
- * so a provider adapter can depend on it without creating a cycle.
+ * activation switches that mount it. Its one dependency is the L1 usage writer,
+ * and only for a NAME LIST: `totalFormula` must be validated against the formulas
+ * that actually have an implementation, so a descriptor can never declare a
+ * convention the pipe then refuses to apply. (Measured: this module used to keep
+ * its own list, `['prompt+output', 'gemini']`, which matched neither the writer's
+ * two names nor the live Anthropic descriptor — so `defineProviderDriver`
+ * rejected Anthropic and Antigravity while accepting a name the writer threw on.)
  *
  * Hooks must be PURE: no I/O (no filesystem, network, process or clock reads),
  * no mutation of shared state, and they never receive ctx. A hook slot that is
  * present but not a function is rejected here, not at call time.
  */
 
+import { ALL_FORMULAS } from '../stream/usage.js'
+
 const TOOL_CALL_SHAPES = Object.freeze(['fragmented', 'complete'])
-const TOTAL_FORMULAS = Object.freeze(['prompt+output', 'gemini'])
+const TOTAL_FORMULAS = ALL_FORMULAS
 const MALFORMED_POLICIES = Object.freeze(['fail', 'skip'])
 const AUTH_MODES = Object.freeze(['web-auth', 'api-key', 'daemon'])
 const OPTIONAL_HOOKS = Object.freeze([

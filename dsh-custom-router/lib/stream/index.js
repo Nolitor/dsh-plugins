@@ -19,14 +19,23 @@
  * @module @nolit/dsh-custom-router/stream
  */
 
-import { abortedCompletion, CODES, cutCompletion, emptyCompletion, fail } from './failure.js'
+import { abortError, abortedCompletion, CODES, cutCompletion, emptyCompletion, fail } from './failure.js'
 import { readSseEvents } from './sse.js'
 import { usageFrom as defaultUsageFrom } from './usage.js'
 import { finishReasonFor } from './wire.js'
 
-export { CODES, abortedCompletion, cutCompletion, emptyCompletion, fail } from './failure.js'
+export { ABORT_MESSAGE, CODES, abortError, abortedCompletion, cutCompletion, emptyCompletion, fail } from './failure.js'
 export { DONE, findRecordBoundary, readSseEvents } from './sse.js'
-export { TOTAL_FORMULAS, usageFrom, usageFromProjection } from './usage.js'
+export {
+  ADDITIVE_FORMULA,
+  ALL_FORMULAS,
+  FORMULA_ALIASES,
+  TOTAL_FORMULAS,
+  resolveFormula,
+  usageFrom,
+  usageFromAnthropic,
+  usageFromProjection,
+} from './usage.js'
 export { count, finishReasonFor } from './wire.js'
 
 /**
@@ -333,11 +342,4 @@ export async function* normalizeStream(options = {}) {
       argumentsDelta: delta,
     }
   }
-}
-
-/** @returns an `AbortError`-shaped error. */
-function abortError() {
-  const error = new Error('the stream was aborted')
-  error.name = 'AbortError'
-  return error
 }

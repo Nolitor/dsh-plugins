@@ -21,8 +21,9 @@
  * @module @nolit/dsh-custom-router/stream/anthropic
  */
 
-import { CODES } from './failure.js'
-import { count, finishReasonFor } from './wire.js'
+import { abortError, CODES } from './failure.js'
+import { usageFromAnthropic } from './usage.js'
+import { finishReasonFor } from './wire.js'
 
 /**
  * The pipeline descriptor for Anthropic's wire.
@@ -354,40 +355,12 @@ export function mapAnthropicFinish(stopReason) {
 /**
  * Project accumulated Anthropic token counts onto the host usage shape.
  *
- * Anthropic's `input_tokens` already EXCLUDES cache, so nothing is subtracted
- * here; adding cache on top is the correction, not the double count. `total` is
- * reported only when the provider's own total agrees with `input+cache+output`,
- * so a mismatch is a visible omission rather than a silently wrong number.
- *
- * @param raw - `{ input, cacheRead, cacheWrite, output, total? }`; every field
- *   optional, values are validated as non-negative integers.
- * @param options - accepted for `hooks.usageFrom(raw, options)` symmetry; the
- *   Anthropic formula is fixed by the descriptor, so it is not consulted.
- * @returns `{ inputTokens, cacheReadTokens?, cacheWriteTokens?, outputTokens, totalTokens? }`,
- *   or `undefined` when no field carries a usable count.
+ * Re-exported from {@link module:@nolit/dsh-custom-router/stream/usage}: the
+ * writer is the shared one, so this module keeps no accounting of its own. The
+ * additive cache convention is declared by the descriptor's
+ * `totalFormula: 'input+output+cache'`, not by a private function here.
  */
-export function usageFromAnthropic(raw = {}, options) {
-  if (raw === null || typeof raw !== 'object') return undefined
-
-  const input = count(raw.input)
-  const cacheRead = count(raw.cacheRead)
-  const cacheWrite = count(raw.cacheWrite)
-  const output = count(raw.output)
-  if (input === undefined && cacheRead === undefined && cacheWrite === undefined && output === undefined) {
-    return undefined
-  }
-
-  const usage = { inputTokens: input ?? 0 }
-  // A cache count of zero is omitted: the host treats the field as "this turn
-  // used the cache", not as a measurement of zero.
-  if (cacheRead !== undefined && cacheRead > 0) usage.cacheReadTokens = cacheRead
-  if (cacheWrite !== undefined && cacheWrite > 0) usage.cacheWriteTokens = cacheWrite
-  usage.outputTokens = output ?? 0
-
-  const total = (input ?? 0) + (cacheRead ?? 0) + (cacheWrite ?? 0) + (output ?? 0)
-  if (raw.total === total) usage.totalTokens = total
-  return usage
-}
+export { usageFromAnthropic }
 
 /** The hook set the shared pipe consumes for `protocol: 'anthropic-messages'`. */
 export const ANTHROPIC_HOOKS = Object.freeze({
@@ -606,9 +579,4 @@ async function* chunksOf(source) {
   if (typeof body[Symbol.asyncIterator] === 'function') {
     for await (const chunk of body) yield chunk
   }
-}
-
-/** An abort that the shared pipe recognises as a caller cancellation. */
-function abortError() {
-  return Object.assign(new Error('request cancelled by the caller'), { name: 'AbortError' })
 }

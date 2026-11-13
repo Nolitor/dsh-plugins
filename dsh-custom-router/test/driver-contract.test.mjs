@@ -250,6 +250,13 @@ test('the module imports nothing from index.js, presets.js or vendor', async () 
   const source = await readFile(new URL('../lib/driver/contract.js', import.meta.url), 'utf8')
 
   assert.doesNotMatch(source, /lib\/index|lib\/presets|vendor\//)
-  assert.doesNotMatch(source, /^\s*import\s/m)
   assert.doesNotMatch(source, /\brequire\s*\(/)
+
+  // Exactly ONE import is allowed, and only to share the formula vocabulary:
+  // `totalFormula` must be validated against the formulas `usage.js` actually
+  // implements, so the two lists cannot drift apart again. Any other import
+  // reintroduces the dependency the leaf rule exists to prevent.
+  const imports = (source.match(/^\s*import\s.*$/gm) ?? []).map((line) => line.trim())
+  assert.deepEqual(imports, ["import { ALL_FORMULAS } from '../stream/usage.js'"])
+  assert.doesNotMatch(source, /from '(?!\.\.\/stream\/usage\.js')/)
 })

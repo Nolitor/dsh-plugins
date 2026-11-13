@@ -79,7 +79,13 @@ test('zero cache fields are omitted instead of emitted as zero', () => {
 
 test('an unknown formula is refused instead of quietly defaulting', () => {
   assert.throws(() => usageFrom(openAiShape(), { formula: 'invented' }), TypeError)
-  assert.deepEqual(Object.keys(TOTAL_FORMULAS), ['prompt+output', 'prompt+output+reasoning'])
+  // Three first-class conventions, one per live protocol: OpenAI, Anthropic and
+  // Gemini. Aliases (`openai`, `gemini`) resolve onto these, they are not extras.
+  assert.deepEqual(Object.keys(TOTAL_FORMULAS), [
+    'prompt+output',
+    'prompt+output+reasoning',
+    'input+output+cache',
+  ])
 })
 
 test('a provider with its own field names projects onto the same writer', () => {

@@ -81,3 +81,25 @@ export function cutCompletion(cause = {}) {
 export function abortedCompletion(message = 'request cancelled by the caller') {
   return { type: 'finish', reason: { kind: 'aborted', failure: fail(CODES.ABORTED, message) } }
 }
+
+/** The one abort message the shared pipe raises. */
+export const ABORT_MESSAGE = 'the stream was aborted'
+
+/**
+ * Build the `AbortError` this pipe throws when a caller's signal is aborted.
+ *
+ * One factory, one message, one shape across `index.js`, `sse.js` and
+ * `anthropic.js`: those three each carried their own copy and one of them used a
+ * different message, so the same cancellation surfaced differently depending on
+ * which layer noticed it first. `error.name === 'AbortError'` is the contract the
+ * pipe and `lib/retry.js` both recognise, so it is set explicitly rather than
+ * relying on `DOMException`.
+ *
+ * @param message - operator-facing detail; defaults to {@link ABORT_MESSAGE}.
+ * @returns an `AbortError`-shaped `Error`.
+ */
+export function abortError(message = ABORT_MESSAGE) {
+  const error = new Error(message)
+  error.name = 'AbortError'
+  return error
+}

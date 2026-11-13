@@ -18,6 +18,8 @@
  * @module @nolit/dsh-custom-router/stream/sse
  */
 
+import { abortError } from './failure.js'
+
 /** The literal payload that ends an OpenAI-compatible stream. */
 export const DONE = '[DONE]'
 
@@ -170,11 +172,4 @@ function decodeRecord(record, malformed) {
     error.raw = joined.slice(0, 400)
     throw error
   }
-}
-
-/** @returns an `AbortError`-shaped error. */
-function abortError() {
-  const error = new Error('the stream was aborted')
-  error.name = 'AbortError'
-  return error
 }
