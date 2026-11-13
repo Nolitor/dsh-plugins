@@ -1,14 +1,78 @@
 # Changelog — @nolit/dsh-antigravity
 
 <!-- skeleton:
-version: 1.3
+version: 1.4
 kind: report
 status: active
-updated: 2026-11-10
+updated: 2026-11-13
 summary: Engineering history for @nolit/dsh-antigravity, including the rc.6 fix for empty stored answers and the route-gated usage chip. Created 2026-11-05 by merging the CLI worker surface of @nolit/dsh-antigravity-cli with the HTTP model route proven in @nolit/dsh-antigravity-directsdk, plus a settings section, a usage chip and per-surface switches.
 -->
 
-Current version: `0.0.1-rc.11`
+Current version: `0.0.1-rc.12`
+
+## 0.0.1-rc.12 — 2026-11-13 (router peer rc.13)
+
+### The catalog was fetched from the wrong cloudcode host
+
+`createCatalog().rpc()` used `configValue(config,'controlBaseUrl') || 'https://cloudcode-pa.googleapis.com'`.
+That hardcoded literal ignored `baseUrl` (whose default is
+`daily-cloudcode-pa.googleapis.com`, exported as `DEFAULT_BASE_URL`) and
+`DEFAULT_CONTROL_BASE_URL` was never imported. Measured on the same token, 2026-11-13:
+
+| Host | Models | Hydrogen |
+|---|---|---|
+| `cloudcode-pa.googleapis.com` | 26 | none |
+| `daily-cloudcode-pa.googleapis.com` | 31 | 4 (`-low/-medium/-high/-xhigh`) |
+
+Five consecutive daily-host calls returned 31/4 each time. Consequence: `catalog.all()` returned
+**19** rows with no Hydrogen, while `agy models` (which uses the daily host) printed all four
+Hydrogen levels. Resolution order is now `controlBaseUrl` → `baseUrl` → `DEFAULT_CONTROL_BASE_URL`;
+`catalog.all()` returns **23** rows including Hydrogen, grouped as one row with 4 variants.
+
+### Three grouping defects the same re-measure exposed
+
+- `splitEffort` only recognised `low|medium|high`, so `gemini-4-hydrogen-xhigh` became its own
+  base row beside `gemini-4-hydrogen` (one model shown twice, an incomplete variant write). The
+  pattern now covers `xhigh|max|minimal|none|maximal`.
+- `EFFORT_NAMES` listed three levels; added the rest so an `xhigh` variant is not rendered by id.
+- `parseCatalog` accepted `gemini-4-carbon-disabled` (a `displayName` but no quota); `-disabled`
+  ids are now filtered.
+
+### F-40 was not honoured (owner correction, same session)
+
+Adding `xhigh` to `splitEffort`'s pattern was not enough: F-40 requires the suffixed ids to group
+into ONE base model, expose the suffixes as `reasoning.efforts`, **and reverse the mapping on the
+way out**. The last part was actively broken — `modelForEffort()` folded
+`xhigh`/`max` onto `high` unconditionally, so choosing XHigh sent High.
+
+Fixed:
+
+- `EFFORT_ORDER` and the display-name trim now cover
+  `minimal/none/low/medium/high/xhigh/maximal/max` (an unlisted level had `indexOf === -1`, which
+  sorted it ahead of `low`; the base row also kept `(XHigh)` in its name).
+- `modelForEffort()` collapses `xhigh`/`max` only when the catalog does not carry that exact
+  level, so three-level accounts keep the old safe folding and Hydrogen round-trips.
+- Verified: one `Gemini 4 Hydrogen` row, `reasoning.efforts` `low/medium/high/xhigh`,
+  `defaultEffort: low`.
+
+Tests: 184 pass (four new F-40 cases: every served level round-trips, an unserved level folds,
+the grouped row advertises four ordered efforts with a trimmed name, and an unlisted level cannot
+sort ahead of a known one; plus the four earlier cases: daily host, explicit controlBaseUrl,
+xhigh collapse, `-disabled` filter).
+
+
+
+- **`POST /models` accepts `?refresh=1`** and calls the catalog's `invalidate()` before reading.
+  Measured before: the route answered from a 15-minute `catalogTtlMs` cache with no bypass, so a
+  settings-panel refresh replayed the same rows for the rest of the TTL even once the panel
+  gained a refetch path. The flag is the one the router's models tab now sends on a manual
+  refresh; an event-driven refresh does not send it and stays on the cache.
+- A malformed request URL is a plain read, never a 500 (`isForced` never throws).
+- **`peerDependencies['@nolit/dsh-custom-router']`: `0.0.1-rc.12` → `0.0.1-rc.13`.** No surface,
+  provider or credential behaviour changed.
+
+Suite: 9 pass in `test/server.test.mjs` (two new cases: invalidate-on-force / no-invalidate-on-read,
+and the malformed-URL read).
 
 ## 0.0.1-rc.11 — 2026-11-10 (router peer rc.10)
 

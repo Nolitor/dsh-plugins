@@ -1,17 +1,28 @@
 # CHANGELOG — @nolit/dsh-deepinfra
 
 <!-- skeleton:
-version: 1.5
+version: 1.6
 kind: report
 status: active
-updated: 2026-11-10
+updated: 2026-11-13
 summary: Every change to this track with measured before/after: the 0.0.1-rc.1 adapter, five brief assumptions the live API contradicted, the 0.2.0 production integration, the 0.2.1 architecture correction (config-layer credentials, model selection UI, production registration), 0.0.1-rc.10 — P3 migration of the downstream half onto the shared stream pipe (D4/D6 closed, docs basis recorded), and 0.0.1-rc.11 — an opt-in second route on DeepInfra's native Anthropic Messages endpoint with our own SSE parser (no pi-ai).
 -->
 
 > History for this plugin only (RULES §6.1). Measurements that outlive one plugin belong in
 > root `docs/`. Every entry states what was measured, not what was intended.
 
-Current version: `0.0.1-rc.12`
+Current version: `0.0.1-rc.13`
+
+## 0.0.1-rc.13 — 2026-11-13 (router peer rc.13)
+
+- **`POST /models` accepts `?refresh=1`** and drops the 30-minute catalog closure cache first
+  (`invalidateCatalog` is now a dependency of `createServer`, wired from `lib/index.js` where
+  `cache` lives). Measured before: the route had no bypass at all, so the settings panel's
+  refresh button could only replay the cached snapshot.
+- A malformed request URL is a plain read, never a 500.
+- **`peerDependencies['@nolit/dsh-custom-router']`: `0.0.1-rc.12` → `0.0.1-rc.13`.**
+
+Suite: 22 pass in `test/server.test.mjs` (one new case: invalidate-on-force / no-invalidate-on-read).
 
 ## 0.0.1-rc.12 — 2026-11-10 (router peer rc.10)
 

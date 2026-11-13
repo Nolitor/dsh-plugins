@@ -74,9 +74,21 @@ The plugin talks to two Google hosts directly:
 
 | Host | Used for |
 | :--- | :--- |
-| `daily-cloudcode-pa.googleapis.com` | generation (SSE) |
-| `cloudcode-pa.googleapis.com` | `loadCodeAssist`, `fetchAvailableModels` |
+| `daily-cloudcode-pa.googleapis.com` | generation (SSE), **and `fetchAvailableModels`** |
+| `cloudcode-pa.googleapis.com` | `loadCodeAssist` (and the quota RPC) |
 | `oauth2.googleapis.com` | refresh-token grant |
+
+**The catalog host is not interchangeable.** Measured 2026-11-13 with one token, same body:
+
+| Host | `fetchAvailableModels` result |
+| :--- | :--- |
+| `daily-cloudcode-pa.googleapis.com` | **31 models, 4 Hydrogen** (`gemini-4-hydrogen-{low,medium,high,xhigh}`) |
+| `cloudcode-pa.googleapis.com` | 26 models, **no Hydrogen** |
+
+An earlier revision of this table said the catalog came from the control host. That was wrong,
+and code written from it (`rpc()` hardcoded `cloudcode-pa`) hid every Hydrogen route from the
+settings list even though the account served them. `loadCodeAssist` answers 200 on **both** hosts;
+only the catalog differs.
 
 A proxy is supported through `extraHeaders` and the standard `HTTPS_PROXY` handling of the
 host's fetch implementation.
@@ -163,13 +175,19 @@ level selector:
 
 | Picker id | Efforts |
 | :--- | :--- |
+| `gemini-4-hydrogen` | low, medium, high, **xhigh** |
+| `gemini-4-argon` | low, medium, high |
 | `gemini-3.8-flash` | low, medium, high |
 | `gemini-3.5-flash-lite` | low, medium, high (three aliased ids; see below) |
 | `claude-sonnet-5-5` | low, medium, high |
+| `claude-opus-5-5` | low, medium, high |
 | `gpt-oss-120b` | medium (no image support) |
 
-**Every model with a low level defaults to low.** `gpt-oss-120b` is the exception because the
-account serves only `-medium`; requesting a level it does not serve would return 404.
+This table is **measured per account**, not fixed: the picker shows whatever
+`fetchAvailableModels` returns, grouped by base model. Levels come from the id suffix, so a family
+that serves a fourth level (`xhigh`) advertises four. **Every model with a low level defaults to
+low.** `gpt-oss-120b` is the exception because the account serves only `-medium`; requesting a
+level it does not serve returns 404, so an unserved level folds onto the nearest served one.
 
 Effort is encoded in the model id suffix, because `thinkingConfig.thinkingLevel` is ignored by the
 server (measured). The Gemini 3.5 Flash Lite family is the one exception: Google serves it as three
@@ -180,6 +198,11 @@ unrelated ids whose display names are identical, so the plugin aliases them back
 | low | `gemini-2.5-flash-lite` |
 | medium | `gemini-2.5-flash` |
 | high | `gemini-2.5-flash-thinking` |
+
+The mapping must **round-trip** (F-40): `modelForEffort()` resolves a chosen level back to a wire
+id, and it may fold a level only when the catalog does not carry that exact id. Folding
+unconditionally (`xhigh → high`) is a control that is accepted but not honoured, which is the
+failure F-40 records.
 
 Sending an image to a model without image support is refused with `UNSUPPORTED_OPTION` rather than
 silently dropping the image.

@@ -174,6 +174,22 @@ export function attachQuota(groups, summary) {
   return groups
 }
 
+/**
+ * Whether one request asks for a cache bypass (`?refresh=1`).
+ *
+ * A malformed URL is not a refresh request: the fast path must never throw and
+ * turn a read into a 500.
+ * @param {Request} request - the route request.
+ * @returns {boolean} true when the client asked for a fresh upstream answer.
+ */
+function isForced(request) {
+  try {
+    return new URL(request?.url ?? 'http://localhost/').searchParams.get('refresh') === '1'
+  } catch {
+    return false
+  }
+}
+
 /** Route suffix -> handler. Prefixed with `/api/local/<plugin>/`. */
 function createRoutes({ config, catalog, endpointOf, ledger, settings, installed, invalidate, quota, onModelsApplied }) {
   return {
@@ -214,8 +230,16 @@ function createRoutes({ config, catalog, endpointOf, ledger, settings, installed
     /**
      * Live catalog grouped like the account's usage page: family -> base model.
      * Effort suffixes are hidden; a base row owns all of its variants.
+     *
+     * `?refresh=1` drops the cached catalog first. The cache TTL is 15 minutes,
+     * so without this flag the settings panel kept serving a stale model list
+     * for the rest of the TTL no matter how often it re-read the route
+     * (measured 2026-11-13: the models tab had no refetch path at all, and the
+     * one it gained would still have answered from cache).
+     * @param {Request} request - the route request.
      */
-    models: async () => {
+    models: async (request) => {
+      if (isForced(request)) invalidate?.()
       const all = await catalog.all().catch(() => [])
       const enabled = configValue(config, 'enabledModels') ?? []
       const summary = await quota?.().catch(() => undefined)

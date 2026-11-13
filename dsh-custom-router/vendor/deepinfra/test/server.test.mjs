@@ -342,3 +342,33 @@ test('an OpenCodex refusal is explicit after the DSH selection is saved', async 
   assert.equal(reply.body.ok, false)
   assert.match(reply.body.error, /OpenCodex unavailable/)
 })
+
+test('POST /models reaches the provider only when ?refresh=1 is asked for', async () => {
+  // The panel's refresh button must not replay the 30-minute snapshot, and a
+  // plain read must not spend an upstream request on every card render.
+  let invalidations = 0
+  const isolatedHome = mkdtempSync(join(tmpdir(), 'dif-home-'))
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = isolatedHome
+  const ctx = fakeContext()
+  const server = createServer({
+    ctx,
+    config: { apiKey: { get: () => '' }, baseURL: { get: () => 'https://api.deepinfra.com/v1/openai' } },
+    catalog: { list: async () => [], entries: async () => [] },
+    invalidateCatalog: () => { invalidations += 1 },
+    profileDir: mkdtempSync(join(tmpdir(), 'dif-server-')),
+    log: { warn() {} },
+  })
+  const callThrough = (url) => server.routes.models(new Request(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  }))
+  await callThrough('http://localhost/api/local/deepinfra/models')
+  assert.equal(invalidations, 0)
+  await callThrough('http://localhost/api/local/deepinfra/models?refresh=1')
+  assert.equal(invalidations, 1)
+  server.dispose()
+  if (previousHome === undefined) delete process.env.DSH_HOME
+  else process.env.DSH_HOME = previousHome
+})

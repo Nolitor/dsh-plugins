@@ -33,7 +33,7 @@ import { AntigravityAdapter } from './adapter.js'
 import { TokenProvider } from './auth.js'
 import { DEFAULT_EFFORT, DEFAULT_MODE, DEFAULT_MODEL, EFFORTS, MODES } from './backends.js'
 import { parseAccount, parseCatalog, splitEffort } from './catalog.js'
-import { configValue, resolveEndpoint } from './settings.js'
+import { DEFAULT_CONTROL_BASE_URL, configValue, resolveEndpoint } from './settings.js'
 import { listAgyModels } from './worker.js'
 import { BATCH_TOOL_NAME, batchToolDefinition } from './cli-batch.js'
 import { startCliChild } from './cli-activation.js'
@@ -206,10 +206,23 @@ export function createCatalog({ config, tokens, fetchImpl, log, now, onChanged }
   let quotaCache = null
   let quotaInflight = null
 
-  /** POST one cloudcode RPC to the control host. */
+  /**
+   * POST one cloudcode RPC to the control host.
+   *
+   * MEASURED (2026-11-13): the two cloudcode hosts do NOT serve the same
+   * catalog. `cloudcode-pa.googleapis.com` answered 26 models with NO
+   * Hydrogen/Argon, while `daily-cloudcode-pa.googleapis.com` — the host
+   * `DEFAULT_BASE_URL` already names — answered 31 models including all four
+   * `gemini-4-hydrogen-*` levels. This function hardcoded the non-daily host and
+   * ignored `baseUrl`, so the settings list never showed Hydrogen even though
+   * the account serves it and `agy models` prints it.
+   *
+   * Resolution order: an explicit `controlBaseUrl`, then `baseUrl`, then the
+   * shared default. Both constants live in settings.js; the literal did not.
+   */
   async function rpc(method, body, signal) {
     const endpoint = resolveEndpoint(config)
-    const host = configValue(config, 'controlBaseUrl') || 'https://cloudcode-pa.googleapis.com'
+    const host = configValue(config, 'controlBaseUrl') || endpoint.baseUrl || DEFAULT_CONTROL_BASE_URL
     const token = await tokens.get(signal)
     const response = await fetchImpl(`${host}/v1internal:${method}`, {
       method: 'POST',

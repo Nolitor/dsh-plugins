@@ -348,16 +348,27 @@ test('the subagent surface is independent of the CLI switch', () => {
   assert.equal(opencode.surfaces.subagent.maxDepth, 'provider-managed')
 })
 
-test('every provider package agrees with the router version it peers on', async () => {
+test('every provider package in this track agrees with the router version it peers on', async () => {
   // Measured defect (pre-existing, fixed 2026-11-08): both vendor packages pinned
   // `@nolit/dsh-custom-router@0.0.1-rc.2` while the router had reached rc.9. A peer
   // range that is not the shipped version makes a strict resolver refuse the
   // installation, and the failure surfaces at mount time rather than here.
+  //
+  // SCOPE CORRECTED 2026-11-12 (owner instruction). This test used to reach into
+  // `../../dsh-opencode-v2/package.json`, a SIBLING track. That coupled every
+  // router `rc` bump to a write outside this track's boundary, which the
+  // single-writer rule (docs/RULES.md §3.2) forbids: the router could not ship a
+  // new rc without an unauthorized edit to another package. The check now covers
+  // only packages this track owns — the vendored providers under `vendor/`, which
+  // are part of this package. A sibling track's peer pin is that track's own
+  // concern; `verify:presets` boots the real profile and is where cross-track
+  // drift is caught by measurement rather than by a unit test reaching sideways.
   const { readFile } = await import('node:fs/promises')
   const routerPkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
   const peers = [
     new URL('../vendor/antigravity/package.json', import.meta.url),
-    new URL('../../dsh-opencode-v2/package.json', import.meta.url),
+    new URL('../vendor/opencode/package.json', import.meta.url),
+    new URL('../vendor/deepinfra/package.json', import.meta.url),
   ]
   for (const url of peers) {
     const pkg = JSON.parse(await readFile(url, 'utf8'))

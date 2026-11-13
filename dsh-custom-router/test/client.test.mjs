@@ -63,7 +63,17 @@ function createReact() {
     return [store.values[index], dispatch]
   }
 
-  const useEffect = (effect) => {
+  // Dependency-aware, like React: an effect whose deps are unchanged must not
+  // run again. Without this, a re-render re-issues every fetch and a test can
+  // neither prove nor disprove "one announcement = one refresh".
+  const useEffect = (effect, deps) => {
+    const index = current.index++
+    const previous = current.deps[index]
+    const same = previous !== undefined && Array.isArray(deps)
+      && previous.length === deps.length
+      && deps.every((value, position) => Object.is(value, previous[position]))
+    current.deps[index] = Array.isArray(deps) ? [...deps] : undefined
+    if (same) return
     current.effects.push(effect)
   }
 
@@ -75,7 +85,7 @@ function createReact() {
     if (typeof element === 'string' || typeof element === 'number') return { type: '#text', text: String(element) }
     if (Array.isArray(element)) return element.map((child, index) => render(child, path + '/' + index)).filter((node) => node !== null)
     if (typeof element.type === 'function') {
-      const store = stores.get(path) ?? { values: {}, index: 0, effects: [] }
+      const store = stores.get(path) ?? { values: {}, index: 0, effects: [], deps: {} }
       stores.set(path, store)
       store.index = 0
       store.effects = []
@@ -102,11 +112,14 @@ function createReact() {
 
   return {
     React: { createElement, useState, useReducer, useEffect, useCallback, useMemo },
-    renderRoot: (Component, props) => {
+    // `path` keeps two mounted surfaces in SEPARATE hook stores. React keys a
+    // component instance by its position; rendering both at 'root' would make
+    // one component read the other's state (measured while writing these tests).
+    renderRoot: (Component, props, path = 'root') => {
       let output = null
       for (let pass = 0; pass < 20; pass += 1) {
         dirty = false
-        output = render(createElement(Component, props), 'root')
+        output = render(createElement(Component, props), path)
         if (!dirty) break
       }
       return output
@@ -172,6 +185,16 @@ function loadClient(options = {}) {
   const { React, renderRoot } = createReact()
   let descriptor = null
   const document = createDocument()
+  // Record every route call (url, method, body) so a test can prove WHAT was
+  // asked and whether a cache bypass was requested.
+  const fetchCalls = []
+  const baseFetch = options.fetch ?? (() => Promise.reject(new Error('fetch unavailable in test')))
+  const recordingFetch = async (url, init) => {
+    fetchCalls.push({ url: String(url), method: init?.method, body: init?.body })
+    const path = String(url).split('?')[0]
+    // A forced read uses the same route; the stub answers by pathname.
+    return baseFetch(path, init)
+  }
   const sandbox = {
     window: { __ModuleLoader__: { load: (value) => { descriptor = value } } },
     document,
@@ -181,7 +204,7 @@ function loadClient(options = {}) {
     Promise,
     // The section reads live vendor usage through globalThis.fetch; a test that
     // never provides one makes the merge path untestable.
-    fetch: options.fetch ?? (() => Promise.reject(new Error('fetch unavailable in test'))),
+    fetch: recordingFetch,
   }
   vm.createContext(sandbox)
   vm.runInContext(clientSource, sandbox, { filename: 'client.js' })
@@ -205,7 +228,21 @@ function loadClient(options = {}) {
       return Promise.resolve(true)
     },
   }
+  // A host-event seam the wiring can subscribe to; the recorded handlers are
+  // what the event-sync tests fire.
+  const remoteEvents = new Map()
   const ctx = {
+    remote: {
+      $on: (event, handler) => {
+        const list = remoteEvents.get(event) ?? []
+        list.push(handler)
+        remoteEvents.set(event, list)
+        return () => {
+          const index = list.indexOf(handler)
+          if (index >= 0) list.splice(index, 1)
+        }
+      },
+    },
     locale: { getSnapshot: () => ({ active: 'en' }), subscribe: () => () => {} },
     configForms: {
       get: (id) => {
@@ -234,7 +271,7 @@ function loadClient(options = {}) {
     },
   }
   const dispose = exports.apply(ctx)
-  return { exports, registrations, writes, dispose, React, renderRoot, document }
+  return { exports, registrations, writes, dispose, React, renderRoot, document, remoteEvents, fetchCalls }
 }
 
 const NAMESPACE_WITH_USAGE = {
@@ -315,9 +352,12 @@ test('the client registers no vendor settings section', () => {
   dispose()
 })
 
-test('the client injects exactly slots, locale and configForms', () => {
+test('the client injects exactly slots, locale, configForms and remote', () => {
+  // `remote` is declared because the event wiring reads it: an undeclared read
+  // on a real cordis context throws, which would leave every host event
+  // unsubscribed while this suite stayed green.
   const { exports, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
-  assert.equal(JSON.stringify(exports.inject), JSON.stringify(['slots', 'locale', 'configForms']))
+  assert.equal(JSON.stringify(exports.inject), JSON.stringify(['slots', 'locale', 'configForms', 'remote']))
   dispose()
 })
 
@@ -513,6 +553,8 @@ async function loadModels(options = {}) {
     fetch: options.fetch ?? fetchStub,
     secrets: options.secrets,
   })
+  // Mounted at the DEFAULT position, which is where every pre-existing test
+  // renders it; `flush()` uses the same position for the models tab.
   loaded.renderRoot(loaded.exports.CustomRouterModels, {})
   await new Promise((resolve) => setTimeout(resolve, 20))
   return loaded
@@ -1712,4 +1754,177 @@ test('REGRESSION GATE: no .5px hairline literal exists in the stylesheet', async
 test('REGRESSION GATE: the root container keeps Korean words together', () => {
   assert.match(clientSource, /\.crSection\{[^}]*word-break:keep-all/, 'the root must wrap on word boundaries (CJK)')
   assert.match(clientSource, /\.crSection\{[^}]*overflow-wrap:break-word/, 'the root must still break a single long token')
+})
+
+// ------------------------------------------------------------ refresh design
+//
+// The three-part design the owner ordered on 2026-11-13:
+//   1. a manual refresh reaches the backend with `?refresh=1` (cache bypass),
+//   2. BOTH surfaces (models tab and dashboard) carry their own refresh button,
+//   3. one bus keeps the two surfaces in sync, and host events feed the same bus.
+
+/**
+ * Drive one state change through the stub renderer.
+ *
+ * The stub has no live React: a setState only marks the tree dirty, so the
+ * component must be rendered again for its effects to re-run and for the
+ * refresh request to reach the fetch stub.
+ * @param {object} loaded - the loaded client.
+ * @param {object} component - the registered component to re-render.
+ * @param {number} [times] - how many render passes (each drains its effects).
+ * @returns {Promise<object>} the settled tree.
+ */
+async function flush(loaded, component, times = 3) {
+  // The models tab and the dashboard mount at different positions, exactly as
+  // they do in the host (a settings page and a main page).
+  // `root` is where the existing tests mount the models tab; the dashboard gets
+  // its own store because it is a different surface with its own hooks.
+  const path = component === loaded.exports.CustomRouterModels ? 'root' : 'dashboard'
+  let tree = null
+  for (let pass = 0; pass < times; pass += 1) tree = loaded.renderRoot(component, {}, path)
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  for (let pass = 0; pass < times; pass += 1) tree = loaded.renderRoot(component, {}, path)
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  return tree
+}
+
+test('a manual refresh asks every vendor route for a cache bypass', async () => {
+  const loaded = await loadModels()
+  const calls = loaded.fetchCalls.map((call) => call.url)
+  // The mount load is a plain read: it must not force every open of settings.
+  assert.deepEqual(calls.sort(), [...Object.keys(MODEL_ROUTE_ANSWERS)].sort())
+  assert.equal(calls.some((url) => url.includes('refresh=1')), false, 'mount load must not bypass caches')
+
+  loaded.fetchCalls.length = 0
+  loaded.exports.requestRefresh({ force: true })
+  await flush(loaded, loaded.exports.CustomRouterModels)
+  assert.equal(loaded.fetchCalls.length, 3, 'one announcement refreshes every preset')
+  for (const call of loaded.fetchCalls) {
+    assert.match(call.url, /\?refresh=1$/, call.url + ' must carry the bypass flag')
+    assert.equal(call.method, 'POST')
+    assert.equal(call.body, '{}')
+  }
+  loaded.dispose()
+})
+
+test('an event-driven refresh re-reads without forcing the upstream catalog', async () => {
+  const loaded = await loadModels()
+  loaded.fetchCalls.length = 0
+  for (const handler of loaded.remoteEvents.get('llm/models-updated') ?? []) handler()
+  await flush(loaded, loaded.exports.CustomRouterModels)
+  assert.equal(loaded.fetchCalls.length, 3)
+  for (const call of loaded.fetchCalls) {
+    assert.equal(call.url.includes('refresh=1'), false, 'an event must not spend an upstream request')
+  }
+  loaded.dispose()
+})
+
+test('the models tab carries its own refresh button beside search and select-all', async () => {
+  const loaded = await loadModels()
+  const panel = activeModelsPanel(loaded.renderRoot(loaded.exports.CustomRouterModels, {}))
+  const toolbar = byClass(panel, 'crToolbar')[0]
+  const buttons = findAll(toolbar, (node) => node.type === 'button')
+  const refresh = buttons.find((button) => button.props['data-action'] === 'refresh-models')
+  assert.ok(refresh, 'the models toolbar needs a refresh control of its own')
+  assert.equal(refresh.props.disabled, false)
+  assert.equal(byClass(toolbar, 'crSearchInput').length, 1, 'search stays in the same toolbar')
+  assert.equal(buttons.length, 3, 'search + select-all + clear + refresh (3 buttons)')
+  loaded.dispose()
+})
+
+test('both surfaces share one refresh bus: one announcement refreshes both', async () => {
+  const loaded = await loadModels({ namespace: NAMESPACE_WITH_USAGE })
+  // Render both surfaces so both subscriptions exist.
+  loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  await flush(loaded, loaded.exports.CustomRouterDashboard)
+  loaded.fetchCalls.length = 0
+  // The dashboard's button and the models tab's button both publish here.
+  loaded.exports.requestRefresh({ force: true })
+  await flush(loaded, loaded.exports.CustomRouterModels)
+  await flush(loaded, loaded.exports.CustomRouterDashboard)
+  const urls = loaded.fetchCalls.map((call) => call.url)
+  // Models tab: 3 preset routes. Dashboard: antigravity, opencode plan+catalog, deepinfra.
+  assert.equal(urls.filter((url) => url === '/api/local/dsh-antigravity/models?refresh=1').length, 2,
+    'the antigravity route is read once by each surface, both forced')
+  assert.ok(urls.some((url) => url.startsWith('/api/local/opencode-v2/plan-usage')), 'dashboard usage feed follows the bus')
+  assert.ok(urls.some((url) => url.startsWith('/api/local/deepinfra/cost/summary')), 'dashboard billing feed follows the bus')
+  loaded.dispose()
+})
+
+test('the dashboard header button announces a forced refresh', async () => {
+  const loaded = await loadModels({ namespace: NAMESPACE_WITH_USAGE })
+  let tree = await flush(loaded, loaded.exports.CustomRouterDashboard)
+  const headerButton = findAll(tree, (node) => node.type === 'button')
+    .find((node) => node.props?.className === 'crButton' && typeof node.props?.onClick === 'function' && node.props?.disabled === false)
+  assert.ok(headerButton, 'the dashboard keeps its header refresh button')
+  loaded.fetchCalls.length = 0
+  headerButton.props.onClick()
+  await flush(loaded, loaded.exports.CustomRouterDashboard)
+  await flush(loaded, loaded.exports.CustomRouterModels)
+  assert.ok(loaded.fetchCalls.length > 0, 'the header button refreshes through the bus')
+  for (const call of loaded.fetchCalls) assert.match(call.url, /refresh=1$/, 'a button press is always forced')
+  loaded.dispose()
+})
+
+test('REGRESSION GATE: a full-price row never renders a promotion badge', () => {
+  // Measured bug (2026-11-13): `Number(null) === 0` is finite, so the old
+  // coercion turned "no promotion" into `0` and EVERY DeepInfra row showed
+  // "0% off" while the footer counted all 168 full-price rows as promotions.
+  const { exports, dispose } = loadClient({ namespace: NAMESPACE_WITH_USAGE })
+  const promo = exports.promoPercentOf
+  assert.equal(promo({ promoPercent: null }), null, 'null is no promotion, not 0%')
+  assert.equal(promo({ promoPercent: undefined }), null)
+  assert.equal(promo({}), null)
+  assert.equal(promo(null), null)
+  assert.equal(promo(undefined), null)
+  assert.equal(promo({ promoPercent: 0 }), null, '0% is not a promotion')
+  assert.equal(promo({ promoPercent: '0' }), null, 'a "0" string is not a promotion either')
+  assert.equal(promo({ promoPercent: Number.NaN }), null)
+  assert.equal(promo({ promoPercent: -5 }), null)
+  assert.equal(promo({ promoPercent: 75 }), 75)
+  assert.equal(promo({ promoPercent: 0.375 * 100 }), 37.5)
+  dispose()
+})
+
+test('REGRESSION GATE: the promotion footer counts only real promotions', async () => {
+  // One discounted row and one full-price row: the badge and the count must
+  // follow the data, never the coercion.
+  const answers = {
+    '/api/local/deepinfra/models': {
+      models: [
+        { id: 'a/discounted', price: { input: 0.075, output: 0.225, listInput: 0.3, listOutput: 0.9 }, promotion: { percentOff: 75 }, enabled: true },
+        { id: 'b/full-price', price: { input: 0.2, output: 0.6, listInput: 0.2, listOutput: 0.6 }, promotion: null, enabled: false },
+      ],
+    },
+  }
+  const fetchStub = async (path) => {
+    if (!(path in answers)) throw new Error('unexpected route: ' + path)
+    return { ok: true, status: 200, json: async () => answers[path] }
+  }
+  const loaded = loadClient({
+    namespace: { presets: { deepinfra: true }, vendorConfig: {} },
+    fetch: fetchStub,
+  })
+  loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  // The DeepInfra tab is the metered one; the first tab is Antigravity.
+  const tree = (() => {
+    let current = loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+    const tab = findAll(current, (node) => node.props?.role === 'tab').find((entry) => entry.props.id === 'cr-models-tab-deepinfra')
+    assert.ok(tab, 'missing the deepinfra models tab')
+    tab.props.onClick()
+    return loaded.renderRoot(loaded.exports.CustomRouterModels, {})
+  })()
+  const panel = activeModelsPanel(tree)
+  // Row badges only: the footer's count badge shares the same tone, so the
+  // assertion is scoped to the list, not the whole panel.
+  const list = byClass(panel, 'crCards')[0]
+  const badges = findAll(list, (node) => node.props?.['data-tone'] === 'promo')
+    .flatMap((node) => findAll(node, (child) => child.type === '#text'))
+    .map((node) => node.text)
+  assert.deepEqual(badges, ['75% off'], 'only the discounted row carries a promo badge')
+  const footer = byClass(panel, 'crFooterBar')[0]
+  const footerText = findAll(footer, (node) => node.type === '#text').map((node) => node.text).join(' ')
+  assert.match(footerText, /1 on promotion/, 'the footer counts ONE promotion, not every row')
+  loaded.dispose()
 })

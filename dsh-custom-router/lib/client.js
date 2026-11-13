@@ -760,6 +760,50 @@ window.__ModuleLoader__.load({
       return String(value).replace(/\{(\w+)\}/g, (match, name) => String(vars[name] ?? ''))
     }
 
+    // ------------------------------------------------------- refresh bus
+
+    /**
+     * One refresh reaches BOTH surfaces.
+     *
+     * MEASURED (2026-11-13): the models tab and the dashboard each loaded their
+     * data once at mount and nothing ever refetched them. A manual refresh in
+     * one surface therefore left the other showing the mount-time answer, and a
+     * host event (a provider catalog change, a settings write) reached neither.
+     * One module-level bus is the single place a refresh is announced; each
+     * surface subscribes and refreshes itself, so neither owns the other.
+     *
+     * The payload carries `force`: a manual button means "bypass the vendor's
+     * catalog cache" (`?refresh=1`), an event-driven refresh means "re-read what
+     * the vendor already revalidated" and must not spend an upstream request.
+     */
+    const refreshListeners = new Set()
+
+    /**
+     * Subscribe one surface to refresh announcements.
+     * @param {(payload: {force: boolean}) => void} listener - the refresh action.
+     * @returns {() => void} the unsubscribe function.
+     */
+    function onRefresh(listener) {
+      refreshListeners.add(listener)
+      return () => { refreshListeners.delete(listener) }
+    }
+
+    /**
+     * Announce one refresh to every mounted surface.
+     * @param {{force?: boolean}} [payload] - `force` bypasses vendor caches.
+     * @returns {void}
+     */
+    function requestRefresh(payload) {
+      const announcement = { force: payload?.force === true }
+      for (const listener of [...refreshListeners]) {
+        try {
+          listener(announcement)
+        } catch {
+          // One failing surface must not stop the other from refreshing.
+        }
+      }
+    }
+
     // ------------------------------------------------------------- contracts
 
     /**
@@ -1102,12 +1146,19 @@ window.__ModuleLoader__.load({
 
     /**
      * POST one local vendor route and parse its JSON answer.
+     *
+     * `force` appends `?refresh=1`, which every vendor model route understands
+     * as "bypass the catalog cache". It is only sent for a deliberate manual
+     * refresh: an event-driven re-read must not spend an upstream request for
+     * data the vendor already revalidated.
      * @param {Function} fetchImpl - fetch implementation.
      * @param {string} path - local API path.
+     * @param {{force?: boolean}} [options] - refresh options.
      * @returns {Promise<object>} parsed response.
      */
-    async function postUsageRoute(fetchImpl, path) {
-      const response = await fetchImpl(path, {
+    async function postUsageRoute(fetchImpl, path, options = {}) {
+      const target = options?.force === true ? path + (path.includes('?') ? '&' : '?') + 'refresh=1' : path
+      const response = await fetchImpl(target, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: '{}',
@@ -1122,21 +1173,22 @@ window.__ModuleLoader__.load({
      * The routes are the same measured seams each vendor's own panel uses.
      * A missing/unmounted route is omitted, not turned into a zero.
      * @param {Function} [fetchImpl] - injectable fetch.
+     * @param {{force?: boolean}} [options] - `force` bypasses vendor caches.
      * @returns {Promise<object>} measurements keyed by preset id.
      */
-    async function fetchUsageFeeds(fetchImpl) {
+    async function fetchUsageFeeds(fetchImpl, options = {}) {
       const doFetch = typeof fetchImpl === 'function' ? fetchImpl : globalThis.fetch
       if (typeof doFetch !== 'function') return {}
       const jobs = [
-        (async () => ['antigravity', normalizeAntigravityUsage(await postUsageRoute(doFetch, '/api/local/dsh-antigravity/models'))])(),
+        (async () => ['antigravity', normalizeAntigravityUsage(await postUsageRoute(doFetch, '/api/local/dsh-antigravity/models', options))])(),
         (async () => {
           const [plan, catalog] = await Promise.all([
-            postUsageRoute(doFetch, '/api/local/opencode-v2/plan-usage'),
-            postUsageRoute(doFetch, '/api/local/opencode-v2/model-settings'),
+            postUsageRoute(doFetch, '/api/local/opencode-v2/plan-usage', options),
+            postUsageRoute(doFetch, '/api/local/opencode-v2/model-settings', options),
           ])
           return ['opencode', normalizeOpencodeUsage(plan, catalog)]
         })(),
-        (async () => ['deepinfra', normalizeDeepinfraUsage(await postUsageRoute(doFetch, '/api/local/deepinfra/cost/summary'))])(),
+        (async () => ['deepinfra', normalizeDeepinfraUsage(await postUsageRoute(doFetch, '/api/local/deepinfra/cost/summary', options))])(),
       ]
       const settled = await Promise.allSettled(jobs)
       const output = {}
@@ -2294,7 +2346,7 @@ window.__ModuleLoader__.load({
      */
     function PriceBlock(props) {
       const price = props.price
-      const promoPercent = price !== null && Number.isFinite(Number(price.promoPercent)) ? Number(price.promoPercent) : null
+      const promoPercent = promoPercentOf(price)
       const hasListPrice = price !== null && Number.isFinite(Number(price.listInput)) && Number.isFinite(Number(price.listOutput))
       return h('span', { className: 'crPrice' },
         price !== null
@@ -2373,6 +2425,27 @@ window.__ModuleLoader__.load({
      * @param {Set<string>|undefined} right - another set.
      * @returns {boolean} true when equal.
      */
+    /**
+     * The promotion percentage of a row, or null when it has none.
+     *
+     * MEASURED BUG (2026-11-13): the previous spelling was
+     * `Number.isFinite(Number(price.promoPercent))`, and `Number(null) === 0` is
+     * finite — so a full-price row (promotion `null`) was coerced to `0` and
+     * every row rendered a "0% off" badge while the footer counted every row as
+     * a promotion (168 of 177 live DeepInfra rows). A percentage only exists
+     * when the value is a real number and greater than 0; anything else is
+     * "no promotion", never zero.
+     * @param {object|null} price - a row's price block.
+     * @returns {number|null} the percent off, or null.
+     */
+    function promoPercentOf(price) {
+      if (price === null || typeof price !== 'object') return null
+      const raw = price.promoPercent
+      if (raw === null || raw === undefined) return null
+      const value = Number(raw)
+      return Number.isFinite(value) && value > 0 ? value : null
+    }
+
     function sameSelection(left, right) {
       if (left === undefined || right === undefined) return left === right
       if (left.size !== right.size) return false
@@ -2603,13 +2676,21 @@ window.__ModuleLoader__.load({
       const [queries, setQueries] = React.useState({})
       const [saving, setSaving] = React.useState({})
       const [errors, setErrors] = React.useState({})
+      // One refresh request drives the whole load path: `tick` changes when a
+      // new load must run, `force` says whether that load bypasses the vendor's
+      // catalog cache. The object is the effect's only dependency, so a
+      // re-render can never re-issue a load by itself.
+      const [request, setRequest] = React.useState({ tick: 0, force: false })
+      const [refreshing, setRefreshing] = React.useState(false)
 
       React.useEffect(() => {
         let alive = true
-        for (const preset of MODEL_PRESETS) {
+        const force = request.force === true
+        if (request.tick > 0) setRefreshing(true)
+        const loads = MODEL_PRESETS.map((preset) =>
           // The initial state is already 'loading'; resetting it here would
           // overwrite an answered catalog on every re-render.
-          postUsageRoute(globalThis.fetch, preset.route)
+          postUsageRoute(globalThis.fetch, preset.route, { force })
             .then((payload) => {
               if (!alive) return
               const groups = preset.load(payload).groups
@@ -2624,10 +2705,16 @@ window.__ModuleLoader__.load({
             })
             .catch(() => {
               if (alive) setStatus((previous) => ({ ...previous, [preset.id]: 'error' }))
-            })
-        }
+            }))
+        void Promise.allSettled(loads).then(() => { if (alive) setRefreshing(false) })
         return () => { alive = false }
-      }, [])
+      }, [request])
+
+      // One subscription serves the button, the dashboard and the host events:
+      // a refresh announced anywhere lands in the same effect above.
+      React.useEffect(() => onRefresh((announcement) => {
+        setRequest((previous) => ({ tick: Number(previous?.tick || 0) + 1, force: announcement?.force === true }))
+      }), [])
 
       /**
        * Toggle one row: every variant id of the row moves together.
@@ -2706,7 +2793,7 @@ window.__ModuleLoader__.load({
           .filter((group) => group.rows.length > 0)
       const state = status[active.id] ?? 'loading'
       const selectedRows = groups.reduce((sum, group) => sum + group.rows.filter((row) => rowSelected(row, chosen)).length, 0)
-      const promoCount = groups.reduce((sum, group) => sum + group.rows.filter((row) => row.price !== null && row.price.promoPercent !== null && Number.isFinite(row.price.promoPercent)).length, 0)
+      const promoCount = groups.reduce((sum, group) => sum + group.rows.filter((row) => promoPercentOf(row.price) !== null).length, 0)
       const emptyGroups = groups.length === 0 || visibleGroups.length === 0
 
       return h('div', { className: 'crSection crSettingsSection crModels', 'data-models-tab': active.id },
@@ -2751,7 +2838,17 @@ window.__ModuleLoader__.load({
             onChange: (event) => setQueries((previous) => ({ ...previous, [active.id]: event.target.value })),
           }),
           h('button', { type: 'button', className: 'crButton', onClick: () => setAll(active.id, true) }, t('modelsSelectAll')),
-          h('button', { type: 'button', className: 'crButton crButtonGhost', onClick: () => setAll(active.id, false) }, t('modelsClear'))),
+          h('button', { type: 'button', className: 'crButton crButtonGhost', onClick: () => setAll(active.id, false) }, t('modelsClear')),
+          // The manual path: `force` makes every vendor route bypass its
+          // catalog cache, and the announcement carries the same refresh to the
+          // dashboard so the two surfaces never disagree after one click.
+          h('button', {
+            type: 'button',
+            className: 'crButton crButtonGhost',
+            'data-action': 'refresh-models',
+            disabled: refreshing,
+            onClick: () => requestRefresh({ force: true }),
+          }, refreshing ? t('refreshing') : t('refresh'))),
         state === 'error'
           ? h('p', { className: 'crEmpty', 'data-state': 'error' }, t('modelsLoadFailed'))
           : state === 'loading'
@@ -2832,7 +2929,8 @@ window.__ModuleLoader__.load({
       const [drafts, setDrafts] = React.useState({})
       const [updatedAt, setUpdatedAt] = React.useState(null)
       const [runtimeUsage, setRuntimeUsage] = React.useState(undefined)
-      const [refreshTick, setRefreshTick] = React.useState(0)
+      const [request, setRequest] = React.useState({ tick: 0, force: false })
+      const [refreshing, setRefreshing] = React.useState(false)
       const [reload, setReload] = React.useState(() => () => {})
       const [, forceRender] = React.useReducer((n) => n + 1, 0)
 
@@ -2854,7 +2952,11 @@ window.__ModuleLoader__.load({
           if (snapshot.status === 'error') setError('unavailable')
         }
         read()
-        setReload(read)
+        // MUST be an updater returning the function: `setReload(read)` passes
+        // `read` as a React updater, so the stored value became `read(previous)`
+        // (undefined) and the header's refresh button threw "reload is not a
+        // function" on every click (measured 2026-11-13).
+        setReload(() => read)
         const unsubscribe = form.subscribe(read)
         const locale = hostCtx && hostCtx.locale ? hostCtx.locale : null
         const offLocale = locale && typeof locale.subscribe === 'function' ? locale.subscribe(() => forceRender()) : undefined
@@ -2865,15 +2967,29 @@ window.__ModuleLoader__.load({
       }, [])
 
       React.useEffect(() => {
-        if (status !== 'ready') return undefined
+        if (status !== 'ready') {
+          // A surface that is not ready has no refresh in flight; leaving the
+          // flag set would keep the header button disabled forever.
+          setRefreshing(false)
+          return undefined
+        }
         let alive = true
-        void fetchUsageFeeds(globalThis.fetch).then((next) => {
+        if (request.tick > 0) setRefreshing(true)
+        void fetchUsageFeeds(globalThis.fetch, { force: request.force === true }).then((next) => {
           if (!alive) return
           setRuntimeUsage(next)
           setUpdatedAt(Date.now())
         }).catch(() => { /* keep settings fallback; never invent usage */ })
+          .then(() => { if (alive) setRefreshing(false) })
         return () => { alive = false }
-      }, [status, refreshTick])
+      }, [status, request])
+
+      // The SAME bus the models tab listens to. The dashboard's own button, the
+      // models tab's button and every host event all end up here, so a refresh
+      // anywhere updates both surfaces; nothing refetches in two places.
+      React.useEffect(() => onRefresh((announcement) => {
+        setRequest((previous) => ({ tick: Number(previous?.tick || 0) + 1, force: announcement?.force === true }))
+      }), [])
 
       /**
        * Queue one settings write.
@@ -3068,12 +3184,15 @@ window.__ModuleLoader__.load({
             h('button', {
               type: 'button',
               className: 'crButton',
-              disabled: status === 'loading',
+              disabled: status === 'loading' || refreshing,
+              // `force` because a button press is the one moment an operator
+              // asks for a fresh upstream answer; event-driven refreshes read
+              // whatever the vendor already revalidated.
               onClick: () => {
                 reload()
-                setRefreshTick((previous) => Number(previous || 0) + 1)
+                requestRefresh({ force: true })
               },
-            }, t('refresh')))),
+            }, refreshing ? t('refreshing') : t('refresh')))),
         h('div', {
           className: 'crTabs',
           role: 'tablist',
@@ -3161,7 +3280,11 @@ window.__ModuleLoader__.load({
      * `module.exports.inject` lists. `ctx.slots`, `ctx.locale` and
      * `ctx.configForms` come back undefined otherwise.
      */
-    const inject = ['slots', 'locale', 'configForms']
+    // `remote` is REQUIRED (not optional-read): reading an undeclared service on
+    // a real cordis context throws, so an undeclared read would silently leave
+    // every host event unsubscribed while the unit tests stayed green. The
+    // standard Models settings section declares the same service.
+    const inject = ['slots', 'locale', 'configForms', 'remote']
 
     /**
      * Register the single settings section.
@@ -3172,6 +3295,31 @@ window.__ModuleLoader__.load({
       hostCtx = ctx
       localeReader = () => String(ctx && ctx.locale && ctx.locale.getSnapshot ? ctx.locale.getSnapshot().active ?? '' : '')
       const releases = []
+      // 0. Host events -> the refresh bus. These are the events the standard
+      //    Models settings section already treats as invalidations (measured
+      //    2026-11-13 in dsh-client-ui-settings-models): a settings write, a
+      //    credential change, or a provider topology/catalog change. Without
+      //    this wiring neither surface ever hears about any of them.
+      //    The read below is guarded anyway: a remote seam without `$on` (a test
+      //    double, a future host) must not stop the surfaces from mounting.
+      try {
+        // `ctx.get` (not `ctx.remote`) so a context that cannot resolve the
+        // service answers undefined instead of throwing: the surfaces must still
+        // mount, they would only be limited to their own buttons.
+        const remote = ctx && typeof ctx.get === 'function' ? ctx.get('remote') : ctx && ctx.remote
+        if (remote && typeof remote.$on === 'function') {
+          for (const event of ['llm/adapters-updated', 'llm/models-updated', 'settings/document-updated', 'credentials/record-updated', 'credentials/reference-updated']) {
+            try {
+              const off = remote.$on(event, () => requestRefresh({ force: false }))
+              if (typeof off === 'function') releases.push(off)
+            } catch (error) {
+              console.warn('dsh-custom-router: could not subscribe to ' + event + ': ' + (error instanceof Error ? error.message : String(error)))
+            }
+          }
+        }
+      } catch {
+        // No remote service: the surfaces still mount and still refresh on demand.
+      }
       // 1. Settings section: per-preset model serving lists and selection.
       releases.push(ctx.slots.inject('settings.section', () =>
         ctx.slots.register(
@@ -3225,6 +3373,9 @@ window.__ModuleLoader__.load({
     exports.normalizeOpencodeUsage = normalizeOpencodeUsage
     exports.normalizeDeepinfraUsage = normalizeDeepinfraUsage
     exports.fetchUsageFeeds = fetchUsageFeeds
+    exports.onRefresh = onRefresh
+    exports.promoPercentOf = promoPercentOf
+    exports.requestRefresh = requestRefresh
     exports.readSecretSet = readSecretSet
     exports.readSwitch = readSwitch
     exports.CustomRouterDashboard = CustomRouterDashboard

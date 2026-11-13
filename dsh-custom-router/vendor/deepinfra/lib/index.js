@@ -138,6 +138,15 @@ export function apply(ctx, config) {
 
   /** @type {{ entries: object[], fetchedAt: number } | undefined} */
   let cache
+  /**
+   * Drop the cached catalog so the next read reaches the provider.
+   *
+   * The reader keeps a 30-minute TTL (DEFAULT_CATALOG_TTL_MS); the panel's
+   * `?refresh=1` calls this, otherwise a refresh button would replay the stale
+   * snapshot until the TTL expired (measured 2026-11-13).
+   * @returns {void}
+   */
+  const invalidateCatalog = () => { cache = undefined }
   const catalogReader = async (signal) => {
     const ttl = numberAt('catalogTtlMs', DEFAULT_CATALOG_TTL_MS)
     const baseURL = stringAt('baseURL', DEFAULT_BASE_URL)
@@ -229,6 +238,7 @@ export function apply(ctx, config) {
     onModelsApplied: async (enabled) => {
       await syncDeepInfraSelection(enabled)
     },
+    invalidateCatalog,
     profileDir: typeof optional(ctx, 'profileDir') === 'string' ? optional(ctx, 'profileDir') : undefined,
     log,
   })

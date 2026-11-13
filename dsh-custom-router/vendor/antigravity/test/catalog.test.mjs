@@ -17,6 +17,7 @@ import {
   toModelInfo,
   toResolvedModelInfo,
 } from '../lib/catalog.js'
+import { modelForEffort } from '../lib/wire.js'
 
 const PAYLOAD = {
   models: {
@@ -158,4 +159,113 @@ test('duplicate display names of distinct models are disambiguated with the id',
   assert.equal(names.alpha, 'Same Name (alpha)')
   assert.equal(names.beta, 'Same Name (beta)')
   assert.equal(names.gamma, 'Unique Name')
+})
+
+// ------------------------------------------------ measured live shape, 2026-11-13
+
+test('splitEffort knows every effort level the account actually serves', () => {
+  // Measured against daily-cloudcode-pa on 2026-11-13: Hydrogen serves FOUR
+  // levels, `xhigh` included. A pattern that only knew low/medium/high left
+  // `gemini-4-hydrogen-xhigh` as its own base row beside `gemini-4-hydrogen`.
+  assert.deepEqual(splitEffort('gemini-4-hydrogen-xhigh'), { base: 'gemini-4-hydrogen', effort: 'xhigh' })
+  assert.deepEqual(splitEffort('gemini-4-hydrogen-low'), { base: 'gemini-4-hydrogen', effort: 'low' })
+  assert.deepEqual(splitEffort('gemini-4-hydrogen-medium'), { base: 'gemini-4-hydrogen', effort: 'medium' })
+  assert.deepEqual(splitEffort('gemini-4-hydrogen-high'), { base: 'gemini-4-hydrogen', effort: 'high' })
+  // The other levels a provider may publish must not become separate models.
+  assert.deepEqual(splitEffort('x-model-none'), { base: 'x-model', effort: 'none' })
+  assert.deepEqual(splitEffort('x-model-max'), { base: 'x-model', effort: 'max' })
+})
+
+test('all four Hydrogen levels collapse into ONE base row', () => {
+  const entries = parseCatalog({
+    models: {
+      'gemini-4-hydrogen-low': { displayName: 'Gemini 4 Hydrogen (Low)' },
+      'gemini-4-hydrogen-medium': { displayName: 'Gemini 4 Hydrogen (Medium)' },
+      'gemini-4-hydrogen-high': { displayName: 'Gemini 4 Hydrogen (High)' },
+      'gemini-4-hydrogen-xhigh': { displayName: 'Gemini 4 Hydrogen (XHigh)' },
+    },
+  })
+  const groups = groupByBase(entries)
+  assert.equal(groups.length, 1, 'one base model, not two')
+  assert.equal(groups[0].id, 'gemini-4-hydrogen')
+  assert.deepEqual([...groups[0].members.map((member) => member.id)].sort(), [
+    'gemini-4-hydrogen-high',
+    'gemini-4-hydrogen-low',
+    'gemini-4-hydrogen-medium',
+    'gemini-4-hydrogen-xhigh',
+  ])
+})
+
+test('a withdrawn `-disabled` route is not offered as a conversation model', () => {
+  // Measured: `gemini-4-carbon-disabled` carries a displayName but NO quota.
+  const ids = parseCatalog({
+    models: {
+      'gemini-4-carbon-disabled': { displayName: 'Gemini 4 Carbon' },
+      'gemini-4-hydrogen-low': { displayName: 'Gemini 4 Hydrogen (Low)' },
+    },
+  }).map((entry) => entry.id)
+  assert.deepEqual(ids, ['gemini-4-hydrogen-low'])
+})
+
+test('a utility route listed for image generation is still filtered', () => {
+  // The role lists are the primary signal; the id shape is the backstop.
+  const ids = parseCatalog({
+    imageGenerationModelIds: ['gemini-3.1-flash-image'],
+    models: { 'gemini-3.1-flash-image': { displayName: 'Gemini 3.1 Flash Image' } },
+  }).map((entry) => entry.id)
+  assert.deepEqual(ids, [])
+})
+
+// ---------------------------------------------- F-40 round-trip, 2026-11-13
+
+test('F-40: every served effort level rounds out to its own wire id', () => {
+  // The old rule folded xhigh/max onto `high` unconditionally. That was safe
+  // only while no account served an xhigh id; Hydrogen does, so folding meant
+  // picking XHigh silently sent High — a control accepted but not honoured.
+  const hydrogen = ['gemini-4-hydrogen-low', 'gemini-4-hydrogen-medium', 'gemini-4-hydrogen-high', 'gemini-4-hydrogen-xhigh']
+  assert.equal(modelForEffort('gemini-4-hydrogen', 'low', hydrogen), 'gemini-4-hydrogen-low')
+  assert.equal(modelForEffort('gemini-4-hydrogen', 'medium', hydrogen), 'gemini-4-hydrogen-medium')
+  assert.equal(modelForEffort('gemini-4-hydrogen', 'high', hydrogen), 'gemini-4-hydrogen-high')
+  assert.equal(modelForEffort('gemini-4-hydrogen', 'xhigh', hydrogen), 'gemini-4-hydrogen-xhigh')
+})
+
+test('F-40: a level the account does NOT serve still folds to the nearest one', () => {
+  // A three-level account must keep the old, safe behaviour.
+  const flash = ['gemini-3.8-flash-low', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-high']
+  assert.equal(modelForEffort('gemini-3.8-flash', 'xhigh', flash), 'gemini-3.8-flash-high')
+  assert.equal(modelForEffort('gemini-3.8-flash', 'max', flash), 'gemini-3.8-flash-high')
+})
+
+test('F-40: the grouped Hydrogen row advertises four ordered efforts, not one per row', () => {
+  const entries = parseCatalog({
+    models: {
+      'gemini-4-hydrogen-low': { displayName: 'Gemini 4 Hydrogen (Low)', supportsThinking: true },
+      'gemini-4-hydrogen-medium': { displayName: 'Gemini 4 Hydrogen (Medium)', supportsThinking: true },
+      'gemini-4-hydrogen-high': { displayName: 'Gemini 4 Hydrogen (High)', supportsThinking: true },
+      'gemini-4-hydrogen-xhigh': { displayName: 'Gemini 4 Hydrogen (XHigh)', supportsThinking: true },
+    },
+  })
+  const groups = groupByBase(entries)
+  assert.equal(groups.length, 1, 'ONE base model (the big category), not four rows')
+  assert.equal(groups[0].id, 'gemini-4-hydrogen')
+  // The level must come out of the NAME: the row reads as one model with a choice.
+  assert.equal(groups[0].name, 'Gemini 4 Hydrogen')
+  const info = toResolvedModelInfo('antigravity', groups[0], { defaultMaxTokens: 16384 })
+  assert.deepEqual(info.reasoning.efforts.map((effort) => effort.id), ['low', 'medium', 'high', 'xhigh'])
+  assert.deepEqual(info.reasoning.efforts.map((effort) => effort.name), ['Low', 'Medium', 'High', 'XHigh'])
+  // The owner's rule is the LOWEST level, not the first catalog row.
+  assert.equal(info.reasoning.defaultEffort, 'low')
+})
+
+test('an unlisted effort level cannot sort ahead of the known ones', () => {
+  // `indexOf('xhigh')` used to be -1, which sorted it BEFORE `low`.
+  const entries = parseCatalog({
+    models: {
+      'm-xhigh': { displayName: 'M (XHigh)', supportsThinking: true },
+      'm-low': { displayName: 'M (Low)', supportsThinking: true },
+      'm-high': { displayName: 'M (High)', supportsThinking: true },
+    },
+  })
+  const groups = groupByBase(entries)
+  assert.deepEqual(groups[0].efforts, ['low', 'high', 'xhigh'])
 })

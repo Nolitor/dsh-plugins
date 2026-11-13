@@ -180,6 +180,13 @@ function adapterFor(serverState, overrides = {}) {
       // by 1s, so a shared test path made later assertions read earlier tests'
       // records (measured 2026-11-05: summary.requests was 3 instead of 1).
       costPath: join(mkdtempSync(join(tmpdir(), 'dsh-cost-')), 'opencode-session-cost.json'),
+      // Each adapter also gets its own CATALOG. Without this the store falls
+      // back to `$DSH_HOME/cache/opencode-models.json`, i.e. the OPERATOR'S live
+      // catalog: six tests in this file then asserted against whatever the live
+      // probe had last saved and failed on a developer machine while passing in
+      // CI (measured 2026-11-13 — `resolveModel` read 1000000 from the live
+      // snapshot and 32768 from the fixture). A test must never read live state.
+      catalogPath: join(mkdtempSync(join(tmpdir(), 'dsh-catalog-')), 'opencode-models.json'),
       ...overrides,
     }),
   )
@@ -2012,6 +2019,61 @@ test('the trace records wire unverified for an unsupported package and wire chat
   } finally {
     if (previous === undefined) delete process.env.OPENCODE_V2_TRACE
     else process.env.OPENCODE_V2_TRACE = previous
+    await close()
+  }
+})
+
+test('model-settings probes the catalog only when ?refresh=1 is asked for', async () => {
+  // `CatalogLifecycle.read()` answers from the snapshot and revalidates in the
+  // background, so a plain read never waits for a probe. The refresh button must
+  // actually probe; without the flag the panel kept rendering the cached rows
+  // (measured 2026-11-13: `discoveryCacheMs` is 5 minutes).
+  const { state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), enabledModels: [] })
+    let probes = 0
+    adapter.catalog = Object.assign(Object.create(Object.getPrototypeOf(adapter.catalog)), adapter.catalog, {
+      refresh: async () => { probes += 1; return null },
+    })
+    const registered = new Map()
+    const ctx = {
+      effect: (fn) => fn(),
+      connection: { fetch: { register: (route) => { registered.set(route.path, route); return () => {} } } },
+    }
+    ctx.settings = { update: async () => {} }
+    registerModelSettingsRoutes(ctx, adapter, adapter.config, () => {}, {})
+    const route = registered.get('/api/local/opencode-v2/model-settings')
+
+    await route.fetch(new Request('http://x/', { method: 'POST' }))
+    assert.equal(probes, 0, 'a plain read must not spend a probe')
+
+    await route.fetch(new Request('http://x/?refresh=1', { method: 'POST' }))
+    assert.equal(probes, 1, '?refresh=1 must probe the catalog')
+  } finally {
+    await close()
+  }
+})
+
+test('a failed forced probe still answers the settings read', async () => {
+  const { state, close } = await startServer()
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state), enabledModels: [] })
+    adapter.catalog = Object.assign(Object.create(Object.getPrototypeOf(adapter.catalog)), adapter.catalog, {
+      refresh: async () => { throw new Error('daemon down') },
+    })
+    const registered = new Map()
+    const ctx = {
+      effect: (fn) => fn(),
+      connection: { fetch: { register: (route) => { registered.set(route.path, route); return () => {} } } },
+    }
+    ctx.settings = { update: async () => {} }
+    registerModelSettingsRoutes(ctx, adapter, adapter.config, () => {}, {})
+    const response = await registered.get('/api/local/opencode-v2/model-settings')
+      .fetch(new Request('http://x/?refresh=1', { method: 'POST' }))
+    assert.equal(response.status, 200, 'the cached catalog stays authoritative')
+    const body = await response.json()
+    assert.ok(Array.isArray(body.models))
+  } finally {
     await close()
   }
 })

@@ -2802,6 +2802,19 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
   const respond = (body, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
+  /**
+   * Whether one request asks for a cache bypass (`?refresh=1`).
+   * @param {Request} request - the route request.
+   * @returns {boolean} true when the client asked for a fresh upstream answer.
+   */
+  const isForcedRequest = (request) => {
+    try {
+      return new URL(request?.url ?? 'http://localhost/').searchParams.get('refresh') === '1'
+    } catch {
+      return false
+    }
+  }
+
   const readJson = async (request) => {
     try {
       const text = await request.text()
@@ -2855,7 +2868,25 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
       .catch(() => [])
 
   const routes = {
-    'model-settings': async () => {
+    /**
+     * `model-settings` reports the served catalog and the current allow-list.
+     *
+     * `?refresh=1` forces a catalog probe first. `CatalogLifecycle.read()`
+     * answers from the snapshot and only revalidates in the background, so
+     * without this flag the panel's refresh button would render the same rows
+     * again (measured 2026-11-13: `discoveryCacheMs` is 5 minutes).
+     * @param {Request} request - the route request.
+     */
+    'model-settings': async (request) => {
+      if (isForcedRequest(request)) {
+        // A failed probe must not fail the read: `describeModels()` still has
+        // whatever the lifecycle holds, and the panel shows the last good rows.
+        try {
+          await adapter.catalog?.refresh?.()
+        } catch {
+          /* the cached snapshot stays authoritative */
+        }
+      }
       const state = await describeModels()
       return respond({
         activePlan: config.activePlan?.get?.() ?? 'go',

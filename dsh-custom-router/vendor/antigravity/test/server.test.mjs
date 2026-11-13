@@ -114,3 +114,80 @@ test('an OpenCodex sync failure is reported after the DSH write, not faked as su
   assert.equal(response.status, 502)
   assert.equal((await response.json()).ok, false)
 })
+
+test('POST /models answers from the cache unless ?refresh=1 invalidates it', async () => {
+  // The models tab's refresh button means "reach the account again". Without the
+  // flag the route must stay on the cached catalog: a plain panel open may not
+  // spend a cloudcode-pa RPC every time (measured 2026-11-13: the cache TTL is
+  // 15 minutes, so a re-read without the flag replayed the same rows).
+  const routes = new Map()
+  const ctx = { effect: (fn) => fn(), logger: { warn() {} } }
+  const connection = { fetch: { register(route) { routes.set(route.path, route); return () => {} } } }
+  let allCalls = 0
+  let invalidations = 0
+  const deps = {
+    config: { enabled: true, modelServing: true, cliWorker: true, usagePill: true, enabledModels: [] },
+    catalog: {
+      account: async () => undefined,
+      all: async () => { allCalls += 1; return [] },
+    },
+    endpointOf: () => ({ baseUrl: 'https://example.invalid', project: 'p' }),
+    ledger: createLedger(),
+    installed: () => ({}),
+    invalidate: () => { invalidations += 1 },
+    pluginName: '@nolit/dsh-antigravity',
+  }
+  registerRoutes(ctx, deps, { connection })
+
+  const route = routes.get('/api/local/dsh-antigravity/models')
+  const post = (url) => route.fetch(new Request(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }))
+
+  await post('http://localhost/api/local/dsh-antigravity/models')
+  assert.equal(allCalls, 1)
+  assert.equal(invalidations, 0, 'a plain read must not invalidate the catalog cache')
+
+  await post('http://localhost/api/local/dsh-antigravity/models?refresh=1')
+  assert.equal(allCalls, 2)
+  assert.equal(invalidations, 1, '?refresh=1 must drop the cached catalog before reading')
+})
+
+test('a malformed request URL is a plain read, never a 500', async () => {
+  const { routes } = harness()
+  const route = routes.get('/api/local/dsh-antigravity/models')
+  const response = await route.fetch({ method: 'POST', url: 'not a url', json: async () => ({}) })
+  assert.equal(response.status, 200)
+})
+
+test('the model catalog is fetched from the host that actually serves it', async () => {
+  // MEASURED 2026-11-13: `cloudcode-pa.googleapis.com` answered 26 models with
+  // no Hydrogen/Argon; `daily-cloudcode-pa.googleapis.com` answered 31 with all
+  // four `gemini-4-hydrogen-*` levels. `rpc()` hardcoded the non-daily host and
+  // ignored `baseUrl`, so the settings list never showed Hydrogen although the
+  // account served it (and `agy models` printed it).
+  const seen = []
+  const fetchImpl = async (url) => {
+    seen.push(String(url))
+    return { ok: true, json: async () => ({ models: {} }) }
+  }
+  const config = new Proxy({}, { get: (_t, key) => ({ get: () => (key === 'baseUrl' ? 'https://daily-cloudcode-pa.googleapis.com' : '') }) })
+  const { createCatalog } = await import('../lib/index.js')
+  const catalog = createCatalog({ config, tokens: { get: async () => 't' }, fetchImpl, now: Date.now })
+  await catalog.all()
+  assert.ok(seen.length > 0, 'the catalog must issue a request')
+  for (const url of seen) {
+    assert.match(url, /^https:\/\/daily-cloudcode-pa\.googleapis\.com\//, 'catalog RPC must use the configured base host: ' + url)
+  }
+})
+
+test('an explicit controlBaseUrl still wins over baseUrl', async () => {
+  const seen = []
+  const fetchImpl = async (url) => {
+    seen.push(String(url))
+    return { ok: true, json: async () => ({ models: {} }) }
+  }
+  const config = new Proxy({}, { get: (_t, key) => ({ get: () => (key === 'controlBaseUrl' ? 'https://override.example' : key === 'baseUrl' ? 'https://daily-cloudcode-pa.googleapis.com' : '') }) })
+  const { createCatalog } = await import('../lib/index.js')
+  const catalog = createCatalog({ config, tokens: { get: async () => 't' }, fetchImpl, now: Date.now })
+  await catalog.all()
+  for (const url of seen) assert.match(url, /^https:\/\/override\.example\//)
+})

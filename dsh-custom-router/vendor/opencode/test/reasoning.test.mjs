@@ -14,6 +14,9 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import {
   modelFromApiEntry,
@@ -99,6 +102,12 @@ function makeAdapter(discovered, overrides = {}) {
     autoDiscoverModels: true,
     discoveryTimeoutMs: 60000,
     discoveryCacheMs: 300000,
+    // A throwaway catalog path. Without it the store falls back to
+    // `$DSH_HOME/cache/opencode-models.json` — the OPERATOR'S live snapshot — so
+    // `discover()` answered from a seeded live catalog and never called the
+    // probe the test counts (measured 2026-11-13: probes was 0, passing in CI
+    // and failing on a developer machine).
+    catalogPath: join(mkdtempSync(join(tmpdir(), 'dsh-oc-catalog-')), 'opencode-models.json'),
     exportTimeoutMs: 0,
     ...overrides,
   })

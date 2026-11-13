@@ -18,8 +18,17 @@
  * @module @nolit/dsh-antigravity/catalog
  */
 
-/** Effort suffixes the catalog uses, least to greatest. */
-export const EFFORT_ORDER = ['low', 'medium', 'high']
+/**
+ * Effort suffixes the catalog uses, least to greatest.
+ *
+ * MEASURED 2026-11-13: the account serves FOUR Hydrogen levels and the highest
+ * is `xhigh`. Keeping this list at three entries was not a cosmetic omission:
+ * `groupByBase` sorts by `indexOf`, so an unlisted level got `-1` and sorted
+ * ahead of `low`, and `modelForEffort` could not name it as a wire id.
+ * F-40 is the rule this list serves: the provider's effort scale is mapped onto
+ * DSH's, and every level it actually serves must round-trip.
+ */
+export const EFFORT_ORDER = ['minimal', 'none', 'low', 'medium', 'high', 'xhigh', 'maximal', 'max']
 
 /**
  * Google serves the three Gemini 3.5 Flash Lite reasoning levels as THREE ids
@@ -63,7 +72,7 @@ export function effortAlias(id) {
 }
 
 /** Display names for the effort ids DSH shows in its selector. */
-const EFFORT_NAMES = { low: 'Low', medium: 'Medium', high: 'High' }
+const EFFORT_NAMES = { minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'XHigh', max: 'Max', maximal: 'Maximal', none: 'None' }
 
 /**
  * Split a picker id into base model and effort suffix.
@@ -73,7 +82,12 @@ const EFFORT_NAMES = { low: 'Low', medium: 'Medium', high: 'High' }
 export function splitEffort(id) {
   const alias = effortAlias(id)
   if (alias) return { base: alias.base, effort: alias.effort }
-  const match = /^(.*)-(low|medium|high)$/.exec(String(id ?? ''))
+  // The account serves more levels than the picker's first three: `xhigh` is a
+  // real Hydrogen route (measured 2026-11-13). A pattern that only knew
+  // low/medium/high left `gemini-4-hydrogen-xhigh` as its OWN base row next to
+  // `gemini-4-hydrogen`, so one model appeared twice and its checkbox wrote an
+  // incomplete variant set.
+  const match = /^(.*)-(low|medium|high|xhigh|maximal|minimal|none|max)$/.exec(String(id ?? ''))
   if (!match) return { base: String(id ?? ''), effort: undefined }
   return { base: match[1], effort: match[2] }
 }
@@ -111,7 +125,10 @@ export function groupByBase(entries) {
     if (effort && !group.efforts.includes(effort)) group.efforts.push(effort)
     // Prefer a human name from any member, minus the trailing level.
     if (typeof entry.name === 'string' && entry.name !== entry.id) {
-      const trimmed = entry.name.replace(/\s*\((Low|Medium|High)\)\s*$/i, '').trim()
+      // The account suffixes the level into displayName ("Gemini 4 Hydrogen
+      // (XHigh)"). Every served level must be trimmed, or the base row keeps a
+      // level in its name and no longer reads as one model with a choice.
+      const trimmed = entry.name.replace(/\s*\((Minimal|None|Low|Medium|High|XHigh|Maximal|Max)\)\s*$/i, '').trim()
       if (trimmed !== '') group.name = trimmed
     }
     if (entry.maxInputTokens !== undefined) group.maxInputTokens = Math.max(group.maxInputTokens ?? 0, entry.maxInputTokens)
@@ -182,6 +199,10 @@ export function parseCatalog(payload) {
 function isConversationModel(id, value) {
   // Utility routes use snake_case ids (tab_flash_lite_preview, chat_23310).
   if (/^[a-z0-9]+_[a-z0-9_]+$/.test(id) && !id.includes('-')) return false
+  // The account publishes withdrawn routes with a `-disabled` suffix and no
+  // quota (`gemini-4-carbon-disabled`, measured 2026-11-13). Offering one as a
+  // selectable model is a promise the route cannot keep.
+  if (/-disabled$/.test(id)) return false
   if (typeof value?.displayName !== 'string') return false
   return true
 }

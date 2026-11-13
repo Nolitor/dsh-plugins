@@ -249,10 +249,20 @@ export function modelForEffort(model, effort, available) {
   const base = alias ? alias.base : String(model ?? '').replace(/-(low|medium|high)$/, '')
   const variants = ids.filter((id) => id === base || id.startsWith(base + '-'))
 
-  let wanted = effort === 'xhigh' || effort === 'max' ? 'high' : effort
+  // F-40: the provider's effort scale is mapped onto DSH's, and the mapping
+  // must round-trip. The old rule folded `xhigh` onto `high` unconditionally,
+  // which was correct only while no account served an `xhigh` id. Measured
+  // 2026-11-13: Hydrogen serves one, so folding meant picking XHigh sent High —
+  // a control that is accepted but not honoured, the exact failure F-40 names.
+  // Collapse only when the catalog does NOT carry the exact level.
+  const served = new Set(ids)
+  let wanted = effort
+  if ((effort === 'xhigh' || effort === 'max' || effort === 'maximal') && !served.has(`${base}-${effort}`)) wanted = 'high'
   // A bare alias id already encodes its level; a bare alias base defaults to low.
   if (!wanted) wanted = alias?.effort ?? (base === 'gemini-3.5-flash-lite' ? 'low' : undefined)
-  if (wanted && ['low', 'medium', 'high'].includes(wanted)) {
+  // Bounded by the suffix shape, not a closed list: a narrower list silently
+  // refuses to name a level the catalog just advertised.
+  if (wanted && /^[a-z]+$/.test(wanted)) {
     // The 3.5 Flash Lite family maps effort onto three unrelated ids.
     const aliasId = aliasFor(base, wanted)
     if (aliasId) return aliasId

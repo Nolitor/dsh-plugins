@@ -55,7 +55,7 @@ export function resolveLedgerPath({ explicit, dshHome, profileDir, homeDir } = {
  * @param {object} [options.log] - `{ warn }`.
  * @returns {{ ledger: object, routes: object, recordCost: Function, dispose: Function }}
  */
-export function createServer({ ctx, config, catalog, profileDir, log = { warn() {} }, onModelsApplied }) {
+export function createServer({ ctx, config, catalog, profileDir, log = { warn() {} }, onModelsApplied, invalidateCatalog }) {
   /**
    * Services handed by the deferred sub-context, when the plugin mounted its
    * panel through `ctx.inject([...])`. Reading the ROOT ctx in that case returns
@@ -121,6 +121,19 @@ export function createServer({ ctx, config, catalog, profileDir, log = { warn() 
     status,
     headers: { 'content-type': 'application/json; charset=utf-8' },
   })
+
+  /**
+   * Whether one request asks for a cache bypass (`?refresh=1`).
+   * @param {Request} request - the route request.
+   * @returns {boolean} true when the client asked for a fresh upstream answer.
+   */
+  const isForced = (request) => {
+    try {
+      return new URL(request?.url ?? 'http://localhost/').searchParams.get('refresh') === '1'
+    } catch {
+      return false
+    }
+  }
 
   /**
    * Read a JSON request body, tolerating an empty one.
@@ -222,7 +235,17 @@ export function createServer({ ctx, config, catalog, profileDir, log = { warn() 
   }
 
   const routes = {
-    models: async () => json(await describeModels()),
+    /**
+     * Every served route, for the settings panel.
+     *
+     * `?refresh=1` drops the 30-minute catalog cache first, so the panel's
+     * refresh button reaches the provider instead of replaying a stale answer.
+     * @param {Request} request - the route request.
+     */
+    models: async (request) => {
+      if (isForced(request)) invalidateCatalog?.()
+      return json(await describeModels())
+    },
     'models/apply': async (request) => {
       const body = await bodyOf(request)
       if (!Array.isArray(body.enabled)) return json({ error: 'expected { enabled: string[] }' }, 400)

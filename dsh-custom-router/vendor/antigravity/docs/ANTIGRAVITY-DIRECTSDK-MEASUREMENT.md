@@ -193,9 +193,17 @@ All probes ran `--model gemini-3.8-flash-low`. Weapon: model asked to `touch /tm
 | :--- | :--- |
 | Token file | `antigravity-oauth-token`: `access_token` (260), `refresh_token` (103), `token_type Bearer`, `expiry` |
 | Auth | `auth_method: consumer` (Google account) |
-| API host | `cloudcode-pa.googleapis.com` (`/v1internal`) |
+| API host | `cloudcode-pa.googleapis.com` **and** `daily-cloudcode-pa.googleapis.com`, both `/v1internal` — see the correction below |
 | RPCs in binary | `LoadCodeAssist`, `FetchAvailableModels`, `GenerateContent`, `StreamGenerateContent`, `countTokens`, `onboardUser` |
 | Token endpoint | `oauth2.googleapis.com/token` |
+
+> **Correction (2026-11-13, measured with one token and identical bodies):** the two hosts do not
+> serve the same catalog. `fetchAvailableModels` returned **31 models including four
+> `gemini-4-hydrogen-*` levels** on `daily-cloudcode-pa.googleapis.com`, and **26 models with no
+> Hydrogen** on `cloudcode-pa.googleapis.com`. `loadCodeAssist` answers 200 on both. The
+> single-host row above was an artifact of probing `cloudcode-pa` only; building the catalog
+> request against it hides every Hydrogen route. The plugin now resolves
+> `controlBaseUrl → baseUrl → DEFAULT_CONTROL_BASE_URL` and fetches the catalog from the daily host.
 
 **So: CLI is NOT mandatory.** `StreamGenerateContent` over HTTP is available; the CLI is just a client of it. HTTP routing bypasses the agent persona **and** B2/B3/B4 entirely. Gate: unknown request schema.
 ## 13. Google Antigravity SDK (`google-antigravity`) — MEASURED 2026-11-05
@@ -238,7 +246,7 @@ Steps include `ContentStep`, **`ThoughtStep`**, `ToolCallStep`, `ToolResultStep`
 `models.py`: `GeminiAPIEndpoint.validate_endpoint()` demands `GEMINI_API_KEY`; `VertexEndpoint` takes `project/location/api_key`.
 `grep` for `cloudcode`, `consumer`, `oauth`, `refresh_token`, `antigravity-oauth` → **zero hits** (only unrelated prose).
 
-So the SDK is built for **API-key / Vertex billing**, not the Antigravity consumer subscription. The subscription in §12 (`auth_method: consumer`, `refresh_token`) is reachable only through `cloudcode-pa.googleapis.com` — the path `agy` uses and the SDK does not implement.
+So the SDK is built for **API-key / Vertex billing**, not the Antigravity consumer subscription. The subscription in §12 (`auth_method: consumer`, `refresh_token`) is reachable only through the cloudcode hosts — the path `agy` uses and the SDK does not implement. (Corrected 2026-11-13: `agy` uses the **daily** host, which is the one that serves the full catalog.)
 
 ### Consequences for the build
 

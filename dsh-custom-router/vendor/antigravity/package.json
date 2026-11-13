@@ -1,6 +1,6 @@
 {
   "name": "@nolit/dsh-antigravity",
-  "version": "0.0.1-rc.11",
+  "version": "0.0.1-rc.12",
   "private": false,
   "description": "Antigravity Agent for DeepSeek Harness: one plugin with the /agy CLI worker and agy_worker tool, a pure HTTP model route on the Antigravity subscription (cloudcode-pa, no CLI, no persona), an Antigravity settings section, and a composer usage chip. Master enable plus per-surface switches; English by default, Korean with the host locale.",
   "keywords": [
@@ -103,7 +103,7 @@
     "@deepseek-ai/dsh-llm": "^0.2.2-alpha.2",
     "@deepseek-ai/dsh-subprocess": "^0.2.2-alpha.2",
     "@deepseek-ai/dsh-tools": "^0.2.2-alpha.2",
-    "@nolit/dsh-custom-router": "0.0.1-rc.11"
+    "@nolit/dsh-custom-router": "0.0.1-rc.13"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
