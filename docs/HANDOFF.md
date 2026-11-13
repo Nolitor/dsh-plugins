@@ -16,17 +16,18 @@ summary: Workspace-level progress roll-up — per-track state, the ordered cross
 | Track | Version | Tests | Live | Handoff |
 | :--- | :--- | :--- | :--- | :--- |
 | `dsh-custom-router` | `0.0.1-rc.10` | 491/491, vendored OpenCode 544/544, stream 7/7, dispatch 17/17, contract 0 undocumented | mounted | [HANDOFF](../dsh-custom-router/docs/HANDOFF.md) |
-| `dsh-opencode-v2` | `0.0.1-rc.5` | shim only (7 re-exports); suite moved to `vendor/opencode` 544/544 | mounted via router | [HANDOFF](../dsh-opencode-v2/docs/HANDOFF.md) |
+| `dsh-opencode-v2` | `0.0.1-rc.5` | shim only (7 re-exports); suite moved to `vendor/opencode` 544/544 | mounted via router | [HANDOFF](../archive/dsh-opencode-v2/docs/HANDOFF.md) |
 | `dsh-notify` | `0.0.1-rc.4` | 70/70 | loaded; live visual check open | [HANDOFF](../dsh-notify/docs/HANDOFF.md) |
 | `dsh-tokeneconomizer` | `0.0.1-rc.1` | 139 pass / 1 skip | loaded; live visual check open | [HANDOFF](../dsh-tokeneconomizer/docs/HANDOFF.md) |
 | `dsh-sidebar-manager` | `0.0.1-rc.1` | 162/162 | mounted | [HANDOFF](../dsh-sidebar-manager/docs/HANDOFF.md) |
 | `dsh-command-skill` | `0.0.1-rc.1` | contract verifier only | not installed (by design) | [HANDOFF](../dsh-command-skill/docs/HANDOFF.md) |
-| `dsh-korean-locale` | `0.0.1-rc.1` | `verify.mjs` ok — 74 ns / 3,843 keys | mounted | see below |
+| `dsh-korean-locale` | `0.0.1-rc.4` | `verify.mjs` ok — 77 ns / 4,253 keys | mounted | [HANDOFF](../dsh-korean-locale/HANDOFF.md) |
 | `archive/` (6 tracks) | — | — | not installed | [archive/README.md](../archive/README.md) |
 
-`dsh-korean-locale` is a **git submodule**: this workspace must not write into it (RULES §6.1b),
-so it has no handoff here. Its own record is `dsh-korean-locale/README.md` + `CHANGELOG.md`, and its
-repository has no `docs/` directory.
+`dsh-korean-locale` is a **git submodule** (RULES §6.1b): the workspace is not its writer, so its
+handoff lives in its own repository — now [HANDOFF.md](../dsh-korean-locale/HANDOFF.md) alongside
+`README.md` and `CHANGELOG.md`. The 2026-11-14 rc.3 regeneration was performed inside the submodule
+on the Master's explicit instruction; the workspace only records the resulting gitlink.
 
 ## 2. Ordered cross-track actions
 
