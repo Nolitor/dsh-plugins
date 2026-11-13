@@ -53,7 +53,7 @@ summary: Closed and superseded roadmap items for @nolit/dsh-custom-router, kept 
 
 | Old claim | Why it is archived |
 | :--- | :--- |
-| `PRESET-REGISTRY-STANDARD.md` §1–§2 “two registries / five places” | The browser registry is derived; only `ROUTER_PROVIDERS`/`PICKER_ITEMS` remain hand-authored and are tracked as P2-1 |
+| `PRESET-REGISTRY-STANDARD.md` §1–§2 “two registries / five places” | The browser registry is derived; only `ROUTER_PROVIDERS`/`PICKER_ITEMS` remain hand-authored and are tracked under ROADMAP P2-A |
 | `CLI-DISPATCH-CONTROL-PLANE.md` §8.1–8.4 “`cli:false`; no config-reload; Step 2/3 blocked on M9” | The toggle was withdrawn, the reload listener exists, and the legacy path is gone; M9 was never required for activation |
 | `SHARED-STREAM-PIPE-SPEC.md` “P1–P3 done, P4 next” | P4 is integrated; the residual is the `pipe:'shared'` default (P2-2) |
 | `OPENCODE-ABSORPTION-BLUEPRINT.md` Phase A/C/D/E checklists | Implemented; only Phase B's `shared` default and Phase F's canonical parser remain (P2-2/P2-3) |
@@ -69,6 +69,6 @@ summary: Closed and superseded roadmap items for @nolit/dsh-custom-router, kept 
 | Anthropic/Google conformance fixtures | **Closed** — see §2 (P2-4) |
 | S3 per-group usage | [ROADMAP.md](./ROADMAP.md) P2-5 |
 | S4 spec-only surfaces | [ROADMAP.md](./ROADMAP.md) P2-6 |
-| Data-only preset install | [ROADMAP.md](./ROADMAP.md) P2-1 |
+| Data-only preset install | **Removed 2026-11-14 as unreachable** — the declaration layer owns mount rows + routing only (`kind:'declaration'` mounts nothing, `route:'pi-ai'` has no writer); the work moved to [ROADMAP.md](./ROADMAP.md) P2-A |
 | API-key migration | [ROADMAP.md](./ROADMAP.md) P0-1 |
 | Pricing freshness / watch cadence | **Closed** — see §2 (P1-4, P1-5) |

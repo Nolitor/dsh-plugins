@@ -5,19 +5,19 @@ version: 0.0.1-rc.15
 kind: spec
 status: active
 updated: 2026-11-14
-summary: The preset registry is derived and its drift gate is implemented; the only hand-authored dashboard residual is ROUTER_PROVIDERS/PICKER_ITEMS (ROADMAP P2-1). Records the places a new model-serving preset touches, the exact drift each causes when forgotten, the normative descriptor contract, and the two-part drift gate that enforces it — a static registry diff (presets × descriptors × locales × artefacts) plus the isolated runtime boot — with a mutation harness that proves each drift class is rejected (17/17).
+summary: The preset registry is derived and its drift gate is implemented; the only hand-authored dashboard residual is ROUTER_PROVIDERS/PICKER_ITEMS (ROADMAP P2-A). Records the places a new model-serving preset touches, the exact drift each causes when forgotten, the normative descriptor contract, and the two-part drift gate that enforces it — a static registry diff (presets × descriptors × locales × artefacts) plus the isolated runtime boot — with a mutation harness that proves each drift class is rejected (17/17).
 -->
 
 > **PARTIALLY SUPERSEDED (2026-11-14).** The browser registry is now derived
 > (`lib/preset-derive.js`, `lib/client.src.js:2010`) and the drift gate is implemented; the
 > “two registries / five places” model below is historical. The only hand-authored parts left are
 > `ROUTER_PROVIDERS` (`lib/client.src.js:395`) / `PICKER_ITEMS` (`lib/client.src.js:478`), tracked
-> as [ROADMAP.md](./ROADMAP.md) P2-1. Mutation gate re-measured 2026-11-14: **17/17**.
+> as [ROADMAP.md](./ROADMAP.md) P2-A. Mutation gate re-measured 2026-11-14: **17/17**.
 
 > **Historical status (2026-11-14).** The registry is derived (`preset-derive` + `sync-derive`)
 > and the drift gate is implemented; all §4 steps are done or superseded. The only remaining
 > hand-authored part is the dashboard `ROUTER_PROVIDERS`/`PICKER_ITEMS` pair, tracked in
-> [ROADMAP.md](./ROADMAP.md) P2-1.
+> [ROADMAP.md](./ROADMAP.md) P2-A.
 
 ## 1. The two registries (both exist today, neither derives from the other)
 
@@ -111,7 +111,7 @@ it records what the tree does now, not an intention. This plan is closed — any
 
 **The only hand-authored preset surface left** is the dashboard pair `ROUTER_PROVIDERS`
 (`lib/client.src.js:395`) and `PICKER_ITEMS` (`lib/client.src.js:478`), which are still literal
-arrays. That residual is tracked as [ROADMAP.md](./ROADMAP.md) P2-1; it is not a second registry,
+arrays. That residual is tracked as [ROADMAP.md](./ROADMAP.md) P2-A; it is not a second registry,
 because the drift gate rejects disagreement with the derived descriptors.
 
 ## 5. The gate (implemented)
