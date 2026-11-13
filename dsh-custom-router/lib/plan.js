@@ -20,6 +20,104 @@ const FAILED_PROBES = new Set(['auth-error', 'model-unavailable', 'overloaded'])
 const SETTLED_PROBES = new Set(['ok', 'free-limit', 'throttled'])
 
 /**
+ * Billing modes that charge per token, whatever the provider calls them.
+ *
+ * `pay-per-token` is the preset vocabulary (`lib/presets.js`, deepinfra);
+ * `metered` is the same thing named by `specs/pricing/*.kind: 'live-catalog'`.
+ * Both bill the catalog estimate and neither is ever covered by a plan.
+ */
+export const METERED_MODES = Object.freeze(['pay-per-token', 'metered'])
+
+/** The canonical billing modes `billingOutcome()` judges, in display order. */
+export const BILLING_MODES = Object.freeze(['subscription', 'flat', 'pay-per-token', 'free', 'none'])
+
+/** Aliases seen on the wire / in specs, mapped to a canonical mode. */
+const MODE_ALIASES = Object.freeze({
+  'pay-per-token': 'pay-per-token',
+  metered: 'pay-per-token',
+  'live-catalog': 'pay-per-token',
+  subscription: 'subscription',
+  flat: 'flat',
+  free: 'free',
+  none: 'none',
+})
+
+/**
+ * The canonical billing mode of a preset/record, or `null` when undeclared.
+ *
+ * Measured 2026-11-14: `specs/pricing/*.kind` uses `subscription` /
+ * `live-catalog` / `free` / `flat` while `preset.usage.billing.mode` uses
+ * `subscription` / `flat` / `pay-per-token` / `none`. This is the one place the
+ * two vocabularies are reconciled, so a caller never has to know both.
+ *
+ * @param {object} billing - `{mode}` record (preset `usage.billing` or a spec row).
+ * @returns {'subscription'|'flat'|'pay-per-token'|'free'|'none'|null} canonical mode.
+ */
+export function billingModeOf(billing) {
+  const raw = billing?.mode ?? billing?.kind
+  if (typeof raw !== 'string' || raw.length === 0) return null
+  return MODE_ALIASES[raw.toLowerCase()] ?? null
+}
+
+/**
+ * Window-label aliases. The measured labels (`5h`, `rolling`, `weekly`, `7d`,
+ * `monthly`, `30d`, `per-request`, `quota`) and their normalised ids.
+ */
+const WINDOW_ALIASES = Object.freeze({
+  '5h': '5h',
+  rolling: '5h',
+  weekly: 'weekly',
+  '7d': 'weekly',
+  monthly: 'monthly',
+  '30d': 'monthly',
+  'per-request': 'per-request',
+  quota: 'quota',
+})
+
+/**
+ * Map a provider window label to the normalised window id.
+ * @param {unknown} label - e.g. `rolling`, `7d`, `weekly`.
+ * @returns {string|null} normalised id, or null when the label is not a string.
+ */
+export function normalizeWindow(label) {
+  if (typeof label !== 'string') return null
+  return WINDOW_ALIASES[label.toLowerCase()] ?? label
+}
+
+/**
+ * Read the DECLARED window set out of `usage.billing.windows`.
+ *
+ * This field was validated, projected to the browser and read by nothing —
+ * measured 2026-11-14 (`docs/ROADMAP.md:201`, "dead declarations"). It is the
+ * only window information that exists before any probe runs: antigravity
+ * declares `5h` / `weekly` / `monthly`, opencode-v2 declares `per-request`.
+ * A declaration says a window EXISTS; it never says how much is consumed, so the
+ * result carries `measured: false` and no `percent`.
+ *
+ * @param {object} billing - preset `usage.billing` (may also be given directly).
+ * @returns {{window: string|null, label: string, scope: 'plan'|'request', declared: true, measured: false, limited: null, resetsAt: null}[]} declarations.
+ */
+export function readDeclaredWindows(billing) {
+  const rows = Array.isArray(billing?.windows) ? billing.windows : []
+  const out = []
+  for (const row of rows) {
+    const label = typeof row === 'string' ? row : row?.label
+    if (typeof label !== 'string' || label.length === 0) continue
+    const window = normalizeWindow(label)
+    out.push({
+      window,
+      label,
+      scope: window === 'per-request' ? 'request' : 'plan',
+      declared: true,
+      measured: false,
+      limited: null,
+      resetsAt: null,
+    })
+  }
+  return out
+}
+
+/**
  * Assemble a PlanVerdict with every field explicit.
  * @param {object} input - measured facts.
  * @returns {object} the verdict.
@@ -82,7 +180,7 @@ export function judgePlan(input = {}) {
   const degraded = Array.isArray(input.degraded) ? input.degraded : []
 
   let verdict = 'unknown'
-  if (!billing || billing.mode === 'none') {
+  if (!billing || billingModeOf(billing) === 'none') {
     verdict = 'no-plan-service'
   } else if (FAILED_PROBES.has(endpointProbe)) {
     verdict = 'unknown'
@@ -220,7 +318,9 @@ export function tierFromBillingSources(sources) {
  * @returns {{billed: number|null, covered: boolean|null, confidence: 'measured'|'estimated'|'unavailable', reason: string}} the billing outcome.
  */
 export function billingOutcome({ billing, verdict, cost } = {}) {
-  const mode = billing?.mode
+  // Canonicalise first: `metered` / `live-catalog` are the same mode as
+  // `pay-per-token`, and a preset may carry either vocabulary.
+  const mode = billingModeOf(billing)
   const planVerdict = verdict?.verdict ?? 'unknown'
   const estimatedTotal = typeof cost?.total === 'number' ? cost.total : undefined
 
@@ -232,6 +332,11 @@ export function billingOutcome({ billing, verdict, cost } = {}) {
       return { billed: null, covered: false, confidence: 'unavailable', reason: 'no catalog rates for this model' }
     }
     return { billed: estimatedTotal, covered: false, confidence: 'estimated', reason: 'per-token catalog estimate' }
+  }
+  if (mode === 'free') {
+    // A provider-declared free route (`specs/pricing/*.kind: 'free'`): the plan
+    // model stays out of it, and the amount is measured at zero, not guessed.
+    return { billed: 0, covered: true, confidence: 'measured', reason: 'free tier; the provider charges nothing' }
   }
   if (mode === 'subscription' || mode === 'flat') {
     if (planVerdict === 'unknown') {
@@ -251,4 +356,155 @@ export function billingOutcome({ billing, verdict, cost } = {}) {
     return { billed: 0, covered: true, confidence: 'measured', reason: `${mode} plan covers this usage` }
   }
   return { billed: null, covered: null, confidence: 'unavailable', reason: 'billing mode is not declared' }
+}
+
+/* ------------------------------------------------------------------ *
+ * Plan availability and ordering (union of `vendor/opencode/lib/plans.js`)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Plans in display order. A provider id IS the plan id on the wire, so
+ * availability is decidable from the catalog alone — no per-model request.
+ */
+export const PLANS = Object.freeze(['go', 'zen'])
+
+/** Provider id that owns each plan's routes (measured: opencode-go / opencode). */
+export const PLAN_PROVIDERS = Object.freeze({ go: 'opencode-go', zen: 'opencode' })
+
+/** How long a newly appeared route keeps priority ordering. */
+export const NEW_MODEL_DAYS = 7
+
+/** Verdicts that mean "the backend itself refused this route". */
+const REFUSALS = new Set(['unavailable', 'deprecated', 'auth', 'forbidden'])
+
+/**
+ * The plan a provider id belongs to.
+ * @param {string} providerId - catalog row provider (`opencode-go`, `opencode`, ...).
+ * @param {Record<string,string>} [providers] - plan → provider map (defaults to `PLAN_PROVIDERS`).
+ * @returns {string} `go` | `zen` | `other`.
+ */
+export function planOfProvider(providerId, providers = PLAN_PROVIDERS) {
+  for (const plan of PLANS) {
+    if (providers?.[plan] === providerId) return plan
+  }
+  return 'other'
+}
+
+/**
+ * The plan a `provider/model` route belongs to.
+ * @param {string} route - catalog id.
+ * @param {Record<string,string>} [providers] - plan → provider map.
+ * @returns {string} `go` | `zen` | `other`.
+ */
+export function planOfRoute(route, providers = PLAN_PROVIDERS) {
+  return planOfProvider(String(route ?? '').split('/')[0], providers)
+}
+
+/**
+ * Is this route new enough to be served first?
+ *
+ * New means first seen inside the window AND not yet covered by the public usage
+ * ranking — once ranked it competes on usage like everything else.
+ * @param {string} route - `provider/model`.
+ * @param {{firstSeen?: object, ranking?: object, now?: number, newWithinDays?: number}} [state] - observation state.
+ * @returns {boolean} true when the route is inside its new-model window.
+ */
+export function isNewModel(route, { firstSeen = {}, ranking = {}, now = Date.now(), newWithinDays = NEW_MODEL_DAYS } = {}) {
+  const key = String(route ?? '')
+  if (key.length === 0) return false
+  if (typeof ranking?.[key] === 'number') return false
+  const seen = firstSeen?.[key]
+  if (seen === undefined || seen === null) return false
+  const stamp = typeof seen === 'number' ? seen : Date.parse(String(seen))
+  if (!Number.isFinite(stamp)) return false
+  return now - stamp < newWithinDays * 86_400_000
+}
+
+/**
+ * Decide whether one route may be used right now.
+ *
+ * The plan is the FIRST question, not a tie-breaker: a refusal measured on the
+ * other plan's endpoint does not make the route "unavailable", because the
+ * operator is not being offered it at all.
+ * @param {{route?: string, id?: string}} model - catalog row.
+ * @param {{activePlan?: string, verdicts?: Record<string,string>, providers?: Record<string,string>}} [state] - plan state.
+ * @returns {{plan: string, available: boolean, state: 'usable'|'other-plan'|'unknown'|'unavailable'|'deprecated'|'auth'|'forbidden'}} availability.
+ */
+export function availabilityOf(model, { activePlan = 'go', verdicts = {}, providers = PLAN_PROVIDERS } = {}) {
+  const route = String(model?.route ?? model?.id ?? '')
+  const plan = planOfRoute(route, providers)
+  const verdict = verdicts?.[route]
+  const refusal = typeof verdict === 'string' && REFUSALS.has(verdict) ? verdict : null
+
+  if (plan === 'other') return { plan, available: false, state: 'unknown' }
+  if (plan !== activePlan) return { plan, available: false, state: 'other-plan' }
+  if (refusal !== null) return { plan, available: false, state: refusal }
+  return { plan, available: true, state: 'usable' }
+}
+
+/**
+ * Order a checklist: the active plan first, usable before blocked, newly appeared
+ * first, then public usage rank, then name. Nothing is dropped.
+ * @param {readonly object[]} models - catalog rows (`{route, name}`).
+ * @param {{activePlan?: string, verdicts?: object, ranking?: object, firstSeen?: object, now?: number, newWithinDays?: number, providers?: object}} [state] - ordering state.
+ * @returns {(object & {plan: string, available: boolean, state: string, rank: number|null, isNew: boolean})[]} ordered rows.
+ */
+export function orderModels(
+  models,
+  { activePlan = 'go', verdicts = {}, ranking = {}, firstSeen = {}, now = Date.now(), newWithinDays = NEW_MODEL_DAYS, providers = PLAN_PROVIDERS } = {},
+) {
+  const annotated = (models ?? []).map((model) => {
+    const route = String(model?.route ?? model?.id ?? '')
+    const availability = availabilityOf({ route }, { activePlan, verdicts, providers })
+    const rank = typeof ranking?.[route] === 'number' ? ranking[route] : null
+    const isNew = isNewModel(route, { firstSeen, ranking, now, newWithinDays })
+    return { ...model, route, ...availability, rank, isNew }
+  })
+  const onActive = (model) => (model.plan === activePlan ? 0 : 1)
+  return annotated.sort((left, right) => {
+    const planDelta = onActive(left) - onActive(right)
+    if (planDelta !== 0) return planDelta
+    if (left.available !== right.available) return left.available ? -1 : 1
+    if (left.isNew !== right.isNew) return left.isNew ? -1 : 1
+    const leftRank = left.rank ?? Number.POSITIVE_INFINITY
+    const rightRank = right.rank ?? Number.POSITIVE_INFINITY
+    if (leftRank !== rightRank) return leftRank - rightRank
+    const nameDelta = String(left.name ?? left.route).localeCompare(String(right.name ?? right.route), 'en')
+    return nameDelta !== 0 ? nameDelta : left.route.localeCompare(right.route)
+  })
+}
+
+/**
+ * Extract `model -> weekly usage rank` from a public data index payload.
+ * @param {unknown} payload - parsed `opencode.ai/data/index.json`.
+ * @returns {{ranking: Record<string, number>, updatedAt: string|null, covered: number}} the ranking.
+ */
+export function rankingFromDataIndex(payload) {
+  const leaderboard = payload?.leaderboard?.pastWeek
+  const ranking = {}
+  if (Array.isArray(leaderboard)) {
+    leaderboard.forEach((row, index) => {
+      const model = typeof row?.model === 'string' ? row.model : ''
+      if (model.length === 0) return
+      ranking[model] = typeof row?.rank === 'number' ? row.rank : index + 1
+    })
+  }
+  const updatedAt = typeof payload?.updatedAt === 'string' && payload.updatedAt.length > 0 ? payload.updatedAt : null
+  return { ranking, updatedAt, covered: Object.keys(ranking).length }
+}
+
+/**
+ * Apply a bare-model ranking map to `provider/model` routes.
+ * @param {readonly string[]} routes - qualified routes.
+ * @param {Record<string, number>} byModel - bare-id ranking.
+ * @returns {Record<string, number>} route → rank.
+ */
+export function rankingForRoutes(routes, byModel) {
+  const out = {}
+  for (const route of routes ?? []) {
+    const model = String(route).split('/').slice(1).join('/')
+    const rank = byModel?.[model]
+    if (typeof rank === 'number') out[String(route)] = rank
+  }
+  return out
 }
