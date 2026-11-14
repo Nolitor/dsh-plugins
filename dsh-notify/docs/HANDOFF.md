@@ -5,7 +5,7 @@ version: 1.1
 kind: report
 status: active
 updated: 2026-11-13
-summary: Stage-by-stage handoff for @nolit/dsh-notify at 0.0.1-rc.5 — the shipped Chrome-notification surface, the pending-restart state, and the two recorded follow-ups (host settings, stale prototype doc).
+summary: Stage-by-stage handoff for @nolit/dsh-notify at 0.0.1-rc.6 — the shipped Chrome-notification surface, the pending-restart state, and the two recorded follow-ups (host settings, stale prototype doc).
 -->
 
 > History lives in [CHANGELOG.md](../CHANGELOG.md). This file is the **forward** view.
@@ -14,9 +14,9 @@ summary: Stage-by-stage handoff for @nolit/dsh-notify at 0.0.1-rc.5 — the ship
 
 | Item | Measured value |
 | :--- | :--- |
-| Package | `@nolit/dsh-notify@0.0.1-rc.5` |
+| Package | `@nolit/dsh-notify@0.0.1-rc.6` |
 | Last code commit | `d9d0d47` 2026-11-08 — settings card and peak chip aligned with DSH |
-| Tests | `npm test` → **72/72 pass** (re-measured 2026-11-13) |
+| Tests | `npm test` → **77/77 pass** (re-measured 2026-11-13) |
 | Publishable | yes — tarball 39 files (re-measured 2026-11-13), prerelease needs `--tag` |
 | Live state | modules loaded — `lib/client.src.js` mtime 11:30:26 is before the 11:53:42 service start; live *visual* check still outstanding |
 

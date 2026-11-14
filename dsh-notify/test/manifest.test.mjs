@@ -27,7 +27,7 @@ test('package name stays @nolit/dsh-notify; display identity is Notify for Chrom
 })
 
 test('version is an owner-form 0.0.1-rc.N and the market agrees with it', () => {
-  assert.equal(pkg.version, '0.0.1-rc.5')
+  assert.equal(pkg.version, '0.0.1-rc.6')
   assert.match(pkg.version, /^\d+\.\d+\.\d+-rc\.\d+$/)
   assert.equal(market.plugins[0].versions[0].version, pkg.version)
   // The numeric part is the owner's; the rc suffix is the agent's history marker,
