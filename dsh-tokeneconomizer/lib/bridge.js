@@ -222,6 +222,65 @@ export function writeExport(dir, session) {
 }
 
 /**
+ * Run one engine command and keep its exit code alongside its output.
+ *
+ * {@link runJson} answers a machine protocol where the last JSON line is the whole answer, so it
+ * drops the status. An operator command is the opposite: `te config set` prints a human-readable
+ * confirmation on success and still exits 0, so a caller that only sees stdout cannot tell success
+ * from a rejection. This keeps both, and never throws.
+ * @param {string} program - the launcher to run.
+ * @param {string[]} args - its arguments.
+ * @param {{ env?: object, timeoutMs?: number, spawnImpl?: Function }} [options] - overrides.
+ * @returns {Promise<{ ok: boolean, code: number | null, output: string, error: string }>} the run.
+ */
+export function runText(program, args, options = {}) {
+  const { env = process.env, timeoutMs = DEFAULT_CLI_TIMEOUT_MS, spawnImpl = spawn } = options
+  return new Promise((resolve) => {
+    let out = ''
+    let err = ''
+    let child
+    try {
+      child = spawnImpl(program, args, {
+        env: { ...process.env, ...env, ...DSH_ENV, PYTHONUTF8: '1' },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+    } catch (error) {
+      resolve({ ok: false, code: null, output: '', error: error instanceof Error ? error.message : String(error) })
+      return
+    }
+    let settled = false
+    const finish = (value) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(value)
+    }
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        /* already gone */
+      }
+      finish({ ok: false, code: null, output: out, error: 'engine command timed out after ' + timeoutMs + 'ms' })
+    }, timeoutMs)
+    child.stdout?.setEncoding?.('utf8')
+    child.stderr?.setEncoding?.('utf8')
+    child.stdout?.on?.('data', (chunk) => {
+      out += chunk
+    })
+    child.stderr?.on?.('data', (chunk) => {
+      err += chunk
+    })
+    child.on('error', (error) => {
+      finish({ ok: false, code: null, output: out, error: error instanceof Error ? error.message : String(error) })
+    })
+    child.on('close', (code) => {
+      finish({ ok: code === 0, code: typeof code === 'number' ? code : null, output: out, error: err })
+    })
+  })
+}
+
+/**
  * The exit status a DSH tool result names in its rendered text, when it names one (`bash`
  * appends `[exit code: N]`). Used for the guard's ended-green proxy.
  * @param {string} text - rendered tool result.

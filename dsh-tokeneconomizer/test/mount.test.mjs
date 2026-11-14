@@ -11,12 +11,68 @@
  * policy, the pinned prompt slot, the loop breaker, and the thinking watchdog.
  */
 import assert from 'node:assert/strict'
-import { mkdtempSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { apply, DEFAULTS, isHeadless, name, resolveConfig } from '../lib/index.js'
+import { apply, DEFAULTS, isHeadless, name, resolveConfig, rootSessionsView } from '../lib/index.js'
+
+/**
+ * Launcher pair that records every engine invocation instead of running the Python engine.
+ *
+ * An absent engine fails open to `{}`, which is indistinguishable from a hook that was never
+ * called — so the fail-open path alone cannot prove "a subagent makes zero engine calls". These
+ * launchers write one line per process the plugin actually spawns, which turns that claim into a
+ * counted fact. Each invocation appends its argv and its stdin payload, so the lifecycle event
+ * (`hook_event_name`) is assertable too, not just the count.
+ * @param {string} dir - the state root to install the launchers under.
+ * @returns {{ te: string, hook: string, calls: (which: string) => object[], launches: () => number }}
+ *   the launcher paths and the recorded calls.
+ */
+function countingLaunchers(dir) {
+  const logDir = join(dir, 'engine-calls')
+  mkdirSync(logDir, { recursive: true })
+  const install = (label) => {
+    const path = join(dir, label)
+    const log = join(logDir, `${label}.log`)
+    // The last line is the JSON answer a real launcher would print; `{}` changes nothing.
+    writeFileSync(path, [
+      '#!/bin/sh',
+      `payload=$(cat 2>/dev/null || true)`,
+      `printf '%s\\n' "$*" >> "${log}"`,
+      `printf '%s\\n' "$payload" >> "${log}.payload"`,
+      `printf '%s\\n' '{}'`,
+      '',
+    ].join('\n'), { mode: 0o755 })
+    return { path, log }
+  }
+  const te = install('te')
+  const hook = install('hook')
+  const lines = (file) => (existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter(Boolean) : [])
+  return {
+    te: te.path,
+    hook: hook.path,
+    /** The argv of every invocation of one launcher. */
+    calls(which) {
+      return lines(which === 'te' ? te.log : hook.log)
+    },
+    /** The parsed stdin payloads of every hook invocation. */
+    payloads() {
+      return lines(hook.log).map((_, index) => {
+        try {
+          return JSON.parse(lines(`${hook.log}.payload`)[index] ?? '{}')
+        } catch {
+          return {}
+        }
+      })
+    },
+    /** Total engine processes spawned, both launchers. Zero means "no engine at all". */
+    launches() {
+      return lines(te.log).length + lines(hook.log).length
+    },
+  }
+}
 
 /**
  * A Context stub that records listeners and the tool definitions it advertises.
@@ -163,6 +219,11 @@ test('the host-local settings are validated', () => {
   // Advisory by default: only an explicit `interrupt` may end a turn.
   assert.equal(resolveConfig({}).watchdogAction, 'interrupt')
   assert.equal(resolveConfig({}).mode, 'apply')
+  // A child gets the memory levers by default, and the switch is a real boolean setting.
+  assert.equal(DEFAULTS.subagentMemory, true)
+  assert.equal(resolveConfig({}).subagentMemory, true)
+  assert.equal(resolveConfig({ subagentMemory: false }).subagentMemory, false)
+  assert.throws(() => resolveConfig({ subagentMemory: 'no' }), /subagentMemory/)
   assert.throws(() => resolveConfig({ mode: 'off' }), /mode/)
   // The warning point is derived from the budget, so a short budget clamps it instead of failing.
   assert.equal(resolveConfig({ watchdogThresholdMs: 20 }).watchdogWarnMs, 10)
@@ -205,14 +266,226 @@ test('an agent scope composes with no engine present', async () => {
   assert.ok(agent.calls.listeners.includes('tools/result'))
 })
 
-test('a subagent session is not given its own economy', async () => {
+test('subagent gets the in-memory levers but no engine', async () => {
   const ctx = fakeContext()
   const home = mkdtempSync(join(tmpdir(), 'te-dsh-sub-'))
-  apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y') })
+  const engine = countingLaunchers(home)
+  apply(ctx, { stateHome: home, tePath: engine.te, hookPath: engine.hook })
   const agent = fakeAgent('session-sub', home)
   agent.session.header.origin = 'subagent'
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
+
+  // The memory path IS mounted: a child session burns the same context and calls the same
+  // tools, and its bill lands on the parent. `tools/post-execute` carries dedup, tiering and the
+  // loop breaker; `session/event` carries the watchdog, the prefix guard and the call index.
+  assert.notDeepEqual(agent.calls.listeners, [])
+  assert.ok(agent.calls.listeners.includes('tools/post-execute'))
+  assert.ok(agent.calls.listeners.includes('session/event'))
+  // The rest of the in-memory path, so a later refactor cannot quietly drop one of them:
+  // `agent/pre-step` is the tiering waterfall and `tools/result` is the loop guard's trace.
+  assert.ok(agent.calls.listeners.includes('agent/pre-step'), 'tiering must still run for a child')
+  assert.ok(agent.calls.listeners.includes('tools/result'), 'the tool-result trace must still run')
+
+  // The engine path is NOT: microskills (a prompt context) and toolprune (a tool restriction)
+  // are answers only the engine can give, so a child that never asks gets neither.
+  assert.deepEqual(agent.calls.context, [])
+  assert.deepEqual(agent.calls.restrict, [])
+
+  // And no engine process was spawned for it: not SessionStart, not the brief `te` call.
+  assert.equal(engine.launches(), 0, 'a subagent must make zero engine calls')
+})
+
+test('a subagent stays off the engine across a whole turn lifecycle', async () => {
+  const ctx = fakeContext()
+  const home = mkdtempSync(join(tmpdir(), 'te-dsh-sub-life-'))
+  const engine = countingLaunchers(home)
+  apply(ctx, { stateHome: home, tePath: engine.te, hookPath: engine.hook })
+  const agent = fakeAgent('session-sub-life', home)
+  agent.session.header.origin = 'subagent'
+  await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
+
+  // Drive every lifecycle edge that reaches an engine call in a root session: the prompt turn
+  // (UserPromptSubmit), a tool result (PostToolUse), and the turn end (Stop + export).
+  emit(agent, { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'do it' }] } })
+  emit(agent, { type: 'turn/start', data: { turn: 1 } })
+  emit(agent, toolCall('c1', 1))
+  agent.calls.handlers.get('tools/result')?.forEach((handler) => {
+    handler(
+      { name: 'bash', callId: 'c1', arguments: { command: 'ls' }, agent },
+      { isError: false, content: [{ type: 'text', text: 'x'.repeat(400) }] },
+    )
+  })
+  emit(agent, { type: 'turn/end', data: { turn: 1 } })
+  await wait(60)
+  // SessionEnd, which finishes the export and hands the session to a detached `te fold`.
+  ctx.listeners.get('agent/disposed')({ agent })
+  await wait(60)
+
+  assert.equal(engine.calls('te').length, 0, 'no `te` process for a subagent')
+  assert.equal(engine.calls('hook').length, 0, 'no `te-hook` process for a subagent')
+  assert.equal(engine.launches(), 0)
+  // No export either: a child transcript in dsh-sessions/ would be folded a second time.
+  assert.equal(existsSync(join(home, 'dsh-sessions')), false, 'a subagent writes no session export')
+})
+
+test('a subagent still deduplicates a repeated tool output', async () => {
+  const ctx = fakeContext()
+  const home = mkdtempSync(join(tmpdir(), 'te-dsh-sub-dedup-'))
+  const engine = countingLaunchers(home)
+  apply(ctx, { stateHome: home, tePath: engine.te, hookPath: engine.hook })
+  const agent = fakeAgent('session-sub-dedup', home)
+  agent.session.header.origin = 'subagent'
+  await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
+
+  const output = 'y'.repeat(400)
+  emit(agent, toolCall('c1', 3))
+  const first = await postExecute(
+    agent,
+    { name: 'bash', callId: 'c1', arguments: { command: 'ls' }, agent },
+    { isError: false, content: [{ type: 'text', text: output }] },
+  )
+  assert.equal(first.content, undefined, 'the first occurrence keeps its full text')
+
+  emit(agent, toolCall('c2', 7))
+  let second = null
+  const logged = await captureStderr(async () => {
+    second = await postExecute(
+      agent,
+      { name: 'bash', callId: 'c2', arguments: { command: 'ls' }, agent },
+      { isError: false, content: [{ type: 'text', text: output }] },
+    )
+  })
+  // The saving is real in a child: the model-visible copy becomes a pointer to step 3.
+  assert.equal(second.kind, 'accept')
+  assert.equal(second.content.length, 1)
+  assert.match(second.content[0].text, /^\[Output identical to step 3 \(hash: [0-9a-f]{12}\), content omitted to save context\]$/)
+  assert.match(logged, /\[tokeneconomizer\] dedup: tool=bash repeated-output replaced hits=2 first-step=3/)
+  // The dedup ran entirely in memory: it needed no engine process to do it.
+  assert.equal(engine.launches(), 0)
+})
+
+test('a subagent still runs the loop breaker and the watchdog', async () => {
+  const ctx = fakeContext()
+  const home = mkdtempSync(join(tmpdir(), 'te-dsh-sub-loop-'))
+  const engine = countingLaunchers(home)
+  apply(ctx, {
+    stateHome: home,
+    tePath: engine.te,
+    hookPath: engine.hook,
+    watchdogThresholdMs: 20,
+    watchdogAction: 'interrupt',
+  })
+  const agent = fakeAgent('session-sub-loop', home)
+  agent.session.header.origin = 'subagent'
+  await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
+
+  const exec = { name: 'bash', callId: 'c1', arguments: { command: 'pytest -q' }, agent }
+  const result = { isError: true, content: [{ type: 'text', text: 'Error: command failed' }] }
+  await captureStderr(async () => {
+    for (const callId of ['c1', 'c2', 'c3']) {
+      emit(agent, toolCall(callId, 3))
+      await postExecute(agent, { ...exec, callId }, result)
+    }
+  })
+  assert.equal(agent.calls.cancelled.length, 1, 'the breaker trips inside a subagent too')
+  assert.deepEqual(agent.calls.cancelled[0].cause, { kind: 'hook', reason: 'tokeneconomizer/loop-breaker' })
+
+  // The watchdog is armed from the same event stream.
+  const watch = await captureStderr(async () => {
+    emit(agent, { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'next' }] } })
+    emit(agent, { type: 'turn/start', data: { turn: 2 } })
+    await wait(80)
+  })
+  assert.match(watch, /made no progress/)
+  assert.equal(engine.launches(), 0)
+})
+
+test('subagentMemory false restores no economy of its own for a child', async () => {
+  const ctx = fakeContext()
+  const home = mkdtempSync(join(tmpdir(), 'te-dsh-sub-off-'))
+  const engine = countingLaunchers(home)
+  apply(ctx, {
+    stateHome: home,
+    tePath: engine.te,
+    hookPath: engine.hook,
+    subagentMemory: false,
+  })
+  const agent = fakeAgent('session-sub-off', home)
+  agent.session.header.origin = 'subagent'
+  await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
+
+  // Nothing at all is registered for the child, which is the historical behaviour.
   assert.deepEqual(agent.calls.listeners, [])
+  assert.deepEqual(agent.calls.context, [])
+  assert.deepEqual(agent.calls.restrict, [])
+  assert.deepEqual(agent.calls.sections, [], 'not even the pinned section')
+  assert.equal(engine.launches(), 0)
+
+  // The switch is honoured for children only: a root session in the same plugin still mounts.
+  const root = fakeAgent('session-root-on', home)
+  await ctx.listeners.get('agent/created')({ agent: root, source: 'startup' })
+  assert.ok(root.calls.listeners.includes('tools/post-execute'))
+  assert.ok(root.calls.listeners.includes('session/event'))
+})
+
+test('the root session keeps its full engine lifecycle', async () => {
+  const ctx = fakeContext()
+  const home = mkdtempSync(join(tmpdir(), 'te-dsh-root-engine-'))
+  const engine = countingLaunchers(home)
+  apply(ctx, { stateHome: home, tePath: engine.te, hookPath: engine.hook })
+  const agent = fakeAgent('session-root', home)
+  await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
+
+  // SessionStart: one `te` brief and one `te-hook` SessionStart.
+  assert.equal(engine.calls('te').length, 1, 'the root session still asks for its brief')
+  const startPayloads = engine.payloads()
+  assert.equal(startPayloads.length, 1)
+  assert.equal(startPayloads[0].hook_event_name, 'SessionStart')
+
+  emit(agent, { type: 'turn/start', data: { turn: 1 } })
+  emit(agent, { type: 'turn/end', data: { turn: 1 } })
+  await wait(60)
+  const events = engine.payloads().map((payload) => payload.hook_event_name)
+  assert.ok(events.includes('UserPromptSubmit'), 'the root session still opens a guard turn')
+  assert.ok(events.includes('Stop'), 'the root session still closes a guard turn')
+  assert.ok(agent.calls.listeners.includes('tools/post-execute'))
+  assert.ok(agent.calls.listeners.includes('session/event'))
+})
+
+test('subagentMemory is declared in the bundle patch, not only in the code', () => {
+  // `watchdog` was once declared, validated and documented with no reader, and the same could
+  // happen here: a key that exists in DEFAULTS but is absent from the bundle patch is dropped the
+  // moment any profile overrides a single key (a patch `config` replaces the whole config), and
+  // the child would silently fall back to the code default. Pin the declaration.
+  const yml = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+  assert.match(yml, /^\s+subagentMemory:\s*true\s*$/m)
+})
+
+test('every DEFAULTS key is declared in the bundle patch', () => {
+  // The drift this catches is silent by construction: the plugin keeps working with a code
+  // default, so nothing fails until an operator wonders why their override did nothing.
+  const yml = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+  const declared = new Set()
+  for (const match of yml.matchAll(/^\s{8}([a-z][A-Za-z0-9]*):/gm)) declared.add(match[1])
+  const missing = Object.keys(DEFAULTS).filter((key) => !declared.has(key))
+  assert.deepEqual(missing, [], 'cordis.patch.yml is missing: ' + missing.join(', '))
+})
+
+test('devstats lists root sessions only, never a child as a sibling', async () => {
+  const sessions = new Map()
+  const root = { sid: 'root', subagent: false, cwd: '/repo' }
+  const child = { sid: 'child', subagent: true, cwd: '/repo' }
+  sessions.set('root', root)
+  sessions.set('child', child)
+  const view = rootSessionsView(sessions)
+  // Counting a child's turns as a top-level session is the same double count the engine path
+  // avoids, only in the statistics surface.
+  assert.deepEqual(view.values().map((state) => state.sid), ['root'])
+  assert.equal(view.size, 1)
+  assert.equal(view.get('root'), root)
+  assert.equal(view.get('child'), undefined)
+  // The real map still holds both: the child keeps its memory levers, it is only off camera.
+  assert.equal(sessions.size, 2)
 })
 
 test('the observers are registered before the session brief resolves', async () => {

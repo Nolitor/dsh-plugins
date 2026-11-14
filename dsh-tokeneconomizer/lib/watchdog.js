@@ -102,11 +102,18 @@ export function createLoopBreaker(options = {}) {
  * The warning tier is separate from the expiry: `onWarn` fires once per budget at `warnMs`, and
  * the caller decides whether the expiry is a notice or an interrupt.
  * @param {{ thresholdMs?: number, warnMs?: number, onWarn?: (elapsedMs: number) => void,
- *   onTimeout?: (elapsedMs: number) => void }} [options] - the budget, the soft-warning point,
- *   and the two handlers.
+ *   onTimeout?: (elapsedMs: number) => void, disabled?: boolean }} [options] - the budget, the
+ *   soft-warning point, the two handlers, and whether `watchdog: false` turned the watch off.
  * @returns {object} the watchdog.
  */
 export function createWatchdog(options = {}) {
+  /*
+   * `watchdog: false` used to be a config key with no reader: it was declared, validated and
+   * documented, and the watch ran anyway. The disabled watchdog keeps the object shape the call
+   * sites already use (`progress()`, `suspend()`, `disarm()`) and simply never arms a timer, so a
+   * deployment that turns it off gets no notices and no interrupt with no call-site changes.
+   */
+  const disabled = options.disabled === true
   const thresholdMs = options.thresholdMs ?? DEFAULT_THRESHOLD_MS
   const warnMs = Math.min(
     options.warnMs ?? Math.floor(thresholdMs * DEFAULT_WARN_RATIO),
@@ -160,6 +167,7 @@ export function createWatchdog(options = {}) {
    * @returns {void}
    */
   function schedule() {
+    if (disabled) return
     if (timer !== null) {
       clearTimeout(timer)
       timer = null
@@ -235,6 +243,7 @@ export function createWatchdog(options = {}) {
      * @returns {void}
      */
     arm() {
+      if (disabled) return
       lastProgressAt = Date.now()
       warned = false
       suspended = false

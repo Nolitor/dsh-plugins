@@ -1,12 +1,14 @@
 # @nolit/dsh-tokeneconomizer
 
 <!-- skeleton:
-version: 1.5
+version: 1.7
 kind: readme
 status: active
-updated: 2026-11-08
-summary: DSH 0.2.2 bridge for microsoft/TokenEconomizer: lifecycle mapping, in-memory tool mask, DSH trace reader, guarded migration, prior-session recall through the harness index, host-local in-memory features, and the Web developer-statistics card.
+updated: 2026-11-15
+summary: DSH 0.2.2 bridge for microsoft/TokenEconomizer: lifecycle mapping, in-memory tool mask, DSH trace reader, guarded migration, prior-session recall through the harness index, host-local in-memory features, plugin-record attribution, the agent/pre-step tiering trigger, and the Web developer-statistics and settings pages.
 -->
+
+Version `0.0.1-rc.6`.
 
 DSH-side bridge for [microsoft/TokenEconomizer](https://github.com/microsoft/TokenEconomizer) (Apache-2.0,
 pinned commit `6141bb92`). The economical behaviour stays in TokenEconomizer's stdlib-only Python
@@ -82,6 +84,8 @@ node bin/te-dsh.mjs purge [--exports] [--state] [--all] [--dry-run] [--yes]
 node bin/te-dsh.mjs status [--cwd <dir>]
 node bin/te-dsh.mjs doctor
 npm test
+npm run check                  # syntax-check every module under lib/, bin/, scripts/
+npm run audit:deprecations     # the deprecation gate over the consumed DSH seams
 ```
 
 `cold-start` skips three things by default, and each has an override: a session this state root
@@ -109,51 +113,103 @@ The package imports nothing outside `node:` builtins. It never imports a harness
 profile can mount it with no peer dependency, and the TokenEconomizer engine is reached only
 through `child_process` (`te`, `te-hook`).
 
-## Developer statistics (Web)
+## Settings (Web) — one row, two tabs
 
-The Web client half (`lib/client.js`) adds one `settings.section` seat, `tokeneconomizer-devstats`
-(order 62), which shows read-only per-turn and per-step context, cache, model and tool
-measurements. The numbers come from the host route
-`POST /api/local/tokeneconomizer/devstats`; the derivation rules and the DSH ledger vocabulary they
-copy are in [docs/DEV-STATISTICS.md](docs/DEV-STATISTICS.md).
+The Web client half (`lib/client.js`) registers **one** `settings.section` seat, `tokeneconomizer`
+(order 62). One navigation row for one product surface; the two halves are internal tabs:
 
-The card follows the DSH settings surface rules:
+| Tab | Content |
+|---|---|
+| **환경설정** | three mode selects, the nine engine thresholds (default / override / effective, with a per-key reset), `toolprune restore`, reset-to-defaults, history import, and a judge-unavailable banner |
+| **통계** | what the plugin actually saved — total characters removed, that saving as a share of the session context, and a per-lever breakdown — then the read-only per-turn ledger |
+
+The section states the product name once and shows a one-line saving summary above the tabs, so the
+value is visible before choosing a tab.
+
+### Host integration
+
+A settings section is **content only**. The host renders it inside the `.options` column of its own
+panel, and that column already owns the width, the `0 24px 24px` padding, and the scroll. Measured
+conventions this section follows, taken from DSH's own `CurrentVersionRow` and from this
+repository's `dsh-custom-router` settings section:
 
 | Surface | Rule |
 |---|---|
-| Width | the section stops at `max-width: 720px` and centres itself, so it stops stretching across a wide pane |
-| Headings | the section title is an `h2` and each card title an `h3`, one step above body content, sized from the DSH content-font tokens |
-| Stylesheet | the stylesheet is keyed by `data-plugin-css="@nolit/dsh-tokeneconomizer"`, so the host owns it and a reload replaces it instead of stacking a second copy |
-| Table | the per-turn table scrolls inside its own `280px` frame with a sticky header row, and every column header carries `scope="col"` |
-| Focus and motion | every control shows a `:focus-visible` ring from the DSH focus tokens; the decorative transitions are dropped under `prefers-reduced-motion: reduce` |
-| Session picker | the option label is the working directory plus the **full** session id, so two sessions in one directory are distinguishable |
+| Width | **none.** The section sets no `max-width` and does not centre itself; the host column owns both |
+| Rows | `padding: 16px 0` with a hairline `border-bottom`, no fill and no radius; the last row has none |
+| Headings | title and intro are **sibling** children, body+4px/600 and 13px tertiary, both from the DSH content-font tokens |
+| Tabs | the `.crSettingsTab` convention: 13px secondary, `padding: 7px 1px 9px`, `gap: 22px`, a 2px underline drawn by `::after` on the selected tab, `role="tablist"` with roving `tabindex` and Arrow/Home/End keys |
+| Stylesheet | keyed by `data-plugin-css="@nolit/dsh-tokeneconomizer"`, so the host owns it and a reload replaces it instead of stacking a second copy |
+| Colours | host `--dsw-alias-*` / `--dsh-*` tokens only; no literal colour or fixed pixel size |
+| Focus and motion | `:focus-visible` from the DSH focus tokens; decorative transitions dropped under `prefers-reduced-motion: reduce` |
+| Table | the per-turn table scrolls inside its own `280px` frame with a sticky header, and every column header carries `scope="col"` |
 
 The plugin's own locale files carry the display title: `locale/en.json` is
 `TokenEconomizer (MS tokeneconomizer)` and `locale/ko.json` keeps the Korean title.
+
+### Control vocabulary
+
+| Control | Values |
+|---|---|
+| `microskills` | `off` / `envfacts` / `envfacts+distiller` / `distiller` |
+| `toolprune` | `off` / `propose` / `auto` |
+| `loopguard` | `off` / `nudge` / `stop` |
+| nine numeric thresholds | each with a default, an override, an effective value, and a per-key reset |
+| actions | `toolprune restore`, reset-to-defaults, history import |
+
+`on` is a **write alias** (`microskills` → `envfacts+distiller`, `toolprune` → `auto`,
+`loopguard` → `nudge`), never a stored value.
+
+`on` is a **write alias, never a stored value**. `history_import` is a plugin-owned action, not an
+engine key — it maps to `bin/te-dsh.mjs cold-start`.
+
+Six routes under `/api/local/tokeneconomizer/settings`: `GET /settings`,
+`POST /settings/config` (batched, per-key results), `POST /settings/restore`,
+`POST /settings/reset`, `POST /settings/import` (202 + job id), `GET /settings/import/:jobId`.
+
+Engine writes go through the `child_process` boundary (`te config set`) — never a direct file write
+— and every write re-reads `te config show` before answering, so the page shows the persisted
+value rather than the posted one. The full description is in
+[docs/OPERATIONS.md](docs/OPERATIONS.md) §5.
 
 ## Layout
 
 ```
 lib/index.js        Cordis plugin: the DSH lifecycle mapping
+lib/identity.js     the two-value project identity: projectDir (immutable) vs liveDir
+lib/repokey-bridge.js  the legacy engine repo key, isolated behind one bridge (UNVERIFIABLE)
+lib/probes.js       the capability-probe catalog: seven DSH seams, contract vs internal tier
+lib/attribution.js  the record layer: plugin:tokeneconomizer/* records
+lib/rewriter.js     surface composition: the prune payload and the replacement
+lib/surface-attribution.js  the paired write: applyRewrite (validate -> decide -> prune -> replace -> record)
+lib/settings-contract.js  the browser-safe frozen settings contract (zero imports)
+lib/settings-api.js  the six settings routes
 lib/bridge.js       the process boundary: te-hook, dsh-session, dsh-import, exports
 lib/repokey.js      host-local: cwd to the engine's repository key, in pure Node
 lib/dedup.js        host-local: tool-result hash deduplication
 lib/prefix.js       host-local: the KV-cache-safe prompt slot, its routing text and its guard
 lib/watchdog.js     host-local: the loop breaker and the advisory thinking watchdog
-lib/tiering.js      host-local: the turn-based tiered memory for tool outputs
+lib/tiering.js      host-local: the tiered memory policy, its trigger and its decision records
 lib/devstats.js     the per-turn/per-step fold of the committed session ledger
 lib/devstats-server.js  the read-only host route behind the statistics card
-lib/client.js       the Web half: the settings.section statistics card
+lib/settings.js     the external settings file, merged on top of the Cordis config
+lib/client.js       the Web half: one settings row with two internal tabs
+lib/types/records.d.ts  the PluginRecordMap augmentation for the three record types
 bin/te-dsh.mjs      operator commands: bootstrap, cold-start, purge, status, doctor
 scripts/bootstrap.mjs  pinned clone + patch + launchers + verification + bounded migration
+scripts/audit-deprecations.mjs  the deprecation gate over the consumed DSH seams
+scripts/check-syntax.mjs  syntax-checks every module under lib/, bin/, scripts/
 patch/              the DSH host patch for the upstream engine (7 files, one new reader)
 test/               node --test: bridge shaping, module load, package contract,
-                    the host-local features, the repository-key parity, one end-to-end
-                    session through a bootstrapped engine
-docs/               architecture, operations, and the host-local features
+                    the host-local features, the repository-key parity, the attribution
+                    and identity layers, one end-to-end session through a bootstrapped engine
+docs/               architecture, operations, the host-local features, and the
+                    DSH schema implementation record
 ```
 
-Design rationale, the per-event contract, and the state/ledger format are in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The host-local, in-memory features are in
-[docs/IN_MEMORY_FEATURES.md](docs/IN_MEMORY_FEATURES.md). Install, migration, purge, and rollback
-procedures are in [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Design rationale, the per-event contract, the attribution record layer, and the state/ledger format
+are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The host-local, in-memory features are in
+[docs/IN_MEMORY_FEATURES.md](docs/IN_MEMORY_FEATURES.md). Install, migration, purge, the settings
+page, and rollback procedures are in [docs/OPERATIONS.md](docs/OPERATIONS.md). The implementation
+record for the DSH schema alignment is in
+[docs/DSH-SCHEMA-IMPLEMENTATION.md](docs/DSH-SCHEMA-IMPLEMENTATION.md).

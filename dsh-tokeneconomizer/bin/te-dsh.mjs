@@ -25,10 +25,18 @@
  *   te-dsh status [--cwd <dir>]
  *       Print `te --host dsh status --json` for a directory.
  *
+ *   te-dsh update --check [--branch main] [--remote <url>] [--timeout-ms N]
+ *       Compare the pinned upstream commit this package patches against the branch head that
+ *       `git ls-remote` reports, and print the distance when a local checkout can measure it.
+ *       Read-only: nothing is fetched, checked out, or written. Exit `0` when the pin is the
+ *       head, `1` when an update is available, `2` when the check could not run (offline, no
+ *       git, a timeout) — the failure is reported as JSON, never as a crash. Without `--check`
+ *       the same comparison runs, exits `0`, and adds the command that would apply it.
+ *
  *   te-dsh doctor
  *       Report which launchers and patch are in place, without changing anything.
  */
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -36,7 +44,7 @@ import { zstdDecompressSync } from 'node:zlib'
 
 import { importExport, launchers, stateRoot } from '../lib/bridge.js'
 import { repoIdentity } from '../lib/repokey.js'
-import { main as bootstrapMain, PINNED_SHA, verify } from '../scripts/bootstrap.mjs'
+import { main as bootstrapMain, PINNED_SHA, UPSTREAM, verify } from '../scripts/bootstrap.mjs'
 
 const argv = process.argv.slice(2)
 const command = argv[0] ?? 'status'
@@ -168,7 +176,10 @@ function purge() {
   const targets = []
   if (wantsExports || argv.includes('--all')) targets.push(join(root, 'dsh-sessions'))
   if (wantsState) {
-    for (const entry of ['repos', 'sessions', 'hosts', 'index.json', 'ho', 'bin', 'vendor', 'errors.log', 'diagnostics.json']) {
+    // Every entry is a path the engine or this plugin actually writes; `ho` was a two-character
+    // typo of `hosts` that purged nothing and would have deleted an unrelated directory named
+    // `ho` if one ever appeared in the state root. Removed 2026-11-13 against the live tree.
+    for (const entry of ['repos', 'sessions', 'hosts', 'index.json', 'bin', 'vendor', 'errors.log', 'diagnostics.json']) {
       targets.push(join(root, entry))
     }
   }
@@ -410,6 +421,144 @@ function doctor() {
 }
 
 /**
+ * Ask the remote for one branch head, without touching any local repository.
+ *
+ * `git ls-remote` is the only read-only way to answer "is the pin still the head"; it opens no
+ * checkout, writes no ref, and works from any directory. Every failure mode is a value, not a
+ * throw: a machine with no network, no `git`, a hanging TLS handshake, or an auth prompt all
+ * become `{ ok: false, detail }` so `update --check` can report them and keep the caller's shell
+ * intact.
+ * @param {object} options - the query.
+ * @param {string} options.remote - repository URL.
+ * @param {string} options.branch - branch name, without `refs/heads/`.
+ * @param {number} [options.timeoutMs] - bound on the whole subprocess.
+ * @returns {{ ok: boolean, sha?: string, detail?: string }} the head, or why it is unknown.
+ */
+export function remoteHead(options) {
+  const timeoutMs = options.timeoutMs ?? 15_000
+  const ref = `refs/heads/${options.branch}`
+  try {
+    const result = spawnSync('git', ['ls-remote', options.remote, ref], {
+      encoding: 'utf8',
+      timeout: timeoutMs,
+      // An unconfigured credential helper or a private mirror must never block on a prompt:
+      // a check that hangs is worse than a check that fails.
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: 'true' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    if (result.error) {
+      const code = result.error.code ?? 'error'
+      return { ok: false, detail: code === 'ETIMEDOUT' ? `timed out after ${timeoutMs} ms` : `git failed: ${code}` }
+    }
+    if (result.status !== 0) {
+      const stderr = String(result.stderr ?? '').trim().split('\n').filter(Boolean).pop() ?? ''
+      return { ok: false, detail: `git ls-remote exited ${result.status}${stderr ? `: ${stderr}` : ''}` }
+    }
+    const line = String(result.stdout ?? '').split('\n').find((entry) => entry.trim().endsWith(ref))
+    if (!line) return { ok: false, detail: `the remote has no ${ref}` }
+    const sha = line.trim().split(/\s+/)[0]
+    if (!/^[0-9a-f]{40}$/.test(sha)) return { ok: false, detail: 'the remote answered a malformed object id' }
+    return { ok: true, sha }
+  } catch (error) {
+    return { ok: false, detail: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/**
+ * How far the pin trails a target commit, when a local checkout can say.
+ *
+ * The vendored tree is cloned with `--filter=blob:none` and may be shallow, so the target commit
+ * is often absent. That is reported as `null` rather than guessed: "unknown distance" is honest,
+ * a fabricated `0` would read as "up to date".
+ * @param {string} tree - a local checkout.
+ * @param {string} from - the older commit.
+ * @param {string} to - the newer commit.
+ * @returns {{ behind: number | null, detail?: string }} the distance, or why it is unknown.
+ */
+export function localDistance(tree, from, to) {
+  if (!existsSync(tree)) return { behind: null, detail: 'no vendored checkout' }
+  try {
+    for (const sha of [from, to]) {
+      const probe = spawnSync('git', ['-C', tree, 'cat-file', '-e', `${sha}^{commit}`], {
+        encoding: 'utf8',
+        timeout: 10_000,
+        stdio: ['ignore', 'ignore', 'ignore'],
+      })
+      if (probe.status !== 0) return { behind: null, detail: `the checkout does not hold ${sha.slice(0, 8)}` }
+    }
+    const counted = spawnSync('git', ['-C', tree, 'rev-list', '--count', `${from}..${to}`], {
+      encoding: 'utf8',
+      timeout: 10_000,
+    })
+    if (counted.status !== 0) return { behind: null, detail: 'rev-list failed' }
+    const behind = Number(String(counted.stdout).trim())
+    return Number.isFinite(behind) ? { behind } : { behind: null, detail: 'rev-list printed no count' }
+  } catch (error) {
+    return { behind: null, detail: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/**
+ * `te-dsh update`: is the pinned upstream commit still the branch head?
+ *
+ * With `--check` this is a read-only report: exit `0` when the pin is the head, `1` when an
+ * update is available, `2` when the question could not be answered. Without `--check` it keeps
+ * exit `0` and prints the command that would move the pin, because "an update exists" is not a
+ * failure of the installation.
+ * @returns {number} exit code.
+ */
+function update() {
+  const checkOnly = argv.includes('--check')
+  const remote = flag('--remote', UPSTREAM)
+  const branch = flag('--branch', 'main')
+  const timeoutMs = Number(flag('--timeout-ms', '15000')) || 15_000
+  const head = remoteHead({ remote, branch, timeoutMs })
+  if (!head.ok) {
+    // Offline, no git, a blocked port, a private mirror: the installation is unchanged and the
+    // reason is data. The exit code says "could not check", never "out of date".
+    process.stdout.write(`${JSON.stringify({
+      check: true,
+      ok: false,
+      pinned: PINNED_SHA,
+      remote,
+      branch,
+      updateAvailable: null,
+      detail: head.detail,
+      hint: 'no ref was fetched and nothing was written; re-run when the remote is reachable',
+    }, null, 2)}\n`)
+    return 2
+  }
+  const same = head.sha === PINNED_SHA
+  const tree = join(launchers(withHome()).root, 'vendor', `TokenEconomizer-${PINNED_SHA.slice(0, 8)}`)
+  const distance = same
+    ? { behind: 0 }
+    : localDistance(tree, PINNED_SHA, head.sha)
+  const observed = {
+    check: true,
+    ok: true,
+    pinned: PINNED_SHA,
+    upstreamHead: head.sha,
+    branch,
+    remote,
+    updateAvailable: !same,
+    commitsBehind: distance.behind,
+    ...(distance.detail ? { distanceDetail: distance.detail } : {}),
+    vendor: { path: tree, exists: existsSync(tree) },
+  }
+  if (same) {
+    observed.detail = 'the pin is the branch head'
+  } else {
+    observed.detail = distance.behind === null
+      ? 'the branch head moved past the pin; the distance is unknown without a fetch'
+      : `the branch head is ${distance.behind} commit(s) ahead of the pin`
+    observed.next = `te-dsh bootstrap --sha ${head.sha}` + (distance.behind === null ? '  (after fetching that commit)' : '')
+  }
+  process.stdout.write(`${JSON.stringify(observed, null, 2)}\n`)
+  if (!checkOnly) return 0
+  return same ? 0 : 1
+}
+
+/**
  * The environment with this command's `--home`, when given.
  * @returns {Record<string, string | undefined>} environment.
  */
@@ -434,6 +583,8 @@ async function main() {
       return status()
     case 'doctor':
       return doctor()
+    case 'update':
+      return update()
     case '-h':
     case '--help':
     case 'help':

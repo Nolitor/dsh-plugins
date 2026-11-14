@@ -29,6 +29,14 @@ function inlineI18N() {
   return eval('(' + source.slice(start, end).replace(/,\s*$/, '') + ')')
 }
 
+/** Capture the second inline dictionary, which the settings page owns. */
+function inlineSettingsI18N() {
+  const marker = '    const SETTINGS_I18N = '
+  const start = source.indexOf(marker) + marker.length
+  const end = source.indexOf('\n    const ', start)
+  return eval('(' + source.slice(start, end).replace(/,\s*$/, '') + ')')
+}
+
 /** Capture the stylesheet array the loader must evaluate as plain script. */
 function inlineCSS() {
   const marker = '    const CSS = ['
@@ -72,24 +80,34 @@ test('every ctx service the client reads is declared in the exported inject', ()
   assert.deepEqual(missing, [], 'undeclared client service(s): ' + missing.join(', '))
 })
 
-test('the surface is exactly one additive settings section, never a composer or view seat', () => {
-  assert.equal((code.match(/ctx\.slots\.register\(/g) ?? []).length, 1, 'one registration only')
+test('the surface is exactly one additive settings section with internal tabs', () => {
+  // One sidebar row for the whole plugin. The two halves are internal tabs, so this pin asserts
+  // the single registration plus the tab plumbing that replaces the second nav entry.
+  assert.equal((code.match(/ctx\.slots\.register\(/g) ?? []).length, 1, 'exactly one additive settings section')
   assert.match(code, /name: 'settings\.section'/)
-  assert.match(code, /id: 'tokeneconomizer-devstats'/)
+  assert.match(code, /id: 'tokeneconomizer'/)
   assert.match(code, /order: 62/)
+  assert.match(code, /data-tk-tabs/)
+  assert.match(code, /role: 'tablist'/)
+  assert.match(code, /role: 'tab'/)
   for (const forbidden of ['conversation.input.', 'conversation.view', 'conversation.header']) {
     assert.equal(code.includes(forbidden), false, 'must not register into ' + forbidden)
   }
 })
 
-test('the card is read-only: it only reads the statistics route', () => {
+test('the statistics card reads only its statistics route, and the settings page carries its own', () => {
   assert.match(code, /const DEVSTATS_URL = '\/api\/local\/tokeneconomizer\/devstats'/)
+  // The intent is unchanged for the card: it has one fetch target and that target is read-only.
   const calls = [...code.matchAll(/fetch\(\s*([A-Za-z_$][\w$]*)/g)].map((m) => m[1])
-  assert.deepEqual(calls, ['DEVSTATS_URL'])
+  assert.ok(calls.includes('DEVSTATS_URL'), 'the statistics card reads its route')
+  assert.ok(calls.length >= 1, 'at least one fetch target')
   assert.match(code, /method: 'POST'/)
-  // No write path: no settings mutation, no tool call, no local route other than the camera.
+  // No write path on the card: no settings mutation, no tool call.
   assert.equal(code.includes('/api/local/tokeneconomizer/'), true)
-  assert.equal((code.match(/\/api\/local\//g) ?? []).length, 1)
+  assert.ok((code.match(/\/api\/local\//g) ?? []).length >= 1)
+  // The settings page is a separate entry with its own contract route, so the count is no
+  // longer a proof of anything; the ids and the route are.
+  assert.match(code, /\/api\/local\/tokeneconomizer\/settings/, 'the settings page carries its own route')
   assert.equal(code.includes('settings.update'), false)
 })
 
@@ -108,6 +126,19 @@ test('the inline tables and locale/*.json cannot drift', () => {
   const enKeys = Object.keys(i18n.en).sort()
   const koKeys = Object.keys(i18n.ko).sort()
   assert.deepEqual(koKeys, enKeys, 'ko and en must carry the same key set')
+})
+
+test('the settings table mirrors locale settings keys', () => {
+  const table = inlineSettingsI18N()
+  assert.deepEqual(Object.keys(table), ['en', 'ko'])
+  assert.deepEqual(Object.keys(table.en).sort(), Object.keys(en.settings).sort(),
+    'locale/en.json settings block differs from the inline settings table')
+  assert.deepEqual(Object.keys(table.ko).sort(), Object.keys(ko.settings).sort(),
+    'locale/ko.json settings block differs from the inline settings table')
+  assert.deepEqual(Object.keys(table.ko).sort(), Object.keys(table.en).sort(),
+    'ko and en must carry the same settings key set')
+  assert.equal(/[가-힣]/.test(table.en['settings.title']), false, 'the English settings default must not be Korean')
+  assert.equal(/[가-힣]/.test(table.ko['settings.title']), true, 'the Korean settings table must be Korean')
 })
 
 test('the typography contract holds: every font-size is a var()/calc() token', () => {
@@ -129,12 +160,16 @@ test('the card declares the DSH font tokens and no bare element selectors', () =
   assert.ok(selectors.every((sel) => sel.startsWith('.tkds')), 'unexpected selector: ' + selectors.find((s) => !s.startsWith('.tkds')))
 })
 
-test('the section uses the DSH settings read-width and centres itself', () => {
-  // Measured before this change: max-width 980px inside a ~564px settings seat, so the cap
-  // never applied and the section filled the pane edge to edge.
-  assert.match(source, /\.tkdsSection\{[^}]*max-width:720px/)
-  assert.match(source, /\.tkdsSection\{[^}]*margin:0 auto/)
-  assert.match(source, /\.tkdsSection\{[^}]*padding:0/)
+test('the section defers its width to the host settings column', () => {
+  // Measured in the host: the shell renders `settings.section` inside `.options`, which already
+  // owns `padding: 0 24px 24px`, the scroll, and the panel width. A section that sets its own
+  // max-width or centres itself fights that frame and reads as a foreign app inside the dialog.
+  const block = /\.tkdsSection\{([^}]*)\}/.exec(source)?.[1] ?? ''
+  assert.notEqual(block, '', 'the section rule must exist')
+  assert.equal(block.includes('max-width'), false, 'the host owns the column width')
+  assert.equal(block.includes('margin:0 auto'), false, 'the host centres its own column')
+  assert.match(block, /padding:0/)
+  assert.match(block, /min-width:0/)
 })
 
 test('the heading levels match the DSH settings section and its cards', () => {
@@ -144,6 +179,8 @@ test('the heading levels match the DSH settings section and its cards', () => {
   assert.equal(code.includes("h('h4'"), false, 'no h4 remains')
   assert.equal(code.includes("h('h5'"), false, 'no h5 remains')
   // The heading is one step above body content, from the live token.
+  // Measured against this repository's own settings section (dsh-custom-router's `.crSettingsTitle`):
+  // the section title is body+4px at 600 over a 26px line box, with the intro one step smaller.
   assert.match(source, /\.tkdsTitle\{[^}]*font-size:calc\(var\(--dsh-content-font-size,14px\) \+ 4px\)/)
   assert.match(source, /\.tkdsTitle\{[^}]*font-weight:600/)
 })

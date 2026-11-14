@@ -42,7 +42,7 @@
  * call fails open: `{}` changes nothing, and a session keeps working without the engine.
  */
 import { randomUUID } from 'node:crypto'
-import { writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 
@@ -54,23 +54,35 @@ import {
   hook,
   isInert,
   launchers,
+  runJson,
+  runText,
   stateRoot,
   toolResponse,
   writeExport,
 } from './bridge.js'
+import { appendRecord, RECORD_NAMES } from './attribution.js'
+import { probeCtx } from './probes.js'
+import { applyRewrite } from './surface-attribution.js'
 import { createDedupStore, SHORT_HASH_CHARS } from './dedup.js'
 import { createDevStatsServer, registerDevStatsRoutes } from './devstats-server.js'
 import { composePinnedText, createPrefixGuard, pinnedSection } from './prefix.js'
+import { adoptLegacyKey, identityKeyOf, readIdentity, resolveIdentity, writeIdentity } from './identity.js'
 import { repoKeyFor } from './repokey.js'
+import { createSettingsRoutes } from './settings-api.js'
 import { mergeSettings, readSettingsFile } from './settings.js'
 import { createLoopBreaker, createWatchdog } from './watchdog.js'
 import { createInterruptRecorder, WATCHDOG_ISSUER } from './interrupt-bridge.js'
 import {
+  chooseTrigger,
   classifyTool,
+  decidedAtTrigger,
+  policyHash,
   TIER_HOT,
   tierContent,
   tierForTurn,
   TIER_DEFAULTS,
+  TRIGGERS,
+  triggerProbe,
 } from './tiering.js'
 
 /** One process-wide recorder: the interrupt registry it points at is process-wide too. */
@@ -107,6 +119,17 @@ export const DEFAULTS = Object.freeze({
   cliTimeoutMs: 20000,
   /** `auto` reads `dsh headless …` from argv, `always`/`never` pin it. */
   headless: 'auto',
+  /**
+   * Mount the in-memory levers (dedup, tiering, loop breaker, watchdog, prefix guard, pinned
+   * rules) in a subagent session too.
+   *
+   * The engine path is root-only by design — a delegated child is folded with its parent's work
+   * (`docs/ARCHITECTURE.md` §3) — but the memory path is not: a child that repeats a 40 kB tool
+   * output, or burns its context on stale turns, costs the same as a root session doing it, and
+   * the bill lands on the parent. Turn this off to restore the old "no economy of its own"
+   * behaviour for children while keeping it for root sessions.
+   */
+  subagentMemory: true,
   /** Replace a repeated tool output with a pointer to the step that produced it. */
   dedup: true,
   /** Shortest output worth replacing with a pointer. */
@@ -171,6 +194,35 @@ export const DEFAULTS = Object.freeze({
 /** Names a config object may carry; anything else is a typo, not a setting. */
 const CONFIG_KEYS = new Set(Object.keys(DEFAULTS))
 
+/**
+ * A read-only view of the session map holding only its root sessions.
+ *
+ * The developer statistics surface lists one row per entry of the map it is handed, so a
+ * delegated child left in the view appears as a *sibling* session of its parent: its turns and
+ * its tokens are counted as if a person had run them, which is exactly the double count this
+ * module removes from the engine path. The view is `values()`-only because that is the one
+ * method `createDevStatsServer` reads, and it is live because the map it wraps is.
+ *
+ * The child still lives in the real map and still gets every memory lever; it is only hidden
+ * from the camera. A child carries no separate bill to report — its cost belongs to the parent
+ * that spawned it.
+ * @param {Map<string, object>} sessions - the live per-session state map.
+ * @returns {{ values: () => object[], get: (id: string) => object | undefined, size: number }}
+ *   the root-session view.
+ */
+export function rootSessionsView(sessions) {
+  return {
+    values: () => [...sessions.values()].filter((state) => state?.subagent !== true),
+    get: (id) => {
+      const state = sessions.get(id)
+      return state?.subagent === true ? undefined : state
+    },
+    get size() {
+      return [...sessions.values()].filter((state) => state?.subagent !== true).length
+    },
+  }
+}
+
 /** Settings whose value is one of a fixed set. */
 const ENUM_SETTINGS = Object.freeze({
   headless: Object.freeze(['auto', 'always', 'never']),
@@ -207,18 +259,6 @@ function rawValue(config, key) {
     }
   }
   return raw
-}
-
-/**
- * Read a config field, preferring the loader's value over the default.
- * @param {object} config - plugin config from the loader.
- * @param {string} key - field name.
- * @param {unknown} fallback - value when the field is absent.
- * @returns {unknown} the resolved value.
- */
-export function configValue(config, key, fallback) {
-  const value = rawValue(config, key)
-  return value === undefined ? fallback : value
 }
 
 /**
@@ -389,6 +429,37 @@ export function apply(ctx, config) {
   // Settings warnings go to stderr, never through noticeUser(): that helper injects a
   // user message, which would restart the watchdog budget the warning is about.
   const settingsWarn = (text) => process.stderr.write(`[tokeneconomizer] ${text}\n`)
+  /**
+   * The mechanism status the settings page shows on its degraded-judge banner.
+   *
+   * Read from the live config rather than a session state, because the page is mounted once for
+   * the process while sessions come and go. The judge answer is the same probe `judgeProbeFor`
+   * uses, resolved without a session so the banner can render before any turn runs.
+   * @returns {{ judge: { available: boolean, reason: string }, config: object }} the status.
+   */
+  const settingsMechanismStatus = () => {
+    let judge = { available: false, reason: 'the judge seam has not been probed' }
+    try {
+      const probe = probeCtx(ctx, 'loopguard/judge')
+      judge = {
+        available: probe?.ok === true,
+        reason: typeof probe?.reason === 'string' && probe.reason
+          ? probe.reason
+          : probe?.ok === true ? '' : 'the judge seam reported nothing',
+      }
+    } catch (error) {
+      judge = { available: false, reason: error instanceof Error ? error.message : String(error) }
+    }
+    return {
+      judge,
+      config: {
+        mode: composed.mode,
+        microskills: composed.microskills,
+        toolprune: composed.toolprune,
+        loopguard: composed.loopguard,
+      },
+    }
+  }
   const composed = resolveConfig(config ?? {})
   // The external settings file is merged ON TOP of the composed Cordis config, because a
   // patch `config` replaces the whole config and a layer underneath could never win a key.
@@ -426,6 +497,8 @@ export function apply(ctx, config) {
   }
 
   const sessions = new Map()
+  /** The resolved plugin-record appender; `undefined` until first lookup, `null` when absent. */
+  let recordAppender
   const diagOn = diagnosticsEnabled()
   const diagRoot = stateRoot({ ...process.env, TOKENECONOMIZER_HOME: bins.root })
 
@@ -464,21 +537,91 @@ export function apply(ctx, config) {
   // It is mounted through the connection seam only when the host has one, so a headless profile
   // boots the plugin with the surface inert (never a failed row).
   const devStats = createDevStatsServer({
-    sessions,
+    sessions: rootSessionsView(sessions),
     readProjections: readProjectionSnapshot,
     log: { warn: settingsWarn },
   })
   const mountDevStats = (scoped) => {
     registerDevStatsRoutes({ ctx, scoped, server: devStats, log: { warn: settingsWarn } })
   }
+  // The interactive settings page. Its six routes are the write half of the seat the client
+  // already renders, so registering them here is what removes the client's 404. Engine access
+  // runs through the same `runJson` boundary every other engine call uses: the route layer never
+  // opens `~/.tokeneconomizer/config.json` itself.
+  const mountSettings = (scoped) => {
+    const connection = scoped?.connection ?? (typeof ctx.get === 'function' ? ctx.get('connection') : undefined)
+    const register = connection?.fetch?.register
+    if (typeof register !== 'function') return []
+    const bins = launchers(createEnv())
+    const runEngine = async (kind, args) => {
+      // `te config show` prints JSON; `set`/`unset`/`restore` print a human-readable confirmation
+      // and still exit 0. The status therefore has to travel with the text — passing only stdout
+      // made a successful write look like a rejection, because a confirmation line is not JSON.
+      return runText(bins.te, ['config', kind, ...args], {
+        env: createEnv(),
+        timeoutMs: opts.cliTimeoutMs,
+      })
+    }
+    try {
+      // DSH allows exactly one registration per path, carrying a `methods` set — a second
+      // registration for the same path throws (`connection: exact Fetch route ... is already
+      // registered`, measured). So collect the handlers by path and register each path once,
+      // dispatching on the request method inside the single handler.
+      const byPath = new Map()
+      const registerPath = (method, path, handler) => {
+        const entry = byPath.get(path) ?? { methods: [], handlers: new Map() }
+        if (entry.handlers.has(method)) return
+        entry.methods.push(method)
+        entry.handlers.set(method, handler)
+        byPath.set(path, entry)
+      }
+      const created = createSettingsRoutes({
+        runEngine,
+        register: registerPath,
+        mechanismStatusOf: () => settingsMechanismStatus(),
+        log: { warn: settingsWarn },
+      })
+      for (const [path, entry] of byPath) {
+        try {
+          register.call(connection.fetch, {
+            path,
+            methods: entry.methods,
+            requestBody: 'buffered',
+            fetch: async (request) => {
+              const method = String(request?.method ?? 'GET').toUpperCase()
+              const handler = entry.handlers.get(method)
+              if (typeof handler !== 'function') {
+                return new Response(JSON.stringify({ ok: false, error: 'method not allowed: ' + method }), {
+                  status: 405,
+                  headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+                })
+              }
+              return handler(request)
+            },
+          })
+        } catch (error) {
+          settingsWarn('settings-api: ' + path + ': ' + (error instanceof Error ? error.message : String(error)))
+        }
+      }
+      return created
+    } catch (error) {
+      settingsWarn('settings-api: ' + (error instanceof Error ? error.message : String(error)))
+      return []
+    }
+  }
   if (typeof ctx.inject === 'function') {
     try {
-      ctx.inject(['connection'], mountDevStats)
+      ctx.inject(['connection'], (scoped) => {
+        mountDevStats(scoped)
+        mountSettings(scoped)
+      })
     } catch {
       mountDevStats()
+      mountSettings()
     }
   } else {
     mountDevStats()
+    mountSettings()
   }
 
   // The harness dispatches the tool events through a scope carrier. These two root-level
@@ -497,12 +640,42 @@ export function apply(ctx, config) {
   }
 
   ctx.on('agent/created', async ({ agent, source }) => {
-    if (agent.session.header.origin === 'subagent') return
+    const isSubagent = agent.session.header.origin === 'subagent'
+    // Two different things live behind one `agent/created` and only ONE of them is root-only.
+    //
+    //   engine path   SessionStart / UserPromptSubmit / PostToolUse / Stop / SessionEnd, the
+    //                 Python engine behind them, the session export and its fold. Root only: a
+    //                 delegated child is folded with its parent's work, so running its own
+    //                 envelope double-counts the child's turns and teaches the loop guard a
+    //                 turn scale no person runs (`docs/ARCHITECTURE.md` §3).
+    //
+    //   memory path   dedup, tiering, loop breaker, watchdog, prefix guard, pinned section. No
+    //                 engine call, no file write, `node:` builtins only. A child session burns
+    //                 the same model context and makes the same tool calls, and its bill lands
+    //                 on the parent, so these must run everywhere — `subagentMemory: false`
+    //                 opts a child back out.
+    //
+    // A child with memory turned off mounts nothing at all: no state, no listeners.
+    if (isSubagent && config.subagentMemory !== true) return
     const sid = String(agent.id)
     const cwd = agent.session.header.cwd ?? process.cwd()
+    /**
+     * The project identity for this session, resolved once through `lib/identity.js`.
+     *
+     * `projectDir` is the immutable anchor from the session header; `liveDir` is the current
+     * directory. They are kept apart because conflating them was the original identity bug.
+     *
+     * `engineRepoKey` is the key the engine actually uses on disk. The legacy `repoKeyFor()` value
+     * stays the authority here — `lib/identity.js` marks the engine's own canonicalization
+     * unverifiable from this host, so a computed key is never allowed to displace a bucket that
+     * already exists. When a legacy bucket is present and the resolved identity differs from it,
+     * the legacy key is adopted onto the identity record so the existing data keeps being read.
+     */
+    const identity = resolveSessionIdentity(agent.session.header, cwd)
     const state = {
       sid,
       cwd,
+      identity,
       agent,
       prompt: '',
       turn: 0,
@@ -511,6 +684,16 @@ export function apply(ctx, config) {
       timer: null,
       closed: false,
       started: false,
+      /**
+       * Whether this session owns the engine path. Every engine call site checks this flag
+       * explicitly instead of relying on `started` (which the memory path never sets) or on the
+       * handler's early return: the SessionEnd hook in `finish()`, the export in
+       * `scheduleExport()`/`writeSession()`, and the PostToolUse trace in `onToolResult()` are
+       * reached through paths that a `started` check alone never covered.
+       */
+      engineEnabled: !isSubagent,
+      /** Whether this state was created for a delegated child (devstats labelling). */
+      subagent: isSubagent,
       broken: false,
       dedup: createDedupStore({
         minChars: config.dedupMinChars,
@@ -525,6 +708,8 @@ export function apply(ctx, config) {
       meta: new Map(),
       tiered: 0,
       tieredTurn: 0,
+      /** The trigger seam the tiering pass is registered on, chosen at mount. */
+      tierTrigger: null,
       requests: 0,
       /**
        * Counters for the read-only developer statistics surface. They are plain numbers so a
@@ -549,13 +734,20 @@ export function apply(ctx, config) {
       },
       /** Whether this session already spent its one prior-session recall. */
       recallDone: false,
+      /** Categories already reported once; a repeating degraded path reports once, not per turn. */
+      noticedOnce: new Set(),
+      /** Whether the tiering pass already reported a skipped rewrite. */
+      tierRewriteNoticed: false,
+      /** The judge seam probe, resolved once per session: `undefined` until first needed. */
+      judgeProbe: undefined,
     }
     sessions.set(sid, state)
     // Every observer is registered before the first await: `agent/created` is awaited before the
     // loop claims its first message, so a listener registered after the brief would miss the
     // session's first tool calls.
     mount(state)
-    await start(state, source)
+    // The engine path is root-only: a child gets the memory levers above and nothing else.
+    if (state.engineEnabled) await start(state, source)
   })
 
   ctx.on('agent/disposed', ({ agent }) => {
@@ -586,6 +778,9 @@ export function apply(ctx, config) {
    */
   function mount(state) {
     state.watchdog = createWatchdog({
+      // `watchdog: false` is honoured here: the key was declared, validated and documented but
+      // read nowhere until 2026-11-13, so turning it off silently changed nothing.
+      disabled: config.watchdog !== true,
       thresholdMs: config.watchdogThresholdMs,
       warnMs: config.watchdogWarnMs,
       // `Infinity` is the config-visible way to disable the tool budget: the settings
@@ -622,26 +817,189 @@ export function apply(ctx, config) {
       return decision
     })
     state.agent.ctx.on('session/event', (session, event) => onEvent(state, session, event))
-    // Tiering rewrites the surface, which cannot run while `turn/start` is
-    // being appended. The request waterfall runs after that append and before
-    // the request is assembled, so the rewrite reaches this turn's first call.
-    state.agent.ctx.on('agent/request', async (payload, next) => {
-      if (payload.agent !== state.agent) return next()
-      state.turn = payload.turn
-      if (state.tieredTurn !== payload.turn) {
-        state.tieredTurn = payload.turn
-        try {
-          applyTiering(state)
-        } catch (error) {
-          notice(state, `tiering: failed open (${error instanceof Error ? error.message : String(error)})`)
-        }
-      }
-      return next()
-    })
+    // Tiering rewrites the surface, which cannot run while `turn/start` is being appended. It is
+    // applied from the non-deprecated `agent/pre-step` waterfall (step preparation, before request
+    // assembly) or, when that seam is absent, from the `session/event` fallback on `step/start`.
+    // Neither window is the old `agent/request` one: a rewrite can land one step later than before,
+    // and still saves tokens on every later step of the turn. The seam is chosen in one place.
+    const triggerChoice = chooseTrigger(triggerProbe(state.agent.ctx))
+    state.tierTrigger = decidedAtTrigger(triggerChoice)
+    if (triggerChoice.trigger === TRIGGERS.PRE_STEP) {
+      state.agent.ctx.on(TRIGGERS.PRE_STEP, async (payload, next) => {
+        if (payload.agent !== state.agent) return next()
+        state.turn = payload.turn
+        tierOnce(state)
+        // A tiering rewrite must never reject a step: `next()` keeps the current messages.
+        return next()
+      })
+    } else {
+      state.agent.ctx.on(TRIGGERS.SESSION_EVENT, (session, event) => {
+        if (session !== state.agent.session || event?.type !== 'step/start') return
+        const turn = event.data?.turn
+        if (typeof turn === 'number' && turn > 0) state.turn = turn
+        tierOnce(state)
+      })
+    }
     state.agent.ctx.on('tools/result', (exec, result) => {
       DELIVERY.agentResult += 1
       onToolResult(state, exec, result)
     })
+  }
+
+  /**
+   * The appender {@link appendRecord} should call, resolved once per process.
+   *
+   * DSH's `Session` has no `appendPluginRecord` *method*: the record API is a module export
+   * (`appendPluginRecord(session, type, data)`), and `lib/attribution.js` looks for a session
+   * method first. Without this seam every record this plugin writes would be dropped with a
+   * warning nobody reads — and the point of this wave is that the records exist. The module
+   * namespace is reached through the ctx service surface (`ctx.get('session')`), which is the
+   * same lookup `lib/probes.js` already performs, so no harness package is imported.
+   *
+   * @returns {Function|null} `(session, type, data) => seq`, or null when unreachable.
+   */
+  function resolveRecordAppender() {
+    if (recordAppender !== undefined) return recordAppender
+    recordAppender = null
+    if (typeof ctx.get === 'function') {
+      let namespace
+      try {
+        namespace = ctx.get('session')
+      } catch {
+        namespace = undefined
+      }
+      const candidate = namespace?.appendPluginRecord ?? namespace?.default?.appendPluginRecord
+      if (typeof candidate === 'function') {
+        recordAppender = (session, type, data) => candidate(session, type, data)
+      }
+    }
+    return recordAppender
+  }
+
+  /**
+   * The options every record write goes through: the resolved appender, or nothing.
+   *
+   * When no appender exists the write is attempted against the session anyway (a test double, a
+   * newer host that grew the method), and its failure is reported once — never silently.
+   * @param {object} state - per-agent state.
+   * @param {object} [session] - the log-owning session, when the write runs against a view of it.
+   * @returns {{ appendPluginRecord?: Function }} the append options.
+   */
+  function recordOptions(state, session) {
+    const appender = resolveRecordAppender()
+    if (appender === null) {
+      noticeOnce(state, 'records', 'records: no plugin-record appender on this host; provenance records cannot be written')
+      return {}
+    }
+    // The record API is a module export bound to the real session object, so a rewrite that runs
+    // against a widened surface view still commits its record through the owner of the log.
+    return {
+      appendPluginRecord: (target, type, data) => appender(session ?? target, type, data),
+    }
+  }
+
+  /**
+   * Apply the engine's tool-prune proposal as a scoped restriction, and record that it applied.
+   *
+   * The proposal is intersected with the tools this agent can actually see before it is passed
+   * to `restrict`: DSH rejects a restriction naming an unknown tool, so an unintersected
+   * proposal would fail every time and the lever would silently never apply — which is exactly
+   * the measured state (`untool_applied: []` across the whole ledger). Every degraded path is
+   * reported once and writes no applied record; only a restriction that really landed does.
+   *
+   * @param {object} state - per-agent state.
+   * @param {{ proposal?: string[], mode?: string, proposalId?: string }} [toolprune] - the
+   *   engine's answer; `undefined` means the engine was unreachable.
+   * @returns {void}
+   */
+  function applyToolPrune(state, toolprune) {
+    const proposal = Array.isArray(toolprune?.proposal)
+      ? toolprune.proposal.filter((name) => typeof name === 'string' && name !== '')
+      : []
+    if (proposal.length === 0) return
+    const before = visibleToolNames(state)
+    const visible = new Set(before)
+    const deny = [...new Set(proposal)].filter((name) => visible.has(name))
+    if (deny.length === 0) {
+      noticeOnce(state, 'toolprune', 'toolprune: the proposal names no tool this assembly registers; nothing was restricted')
+      return
+    }
+    let restricted = false
+    try {
+      state.agent.ctx.tools.restrict({ deny })
+      restricted = true
+    } catch (error) {
+      noticeOnce(
+        state,
+        'toolprune',
+        `toolprune: restrict rejected [${deny.join(', ')}] (${error instanceof Error ? error.message : String(error)}); no tool was masked`,
+      )
+    }
+    if (!restricted) return
+    const after = visibleToolNames(state)
+    // The engine key this session's evidence belongs to, taken from the resolved identity so an
+    // adopted legacy bucket keeps receiving evidence instead of a parallel bucket starting empty.
+    const repoKey = state.identity?.engineRepoKey ?? ''
+    const record = {
+      tools: deny,
+      countBefore: before.length,
+      countAfter: after.length,
+      visibleIntersection: deny,
+      repoKey: repoKey === '' ? 'unknown' : repoKey,
+      time: Date.now(),
+    }
+    if (typeof toolprune?.proposalId === 'string' && toolprune.proposalId !== '') {
+      record.proposalId = toolprune.proposalId
+    }
+    const outcome = appendRecord(state.agent.session, RECORD_NAMES.TOOLPRUNE_APPLIED, record, recordOptions(state))
+    if (!outcome.ok) {
+      noticeOnce(
+        state,
+        'toolprune',
+        `toolprune: applied [${deny.join(', ')}] but its record could not be appended (${outcome.reason ?? 'unknown'})`,
+      )
+      return
+    }
+    state.stats.updatedAt = Date.now()
+  }
+
+  /**
+   * The tool names this agent can see, from its own scope when the registry exposes one.
+   * @param {object} state - per-agent state.
+   * @returns {string[]} the visible names.
+   */
+  function visibleToolNames(state) {
+    const scoped = state.agent.ctx?.tools
+    if (scoped !== null && typeof scoped === 'object' && typeof scoped.definitions === 'function') {
+      try {
+        return scoped.definitions(state.agent).map((definition) => String(definition.name))
+      } catch {
+        /* fall through to the plugin-scoped registry */
+      }
+    }
+    try {
+      return ctx.tools.definitions().map((definition) => String(definition.name))
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * Write one notice at most once per session for a category.
+   *
+   * A degraded path is reported, never silent; but a path that fails on every turn would
+   * otherwise flood the log and bury the one line that identifies the problem.
+   * @param {object} state - per-agent state.
+   * @param {string} key - the once-per-session category.
+   * @param {string} text - the notice.
+   * @returns {void}
+   */
+  function noticeOnce(state, key, text) {
+    const seen = state.noticedOnce
+    if (!(seen instanceof Set)) return
+    if (seen.has(key)) return
+    seen.add(key)
+    notice(state, text)
   }
 
   /**
@@ -653,6 +1011,10 @@ export function apply(ctx, config) {
    * @returns {Promise<void>} resolves after the brief has been applied or failed open.
    */
   async function start(state, source) {
+    // Belt and braces: the caller only reaches here for a root session, but the invariant
+    // "a subagent makes zero engine calls" is worth holding at the engine entry point itself,
+    // not only at its call site.
+    if (!state.engineEnabled) return
     const cwd = state.cwd
     const tools = ctx.tools.definitions().map((def) => def.name)
     const answer = await brief(bins, cwd, tools, {
@@ -671,11 +1033,7 @@ export function apply(ctx, config) {
         required: true,
       })
     }
-    if (applying() && config.toolprune) {
-      const visible = new Set(ctx.tools.definitions().map((def) => def.name))
-      const deny = (answer?.toolprune?.proposal ?? []).filter((t) => visible.has(t))
-      if (deny.length) state.agent.ctx.tools.restrict({ deny })
-    }
+    if (applying() && config.toolprune) applyToolPrune(state, answer?.toolprune)
 
     const payload = {
       session_id: state.sid,
@@ -683,7 +1041,7 @@ export function apply(ctx, config) {
       hook_event_name: 'SessionStart',
       source,
     }
-    if (state.agent.session.snapshotEvents().length > 0) {
+    if (state.agent.session.seq > 0) {
       // A resumed or forked session already has a log; a fresh one is exported at its first
       // turn boundary. SessionStart only needs the log for the engine's "fold what ended
       // unseen" pass, which reads the records it already holds.
@@ -711,7 +1069,7 @@ export function apply(ctx, config) {
     observeMemory(state, event)
     if (event.type === 'turn/start') {
       state.turn = event.data.turn
-      if (!state.started) return
+      if (!state.engineEnabled || !state.started) return
       void hook(bins, {
         session_id: state.sid,
         cwd: state.cwd,
@@ -727,6 +1085,7 @@ export function apply(ctx, config) {
         state.broken = false
       }
     } else if (event.type === 'turn/end') {
+      if (!state.engineEnabled) return
       if (!state.started) return
       void hook(bins, {
         session_id: state.sid,
@@ -736,6 +1095,24 @@ export function apply(ctx, config) {
         stop_hook_active: false,
       }, { timeoutMs: opts.hookTimeoutMs, env: createEnv(), cwd: state.cwd })
       scheduleExport(state)
+    }
+  }
+
+  /**
+   * Apply the tiering pass once per turn, from whichever trigger seam
+   * {@link chooseTrigger} picked. Fail-open: a rewrite that throws is reported
+   * and the turn continues with its context intact.
+   * @param {object} state - per-agent state.
+   * @returns {void}
+   */
+  function tierOnce(state) {
+    const turn = state.turn
+    if (!turn || state.tieredTurn === turn) return
+    state.tieredTurn = turn
+    try {
+      applyTiering(state)
+    } catch (error) {
+      notice(state, `tiering: failed open (${error instanceof Error ? error.message : String(error)})`)
     }
   }
 
@@ -768,6 +1145,18 @@ export function apply(ctx, config) {
     }
     const nodes = session.surface?.nodes
     if (!nodes) return
+    // The harness projects `surface.nodes` as a readonly array and the paired-write module
+    // validates exactly that shape. A standing collection instead (an older host, a test double)
+    // is widened here rather than relaxing that validation. Appends still reach the real session.
+    const target = Array.isArray(nodes)
+      ? session
+      : {
+          append: (type, data, appendOptions) => session.append(type, data, appendOptions),
+          surface: { nodes: [...nodes] },
+        }
+    // The tier policy is hashed once per pass: every decision record names the policy that
+    // graded it, so a later reader can re-audit the decision against the boundaries in force.
+    const policyFingerprint = policyHash(policy)
     for (const seq of [...nodes]) {
       let event
       try {
@@ -801,26 +1190,41 @@ export function apply(ctx, config) {
       })
       if (replacement === undefined) continue
       const shadowTokens = meter.estimateMessage(original)
-      const message = Object.freeze({
-        ...original,
-        content: Object.freeze([{ type: 'text', text: replacement }]),
-      })
+      // The write goes through the paired-write module, so the prune payload, the decision
+      // record and the rewrite record are one ordered unit: a rewrite without its records can
+      // no longer happen, and a reader can tell "decided, not rewritten" from "never decided".
+      let outcome
       try {
-        session.append('compaction/prune', {
-          shadowedRange: { start: seq, end: seq },
-          shadowedSeqs: [seq],
-          shadowedTokenCount: shadowTokens,
+        outcome = applyRewrite(target, seq, replacement, {
+          tier,
+          turn,
+          step: event.data?.step ?? 0,
+          policyHash: policyFingerprint,
+          reason: `tier:${tier}`,
+          shadowTokens: Number.isFinite(Number(shadowTokens)) ? Number(shadowTokens) : 0,
+          charsBefore: text.length,
+        }, {
+          readEvent: (probeSeq) => session.eventAt(probeSeq),
+          ...recordOptions(state, session),
         })
-        session.append('tool/result', { ...event.data, message }, {
-          surfaceOp: { op: 'replace', startSeq: seq, endSeq: seq },
-          sourceEventSeqs: [seq],
-        })
-        state.tiered += 1
-        state.stats.tierShadowTokens += Number.isFinite(Number(shadowTokens)) ? Number(shadowTokens) : 0
-        state.stats.updatedAt = Date.now()
       } catch {
-        /* fail open: a session that cannot be re-tiered keeps its context */
+        // Fail open: a session that cannot be re-tiered keeps its context.
+        outcome = { ok: false, reason: 'rewrite-threw' }
       }
+      if (!outcome.ok) {
+        if (!state.tierRewriteNoticed) {
+          state.tierRewriteNoticed = true
+          notice(state, `tiering: rewrite skipped (${outcome.reason ?? 'unknown'})`)
+        }
+        continue
+      }
+      if (outcome.warning && !state.tierRewriteNoticed) {
+        state.tierRewriteNoticed = true
+        notice(state, `tiering: ${outcome.warning}`)
+      }
+      state.tiered += 1
+      state.stats.tierShadowTokens += Number.isFinite(Number(shadowTokens)) ? Number(shadowTokens) : 0
+      state.stats.updatedAt = Date.now()
     }
   }
 
@@ -887,7 +1291,10 @@ export function apply(ctx, config) {
       // stays unspent until a real prompt arrives.
       const source = event.data?.source?.kind
       const genuine = source === undefined || source === null || source === 'user'
-      if (genuine && !state.recallDone && config.recallPriorSessions) {
+      // Recall belongs to the engine path: it quotes earlier sessions to open a *root* session,
+      // and a delegated child repeats its parent's first prompt, so recalling there would inject
+      // the same block a second time.
+      if (genuine && !state.recallDone && state.engineEnabled && config.recallPriorSessions) {
         state.recallDone = true
         void recallPrior(state, contentText(event.data.content))
       }
@@ -926,12 +1333,13 @@ export function apply(ctx, config) {
     if (!service || typeof service.searchSessions !== 'function') return
     const text = String(query ?? '').trim()
     if (!text) return
-    let key = ''
-    try {
-      key = repoKeyFor(state.cwd)
-    } catch {
-      key = ''
-    }
+    // Recall widens an exact-`cwd` match to the same repository. The key comes from the resolved
+    // identity, and the set of keys to match includes any adopted legacy bucket, so a session
+    // started before the identity layer existed is still recalled by a session started after it.
+    const key = state.identity?.engineRepoKey ?? ''
+    const identityKey = state.identity?.identityKey ?? ''
+    const legacyKeys = Array.isArray(state.identity?.legacyKeys) ? state.identity.legacyKeys : []
+    const knownKeys = new Set([key, identityKey, ...legacyKeys].filter(Boolean))
     let page
     try {
       page = await service.searchSessions({
@@ -949,10 +1357,17 @@ export function apply(ctx, config) {
       .filter(hit => {
         const cwd = hit?.header?.cwd
         if (typeof cwd !== 'string' || !cwd) return false
-        if (cwd === state.cwd) return true
-        if (!key) return false
+        // The live directory and the immutable project directory are both valid matches: a
+        // session resumed from a subdirectory still belongs to the same project.
+        if (cwd === state.cwd || cwd === state.identity?.projectDir) return true
+        if (knownKeys.size === 0) return false
         try {
-          return repoKeyFor(cwd) === key
+          if (knownKeys.has(repoKeyFor(cwd))) return true
+        } catch {
+          /* an unresolvable directory simply does not match */
+        }
+        try {
+          return knownKeys.has(identityKeyOf(resolveIdentity({ cwd }, cwd, [], { env: createEnv() })))
         } catch {
           return false
         }
@@ -1047,6 +1462,79 @@ export function apply(ctx, config) {
   }
 
   /**
+   * Whether the engine's loop-guard judge is reachable, probed once per session.
+   *
+   * The judge is a model side call, and in the measured live deployment it cannot run:
+   * `errors.log` ends with `sidecall dsh: no reply (exit 1) ACCOUNT_SIGN_IN_REQUIRED`. When the
+   * seam is absent the guard still fires — the strict heuristic (consecutive identical failures
+   * with the same error signature) is judge-independent — but its decision is marked degraded so
+   * the lower precision is visible instead of being presented as a judged verdict.
+   *
+   * Probed once and cached: a per-turn probe would spawn a side call on every tool result.
+   * @param {object} state - per-agent state.
+   * @returns {{ ok: boolean, reason: string }} the cached probe.
+   */
+  function judgeProbeFor(state) {
+    if (state.judgeProbe !== undefined) return state.judgeProbe
+    let probe
+    try {
+      probe = probeCtx(state.agent.ctx, 'loopguard/judge')
+    } catch (error) {
+      probe = { ok: false, reason: `probe-threw: ${error instanceof Error ? error.message : String(error)}` }
+    }
+    const resolved = {
+      ok: probe?.ok === true,
+      reason: typeof probe?.reason === 'string' ? probe.reason : 'the judge seam reported nothing',
+    }
+    state.judgeProbe = resolved
+    if (!resolved.ok) {
+      notice(
+        state,
+        `loopguard: judge unavailable (${resolved.reason}); running the strict heuristic path only, decisions are marked degraded`,
+      )
+    }
+    return resolved
+  }
+
+  /**
+   * Record the loop guard's decision, marking it degraded when no judge could vote on it.
+   *
+   * The record is a `tier-decision` payload with a loop-guard reason, because the alternative —
+   * a fourth record type — would be a log-format migration for one field. The `reason` carries
+   * the degradation, so a reader never has to guess whether a judge participated.
+   *
+   * @param {object} state - per-agent state.
+   * @param {object} exec - the tool execution identity.
+   * @param {object} trip - the trip report of the loop breaker.
+   * @param {{ ok: boolean, reason: string }} judge - the cached judge probe.
+   * @returns {void}
+   */
+  function recordLoopDecision(state, exec, trip, judge) {
+    const degraded = !judge.ok
+    const reason = degraded ? 'loopguard:repeat:degraded' : 'loopguard:repeat'
+    // The step comes from the call index the tool-call fold maintains, so the record names the
+    // step that actually looped instead of a placeholder.
+    const call = state.calls?.get(String(exec?.callId))
+    const payload = {
+      nodeSeq: 0,
+      tier: 'hot',
+      turn: Number.isFinite(call?.turn) ? call.turn : (Number.isFinite(state.turn) ? state.turn : 0),
+      step: Number.isFinite(call?.step) ? call.step : 0,
+      policyHash: policyHash({ loopBreakerThreshold: config.loopBreakerThreshold }),
+      reason,
+    }
+    const outcome = appendRecord(state.agent.session, RECORD_NAMES.TIER_DECISION, payload, recordOptions(state))
+    if (!outcome.ok) {
+      noticeOnce(
+        state,
+        'loopguard',
+        `loopguard: decision stands but its record could not be appended (${outcome.reason ?? 'unknown'})`,
+      )
+    }
+    state.stats.updatedAt = Date.now()
+  }
+
+  /**
    * Stop a stuck turn and ask the person for guidance.
    *
    * The bail-out prompt is queued before the cancel, and the cancel keeps the inbox, so the
@@ -1058,6 +1546,10 @@ export function apply(ctx, config) {
    */
   function breakLoop(state, exec, trip) {
     if (!applying()) return
+    // Attribute the decision before acting on it: whether the judge took part is part of the
+    // record, and a degraded decision must be readable as degraded.
+    const judge = judgeProbeFor(state)
+    recordLoopDecision(state, exec, trip, judge)
     const text = `The same command (${exec.name}) failed ${trip.count} times in a row with the same error. `
       + 'Automated execution was stopped; please advise how to proceed.'
     try {
@@ -1070,7 +1562,8 @@ export function apply(ctx, config) {
     } catch {
       /* fail open: a turn that already ended needs no cancel */
     }
-    notice(state, `loop-breaker: tool=${exec.name} consecutive-failures=${trip.count} error=${trip.signature.slice(0, 120)}`)
+    const suffix = judge.ok ? '' : ` degraded=true judge=${judge.reason}`
+    notice(state, `loop-breaker: tool=${exec.name} consecutive-failures=${trip.count} error=${trip.signature.slice(0, 120)}${suffix}`)
   }
 
   /**
@@ -1128,7 +1621,10 @@ export function apply(ctx, config) {
   function onToolResult(state, exec, result) {
     // The PostToolUse hook is a trace: it is what the engine folds into evidence, so observe mode
     // keeps delivering it. Only the guard's redirect back into the conversation is gated.
+    // A subagent never delivers it: the child is folded with its parent, and a second PostToolUse
+    // stream would record the same tool call twice under a turn scale nobody runs.
     if (isInert() || !config.loopguard) return
+    if (!state.engineEnabled) return
     if (exec.agent && String(exec.agent.id) !== state.sid) return
     DELIVERY.hookCalls += 1
     const payload = {
@@ -1169,6 +1665,9 @@ export function apply(ctx, config) {
    */
   function scheduleExport(state) {
     if (state.closed) return
+    // A subagent session is never exported: the engine folds the child through its parent, and a
+    // separate child transcript in `dsh-sessions/` makes the fold count the child's turns twice.
+    if (!state.engineEnabled) return
     if (!config.exportSessions) return
     const now = Date.now()
     if (now - state.lastExport < 30000) return
@@ -1195,6 +1694,11 @@ export function apply(ctx, config) {
    * @returns {string} the export path, or an empty string when exporting is off.
    */
   function writeSession(state) {
+    // A delegated child has no transcript of its own as far as the engine is concerned: its work
+    // is folded through the parent, so a distinct child file would be counted a second time.
+    // Silent, unlike the `exportSessions: false` notice below — this is a deliberate asymmetry,
+    // not a misconfiguration to report.
+    if (!state.engineEnabled) return ''
     if (!config.exportSessions) {
       if (!state.exportOffNoticed) {
         state.exportOffNoticed = true
@@ -1224,6 +1728,12 @@ export function apply(ctx, config) {
     if (state.requests > 5 && DELIVERY.agentResult === 0) {
       notice(state, `route: no tool event reached the bridge in ${state.requests} requests — this route runs its tool calls outside DSH, so the tool-result levers (dedup, loop guard, watchdog, tiering) cannot observe them`)
     }
+    if (!state.engineEnabled) {
+      // The memory levers ran for this child; the engine path never did. Drop the state without
+      // a SessionEnd hook, without an export, and without the fold it would trigger.
+      sessions.delete(state.sid)
+      return
+    }
     let transcript = ''
     try {
       transcript = writeSession(state)
@@ -1245,6 +1755,73 @@ export function apply(ctx, config) {
    * The environment for one engine call: the plugin's own settings and the headless marker.
    * @returns {Record<string, string>} environment additions.
    */
+  /**
+   * Resolve one session's project identity, adopting an existing engine bucket rather than
+   * orphaning it.
+   *
+   * The engine's `repos/<key>/` directories are durable data. `lib/identity.js` computes an
+   * identity key from the same facts the engine uses, but its own header records that the engine's
+   * canonicalization cannot be verified from this host — so a freshly computed key is never
+   * trusted over a bucket that is already on disk. The resolution order is:
+   *
+   *   1. the persisted identity record for this project, when one was written before;
+   *   2. the legacy `repoKeyFor()` key, when that bucket exists on disk (adopted onto the record);
+   *   3. the resolved identity key itself, for a project the engine has never seen.
+   *
+   * Adoption writes a shim, not a move: the bucket keeps its directory and its contents, and the
+   * identity record gains the legacy key in `legacyKeys`, so a later reader can reach the same data
+   * through either name. A resolution that would silently re-partition history is the failure this
+   * function exists to prevent.
+   * @param {object} header - the immutable session header.
+   * @param {string} liveDir - the session's current directory.
+   * @returns {object} the identity record plus `engineRepoKey` and `identityKey`.
+   */
+  function resolveSessionIdentity(header, liveDir) {
+    const root = stateHome || stateRoot(createEnv())
+    let persisted = []
+    let legacyKey = ''
+    try {
+      legacyKey = repoKeyFor(liveDir)
+    } catch {
+      legacyKey = ''
+    }
+    try {
+      const known = identityKeyOf(resolveIdentity(header, liveDir, [], { env: createEnv() }))
+      if (known) {
+        const stored = readIdentity(root, known)
+        if (stored) persisted = [stored]
+      }
+    } catch {
+      /* a resolution failure leaves `persisted` empty; the legacy path below still decides */
+    }
+    let record
+    try {
+      record = resolveIdentity(header, liveDir, persisted, { env: createEnv() })
+    } catch (error) {
+      settingsWarn(`identity: resolution failed (${error instanceof Error ? error.message : String(error)}); using the legacy engine key`)
+      record = { schemaVersion: 1, projectDir: liveDir, liveDir, identityKey: null, legacyKeys: [], resolvedBy: 'unanchored' }
+    }
+    const legacyExists = legacyKey !== '' && existsSync(join(root, 'repos', legacyKey))
+    let engineRepoKey = legacyKey
+    if (record.identityKey && legacyExists && record.identityKey !== legacyKey) {
+      // The bucket on disk wins. Adopt it so both names reach the same data.
+      try {
+        adoptLegacyKey(root, record.identityKey, legacyKey)
+      } catch (error) {
+        settingsWarn(`identity: could not record the legacy key ${legacyKey} (${error instanceof Error ? error.message : String(error)})`)
+      }
+      engineRepoKey = legacyKey
+    } else if (!legacyKey && record.identityKey) {
+      engineRepoKey = record.identityKey
+    }
+    try {
+      if (record.identityKey) writeIdentity(root, record)
+    } catch (error) {
+      settingsWarn(`identity: could not persist the record (${error instanceof Error ? error.message : String(error)})`)
+    }
+    return { ...record, engineRepoKey }
+  }
+
   function createEnv() {
     return {
       ...process.env,

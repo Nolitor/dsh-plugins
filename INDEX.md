@@ -79,10 +79,10 @@
 | Subproject | Docs | Index |
 |---|---|---|
 | `dsh-command-skill/` | 11 | [docs/INDEX.md](dsh-command-skill/docs/INDEX.md) |
-| `dsh-custom-router/` | 34 | [docs/INDEX.md](dsh-custom-router/docs/INDEX.md) |
+| `dsh-custom-router/` | 35 | [docs/INDEX.md](dsh-custom-router/docs/INDEX.md) |
 | `dsh-notify/` | 23 | [docs/INDEX.md](dsh-notify/docs/INDEX.md) |
 | `dsh-sidebar-manager/` | 19 | [docs/INDEX.md](dsh-sidebar-manager/docs/INDEX.md) |
-| `dsh-tokeneconomizer/` | 12 | [docs/INDEX.md](dsh-tokeneconomizer/docs/INDEX.md) |
+| `dsh-tokeneconomizer/` | 16 | [docs/INDEX.md](dsh-tokeneconomizer/docs/INDEX.md) |
 
 ### Separate repositories (submodules)
 

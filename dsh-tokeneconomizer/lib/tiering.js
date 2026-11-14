@@ -19,7 +19,34 @@
  *                 session query (full-text search) by its turn and step.
  *
  * Every function here is pure: the policy decides, the caller applies.
+ *
+ * ## The trigger seam
+ *
+ * The policy is applied from a DSH hook, and the hook this module targets is the
+ * non-deprecated `agent/pre-step` waterfall. Its contract is weaker than the
+ * deprecated `agent/request` seam it replaces: `agent/request` ran after request
+ * assembly and `step/start`, before the system prompt and the accepted user batch
+ * were committed, whereas `agent/pre-step` runs at step preparation, before request
+ * assembly. That difference is real and is not hidden here: a rewrite triggered from
+ * `agent/pre-step` may land **one step later** than it would have on `agent/request`.
+ * It still saves tokens on every subsequent step of the turn, and the session/event
+ * fallback (which observes `step/start` and applies before the next pre-step) is
+ * exposed below as {@link TRIGGERS}. `agent/request` is never chosen.
+ *
+ * ## Decision records
+ *
+ * The policy is only half the evidence a later measurement needs. The other
+ * half is why a node was graded the way it was, kept even when the surface
+ * write that follows is rejected: a decision that produced no rewrite is a
+ * measurement fact, not a failure to be hidden. {@link buildTierDecision} is
+ * pure and {@link emitTierDecision} is fail-open, so the same policy that
+ * decides the write can describe it without being able to break it.
  */
+
+import { createHash } from 'node:crypto'
+
+import { appendRecord, RECORD_NAMES } from './attribution.js'
+import { probeAll, SEAM_CATALOG } from './probes.js'
 
 /** The newest turns: full fidelity, never pruned. */
 export const TIER_HOT = 'hot'
@@ -41,6 +68,16 @@ export const TIER_DEFAULTS = Object.freeze({
   tailChars: 600,
   minChars: 3700,
 })
+
+/**
+ * The marker this plugin puts on a tool result it reduced itself.
+ *
+ * Deliberately different from the harness's own pruner marker (owned by
+ * `dsh-compaction-tool-result-pruner`), so a rewrite found in a log can be attributed from its
+ * content alone — the harness pruner writes no record at all, and this plugin does. This module
+ * must never carry that other marker's text: a reader greps for it to tell the two apart.
+ */
+export const PLUGIN_PRUNE_MARKER = '[... tokeneconomizer: tool result reduced ...]'
 
 /** Tools whose output is code: kept whole through the warm tier. */
 const CODE_TOOLS = new Set([
@@ -162,6 +199,7 @@ export function structuralSummary (text, policy = TIER_DEFAULTS) {
 export function evictionNotice (info) {
   return [
     '[tokeneconomizer] cold tier: this tool output was evicted from the model context.',
+    PLUGIN_PRUNE_MARKER,
     `tool=${info.name} kind=${info.kind} turn=${info.turn} step=${info.step} chars=${info.chars}`,
     'The full output stays in the session log: read it with the session query (full-text search)',
     `for turn ${info.turn} step ${info.step}.`,
@@ -191,4 +229,323 @@ export function tierContent (input) {
   return evictionNotice({
     turn: input.turn, step: input.step, chars: text.length, kind: input.kind, name: input.name,
   })
+}
+
+/**
+ * One policy value as a stable string: primitives by `String`, aggregates by
+ * key-sorted JSON. Key order is the only thing JSON leaves unspecified, so the
+ * canonical form here is what makes a hash of two equal policies equal.
+ * @param {unknown} value - a policy field value.
+ * @returns {string} a deterministic rendering.
+ */
+function canonicalValue (value) {
+  if (value === null) return 'null'
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return `[${value.map(canonicalValue).join(',')}]`
+  if (typeof value === 'object') {
+    const keys = Object.keys(value).sort()
+    return `{${keys.map((key) => `${key}=${canonicalValue(value[key])}`).join(',')}}`
+  }
+  return String(value)
+}
+
+/**
+ * The stable fingerprint of a tier policy: sha1 over its key-sorted
+ * `key=value` pairs. Same policy, same hash; a boundary change changes it, so a
+ * record can be read against the policy that produced it.
+ * @param {object|null|undefined} policy - the policy object, or any non-object.
+ * @returns {string} the hex digest.
+ */
+export function policyHash (policy) {
+  const source = policy !== null && typeof policy === 'object' && !Array.isArray(policy) ? policy : {}
+  const pairs = Object.keys(source).sort().map((key) => `${key}=${canonicalValue(source[key])}`)
+  return createHash('sha1').update(pairs.join('\n')).digest('hex')
+}
+
+/**
+ * Build one tier-decision payload: the grading of a node, described in the
+ * shape {@link import('./attribution.js').RECORD_NAMES.TIER_DECISION} declares.
+ *
+ * Pure and deterministic: it reads its arguments only, mutates nothing, and
+ * hashes the policy instead of copying it, so the same decision always yields
+ * the same bytes. It deliberately knows nothing about whether the graded node
+ * is rewritable — a decision stands on its own.
+ *
+ * @param {{ seq: number, tier: string, turn: number, step: number,
+ *   policy?: object, reason: string }} input - the graded node and its policy.
+ * @returns {{ nodeSeq: number, tier: string, turn: number, step: number,
+ *   policyHash: string, reason: string }} the payload.
+ */
+export function buildTierDecision ({ seq, tier, turn, step, policy, reason }) {
+  return {
+    nodeSeq: seq,
+    tier,
+    turn,
+    step,
+    policyHash: policyHash(policy),
+    reason,
+  }
+}
+
+/**
+ * Append the record for one tier decision. Fail-open by contract: attribution
+ * is evidence about a decision, never a precondition for one, so nothing here
+ * throws and a missing appender is reported rather than raised.
+ *
+ * @param {object|null|undefined} session - session carrying `appendPluginRecord`.
+ * @param {{ nodeSeq: number, tier: string, turn: number, step: number,
+ *   policyHash: string, reason: string }} decision - from {@link buildTierDecision}.
+ * @param {{ appendPluginRecord?: Function }} [options] - injected appender.
+ * @returns {{ ok: boolean, seq?: number, warning?: string, reason?: string }}
+ *   the {@link import('./attribution.js').appendRecord} result.
+ */
+export function emitTierDecision (session, decision, options = {}) {
+  try {
+    return appendRecord(session, RECORD_NAMES.TIER_DECISION, decision, options)
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : String(error),
+      warning: 'tier decision record failed; the decision itself is unaffected',
+    }
+  }
+}
+
+/** The hook seams the tiering rewrite can be applied from. */
+export const TRIGGERS = Object.freeze({
+  /** Preferred: the non-deprecated step-preparation waterfall. */
+  PRE_STEP: 'agent/pre-step',
+  /** Fallback: observe `step/start` and apply before the next pre-step. */
+  SESSION_EVENT: 'session/event',
+})
+
+/** The deprecated seam this module must never choose. Kept as a name, not a route. */
+const DEPRECATED_REQUEST = 'agent/request'
+
+/** @type {ReadonlySet<string>} */
+const KNOWN_TRIGGERS = new Set(Object.values(TRIGGERS))
+
+/**
+ * Read one probe row without letting a hostile getter throw outward.
+ * @param {unknown} probe - probe-result map, or anything else.
+ * @param {string} id - the seam id.
+ * @returns {unknown} the row, or `undefined`.
+ */
+function probeRow (probe, id) {
+  if (probe === null || typeof probe !== 'object') return undefined
+  try {
+    return probe[id]
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Whether a probe row reports the seam as available. Accepts both a
+ * `ProbeResult` (`{ ok: true }`) and the bare `true` a caller may synthesize.
+ * @param {unknown} row - the probe row.
+ * @returns {boolean} true when the seam can be registered on.
+ */
+function rowOk (row) {
+  if (row === true) return true
+  if (row === null || typeof row !== 'object') return false
+  try {
+    return row.ok === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The reason text of a probe row, when it has one.
+ * @param {unknown} row - the probe row.
+ * @returns {string} the reason, or an empty string.
+ */
+function rowReason (row) {
+  if (row === null || typeof row !== 'object') return ''
+  try {
+    return typeof row.reason === 'string' ? row.reason : ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Choose the hook seam the tiering rewrite is applied from.
+ *
+ * Pure and total: it reads the probe result only, performs no I/O, and never
+ * throws — a missing, empty or malformed probe simply lands on the fallback.
+ * The fallback order is fixed:
+ *
+ *   1. `agent/pre-step` — preferred, non-deprecated, the exact step-preparation
+ *      waterfall DSH still supports.
+ *   2. `session/event` — first-class fallback: it observes `step/start` and
+ *      applies before the next pre-step, so a rewrite may land one step later
+ *      but still reaches every later step of the turn.
+ *
+ * `agent/request` is deprecated ("retained for existing listeners; do not add
+ * new listeners") and is never returned, not even when it is the only hook the
+ * probe reports.
+ *
+ * @param {Record<string, unknown>|null|undefined} probe - probe results, keyed
+ *   by seam id; the rows may be `ProbeResult`s or bare booleans.
+ * @returns {{ trigger: string, reason: string }} the chosen seam and why.
+ */
+export function chooseTrigger (probe) {
+  const pre = probeRow(probe, TRIGGERS.PRE_STEP)
+  if (rowOk(pre)) {
+    const why = rowReason(pre)
+    return {
+      trigger: TRIGGERS.PRE_STEP,
+      reason: why === ''
+        ? 'agent/pre-step is available; tiering runs at step preparation'
+        : `agent/pre-step is available (${why})`,
+    }
+  }
+  const why = rowReason(pre)
+  const missing = why === ''
+    ? 'agent/pre-step is absent from the probe'
+    : `agent/pre-step is unavailable (${why})`
+  return {
+    trigger: TRIGGERS.SESSION_EVENT,
+    reason: `${missing}; ${
+      rowOk(probeRow(probe, DEPRECATED_REQUEST))
+        ? 'agent/request is deprecated and is not used'
+        : 'using the session/event fallback (step/start)'
+    }`,
+  }
+}
+
+/**
+ * Whether a value is a ctx whose event surface can carry a listener.
+ * @param {unknown} ctx - the candidate context.
+ * @returns {boolean} true when `ctx.on` is callable.
+ */
+function hasEventSurface (ctx) {
+  if (ctx === null || typeof ctx !== 'object' && typeof ctx !== 'function') return false
+  try {
+    return typeof ctx.on === 'function'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whether this build's seam catalog still declares the pre-step waterfall as a
+ * live, non-deprecated contract.
+ * @returns {boolean} true when the catalog row exists and is not deprecated.
+ */
+function catalogSupportsPreStep () {
+  try {
+    const row = SEAM_CATALOG.find((entry) => entry?.id === TRIGGERS.PRE_STEP)
+    return row !== undefined && row.deprecated !== true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The event vocabulary a context declares, when it declares one.
+ *
+ * A real Cordis context does not enumerate its event names, so this is usually
+ * `undefined`, and the presence of the hook has to be inferred (see
+ * {@link triggerProbe}). When a caller *does* hand over an explicit list, that
+ * list is authoritative: omitting the hook is positive proof the hook is gone.
+ *
+ * Only an explicit name list counts. `ctx.events` is a Cordis *service object*,
+ * never a vocabulary, so reading a vocabulary out of its property names would
+ * report every hook as absent on a live host.
+ *
+ * @param {unknown} ctx - the context to inspect.
+ * @returns {string[]|undefined} the declared names, or `undefined`.
+ */
+function declaredEventTypes (ctx) {
+  if (ctx === null || typeof ctx !== 'object') return undefined
+  for (const key of ['eventTypes', 'knownEventTypes']) {
+    let candidate
+    try {
+      candidate = ctx[key]
+    } catch {
+      continue
+    }
+    if (Array.isArray(candidate)) return candidate.map(String)
+    if (candidate instanceof Set) return [...candidate].map(String)
+    if (candidate !== null && typeof candidate === 'object' && typeof candidate.has === 'function') {
+      try {
+        if (candidate.has(TRIGGERS.PRE_STEP)) return [TRIGGERS.PRE_STEP]
+        return []
+      } catch {
+        continue
+      }
+    }
+  }
+  return undefined
+}
+
+/**
+ * Build the probe map {@link chooseTrigger} reads, from the live context and
+ * the seam sweep {@link probeAll} produces.
+ *
+ * `probes.js` can only inspect hook *values* it finds on a context, and Cordis
+ * accepts a listener under any event name, so a failed lookup is not proof the
+ * waterfall is gone. This function therefore refuses to read silence as absence:
+ *
+ *   - an explicit probe hit wins outright;
+ *   - a context that declares an event vocabulary omitting the hook is taken at
+ *     its word, and the `session/event` fallback is chosen;
+ *   - otherwise the declared seam catalog and a live event surface stand in for
+ *     introspection, which is what this build targets.
+ *
+ * Never throws, and never reports `agent/request`: this function only ever
+ * speaks about `agent/pre-step` and `session/event`.
+ *
+ * @param {unknown} ctx - the agent-scoped context.
+ * @param {Record<string, unknown>} [probed] - an existing {@link probeAll} sweep.
+ * @returns {Record<string, unknown>} the probe map for {@link chooseTrigger}.
+ */
+export function triggerProbe (ctx, probed) {
+  let rows
+  try {
+    rows = probed ?? probeAll(ctx)
+  } catch {
+    rows = {}
+  }
+  if (rows === null || typeof rows !== 'object') rows = {}
+  if (rowOk(probeRow(rows, TRIGGERS.PRE_STEP))) return rows
+  const declared = declaredEventTypes(ctx)
+  if (declared !== undefined && declared.length > 0 && !declared.includes(TRIGGERS.PRE_STEP)) {
+    return rows
+  }
+  if (!hasEventSurface(ctx) || !catalogSupportsPreStep()) return rows
+  return {
+    ...rows,
+    [TRIGGERS.PRE_STEP]: {
+      ok: true,
+      reason: 'declared by the seam catalog; the ctx event surface is present',
+    },
+  }
+}
+
+/**
+ * The seam name recorded on a tiering decision. Accepts the object returned by
+ * {@link chooseTrigger} or a bare trigger string, and normalizes anything
+ * unknown to the safe fallback — this function must never yield the deprecated
+ * `agent/request`.
+ *
+ * @param {{ trigger?: string }|string|null|undefined} chosen - the choice.
+ * @returns {string} one of {@link TRIGGERS}.
+ */
+export function decidedAtTrigger (chosen) {
+  let trigger
+  try {
+    trigger = typeof chosen === 'string'
+      ? chosen
+      : chosen !== null && typeof chosen === 'object'
+        ? chosen.trigger
+        : undefined
+  } catch {
+    trigger = undefined
+  }
+  return typeof trigger === 'string' && KNOWN_TRIGGERS.has(trigger) ? trigger : TRIGGERS.SESSION_EVENT
 }

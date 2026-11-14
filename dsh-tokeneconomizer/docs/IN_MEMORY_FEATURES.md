@@ -1,11 +1,11 @@
 # Host-Local In-Memory Features
 
 <!-- skeleton:
-version: 1.2
+version: 1.4
 kind: spec
 status: active
-updated: 2026-10-31
-summary: Architecture of the host-local features of the DSH bridge: tool-result hash deduplication, the KV-cache-safe prompt slot with its constant routing text, the loop breaker with its advisory thinking watchdog, the turn-based tiered memory, the observe/apply mode split, and the full configuration reference.
+updated: 2026-11-15
+summary: Architecture of the host-local features of the DSH bridge: tool-result hash deduplication, the KV-cache-safe prompt slot with its constant routing text, the loop breaker with its advisory thinking watchdog, the turn-based tiered memory with its 2026-11-15 attribution records and the agent/pre-step trigger, the observe/apply mode split, the full configuration reference, and the 2026-11-14 split that mounts all four in a delegated child session too.
 -->
 
 ## 1. What this document answers
@@ -27,8 +27,10 @@ piece of state lives in the plugin's per-agent record and disappears with the ag
 
 ## 2. Measured seams
 
-The seams below were measured against the published `@deepseek-ai/dsh@0.2.2-alpha.2` type
-declarations, which is the version this package's `engines.dsh` window names.
+The seams below were measured against the installed `@deepseek-ai/dsh@0.2.2-rc.3` type
+declarations (re-measured 2026-11-14; the first reading was against the published
+`@deepseek-ai/dsh@0.2.2-alpha.2` type declarations, which is the version this package's
+`engines.dsh` window names).
 
 | Need | Seam | Contract that matters here |
 |---|---|---|
@@ -40,6 +42,8 @@ declarations, which is the version this package's `engines.dsh` window names.
 | Deliver a prompt into the next step | `agent.inject(UserMessage)` | appends model-facing context; it does not wake the driver |
 | Observe request progress | `session/event`, `agent/assistant-stream` | stream frames are process-local notifications, not session events |
 | Read the model-visible transcript | `session.deriveMessages()` | the first entry is the effective system message |
+| Apply the tiering pass | `agent/pre-step` waterfall (2026-11-15), `session/event` (`step/start`) fallback | `agent/request` is deprecated and is never selected |
+| Attribute a surface write | `appendPluginRecord(session, type, data)` — a **module export**, resolved through `ctx.get('session')` | `Session` has no `appendPluginRecord` method; a record is `ignorable` and never enters the surface |
 
 Two constraints shaped the design:
 
@@ -168,8 +172,10 @@ this plugin and not from the person.
 
 ### 5.2 Thinking watchdog
 
-The watchdog measures the time since the session last committed progress. It is **advisory by
-default**: it warns, and it does not end the turn.
+The watchdog measures the time since the session last committed progress, and it **interrupts by
+default**: a step or tool call that commits no progress inside its budget ends the turn.
+`watchdogAction: 'warn'` restores the advisory behaviour, and `watchdog: false` never arms a timer
+at all.
 
 | Element | Value |
 |---|---|
@@ -177,9 +183,9 @@ default**: it warns, and it does not end the turn.
 | Warning point | `watchdogWarnMs` (default 300000), one notice per budget |
 | Arm | `turn/start` |
 | Progress | committed session events, and — with `watchdogProgress: 'any'` — assistant stream frames |
-| Hold | a tool call in flight `suspend()`s the budget; `tool/result` `resume()`s it from now |
+| Hold | a tool call in flight `suspend()`s the turn budget and runs `watchdogToolThresholdMs` instead; `tool/result` `resume()`s the turn budget from now |
 | Release | `turn/end`, agent disposal |
-| Action | `warn` (default) writes a notice and restarts the budget; `interrupt` cancels the turn |
+| Action | `interrupt` (default) records the interrupt and cancels the turn; `warn` writes a notice and restarts the budget |
 
 Two measurements drove this shape, and both describe a defect that existed before `0.2.0`:
 
@@ -228,6 +234,61 @@ The pass runs when a turn starts, because that is the moment the age of every ou
 It is skipped when the harness has no token meter, because the shadow price is what lets a
 consumer subtract the replaced node's cost.
 
+### 6.1 The trigger moved to `agent/pre-step` (2026-11-15)
+
+The pass used to be applied from `agent/request`, which upstream has deprecated ("retained for
+existing listeners; do not add new listeners"). It is now applied from **`agent/pre-step`**, with a
+`session/event` (`step/start`) fallback. `chooseTrigger()` never returns `agent/request`.
+
+**The honest consequence.** `agent/request` ran *after* request assembly and `step/start`; 
+`agent/pre-step` runs at *step preparation*, before request assembly. A rewrite triggered from
+`agent/pre-step` may therefore land **one step later** than it would have on `agent/request`. It
+still saves tokens on every subsequent step of the turn. The one-step delay is a real cost, not a
+cosmetic one.
+
+### 6.2 The attribution records (2026-11-15)
+
+The surface write is byte-indistinguishable from the harness's own tool-result pruner: both write
+the same `compaction/prune` payload and the same `tool/result` replacement with
+`surfaceOp: {op:'replace'}`, and `compaction/prune` carries **no producer field**. On the log alone
+the two cannot be told apart — and a measurement once credited the harness's 179 rewrites to this
+plugin.
+
+So every write is accompanied by a DSH-native **plugin record**:
+
+| Record type | Payload | When it is written |
+|---|---|---|
+| `tier-decision` | `{ nodeSeq, tier, turn, step, policyHash, reason }` | **before** the surface changes — including when the decision produced no rewrite at all |
+| `surface-rewrite` | `{ nodeSeq, tier, charsBefore, charsAfter, shadowTokens, reason }` | **after** the replacement it describes |
+
+A record is `ignorable`, **never enters the model-visible surface** (zero token cost), and survives
+fork and resume. A *new event type* would do the opposite of what is wanted here: it would enter
+the surface and be paid for on every request. The plugin event space is also closed — the harness
+owns the event-type grammar.
+
+The write order is fixed, and the order *is* the failure policy:
+
+```
+validate the target -> `tier-decision` record -> `compaction/prune`
+                    -> `tool/result` + surfaceOp -> `surface-rewrite` record
+```
+
+A record failure never corrupts or undoes the replacement, and never retries it — a lost record is
+a missing attribution, not a reason to write the surface twice. A replacement failure returns
+before any record claims it, so a record can never describe a write that did not happen.
+
+`Session` has **no** `appendPluginRecord` method: the record API is a *module export*,
+`appendPluginRecord(session, type, data)`, resolved through `ctx.get('session')`.
+
+The loop breaker uses the same `tier-decision` record with a loop-guard `reason`
+(`loopguard:repeat`, or `loopguard:repeat:degraded` when no judge could vote). The tool-prune
+lever writes a third record type, `toolprune-applied`:
+`{ tools, countBefore, countAfter, visibleIntersection, proposalId?, repoKey, time }`.
+
+The full delivery record is in
+[DSH-SCHEMA-IMPLEMENTATION.md](DSH-SCHEMA-IMPLEMENTATION.md); the attribution layer's rationale
+is in [ARCHITECTURE.md](ARCHITECTURE.md) §3.2.
+
 
 ## 7. Configuration
 
@@ -236,6 +297,7 @@ non-positive number, an out-of-range order, or an unknown enum value fails the r
 
 | Field | Type | Default | Meaning |
 |---|---|---|---|
+| `subagentMemory` | boolean | `true` | mount these four features in a delegated child session too (`false` restores "a subagent has no economy of its own"); the engine path stays root-only either way |
 | `dedup` | boolean | `true` | enable the tool-result deduplication |
 | `dedupMinChars` | number > 0 | `200` | shortest output worth replacing |
 | `dedupMaxEntries` | number > 0 | `512` | remembered digests per session |
@@ -244,22 +306,26 @@ non-positive number, an out-of-range order, or an unknown enum value fails the r
 | `loopBreaker` | boolean | `true` | enable the loop breaker |
 | `loopBreakerThreshold` | integer ≥ `2` | `3` | consecutive identical failures that trip the breaker |
 | `loopBreakerWindow` | integer ≥ `2` | `5` | remembered calls |
-| `watchdog` | boolean | `true` | enable the thinking watchdog |
+| `watchdog` | boolean | `true` | enable the thinking watchdog; `false` never arms a timer |
 | `watchdogThresholdMs` | number > 0 | `600000` | progress-free budget of one step |
+| `watchdogToolThresholdMs` | number > 0 | `600000` | budget of one in-flight tool call; `Infinity` disables it |
 | `watchdogWarnMs` | number < `watchdogThresholdMs` | `300000` | point inside the budget for the one warning |
-| `watchdogAction` | `warn` \| `interrupt` | `warn` | what the watchdog does when the budget is exhausted |
+| `watchdogAction` | `warn` \| `interrupt` | `interrupt` | what the watchdog does when the budget is exhausted |
 | `watchdogProgress` | `any` \| `committed` | `any` | whether assistant stream frames count as progress |
 | `tiering` | boolean | `true` | grade old tool outputs by turn and evict the cold ones |
-| `tierHotTurns` | number > 0 | `5` | turns kept at full fidelity |
+| `tierHotTurns` | number > 0 | `6` | turns kept at full fidelity |
 | `tierWarmTurns` | number > `tierHotTurns` | `15` | turns kept as a structural summary |
 | `tierHeadChars` | number > 0 | `2000` | characters kept from the head of a warm-tier output |
 | `tierTailChars` | number > 0 | `600` | characters kept from the tail of a warm-tier output |
-| `tierMinChars` | number > 0 | `3000` | shortest output worth grading; the warm summary's own floor is ~2.96 KB |
+| `tierMinChars` | number > 0 | `3700` | shortest output worth grading; below the measured 3,045-char crossover the warm summary is larger than the original |
 | `thinkInCode` | boolean | `true` | pin the constant routing text that sends one large inspection through one script |
 | `recallPriorSessions` | boolean | `true` | recall this repository's earlier sessions once, on the first real prompt |
 | `recallLimit` | number > 0 | `3` | earlier sessions quoted in the recall block |
 | `recallMaxChars` | number > 0 | `900` | character budget of the recall block |
 | `exportSessions` | boolean | `true` | write the decompressed export the engine's fold reads |
+| `hookTimeoutMs` | number > 0 | `8000` | bound on one lifecycle hook |
+| `cliTimeoutMs` | number > 0 | `20000` | bound on one operator call (session brief, status) |
+| `headless` | `auto` \| `always` \| `never` | `auto` | whether a side call runs as `dsh headless …` |
 | `mode` | `apply` \| `observe` | `apply` | `observe` records evidence but injects nothing |
 
 The bundle row in `cordis.patch.yml` carries the same keys with the same defaults.
@@ -277,6 +343,14 @@ agent/created (awaited by the harness before the loop claims its first message)
 Registering after the brief would miss the session's first tool calls, because the brief is a
 subprocess call bounded by `cliTimeoutMs`.
 
+**A delegated child runs `mount(state)` but not `start(state)`.** The four features in this
+document are the memory path: they mount in every session, child included, because a child burns
+the same model context and its bill lands on the parent. The engine brief, the tool mask and the
+`SessionStart` hook belong to the engine path, which is root-only — a child is folded with its
+parent's work, so its own envelope would count its turns twice. `subagentMemory: false` turns
+the memory path off for children too, and then a child mounts nothing at all. See
+[ARCHITECTURE.md](ARCHITECTURE.md) §3.1.
+
 All registrations live on the agent's own scope, so disposal unwinds them with the agent. The
 watchdog timer is cleared on disposal, and the per-session digest map, ring buffer, call index
 and prefix guard are dropped with the record. No module-level state, no global registry.
@@ -292,6 +366,7 @@ The lines carry the fields a runtime trace needs, and nothing is written on the 
 | the request's first message changed | `prefix: the system prompt changed mid-session, the cached prompt prefix was reset` |
 | the loop breaker tripped | `loop-breaker: tool=<name> consecutive-failures=<n> error=<signature>` |
 | the watchdog expired | `watchdog: no progress for <ms> ms, action=interrupted\|warned` |
+| the watchdog was disabled | nothing: `watchdog: false` arms no timer |
 
 The error signature in the breaker line is truncated to 120 characters. A line is written once per
 event, so the cost on the quiet path is one comparison and no write.
@@ -309,7 +384,9 @@ event, so the cost on the quiet path is one comparison and no write.
 ## 11. Verification
 
 `node --test test/*.test.mjs` covers the four modules and the plugin's registration contract:
-71 tests, 70 passing and one skipped. The engine-backed end-to-end test stays skipped unless
+**236 tests, 235 passing and one skipped** (re-measured 2026-11-15 after the DSH schema alignment;
+the count was 164 before that refactor, 156 before the gate split, and 71 when this document was
+written on 2026-10-31). 29 test files. The engine-backed end-to-end test stays skipped unless
 `TE_DSH_TEST_HOME` names a bootstrapped state root.
 
 | File | Covers |
@@ -319,6 +396,14 @@ event, so the cost on the quiet path is one comparison and no write.
 | `test/watchdog.test.mjs` | trip count, error signature, chain breaks, argument canonicalization, ring bound, reset, watchdog expiry, progress, disarm |
 | `test/tiering.test.mjs` | the tier boundaries, the hot tier untouched, the warm summary keeping head, tail and index, the warm code read kept whole, the cold eviction pointer, the code/log classification, the index contents |
 | `test/tiering-mount.test.mjs` | the plugin's pass replaces a cold node on the session surface, prices the shadowed node, and leaves a hot node alone |
+| `test/tiering-trigger.test.mjs` | `chooseTrigger` prefers `agent/pre-step`, falls back to `session/event`, and never returns `agent/request` |
+| `test/tiering-records.test.mjs` | the tier-decision and surface-rewrite records, their validators, and the write order |
+| `test/attribution.test.mjs` | the record grammar, `appendRecord`'s fail-open behavior, `readRecords` and `recordsOfType` |
+| `test/surface-attribution.test.mjs` | `applyRewrite` — validate → decide → prune → replace → rewrite, and each failure path |
+| `test/probes.test.mjs` | the seven-seam catalog, `probeFn`, `probeCtx`, the append-overload arity probe, `probeAll` |
+| `test/identity.test.mjs` | the two-value identity model, the persisted fast path, the moved and unanchored cases, the legacy-key adoption |
+| `test/session-reads.test.mjs` / `test/surface-reads.test.mjs` | the deprecated-read call sites and the surface read constraints |
+| `test/deprecation-audit.test.mjs` | the seam list, the allow-list justification, and the FAIL branch |
 | `test/mount.test.mjs` | config validation, registration before the brief, the pinned section, the pointer through the pipeline, failed results, a canonical value, a blocked call, the loop breaker trip and reset, the watchdog interrupt and warn modes, the prefix report, the diagnostic line of every event, disposal |
 
 Not covered by these tests, and not claimed:
@@ -331,6 +416,9 @@ Not covered by these tests, and not claimed:
 ## 12. Related documents
 
 * [ARCHITECTURE.md](ARCHITECTURE.md) — the bridge's isolation boundary, the lifecycle contract,
-  and the engine-backed mechanisms.
-* [OPERATIONS.md](OPERATIONS.md) — install, bootstrap, rollback, and the configuration reference.
+  the attribution record layer, the tiering trigger, and the engine-backed mechanisms.
+* [DSH-SCHEMA-IMPLEMENTATION.md](DSH-SCHEMA-IMPLEMENTATION.md) — the delivery record for the
+  2026-11-15 schema alignment: module map, record types, trigger migration, settings page.
+* [OPERATIONS.md](OPERATIONS.md) — install, bootstrap, rollback, the settings page, and the
+  configuration reference.
 * [../README.md](../README.md) — the mechanism table and the package layout.

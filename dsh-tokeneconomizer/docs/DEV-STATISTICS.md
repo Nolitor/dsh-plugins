@@ -1,11 +1,11 @@
 # Developer statistics — DSH ledger shape, and how tk now exposes it
 
 <!-- skeleton:
-version: 1.1
+version: 1.2
 kind: spec
 status: active
-updated: 2026-11-08
-summary: Read-only per-turn/per-step developer statistics for TokenEconomizer: the measured before/after surface, the DSH rc.1 ledger vocabulary it copies, the settings.section seat choice, the derivation rules, and the card's DSH settings-surface rules.
+updated: 2026-11-14
+summary: Read-only per-turn/per-step developer statistics for TokenEconomizer: the measured before/after surface, the DSH rc.1 ledger vocabulary it copies, the settings.section seat choice, the derivation rules, the card's DSH settings-surface rules, and the 2026-11-14 root-session-only view that keeps a delegated child out of the parent's row.
 -->
 
 > Scope: `@nolit/dsh-tokeneconomizer` only. Owner ask (2026-11-05, translated): *"the token
@@ -103,6 +103,11 @@ grows (invalidated by the last `seq` + event count).
 
 ## 6. Operational notes
 
+- **Root sessions only.** Since 2026-11-14 the route is handed a `rootSessionsView()` of the
+  session map, so a delegated child does not appear as a *sibling* row of its parent — its turns
+  and tokens would otherwise be counted as if a person had run them, which is the double count
+  the engine path removes. The child still exists in the real map and still gets every in-memory
+  lever; it is only hidden from this camera. See [ARCHITECTURE.md](ARCHITECTURE.md) §3.1.
 - **Read-only by construction.** The route answers one request body (`{ sessionId? }`), writes no
   file, appends no session event and mutates no settings. `test/devstats-server.test.mjs` asserts
   the live state is byte-identical before and after a request.

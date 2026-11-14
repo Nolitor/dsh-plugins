@@ -24,6 +24,14 @@
         dedup: true
         dedupMinChars: 200
         dedupMaxEntries: 512
+        # A delegated child session gets the in-memory levers above (and tiering, the loop
+        # breaker, the watchdog, the prefix guard and the pinned section) but never the engine
+        # path: a child is folded with its parent's work, so its own SessionStart/Stop/SessionEnd
+        # and its own session export would count its turns twice and teach the loop guard a turn
+        # scale nobody runs. `false` restores "a subagent has no economy of its own".
+        # Measured motive: 201 of the last 333 session logs (60%) are subagents, so the old
+        # blanket early return meant the memory levers did not exist in most sessions.
+        subagentMemory: true
         pinnedRules: ''
         pinnedRulesOrder: 50
         loopBreaker: true

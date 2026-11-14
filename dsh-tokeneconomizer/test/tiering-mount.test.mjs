@@ -120,12 +120,12 @@ test('a turn grades the outputs that fell out of the working window', async (t) 
   apply(ctx, { stateHome: isolatedState(t) })
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
 
-  const requestHandlers = agent.handlers.get('agent/request') ?? []
-  assert.ok(requestHandlers.length > 0, 'the plugin grades before a request is assembled')
+  const stepHandlers = agent.handlers.get('agent/pre-step') ?? []
+  assert.ok(stepHandlers.length > 0, 'the plugin grades at step preparation')
 
-  // Turn 20 puts turn 1 into the cold tier. The request waterfall is the first
-  // point after the turn/start append where a surface rewrite is legal.
-  for (const handler of requestHandlers) {
+  // Turn 20 puts turn 1 into the cold tier. The pre-step waterfall is the
+  // non-deprecated point where a surface rewrite is applied.
+  for (const handler of stepHandlers) {
     await handler({ agent, turn: 20, step: 0, signal: new AbortController().signal }, async () => ({}))
   }
 
@@ -160,7 +160,7 @@ test('the newest turns are left untouched', async (t) => {
   apply(ctx, { stateHome: isolatedState(t) })
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
 
-  for (const handler of agent.handlers.get('agent/request') ?? []) {
+  for (const handler of agent.handlers.get('agent/pre-step') ?? []) {
     await handler({ agent, turn: 20, step: 0, signal: new AbortController().signal }, async () => ({}))
   }
   assert.equal(session.appended.length, 0, 'a hot output is never replaced')

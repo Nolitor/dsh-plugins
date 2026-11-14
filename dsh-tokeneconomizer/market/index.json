@@ -1,0 +1,9 @@
+{
+  "version": "0.0.1-rc.6",
+  "name": "@nolit/dsh-tokeneconomizer",
+  "description": {
+    "en": "Token saving engine: Hierarchical output tiering (Warm/Cold) and redundancy deduplication.",
+    "ko": "토큰 절약 엔진: 계층적 출력 티어링(Warm/Cold) 및 데이터 중복 제거를 통해 토큰 소비를 최적화합니다."
+  },
+  "usage": "통합 엔진이 활성화되어 DSH 동작 시 토큰 재전송을 자동으로 차단합니다."
+}

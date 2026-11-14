@@ -1,11 +1,11 @@
 # TokenEconomizer saving measurement (DSH bridge, 2026-10-30)
 
 <!-- skeleton:
-version: 1.3
+version: 1.4
 kind: measurement
 status: measured
-updated: 2026-11-02
-summary: What the DSH TokenEconomizer bridge actually saved: the 2026-10-30 dark-lever measurement, the tiered-memory and routing fixes built from it, the 2026-11-02 re-measurement that found 1.03M chars of real tiering saving with 53% self-inflation, the toolprune lever that is real but capped near 1.2k tokens per request, and the adopted tierMinChars 3700 floor chosen from the measured maximum inflating input.
+updated: 2026-11-14
+summary: What the DSH TokenEconomizer bridge actually saved: the 2026-10-30 dark-lever measurement, the tiered-memory and routing fixes built from it, the 2026-11-02 re-measurement that found 1.03M chars of real tiering saving with 53% self-inflation, the toolprune lever that is real but capped near 1.2k tokens per request, and the adopted tierMinChars 3700 floor chosen from the measured maximum inflating input. The 2026-11-14 subagent-gate split means the in-memory levers now reach a delegated child; the figures here are the historical reading.
 -->
 
 > **Superseded verdict.** Section 0 below is the **2026-10-30** reading: every lever dark, about
@@ -13,6 +13,22 @@ summary: What the DSH TokenEconomizer bridge actually saved: the 2026-10-30 dark
 > state**. Section 8 is the 2026-11-02 re-measurement over the live corpus: tiering saves for
 > real, the minimum-size gate was raised to stop it inflating, and toolprune turns out to apply
 > but only bounds at roughly 1.2k tokens per request. Read Section 8 before quoting Section 0.
+>
+> **Corpus figures in this document are historical.** Every number here is the **2026-10-30 /
+> 2026-11-02** reading of a corpus that has since grown (this document quotes 140 sessions and
+> 99.27% cache read; the current corpus is 337 sessions and 98.73%). The 2026-11-14
+> re-measurement is in [AUDIT-2026-11-14.md](AUDIT-2026-11-14.md) — read that for the current
+> numbers. The historical readings below are kept as evidence, not as the current state.
+>
+> **The aggregation method also changed.** The figures in this document counted a saving by the
+> presence of the pruner's marker string. That marker is quoted by the user's own `grep`/`bash`
+> output, so the method under-reported real rewrites by 88.6%. The corrected method and the
+> three-step correction are documented in [AUDIT-2026-11-14.md](AUDIT-2026-11-14.md) §4.2.
+>
+> **The subagent gate changed on 2026-11-14.** After that fix the **in-memory levers run in a
+> delegated child too** (dedup, tiering, loop breaker, watchdog, prefix guard, pinned section);
+> only the engine path stays root-only. See [AUDIT-2026-11-14.md](AUDIT-2026-11-14.md) §10 and
+> [ARCHITECTURE.md](ARCHITECTURE.md) §3.1. The readings below are kept as history.
 
 ## 0. Verdict (2026-10-30)
 
@@ -130,7 +146,7 @@ delivered tool event reports that the route runs its tool calls outside DSH.
 
 | Tier | Turns | Log output | Code output |
 |---|---|---|---|
-| hot | newest 5 | byte-identical | byte-identical |
+| hot | newest 6 | byte-identical | byte-identical |
 | warm | up to 15 | head + tail + an index of file names, status codes, schema keys and error counts | kept whole |
 | cold | older | evicted; the model context keeps a pointer to the turn and step | evicted; the model context keeps a pointer |
 
@@ -289,16 +305,16 @@ structural guarantee. The structural alternative — refusing the rewrite whenev
 The plugin is live: the newest rewrite is **2026-11-01T12:50:08**, and the engine journal records
 `[tokeneconomizer] TokenEconomizer nudged this turn (judge-stuck@0.82)` at 2026-11-02 07:25:50.
 The after-era is empty because **no warm-tier opportunity exists yet**: the warm tier begins at turn
-age >= `hotTurns` (5), and every real session that *started* after the cutover has at most 3 turns.
+age >= `hotTurns` (6), and every real session that *started* after the cutover has at most 3 turns.
 Sessions with 22+ turns were all created before it, so they carry the old code for their whole life.
-Re-run the audit once a post-cutover session passes turn 5.
+Re-run the audit once a post-cutover session passes turn 6.
 
 ### 8.4 toolprune: the mask is real, the ceiling is ~1.2k tokens per request
 
 This corrects the earlier "5 proposals, 0 tools removed, 0 tokens saved" reading, which measured
 the wrong artifact.
 
-* **Mechanism is a hard mask, not advice.** `lib/index.js:557-561` calls
+* **Mechanism is a hard mask, not advice.** `lib/index.js` calls
   `ctx.tools.restrict({ deny })`; DSH compiles it into the scoped tool layer, and the single
   `visible` map it filters feeds both the model-facing schema list and dispatch. It is not a
   settings file and not approval-gated.
@@ -314,9 +330,18 @@ the wrong artifact.
   `48210` system-prompt chars, first request `14149` tokens; subagents `53901` chars and
   `16153`/`16054` tokens with all five names present. Delta **5691 chars ~ 1059-1210 tokens per
   request (7.5-7.9% of a first request)**.
-* **The gate that limits it:** `agent/created` returns early for `origin === 'subagent'`
-  (`lib/index.js:408`), so toolprune never runs in a subagent session — and most traffic in this
-  corpus is subagent traffic.
+* **The gate that limits it:** the subagent gate in `lib/index.js` returns early for
+  `origin === 'subagent'` on the engine path, so toolprune never runs in a subagent session —
+  and most traffic in this corpus is subagent traffic.
+
+> **Update 2026-11-14.** The gate was narrowed the same day: the **engine path** (hooks,
+> export, fold, ledger) stays root-only, but the **in-memory levers** — dedup, tiering, loop
+> breaker, watchdog, prefix guard, pinned section — now run in a delegated child too, because a
+> child burns the same context and its bill lands on the parent. `subagentMemory` (default
+> `true`) selects this. The figures in this section are the **2026-11-02 reading of a different
+> corpus** and are kept as-is; the current state is in
+> [AUDIT-2026-11-14.md](AUDIT-2026-11-14.md) §10 and [ARCHITECTURE.md](ARCHITECTURE.md) §3.1.
+> Toolprune itself is still engine-based, so it still does not run in a child.
 
 **Verdict on toolprune:** real, applied, and bounded at roughly **1.2k tokens per non-subagent
 request, zero in every subagent session**. Worth keeping, not worth optimising further.

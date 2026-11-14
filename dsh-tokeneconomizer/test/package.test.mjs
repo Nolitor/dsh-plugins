@@ -23,7 +23,7 @@ test('the running DSH prerelease is inside the declared window', () => {
 test('the track follows the owner version and the rc.1 runtime floor', () => {
   // Owner decision 2026-11-05: every @nolit track is normalized to 0.0.1-rc.N, and rc.1 needs
   // Node >= 24.9. Both are packaging facts, so they are pinned rather than left to review.
-  assert.equal(pkg.version, '0.0.1-rc.2')
+  assert.equal(pkg.version, '0.0.1-rc.6')
   assert.equal(pkg.engines.node, '>=24.9')
   assert.equal(pkg.dsh.manifestVersion, 1)
 })
@@ -104,4 +104,36 @@ test('the operator and statistics entry points exist', () => {
   ]) {
     assert.ok(existsSync(`${root}${file}`), `${file} is missing`)
   }
+})
+
+test('the published tarball carries the history the history rule requires', () => {
+  // Measured 2026-11-13: `files[]` listed lib, bin, scripts, patch, the bundle patch, README,
+  // locale and docs — but not CHANGELOG.md, so `npm pack` produced 28 files with no history in
+  // them. The rule (docs/RULES.md 6.1) was satisfied in the working tree and violated in the
+  // artifact, the same class as F-55. A directory entry would not cover it: the file is at the
+  // package root, so the entry has to name it.
+  assert.ok(existsSync(`${root}CHANGELOG.md`), 'CHANGELOG.md is missing from the track')
+  assert.ok(
+    pkg.files.includes('CHANGELOG.md'),
+    'package.json files[] must name CHANGELOG.md, or npm never ships the history',
+  )
+  // The same gap class applies to the readme: npm always includes it, but the entry documents
+  // intent, and removing it would silently drop the file from a future pack.
+  assert.ok(pkg.files.includes('README.md'), 'files[] must keep README.md')
+})
+
+test('the interrupt registry is located, never spelled into the artifact', () => {
+  // The bridge used to carry `file:///home/<owner>/...` as its default. That is one workstation
+  // written into a published package: an installed copy or another user resolved nothing and the
+  // interrupt was silently unrecorded. The default must come from discovery.
+  const bridge = readFileSync(`${root}lib/interrupt-bridge.js`, 'utf8')
+  assert.doesNotMatch(
+    bridge,
+    /file:\/\/\/home\//,
+    'no absolute home path may be hardcoded in the bridge',
+  )
+  assert.match(bridge, /export function interruptRootCandidates/, 'discovery is exported')
+  assert.match(bridge, /export function resolveInterruptSources/, 'resolution is exported')
+  assert.match(bridge, /DSH_INTERRUPT_CORE_URL/, 'the documented override still wins')
+  assert.match(bridge, /DSH_INTERRUPT_ROOT/, 'a checkout root can be named explicitly')
 })

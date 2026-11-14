@@ -127,3 +127,27 @@ test('progress outside an armed budget starts no timer', async () => {
   assert.equal(fired, 0)
   assert.equal(watchdog.armed, false)
 })
+
+test('a disabled watchdog never arms, warns, or times out', async () => {
+  // `watchdog: false` was declared, validated and documented but read nowhere until
+  // 2026-11-13: the watch ran regardless. Guards the key against becoming decorative again.
+  let warned = 0
+  let expired = 0
+  const watchdog = createWatchdog({
+    disabled: true,
+    thresholdMs: 20,
+    warnMs: 10,
+    onWarn: () => { warned += 1 },
+    onTimeout: () => { expired += 1 },
+  })
+  watchdog.arm()
+  watchdog.suspend()
+  await wait(80)
+  assert.equal(warned, 0)
+  assert.equal(expired, 0)
+  assert.equal(watchdog.armed, false, 'a disabled watchdog never reports itself armed')
+  // The full call-site surface stays present, so no caller needs a null check.
+  watchdog.progress()
+  watchdog.resume()
+  watchdog.disarm()
+})
