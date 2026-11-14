@@ -4,7 +4,7 @@
 version: 1.0
 kind: index
 status: active
-updated: 2026-11-14
+updated: 2026-11-15
 summary: Generated per-subproject index for @nolit/dsh-sidebar-manager: every document this track owns, one line each.
 -->
 
@@ -26,7 +26,7 @@ summary: Generated per-subproject index for @nolit/dsh-sidebar-manager: every do
 | 1.0 | measurement | measured | 2026-10-29 | [FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md](FORGE-VS-SIDEBAR-UTM-MEASUREMENT.md) | Change-requests/worktrees bundle measured against Sidebar Manager and UTM policy; overlap and risk. |
 | 1.0 | measurement | measured | 2026-10-29 | [FORGE-VS-SIDEBAR-UTM-RUNTIME-MEASUREMENT.md](FORGE-VS-SIDEBAR-UTM-RUNTIME-MEASUREMENT.md) | Isolated-DSH_HOME runtime measurement of Forge worktrees x Sidebar Manager v0.1.1 x UTM policy. |
 | 1.1 | report | active | 2026-11-13 | [HANDOFF.md](HANDOFF.md) | Stage-by-stage handoff for @nolit/dsh-sidebar-manager at 0.0.1-rc.2 — the token-stylesheet migration, the drift gate that must run before any version-up, the version/CHANGELOG mismatch, and the open UI audit items from the 2026-11-11 /ui review (hairline tokens, derived font steps, CJK wrapping, row action order), plus the deferred toast elevated-surface decision (D1). |
-| 1.0 | index | active | 2026-11-14 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-sidebar-manager: every document this track owns, one line each. |
+| 1.0 | index | active | 2026-11-15 | [INDEX.md](INDEX.md) | Generated per-subproject index for @nolit/dsh-sidebar-manager: every document this track owns, one line each. |
 | 1.0 | report | completed | 2026-10-29 | [FINAL-REPORT.md](sidebar-manager/FINAL-REPORT.md) | Closing report for the Sidebar Manager programme: delivered surfaces, measured state, and the work left open. |
 | 1.0 | report | completed | 2026-10-29 | [PHASE1-3-IMPLEMENTATION.md](sidebar-manager/PHASE1-3-IMPLEMENTATION.md) | Phase 1-3 implementation record: introducing safe virtual grouping without touching the real workspace registry. |
 | 1.0 | report | completed | 2026-10-29 | [PHASE4-VIRTUAL-GROUPING.md](sidebar-manager/PHASE4-VIRTUAL-GROUPING.md) | Phase 4 record: the virtual grouping harness, HQ tree ordering, and separation of system entries. |
@@ -90,7 +90,7 @@ summary: Generated per-subproject index for @nolit/dsh-sidebar-manager: every do
 
 ## index
 
-- **1.0** · active · 2026-11-14 · [INDEX.md](INDEX.md)
+- **1.0** · active · 2026-11-15 · [INDEX.md](INDEX.md)
   Generated per-subproject index for @nolit/dsh-sidebar-manager: every document this track owns, one line each.
 
 ## MISSING HEADER (1) — fix before release
