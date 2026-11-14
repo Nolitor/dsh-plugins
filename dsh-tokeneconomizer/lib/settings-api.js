@@ -17,13 +17,15 @@ import { fileURLToPath } from 'node:url'
 // constants; this module re-exports them unchanged for Node callers.
 import {
   SETTINGS_PATH, CONFIG_PATH, RESTORE_PATH, RESET_PATH, IMPORT_PATH,
+  UPSTREAM_PATH, MODELS_PATH,
   MODE_KEY, MODE_VALUES, MODE_ALIAS, THRESHOLDS, ACTIONS,
-  THRESHOLD_LABELS, MODE_SELECTS,
+  THRESHOLD_LABELS, MODE_SELECTS, MODEL_SLOTS, MODEL_SLOT_KEYS,
 } from './settings-contract.js'
 export {
   SETTINGS_PATH, CONFIG_PATH, RESTORE_PATH, RESET_PATH, IMPORT_PATH,
+  UPSTREAM_PATH, MODELS_PATH,
   MODE_KEY, MODE_VALUES, MODE_ALIAS, THRESHOLDS, ACTIONS,
-  THRESHOLD_LABELS, MODE_SELECTS,
+  THRESHOLD_LABELS, MODE_SELECTS, MODEL_SLOTS, MODEL_SLOT_KEYS,
 }
 
 /** How many finished import jobs stay readable. */
@@ -236,10 +238,64 @@ export function buildReadPayload (engineConfig, mechanismStatus) {
     ok: true,
     modes,
     thresholds,
+    modelSlots: readModelSlots(index),
     actions: [...ACTIONS],
     mechanismStatus: { ...status, judgeAvailable: judge.available },
     judge,
   }
+}
+
+/**
+ * The stored side-call model of each slot.
+ *
+ * The `default` slot is not an engine config key: it is the deployment's own route, so it is
+ * reported as an empty value the page renders as "the deployment's default". The two mechanism
+ * slots read the engine's own keys, and a key the engine has not stored reads as empty — the
+ * same "nothing is pinned" state, not as a missing value.
+ *
+ * @param {Map<string, unknown>} index - flattened engine values.
+ * @returns {Record<string, string>} the slot label to its stored model string.
+ */
+export function readModelSlots (index) {
+  const out = {}
+  for (const slot of MODEL_SLOT_KEYS) {
+    const spec = MODEL_SLOTS[slot]
+    if (spec === undefined || spec.engineKey === null) {
+      out[spec.label] = ''
+      continue
+    }
+    const stored = index.get(spec.engineKey)
+    out[spec.label] = typeof stored === 'string' ? stored : ''
+  }
+  return out
+}
+
+/**
+ * Validate one side-call model string.
+ *
+ * The engine takes a `provider/model` string: the provider route the DSH side call runs on, and
+ * the model id within it. A string without a separator cannot name both, so it is refused here
+ * rather than being written and silently ignored by the engine.
+ *
+ * @param {string} slot - the slot key.
+ * @param {unknown} raw - the posted value.
+ * @returns {{ ok: boolean, value?: string, error?: string }} the accepted value or the reason.
+ */
+export function validateModel (slot, raw) {
+  const spec = MODEL_SLOTS[slot]
+  if (spec === undefined) return { ok: false, error: 'unknown model slot: ' + String(slot) }
+  const text = String(raw ?? '').trim()
+  if (text.length === 0) return { ok: true, value: '' }
+  const separator = text.indexOf('/')
+  if (separator <= 0 || separator === text.length - 1) {
+    return { ok: false, error: slot + ': expected "provider/model"' }
+  }
+  const provider = text.slice(0, separator)
+  const model = text.slice(separator + 1)
+  if (provider.trim().length === 0 || model.trim().length === 0) {
+    return { ok: false, error: slot + ': expected "provider/model"' }
+  }
+  return { ok: true, value: provider.trim() + '/' + model.trim() }
 }
 
 /**
@@ -298,11 +354,21 @@ function judgeOf (mechanismStatus, index) {
  *   register: (method: string, path: string, handler: Function) => unknown,
  *   mechanismStatus?: object,
  *   mechanismStatusOf?: () => object,
+ *   upstreamCheck?: () => Promise<object>,
+ *   modelCatalog?: () => Promise<{ providers?: object[], failures?: object[] }>,
  *   log?: { warn: (text: string) => void },
  * }} options - injected engine boundary and route registrar.
  * @returns {{ routes: string[], disposeJobs: () => void }} the registered route names.
  */
-export function createSettingsRoutes ({ runEngine, register, mechanismStatus, mechanismStatusOf, log = { warn () {} } }) {
+export function createSettingsRoutes ({
+  runEngine,
+  register,
+  mechanismStatus,
+  mechanismStatusOf,
+  upstreamCheck,
+  modelCatalog,
+  log = { warn () {} },
+}) {
   if (typeof runEngine !== 'function') throw new TypeError('createSettingsRoutes: runEngine must be a function')
   if (typeof register !== 'function') throw new TypeError('createSettingsRoutes: register must be a function')
 
@@ -352,6 +418,32 @@ export function createSettingsRoutes ({ runEngine, register, mechanismStatus, me
     const results = []
     let wrote = false
     for (const [label, raw] of entries) {
+      const modelSpec = MODEL_SLOTS[label]
+      if (modelSpec !== undefined) {
+        const checked = validateModel(label, raw)
+        if (!checked.ok) {
+          results.push({ key: label, ok: false, error: checked.error })
+          continue
+        }
+        // The default slot is not an engine key: an empty value there means "the deployment's
+        // own route", which is what an engine without the two mechanism keys already does.
+        if (modelSpec.engineKey === null) {
+          results.push({ key: label, ok: true, value: '' })
+          continue
+        }
+        // An empty value unsets the key rather than writing an empty string, so the engine
+        // falls back to the next source down — the same rule the other resets follow.
+        const written = checked.value === ''
+          ? await runEngineCommand(runEngine, 'unset', [modelSpec.engineKey])
+          : await runEngineCommand(runEngine, 'set', [modelSpec.engineKey + '=' + checked.value])
+        if (!written.ok) {
+          results.push({ key: label, ok: false, error: written.error })
+          continue
+        }
+        wrote = true
+        results.push({ key: label, ok: true, value: checked.value })
+        continue
+      }
       if (THRESHOLDS[label] !== undefined) {
         const checked = validateValue(label, raw)
         if (!checked.ok) {
@@ -392,7 +484,19 @@ export function createSettingsRoutes ({ runEngine, register, mechanismStatus, me
     const index = engineValueIndex(read.config)
     for (const result of results) {
       if (!result.ok) continue
-      const spec = THRESHOLDS[result.key]
+      const modelSpec = MODEL_SLOTS[result.key]
+      if (modelSpec !== undefined) {
+        // The default slot has no engine key, so the engine's own answer is the truth: an
+        // empty value there is "the deployment's route", which is what was asked for.
+        if (modelSpec.engineKey === null) continue
+        const stored = index.get(modelSpec.engineKey)
+        if (typeof stored === 'string') result.value = stored
+        else {
+          result.error = 'engine did not persist ' + result.key
+          result.ok = false
+        }
+        continue
+      }      const spec = THRESHOLDS[result.key]
       const stored = spec === undefined
         ? { present: index.has(result.key), value: index.get(result.key) }
         : storedThreshold(index, spec)
@@ -461,6 +565,31 @@ export function createSettingsRoutes ({ runEngine, register, mechanismStatus, me
       output: job.output,
       error: job.error,
     }, 200)
+  })
+
+  // The upstream comparison. It answers 200 in every case — including the failure cases — so
+  // the page renders "could not check" instead of an error state it would have to special-case.
+  // The distinction is in `ok`: false means the question could not be answered, and the reasons
+  // are in `errors`.
+  add('GET', UPSTREAM_PATH, async () => {
+    const check = typeof upstreamCheck === 'function'
+      ? await upstreamCheck()
+      : { ok: false, errors: ['the upstream check is not available in this deployment'], detail: 'the upstream check is not available in this deployment' }
+    return json({ ...check, ok: check.ok === true }, 200)
+  })
+
+  // The provider/model pairs a side call may target. The host's own registry is the source:
+  // `ctx.llm.listProviders()` and `ctx.llm.listModels(provider)` describe what this deployment
+  // can actually route. A deployment with no registry answers an empty list, never a guess.
+  add('GET', MODELS_PATH, async () => {
+    let catalog = { providers: [], failures: [] }
+    try {
+      const listed = typeof modelCatalog === 'function' ? await modelCatalog() : null
+      if (listed !== null && Array.isArray(listed.providers)) catalog = listed
+    } catch (error) {
+      log.warn?.('settings-api: model catalog unavailable: ' + (error instanceof Error ? error.message : String(error)))
+    }
+    return json({ ok: true, ...catalog }, 200)
   })
 
   return {

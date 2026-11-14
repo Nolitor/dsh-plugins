@@ -251,3 +251,106 @@ test('REGRESSION GATE: the root container keeps Korean words together', () => {
   assert.match(source, /\.tkdsSection\{[^}]*word-break:keep-all/, 'the root must wrap on word boundaries (CJK)')
   assert.match(source, /\.tkdsSection\{[^}]*overflow-wrap:break-word/, 'the root must still break a single long token')
 })
+
+// --- 2026-11-15 contract drift gate ---------------------------------------------
+// The client half cannot import `lib/settings-contract.js` — the loader exposes a fixed
+// module table and the file must carry no import statements — so the contract is mirrored
+// as literals. These checks pin that mirror to the contract, because a route or a slot
+// key that drifts on one side only is a silent 404 or a setting that never lands.
+//
+// The contract module itself has no imports (that is what makes it shareable), so the
+// Node half of the test can import it directly and compare the two sides for real.
+
+test('the client route literals match the settings contract', async () => {
+  const contract = await import('../lib/settings-contract.js')
+  const paths = {
+    SETTINGS_PATH: contract.SETTINGS_PATH,
+    CONFIG_PATH: contract.CONFIG_PATH,
+    RESTORE_PATH: contract.RESTORE_PATH,
+    RESET_PATH: contract.RESET_PATH,
+    IMPORT_PATH: contract.IMPORT_PATH,
+    UPSTREAM_PATH: contract.UPSTREAM_PATH,
+    MODELS_PATH: contract.MODELS_PATH,
+  }
+  assert.equal(paths.SETTINGS_PATH, '/api/local/tokeneconomizer/settings')
+  for (const [name, value] of Object.entries(paths)) {
+    assert.ok(code.includes("'" + value + "'"), name + ' (' + value + ') is missing from the client')
+  }
+})
+
+test('the client model slots match the settings contract', async () => {
+  const contract = await import('../lib/settings-contract.js')
+  const keys = Object.keys(contract.MODEL_SLOTS)
+  assert.equal(keys.length, 3, 'three model slots')
+  for (const key of keys) {
+    assert.ok(code.includes("key: '" + key + "'"), 'the client is missing the slot ' + key)
+  }
+  // The slot labels are namespaced, so a slot can never share a name with a mechanism mode.
+  const modes = [...code.matchAll(/Object\.freeze\(\{ key: '(microskills|toolprune|loopguard)',/g)].map((m) => m[1])
+  for (const key of keys) {
+    assert.equal(modes.includes(key), false, key + ' collides with a mechanism mode')
+  }
+})
+
+test('REGRESSION GATE: every model slot carries the label the read payload is keyed by', async () => {
+  // Measured 2026-11-15: the client's slots declared only `key` (the WRITE key,
+  // `model.microskills`) and the read lookup used `modelSlots[slot.label]` — a property the
+  // slot did not have. Every stored value therefore read as `undefined`, so a select showed
+  // the deployment default even after the engine had persisted the choice, and the page
+  // re-offered the old value on the next save. The READ payload is keyed by the slot's
+  // `label` (`microskills`), which is a DIFFERENT string from its WRITE `key`
+  // (`model.microskills`); both must be present on every slot.
+  const contract = await import('../lib/settings-contract.js')
+  for (const [key, spec] of Object.entries(contract.MODEL_SLOTS)) {
+    assert.ok(
+      code.includes(`key: '${key}', label: '${spec.label}'`),
+      `the slot ${key} must declare key '${key}' AND label '${spec.label}'`,
+    )
+  }
+  // And the two lookups must use the right one of the two.
+  assert.ok(
+    /modelSlots\[slot\.label\]/.test(code),
+    'the stored value must be read by the slot label',
+  )
+  assert.ok(
+    /modelSlots\[slot\.key\]/.test(code) === false,
+    'the stored value must NOT be read by the slot key — the read payload is keyed by label',
+  )
+})
+
+test('REGRESSION GATE: the default model slot is a fact, never a control', () => {
+  // Measured 2026-11-15: the engine has NO "default model" config key — the deployment's own
+  // route is whatever DSH's `agent-default-model` says. The slot was still a `<select>`: it
+  // accepted a value, the client sent it, the server answered `ok: true` with the value EMPTY
+  // (there was nowhere to put it), and the select snapped back to "deployment default" on the
+  // next read. A control that silently discards its own choice is worse than one that says
+  // it has nowhere to put it, so the default is now stated, not offered.
+  assert.ok(
+    code.includes('SETTINGS_WRITABLE_MODEL_SLOTS'),
+    'the client must distinguish the writable slots from the read-only default',
+  )
+  assert.ok(
+    /SETTINGS_WRITABLE_MODEL_SLOTS = Object\.freeze\(\s*SETTINGS_MODEL_SLOTS\.filter\(\(slot\) => slot\.engineKey !== null\)/.test(code),
+    'the writable slots are exactly those with an engine key',
+  )
+  // The save path must iterate the WRITABLE slots only.
+  const saveBlock = code.slice(code.indexOf('const save = async () =>'), code.indexOf('const act = async'))
+  assert.ok(
+    saveBlock.includes('SETTINGS_WRITABLE_MODEL_SLOTS'),
+    'the save path must write only the writable slots',
+  )
+  assert.ok(
+    saveBlock.includes('SETTINGS_MODEL_SLOTS') === false,
+    'the save path must NOT write the read-only default slot',
+  )
+  // The rendered rows must be the writable slots, and the default is a plain row.
+  const modelBlock = code.slice(code.indexOf('const modelRows = '), code.indexOf('const modelCard = '))
+  assert.ok(
+    modelBlock.includes('SETTINGS_WRITABLE_MODEL_SLOTS'),
+    'the rendered selects must be the writable slots only',
+  )
+  assert.ok(
+    code.includes("'data-tk-settings-model-default': '1'"),
+    'the default route must still be shown as a read-only fact',
+  )
+})

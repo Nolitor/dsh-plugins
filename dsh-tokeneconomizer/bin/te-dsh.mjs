@@ -43,6 +43,7 @@ import { join, resolve } from 'node:path'
 import { zstdDecompressSync } from 'node:zlib'
 
 import { importExport, launchers, stateRoot } from '../lib/bridge.js'
+import { DEFAULTS, MANIFEST_VERSION } from '../lib/index.js'
 import { repoIdentity } from '../lib/repokey.js'
 import { main as bootstrapMain, PINNED_SHA, UPSTREAM, verify } from '../scripts/bootstrap.mjs'
 
@@ -392,6 +393,13 @@ async function status() {
 
 /**
  * `te-dsh doctor`: what is in place, without changing anything.
+ *
+ * The report answers three questions that were previously unanswerable from one place: the
+ * install (launchers, vendored tree, pinned commit), the PLUGIN's own configuration keys
+ * (every key the plugin supports and what it currently resolves to), and the engine's
+ * canonical repository key for this directory compared with the key the plugin's identity
+ * model computes. The third is the one that can silently re-partition a repository's history,
+ * so a mismatch is reported loudly rather than folded into a summary line.
  * @returns {number} exit code.
  */
 function doctor() {
@@ -416,8 +424,153 @@ function doctor() {
     observed.verified = checked.ok
     observed.detail = checked.detail
   }
+  observed.manifest = manifestReport()
+  observed.config = configReport()
+  observed.identity = identityReport(bins.root)
   process.stdout.write(`${JSON.stringify(observed, null, 2)}\n`)
   return observed.te.exists && observed.hook.exists ? 0 : 1
+}
+
+/**
+ * The plugin's own package manifest, as the doctor sees it.
+ *
+ * The manifest version is the plugin's contract with the host, and the host does not enforce
+ * it (measured: the installed `dsh-package-manifest` README says loaders do not enforce
+ * `dsh.manifestVersion`). So the doctor reads it and reports the comparison itself.
+ * @returns {object} the manifest report.
+ */
+function manifestReport () {
+  try {
+    const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+    const declared = manifest?.dsh?.manifestVersion ?? null
+    return {
+      name: manifest?.name ?? null,
+      version: manifest?.version ?? null,
+      manifestVersion: declared,
+      expected: MANIFEST_VERSION,
+      ok: declared === null || declared === MANIFEST_VERSION,
+      detail: declared === null
+        ? 'the manifest declares no manifest version'
+        : declared === MANIFEST_VERSION
+          ? `manifest version ${declared} is the one this build understands`
+          : `the manifest declares ${declared}; this build understands ${MANIFEST_VERSION}`,
+    }
+  } catch (error) {
+    return { ok: false, detail: `the package manifest could not be read: ${error.message}` }
+  }
+}
+
+/**
+ * Every configuration key the plugin supports, and what it resolves to right now.
+ *
+ * The key list is the plugin's own `DEFAULTS`; the values come from the external settings
+ * file, which wins over the composed Cordis config (a patch `config` replaces the whole
+ * config, so a layer underneath could never win a key). A key the operator overrode is
+ * marked, so "why is this on" is answerable without reading code.
+ * @returns {object} the config report.
+ */
+function configReport () {
+  const keys = Object.keys(DEFAULTS)
+  const values = {}
+  const overridden = []
+  for (const key of keys) {
+    const raw = rawSetting(key)
+    values[key] = raw
+    if (raw !== DEFAULTS[key]) overridden.push(key)
+  }
+  return {
+    keys,
+    defaults: { ...DEFAULTS },
+    values,
+    overridden,
+    detail: overridden.length === 0
+      ? 'every key is at its default'
+      : `${overridden.length} key(s) differ from the default: ${overridden.join(', ')}`,
+  }
+}
+
+/**
+ * Read one plugin setting as the plugin itself resolves it.
+ *
+ * The external settings file wins over the Cordis config. The file is read here rather than
+ * through the plugin's module so the doctor can report a deployment whose plugin never mounted.
+ * @param {string} key - the setting name.
+ * @returns {unknown} the resolved value.
+ */
+function rawSetting (key) {
+  const fromFile = settingsFileValues()
+  if (Object.hasOwn(fromFile, key)) return fromFile[key]
+  return DEFAULTS[key]
+}
+
+/**
+ * The external settings file's values, read once per doctor run.
+ *
+ * A missing or unreadable file is an empty object: the doctor reports the defaults, which is
+ * what the plugin would use.
+ * @returns {Record<string, unknown>} the file's values.
+ */
+let cachedSettingsFile = null
+function settingsFileValues () {
+  if (cachedSettingsFile !== null) return cachedSettingsFile
+  cachedSettingsFile = {}
+  try {
+    const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+    const path = process.env.TE_CONFIG ?? join(home, 'tokeneconomizer.json')
+    const parsed = JSON.parse(readFileSync(path, 'utf8'))
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      cachedSettingsFile = parsed
+    }
+  } catch {
+    cachedSettingsFile = {}
+  }
+  return cachedSettingsFile
+}
+
+/**
+ * The engine's canonical repository key for this directory, compared with the plugin's.
+ *
+ * The engine keys a repository by its own canonicalization (the path or remote it derives),
+ * and the plugin's identity model derives its own key. When the two disagree, one repository
+ * is recorded under two keys — the history silently splits, and the engine's evidence for one
+ * half never reaches the other. The engine's live layout under `repos/` is the authority: this
+ * compares the computed key with the directories the engine actually holds.
+ * @param {string} root - the TokenEconomizer state root.
+ * @returns {object} the identity report.
+ */
+function identityReport (root) {
+  const cwd = process.cwd()
+  let computed = ''
+  let how = ''
+  try {
+    const identity = repoIdentity(cwd)
+    computed = identity.key
+    how = identity.how
+  } catch (error) {
+    return { ok: false, computed: null, detail: `the repository key could not be computed: ${error.message}` }
+  }
+  const reposDir = join(root, 'repos')
+  let live = []
+  try {
+    live = readdirSync(reposDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort()
+  } catch {
+    live = []
+  }
+  const present = live.includes(computed)
+  return {
+    ok: present,
+    computed,
+    how,
+    live,
+    detail: present
+      ? `the engine holds this repository under ${computed}`
+      : live.length === 0
+        ? `the engine holds no repository under ${root}/repos`
+        : `the engine holds ${live.join(', ')} but this directory computes ${computed}`,
+  }
 }
 
 /**

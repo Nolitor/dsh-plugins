@@ -295,6 +295,13 @@ is in [ARCHITECTURE.md](ARCHITECTURE.md) §3.2.
 Every setting is a validated field of the plugin's config. An unknown key, a wrong type, a
 non-positive number, an out-of-range order, or an unknown enum value fails the row at load.
 
+**The plugin has 36 configuration keys in all** (measured 2026-11-15 from `lib/index.js`
+`DEFAULTS`). The table below lists the **host-local** ones — the levers this document owns.
+The six that select the ENGINE are listed separately, because they do something different:
+they choose *which* engine answers, not how this plugin behaves.
+
+### 7.1 The host-local levers
+
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `subagentMemory` | boolean | `true` | mount these four features in a delegated child session too (`false` restores "a subagent has no economy of its own"); the engine path stays root-only either way |
@@ -328,7 +335,28 @@ non-positive number, an out-of-range order, or an unknown enum value fails the r
 | `headless` | `auto` \| `always` \| `never` | `auto` | whether a side call runs as `dsh headless …` |
 | `mode` | `apply` \| `observe` | `apply` | `observe` records evidence but injects nothing |
 
+### 7.2 The six that select the engine
+
+These do not change how this plugin behaves — they choose **which** engine answers and **which
+repository** it answers for.
+
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `tePath` | string | `''` | the `te` supervisor command; empty = `<state root>/bin/te` |
+| `hookPath` | string | `''` | the `te-hook` dispatcher; empty = `<state root>/bin/te-hook` |
+| `stateHome` | string | `''` | the TokenEconomizer state root; empty = `$TOKENECONOMIZER_HOME` or `~/.tokeneconomizer` |
+| `microskills` | boolean | `true` | apply the facts the engine's Micro-skills proposer produced |
+| `toolprune` | boolean | `true` | leave out the tools the engine's evidence proposes |
+| `loopguard` | boolean | `true` | fold tool results into the loop guard and deliver its redirects |
+
 The bundle row in `cordis.patch.yml` carries the same keys with the same defaults.
+
+**The engine's own settings are a separate surface.** The values this plugin reads and writes
+through `te config` — the modes, the nine thresholds, and the two side-call model keys
+(`microskills_model`, `loopguard_model`) — are the ENGINE's config, not this plugin's. They
+live in the engine's per-repository `config.json`, and the settings page edits them through the
+engine rather than through this plugin's row. See [OPERATIONS.md](OPERATIONS.md) §5 for that
+surface and for the `--cwd` rule that decides which repository's file it lands in.
 
 ## 8. Registration order and disposal
 
@@ -384,10 +412,10 @@ event, so the cost on the quiet path is one comparison and no write.
 ## 11. Verification
 
 `node --test test/*.test.mjs` covers the four modules and the plugin's registration contract:
-**236 tests, 235 passing and one skipped** (re-measured 2026-11-15 after the DSH schema alignment;
-the count was 164 before that refactor, 156 before the gate split, and 71 when this document was
-written on 2026-10-31). 29 test files. The engine-backed end-to-end test stays skipped unless
-`TE_DSH_TEST_HOME` names a bootstrapped state root.
+**260 tests, 259 passing and one skipped** (re-measured 2026-11-15 at `0.0.1-rc.8`; the count
+was 236 after the DSH schema alignment, 164 before that refactor, 156 before the gate split,
+and 71 when this document was written on 2026-10-31). 30 test files. The engine-backed
+end-to-end test stays skipped unless `TE_DSH_TEST_HOME` names a bootstrapped state root.
 
 | File | Covers |
 |---|---|
@@ -405,6 +433,9 @@ written on 2026-10-31). 29 test files. The engine-backed end-to-end test stays s
 | `test/session-reads.test.mjs` / `test/surface-reads.test.mjs` | the deprecated-read call sites and the surface read constraints |
 | `test/deprecation-audit.test.mjs` | the seam list, the allow-list justification, and the FAIL branch |
 | `test/mount.test.mjs` | config validation, registration before the brief, the pinned section, the pointer through the pipeline, failed results, a canonical value, a blocked call, the loop breaker trip and reset, the watchdog interrupt and warn modes, the prefix report, the diagnostic line of every event, disposal |
+| `test/upstream-models.test.mjs` | the engine identity, the upstream comparison (and the "could not check" answer), and the three side-call model slots |
+| `test/settings-api.test.mjs` | the eight routes, the threshold and model-slot validation, and the `--cwd` rule that names the repository |
+| `test/client.test.mjs` | the browser half: the settings surface, the locale drift gate, the contract drift gate, and the model-slot regression gates |
 
 Not covered by these tests, and not claimed:
 

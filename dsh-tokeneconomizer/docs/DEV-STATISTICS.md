@@ -148,9 +148,9 @@ No data path changed: the same route, the same fold, the same numbers.
 ## 8. Related
 
 - [../CHANGELOG.md](../CHANGELOG.md) — entry with the measured before/after.
-- [../../docs/UI-SLOT-ARCHITECTURE.md](../../docs/UI-SLOT-ARCHITECTURE.md) — slot tiers (tk section
+- `docs/UI-SLOT-ARCHITECTURE.md` (workspace docs) — slot tiers (tk section
   claims no composer seat).
-- [../../docs/PLUGIN-STYLE-STANDARD.md](../../docs/PLUGIN-STYLE-STANDARD.md) — the typography tokens
+- `docs/PLUGIN-STYLE-STANDARD.md` (workspace docs) — the typography tokens
   the card consumes.
-- [../../docs/DSH-RC1-PLUGIN-DELTA.md](../../docs/DSH-RC1-PLUGIN-DELTA.md) — rc.1 plugin deltas
+- `docs/DSH-RC1-PLUGIN-DELTA.md` (workspace docs) — rc.1 plugin deltas
   (Node floor, async projection registration, client manifest).

@@ -1,3 +1,134 @@
+diff --git a/tests/test_dsh_sidecall_model.py b/tests/test_dsh_sidecall_model.py
+new file mode 100644
+index 0000000..6e1d4cf
+--- /dev/null
++++ b/tests/test_dsh_sidecall_model.py
+@@ -0,0 +1,125 @@
++"""The DSH side call's route: the model a mechanism's call runs on.
++
++The DSH host routes by provider, so the model a side call names is a `provider/model` pair.
++It reaches the call as one `--patch` overlay row -- `agent-default-model` -- so it replaces
++the profile's own default route for that call only. A setting that names no provider and no
++model leaves the deployment's default route alone.
++"""
++import json
++import os
++import subprocess
++import tempfile
++
++import pytest
++
++from tokeneconomizer.plugin import sidecall
++from tokeneconomizer.plugin.config import LiveConfig, write_config
++
++
++def _overlay_rows(text):
++    """The rows of a `--patch` overlay file."""
++    rows = []
++    row = None
++    for line in text.splitlines():
++        if line.startswith("- id: "):
++            row = {"id": line[len("- id: "):], "config": {}}
++            rows.append(row)
++        elif row is not None and line.startswith("    ") and ":" in line:
++            key, _, value = line.strip().partition(":")
++            row["config"][key.strip()] = value.strip().strip('"')
++    return rows
++
++
++def _run(monkeypatch, model):
++    """The overlay rows of one DSH side call with `model`.
++
++    The overlay file lives in the call's throwaway directory, so it is read while the call
++    is still running.
++    """
++    seen = {}
++
++    def fake_run(cmd, **kw):
++        path = cmd[cmd.index("--patch") + 1]
++        with open(path, encoding="utf-8") as fh:
++            seen["rows"] = _overlay_rows(fh.read())
++        return subprocess.CompletedProcess(
++            cmd, 0, json.dumps({"type": "final", "text": "ok"}) + "\n", "")
++
++    monkeypatch.setattr(sidecall.subprocess, "run", fake_run)
++    text, _ = sidecall.dsh_call("hello", model=model)
++    assert text == "ok"
++    return seen["rows"]
++
++
++def test_a_provider_model_pair_becomes_the_call_own_route(monkeypatch):
++    rows = _run(monkeypatch, "deepseek-account/deepseek-flash")
++    route = [r for r in rows if r["id"] == "agent-default-model"]
++    assert len(route) == 1
++    assert route[0]["config"]["provider"] == "deepseek-account"
++    assert route[0]["config"]["model"] == "deepseek-flash"
++
++
++def test_no_model_leaves_the_deployment_default_route_alone(monkeypatch):
++    rows = _run(monkeypatch, "")
++    assert not [r for r in rows if r["id"] == "agent-default-model"]
++    # The session stores are still re-rooted: the overlay file exists for that reason alone.
++    assert {r["id"] for r in rows} == {"session-persistence-jsonl", "storage-json"}
++
++
++def test_a_model_without_a_provider_is_not_a_route_and_is_warned_about(monkeypatch):
++    rows = _run(monkeypatch, "deepseek-flash")
++    assert not [r for r in rows if r["id"] == "agent-default-model"]
++    cfg = LiveConfig()
++    assert cfg.set("microskills_model", "deepseek-flash", source="te config")
++    assert any("provider/model" in w for w in cfg.warnings)
++
++
++def test_the_two_mechanisms_can_run_on_two_different_models(monkeypatch):
++    cfg = LiveConfig()
++    cfg.microskills_model = "deepseek-account/deepseek-flash"
++    cfg.loopguard_model = "deepseek-account/deepseek-v4.1"
++    assert sidecall.slot_model(cfg, "microskills") == "deepseek-account/deepseek-flash"
++    assert sidecall.slot_model(cfg, "loopguard") == "deepseek-account/deepseek-v4.1"
++    assert sidecall.slot_model(cfg) == cfg.paid_model        # the default slot is unchanged
++
++    calls = []
++    monkeypatch.setattr(sidecall, "dsh_call",
++                        lambda prompt, model="", **kw: calls.append(model) or ("ok", 0))
++    sidecall.runner_for("dsh", cfg, slot="microskills")("p")
++    sidecall.runner_for("dsh", cfg, slot="loopguard")("p")
++    assert calls == ["deepseek-account/deepseek-flash", "deepseek-account/deepseek-v4.1"]
++
++
++def test_an_empty_mechanism_setting_falls_back_to_the_host_wide_model():
++    cfg = LiveConfig()
++    cfg.paid_model = "haiku"
++    assert sidecall.slot_model(cfg, "microskills") == "haiku"
++    assert sidecall.slot_model(cfg, "loopguard") == "haiku"
++
++
++def test_another_host_keeps_using_the_host_wide_model():
++    cfg = LiveConfig()
++    cfg.paid_model = "haiku"
++    cfg.microskills_model = "deepseek-account/deepseek-flash"
++    runner = sidecall.runner_for("claude", cfg, slot="microskills")
++    assert runner.__code__.co_names.count("claude_call") == 1
++
++
++def test_the_settings_are_written_and_unset_like_any_other(tmp_path):
++    path = str(tmp_path / "config.json")
++    write_config(path, {"microskills_model": "deepseek-account/deepseek-flash",
++                        "loopguard_model": "deepseek-account/deepseek-v4.1"})
++    assert json.load(open(path)) == {"microskills_model": "deepseek-account/deepseek-flash",
++                                     "loopguard_model": "deepseek-account/deepseek-v4.1"}
++    from tokeneconomizer.plugin.config import unset_config
++    unset_config(path, ["microskills_model", "loopguard_model"])
++    assert json.load(open(path)) == {}
++
++
++def test_the_settings_show_up_in_the_config_view():
++    from tokeneconomizer.plugin.cli import _config_view
++    cfg = LiveConfig()
++    cfg.microskills_model = "deepseek-account/deepseek-flash"
++    view = _config_view(cfg)
++    assert view["other"]["microskills_model"] == "deepseek-account/deepseek-flash"
++    assert view["other"]["loopguard_model"] == ""
 diff --git a/tests/test_dsh_trace.py b/tests/test_dsh_trace.py
 new file mode 100644
 index 0000000..396591d
@@ -262,6 +393,57 @@ index 7f8fb75..21db07e 100644
      add("microskills", "facts").set_defaults(fn=cmd_microskills)
      p = add("toolprune", "untool")
      p.add_argument("action", nargs="?", default="show",
+diff --git a/tokeneconomizer/plugin/config.py b/tokeneconomizer/plugin/config.py
+index 877a1e8..85a9a96 100644
+--- a/tokeneconomizer/plugin/config.py
++++ b/tokeneconomizer/plugin/config.py
+@@ -93,6 +93,10 @@ ALIASES = {
+ }
+ _THRESHOLD_PREFIXES = ("loopguard.", "spiral.")
+ 
++# The settings that name the model one side call mechanism runs on. Each value is a
++# `provider/model` pair; an empty value means the deployment's own default route.
++SIDECALL_MODEL_KEYS = ("microskills_model", "loopguard_model")
++
+ # Settings that no longer exist, and where what they did went. A config file that still has one
+ # is read without complaint; `config set` says why it is refused.
+ OBSOLETE = {
+@@ -160,6 +164,12 @@ class LiveConfig:
+     repomap_python: str = ""
+     repomap_timeout: int = 8
+     paid_model: str = ""
++    # The model each side call mechanism runs on: the micro-skills proposer and the loop
++    # guard's judge are two separate calls, so they are two separate settings. Each is a
++    # `provider/model` string; empty means "the deployment's own default", which is what
++    # a setup that never touched these keys gets.
++    microskills_model: str = ""
++    loopguard_model: str = ""
+     shadow: bool = False
+     vocabulary: str = "auto"
+     warnings: list = field(default_factory=list)
+@@ -223,6 +233,13 @@ class LiveConfig:
+             self.warnings.append(f"{source}: {key}={v!r} not one of {choices}")
+             return False
+         setattr(self, key, v)
++        if key in SIDECALL_MODEL_KEYS and v:
++            # The value is kept, not rejected: a call that cannot use it falls back to the
++            # deployment's own default. The warning is how the person hears about it.
++            if "/" not in v:
++                self.warnings.append(
++                    f"{source}: {key}={v!r} is not a provider/model pair, so the side call "
++                    f"runs on the deployment's default model")
+         return True
+ 
+     def _set_threshold(self, name, value, source):
+@@ -250,6 +267,8 @@ class LiveConfig:
+ # Environment variables, old names first so that a new name set alongside its old one wins.
+ _ENV = {"TE_MODE": "mode", "TE_SHADOW": "shadow",
+         "TE_PAID_MODEL": "paid_model", "TE_VOCABULARY": "vocabulary",
++        "TE_MICROSKILLS_MODEL": "microskills_model",
++        "TE_LOOPGUARD_MODEL": "loopguard_model",
+         "TE_INJECT": "microskills", "TE_INJECT_MAX_FACTS": "microskills_max_facts",
+         "TE_INJECT_MAX_TOKENS": "microskills_max_tokens",
+         "TE_PROPOSE_EVERY": "microskills_propose_every",
 diff --git a/tokeneconomizer/plugin/context.py b/tokeneconomizer/plugin/context.py
 index 85865d3..2cd4e7b 100644
 --- a/tokeneconomizer/plugin/context.py
@@ -354,6 +536,19 @@ index ad2b62c..371d69d 100644
      if host == "codex":
          return _restore_codex(repo_root, store, tools)
      return _restore_json_list(repo_root, store, tools, host)
+diff --git a/tokeneconomizer/plugin/fold.py b/tokeneconomizer/plugin/fold.py
+index 1cb4785..d4b5979 100644
+--- a/tokeneconomizer/plugin/fold.py
++++ b/tokeneconomizer/plugin/fold.py
+@@ -75,7 +75,7 @@ def _fold_microskills(ctx, adapter, run_dir, session_id, injected=None):
+                            max_tokens=ctx.config.microskills_max_tokens)
+     # Paused once the host's CLI said it is not signed in (`sidecall.paused`): the free layer
+     # still learns.
+-    runner = (sidecall.runner_for(ctx.host.name, ctx.config)
++    runner = (sidecall.runner_for(ctx.host.name, ctx.config, slot="microskills")
+               if icfg.paid and not sidecall.paused(ctx.host.name, ctx.root) else None)
+     stage = PrefixStage(icfg, ctx.repo.label, ctx.mech_dir, False, runner=runner,
+                         optimizer_model="agent", adapter=adapter, agent=ctx.host.name)
 diff --git a/tokeneconomizer/plugin/hosts.py b/tokeneconomizer/plugin/hosts.py
 index 94e2ef0..c656cf7 100644
 --- a/tokeneconomizer/plugin/hosts.py
@@ -439,14 +634,49 @@ index 94e2ef0..c656cf7 100644
      return recent if recent in HOSTS else "claude"
  
  
+diff --git a/tokeneconomizer/plugin/judge.py b/tokeneconomizer/plugin/judge.py
+index d4bd411..78921ba 100644
+--- a/tokeneconomizer/plugin/judge.py
++++ b/tokeneconomizer/plugin/judge.py
+@@ -68,7 +68,7 @@ def run_job(ctx, session_id, job_id):
+     if req.get("id") != job_id:                       # superseded by a newer request
+         return None
+     runner = (None if sidecall.paused(ctx.host.name, ctx.root)
+-              else sidecall.runner_for(ctx.host.name, ctx.config))
++              else sidecall.runner_for(ctx.host.name, ctx.config, slot="loopguard"))
+     verdict, written = None, None
+     if runner is not None:
+         try:
 diff --git a/tokeneconomizer/plugin/sidecall.py b/tokeneconomizer/plugin/sidecall.py
-index 3594a3e..8a19e61 100644
+index 3594a3e..4694c52 100644
 --- a/tokeneconomizer/plugin/sidecall.py
 +++ b/tokeneconomizer/plugin/sidecall.py
-@@ -331,6 +331,70 @@ def copilot_call(prompt, model="", cli="copilot", timeout=TIMEOUT_S):
+@@ -331,11 +331,132 @@ def copilot_call(prompt, model="", cli="copilot", timeout=TIMEOUT_S):
      return text, eff
  
  
+-def runner_for(host_name, config):
++def parse_sidecall_model(spec):
++    """The provider and model a side-call model string names, or None.
++
++    A side-call model is a `provider/model` string: the DSH host needs both halves, because
++    DSH routes by provider and the model id alone belongs to that provider. A string with no
++    `/` names no provider and is therefore not usable here: the call falls back to the
++    deployment's own default route instead of guessing one. An empty string means "the
++    deployment's default" as well, and is not an error.
++    """
++    text = (spec or "").strip()
++    if not text:
++        return None
++    if "/" not in text:
++        return None
++    provider, _, model = text.partition("/")
++    provider, model = provider.strip(), model.strip()
++    if not provider or not model:
++        return None
++    return provider, model
++
++
 +def dsh_call(prompt, model="", cli="dsh", profile="headless", timeout=TIMEOUT_S):
 +    """A side call through DSH's own headless profile, in a throwaway directory.
 +
@@ -456,7 +686,9 @@ index 3594a3e..8a19e61 100644
 +    `cacheWriteTokens`). The call exports `TE_DISABLE=1` so the DSH TokenEconomizer plugin does
 +    nothing inside it, and `TE_SIDECALL=1` like every other side call.
 +
-+    A model override is not passed: DSH chooses the agent preset's route, which is the person's
++    A model override is optional and comes as a `provider/model` string: with one, the call
++    runs on that provider and model by way of the same `--patch` overlay that re-roots the
++    session stores; with none, DSH chooses the agent preset's route, which is the person's
 +    own default. The call is billed where the person's DSH is billed; the ledger charges the
 +    tokens DSH reports.
 +
@@ -469,6 +701,7 @@ index 3594a3e..8a19e61 100644
 +    cmd = [cli, "--profile", profile, "--json", prompt]
 +    out_usage = None
 +    text = ""
++    route = parse_sidecall_model(model)
 +    with tempfile.TemporaryDirectory(prefix="te-side-") as cwd:
 +        # Keep the Session DSH is about to persist inside the directory this block deletes.
 +        overlay = os.path.join(cwd, ".te-session-store.yml")
@@ -478,6 +711,15 @@ index 3594a3e..8a19e61 100644
 +                fh.write("- id: " + entry + "\n"
 +                         "  config:\n"
 +                         "    root: " + json.dumps(os.path.join(cwd, sub)) + "\n")
++            # The route the person chose for this mechanism, if any: the same overlay file,
++            # one more row, because the overlay is applied as a list and a row that names
++            # `agent-default-model` replaces that row's config wholesale.
++            if route:
++                provider, route_model = route
++                fh.write("- id: agent-default-model\n"
++                         "  config:\n"
++                         "    provider: " + json.dumps(provider) + "\n"
++                         "    model: " + json.dumps(route_model) + "\n")
 +        cmd[3:3] = ["--patch", overlay]
 +        out = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace",
 +                             timeout=timeout, env=dict(_env(), TE_DISABLE="1"), cwd=cwd,
@@ -511,10 +753,41 @@ index 3594a3e..8a19e61 100644
 +    return text, eff
 +
 +
- def runner_for(host_name, config):
++def slot_model(config, slot="default"):
++    """The model a mechanism's side call runs on, for the given slot.
++
++    `default` is the host-wide `paid_model`: what every host used before the mechanisms
++    could be routed separately, and what a caller that names no slot still gets. The
++    `microskills` and `loopguard` slots read the mechanism's own setting; an empty setting
++    falls back to `paid_model`, and an empty `paid_model` to the deployment's own default.
++    """
++    if slot == "microskills":
++        chosen = getattr(config, "microskills_model", "") or ""
++    elif slot == "loopguard":
++        chosen = getattr(config, "loopguard_model", "") or ""
++    else:
++        chosen = ""
++    return chosen or config.paid_model
++
++
++def runner_for(host_name, config, slot="default"):
      """The optimizer callable for this host. Each host's calls go through that host's own CLI,
      never another agent's. The caller decides whether a call is allowed: micro-skills' proposer
-@@ -344,4 +393,6 @@ def runner_for(host_name, config):
+-    when micro-skills is on, the loop guard's judge when the guard is."""
+-    model = config.paid_model
++    when micro-skills is on, the loop guard's judge when the guard is.
++
++    `slot` names which mechanism's side call this runner is: `default` (the host-wide
++    `paid_model`), `microskills` or `loopguard`. The two mechanisms are two different calls
++    on the person's own account, so they can be routed to two different models; a host
++    whose CLI takes a model id only (`claude`, `codex`, `copilot`, `pi`, `opencode`) keeps
++    using `paid_model`, since a provider-qualified pair means nothing to them.
++    """
++    model = slot_model(config, slot)
+     if host_name == "pi":
+         return lambda prompt, _m="agent": pi_call(prompt, model=model)
+     if host_name == "opencode":
+@@ -344,4 +465,6 @@ def runner_for(host_name, config):
          return lambda prompt, _m="agent": codex_call(prompt, model=model)
      if host_name == "copilot":
          return lambda prompt, _m="agent": copilot_call(prompt, model=model)

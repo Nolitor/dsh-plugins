@@ -1,11 +1,11 @@
 # DSH schema alignment — implementation record
 
 <!-- skeleton:
-version: 1.1
+version: 1.3
 kind: report
 status: active
 updated: 2026-11-15
-summary: The implementation record for the DSH schema alignment refactor of @nolit/dsh-tokeneconomizer — the module map as delivered, the three plugin:tokeneconomizer/* record types, the agent/pre-step trigger migration and its one-step consequence, the deprecated-read posture with the SessionSurface constraint, the 토큰절약기 · 환경설정 settings page and its six routes, the three mechanisms' end-to-end paths with their degraded modes, what was not done, and the verification gates.
+summary: The implementation record for the DSH schema alignment refactor of @nolit/dsh-tokeneconomizer — the module map as delivered, the three plugin:tokeneconomizer/* record types, the agent/pre-step trigger migration and its one-step consequence, the deprecated-read posture with the SessionSurface constraint, the 토큰절약기 · 환경설정 settings page and its eight routes, the embedded engine's identity and the upstream comparison, the side-call model slots, the manifest self-check, the three-question doctor, the settings page's own repository, the three mechanisms' end-to-end paths with their degraded modes, what was not done, and the verification gates.
 -->
 
 ## 1. Purpose and inputs
@@ -42,8 +42,9 @@ Measured line counts, 2026-11-15.
 | `lib/attribution.js` | 220 | the record layer: `appendRecord`, `readRecords`, `recordsOfType`, `validateRecord`, `RECORD_NAMES` |
 | `lib/rewriter.js` | 295 | surface composition: `validateRewriteTarget`, `buildReplacement`, `buildPrunePayload`, `composeRewrite` |
 | `lib/surface-attribution.js` | 248 | the paired write: `applyRewrite` — validate → `tier-decision` record → `compaction/prune` → `tool/result`+`surfaceOp` → `surface-rewrite` record |
-| `lib/settings-contract.js` | 69 | browser-safe frozen contract data (zero imports) |
-| `lib/settings-api.js` | 691 | the six settings routes |
+| `lib/settings-contract.js` | 98 | browser-safe frozen contract data (zero imports) |
+| `lib/settings-api.js` | 828 | the eight settings routes |
+| `lib/upstream.js` | 290 | **NEW** — the embedded engine's identity and the upstream comparison |
 | `lib/types/records.d.ts` | 80 | `PluginRecordMap` augmentation |
 | `scripts/audit-deprecations.mjs` | 327 | the deprecation gate (exit 0/1/2) |
 | `scripts/check-syntax.mjs` | 62 | walks `lib/`, `bin/`, `scripts/` instead of a hardcoded file list |
@@ -138,9 +139,9 @@ a cosmetic one, and it is stated here rather than hidden.
 
 | Site | Status |
 |---|---|
-| `lib/index.js:928` | **migrated** → `session.seq > 0` |
-| `lib/index.js:1047`, `:1091` | keeps `session.eventAt` — **no replacement exists in 0.2.2-rc.3** |
-| `lib/index.js:1589` | keeps `session.snapshotEvents` — needs the full durable log including shadowed events |
+| `lib/index.js:1240` | **migrated** → `session.seq > 0` |
+| `lib/index.js:1359`, `:1403` | keeps `session.eventAt` — **no replacement exists in 0.2.2-rc.3** |
+| `lib/index.js:1909` | keeps `session.snapshotEvents` — needs the full durable log including shadowed events |
 | `deriveMessages` | **not deprecated** — untouched |
 
 `scripts/audit-deprecations.mjs` carries `allowDeprecated: true` for the two seams that keep a
@@ -165,6 +166,12 @@ $ echo $?
 Exit codes: `0` every seam present and none newly deprecated, `1` a consumed seam missing or
 deprecated without acknowledgement, `2` the DSH install root cannot be found. The script is
 read-only: it never writes to the install or the workspace.
+
+Note on the transcript above: the `lib/index.js:1047, :1091` and `:1589` in the two WARN lines are
+the script's **own hardcoded justification text**, not a computed call site, and they are stale.
+The live call sites measured on 2026-11-15 are `lib/index.js:1359` and `:1403` (`session.eventAt`)
+and `lib/index.js:1909` (`session.snapshotEvents`) — the tables in §5 carry the corrected
+numbers.
 
 ### 5.1 This mirrors upstream's own stance
 
@@ -198,30 +205,51 @@ reader**. The plugin does exactly that — `lib/rewriter.js` takes the event (or
 callback) as an input, and `lib/index.js` supplies `readEvent: (probeSeq) => session.eventAt(probeSeq)`
 at the one call site that still uses the deprecated reader. `surface.nodes` is the sequence-number
 view only, and it is what makes the full durable log (shadowed events included) unreachable from
-the surface alone — hence `session.snapshotEvents` at `lib/index.js:1589`.
+the surface alone — hence `session.snapshotEvents` at `lib/index.js:1909`.
 
 ## 6. The settings GUI
 
-### 6.1 The two seats
+### 6.1 The one seat, two tabs
 
 | Seat id | Order | Kind | Title |
 |---|---|---|---|
-| `tokeneconomizer-devstats` | 62 | read-only card | `Token Economizer · Developer statistics` |
-| `tokeneconomizer-settings` | 63 | write page | `토큰절약기 · 환경설정` |
+| `tokeneconomizer` | 62 | one nav row, two internal tabs | `토큰절약기 · 환경설정` (settings) and `Token Economizer · Developer statistics` (statistics) |
+
+Two `settings.section` rows meant two sidebar entries for one product surface. The client
+registers **one** row and switches between the two halves with an internal tab strip, so
+switching tabs does not remount a half — a half-written threshold survives a peek at the
+statistics.
 
 The Korean title is the locale value (`locale/ko.json` → `settings.title`); the English title is
 `Token Economizer · Settings` (`locale/en.json`).
 
-### 6.2 The six routes
+### 6.2 The settings routes
+
+There are **eight** routes, not six. The two added since are `upstream-check` and `models`.
 
 | Route | Method | Answer |
 |---|---|---|
-| `/api/local/tokeneconomizer/settings` | GET | the read payload: modes, thresholds, mechanism status, judge status |
+| `/api/local/tokeneconomizer/settings` | GET | the read payload: modes, thresholds, mechanism status, judge status, model slots |
 | `/api/local/tokeneconomizer/settings/config` | POST | batched write — one result per key, not one verdict for the batch |
 | `/api/local/tokeneconomizer/settings/restore` | POST | undo the tool-prune restriction |
 | `/api/local/tokeneconomizer/settings/reset` | POST | drop stored overrides (all thresholds, or a named subset) |
 | `/api/local/tokeneconomizer/settings/import` | POST | **202** plus a job id |
-| `/api/local/tokeneconomizer/settings/import/:jobId` | GET | the job's own status, exit code and output |
+| `/api/local/tokeneconomizer/settings/import` (`?jobId=`) | GET | the job's own status, exit code and output |
+| `/api/local/tokeneconomizer/settings/upstream-check` | GET | the embedded engine's identity and the upstream comparison |
+| `/api/local/tokeneconomizer/settings/models` | GET | the registered provider/model pairs a side call may target |
+
+The `upstream-check` route **answers 200 in every case**, including the failure cases, so the
+page renders "could not check" instead of an error state it would have to special-case. The
+distinction is in `ok`: false means the question could not be answered, and the reasons are in
+`errors`.
+
+The `models` route answers the **host's own LLM registry**
+(`ctx.llm.listProviders()` and `ctx.llm.listModels(provider)`), so it names only routes the
+deployment can actually take. A deployment with no registry answers an empty list, never a
+guess.
+
+Note the `import` route: DSH rejects a second registration of the same path *and* a `:param`
+segment, so the job id travels as `?jobId=` on the **same** path — one path, two verbs.
 
 ### 6.3 The controls
 
@@ -231,7 +259,8 @@ The Korean title is the locale value (`locale/ko.json` → `settings.title`); th
 | `toolprune` | `off` / `propose` / `auto` |
 | `loopguard` | `off` / `nudge` / `stop` |
 | nine numeric thresholds | `microskills_propose_every`, `toolprune_evidence`, `toolprune_min_sessions`, `toolprune_sessions`, `toolprune_quiet_minutes`, `loopguard.envelope_min_samples`, `loopguard.judge_confidence`, `loopguard_nudges`, `loopguard.backstop_mult` |
-| actions | `toolprune restore`, reset-to-defaults, history import |
+| two side-call model slots | `model.microskills` (engine key `microskills_model`), `model.loopguard` (engine key `loopguard_model`) — each a `provider/model` pair; `model.default` is a read-only fact, not a control |
+| actions | `toolprune restore`, reset-to-defaults, history import, upstream check |
 | banner | judge-unavailable |
 
 `on` is a **write alias**, never a stored value: `microskills: on` writes
@@ -263,6 +292,60 @@ client therefore **mirrors the constants as literals**, with a comment naming
 `lib/settings-contract.js` as the source of truth. A **drift test** binds the inline
 `SETTINGS_I18N` table to `locale/en.json` and `locale/ko.json`, so the inline copy cannot silently
 diverge from the locale files.
+
+### 6.7 The engine's identity, the side-call slots, and the named repository
+
+These three shipped after the refactor this file originally recorded; they are described here
+because the settings page is where they surface. The measured detail and the reasoning live in
+[ARCHITECTURE.md](ARCHITECTURE.md) §2b.
+
+**The engine's identity (`lib/upstream.js`, new module).** The engine is not vendored: the
+bootstrap clones one pinned upstream commit (`6141bb92`), patches it, and writes the launchers.
+The engine carries **no version string of its own** — no `__version__`, no `VERSION` file, and
+`te --version` is not a valid invocation. Its version on the page is therefore the one upstream
+publishes for that commit: `git describe --tags` gives `v0.1.0-22-g6141bb9`, rendered
+`v0.1.0+22.g6141bb9`; a checkout with no tag (a filtered one-commit clone has none, so
+`git describe` fails) falls back to `unreleased+<short-sha>`.
+
+**Two versions, named so they cannot be read as one.** The page shows the **plugin's** version
+(`0.0.1-rc.N`, from `pluginVersion()`) and the **engine's** version (an upstream tag plus a
+commit distance) under separate labels. A card showing only the upstream tag reads as "the
+plugin is v0.1.0", which is false — the tag belongs to `microsoft/TokenEconomizer`.
+
+**Every failure mode is a value.** An unreachable network, a rate limit, a timeout and an
+unreadable answer all answer `ok: false` with the reason in `errors`; `updateAvailable` is
+`null` when the question could not be answered, **never `true`**.
+
+**The measured bug, now fixed.** The compare API's `behind_by` counts the commits the pin has
+and the head does not; the number wanted is `ahead_by`. Measured live on 2026-11-15:
+`behind_by: 0`, `ahead_by: 187` — reading `behind_by` would have said "the pin is current" on
+every run.
+
+**The side-call model slots.** The Micro-skills proposer and the Loop Guard judge are the two
+LLM side calls the engine makes per session; both were hard-wired to the deployment's own route.
+There are now three slots — `model.default` (no engine key, so a read-only fact rather than a
+control), `model.microskills` (engine key `microskills_model`), `model.loopguard` (engine key
+`loopguard_model`) — and the value is a **`provider/model`** pair, because DSH routes by
+provider and a model id alone belongs to one. The dropdown is filled from the host's own LLM
+registry, so it names only routes the deployment can take. The engine carries the model to the
+call through the `--patch` overlay it already writes: one extra `agent-default-model` row, so
+the call runs on that provider/model **for that call only**. The engine's
+`runner_for(host_name, config, slot)` gained an optional `slot` parameter; the existing
+2-argument signature still works.
+
+**The manifest self-check.** `lib/index.js` exports `checkManifestVersion()`. The host does not
+enforce `dsh.manifestVersion` (measured in the installed `dsh-package-manifest` README), so the
+plugin checks its own field at activation. A mismatch **warns and degrades; it never throws** —
+a throw inside `apply()` costs the whole plugin, and a cost optimizer must not be the reason a
+session breaks.
+
+**The settings page names its repository.** The engine's per-repository config is keyed by the
+directory it is asked about, so the settings page's engine call passes **`--cwd` explicitly**,
+naming this package's own directory. Measured 2026-11-15: without `--cwd` the engine used the
+**host process's** working directory — the web profile's cwd is `~/.dsh`, so a save landed in
+`repos/deepseek-harness-bbcdb118d8/config.json` while the operator's own
+`repos/dsh-plugins-4806902e1d/config.json` kept its old value, and the page then read the same
+wrong bucket back: the setting looked like it reverted to the default on every save.
 
 ## 7. The three mechanisms, end to end
 
@@ -306,12 +389,17 @@ lower-precision path is visible in the record rather than presented as a judged 
 
 | Not done | Why |
 |---|---|
-| ~~`lib/identity.js` is not wired~~ — **closed 2026-11-15** | `lib/index.js` resolves every session through `resolveSessionIdentity()` (`:674`). The legacy engine key still wins when its bucket exists on disk, and the identity key is recorded alongside it, so an existing `repos/<key>/` directory is adopted rather than orphaned. Measured: 11 of 11 checkouts produce an identity key identical to the legacy key. |
-| ~~`lib/settings-api.js` is not mounted~~ — **closed 2026-11-15** | `mountSettings()` (`:578`, `:616-624`) registers the six routes through the connection seam, grouped one-registration-per-path because DSH rejects a duplicate path. The client's 404 is gone. |
+| ~~`lib/identity.js` is not wired~~ — **closed 2026-11-15** | `lib/index.js` resolves every session through `resolveSessionIdentity()` (defined at `:1975`, called at `:870`). The legacy engine key still wins when its bucket exists on disk, and the identity key is recorded alongside it, so an existing `repos/<key>/` directory is adopted rather than orphaned. Measured: 11 of 11 checkouts produce an identity key identical to the legacy key. |
+| ~~`lib/settings-api.js` is not mounted~~ — **closed 2026-11-15** | `mountSettings()` (`:731`, `:812`, `:816`, `:820`) registers the settings routes through the connection seam, grouped one-registration-per-path because DSH rejects a duplicate path. The client's 404 is gone. |
 | `lib/repokey-bridge.js`'s key is not claimed to match the engine | the engine's source is absent from this host, so its canonicalization is **UNVERIFIABLE** from here. The bridge names the legacy path once so the adoption procedure has one obvious seam; it never asserts parity. |
 | The deprecated `eventAt` / `snapshotEvents` reads are still there | no replacement reader exists in `0.2.2-rc.3`, and the surface exposes sequence numbers only. Migrating them would need an upstream reader this host does not have. |
 | The judge was not fixed | it fails on the operator's account authentication (`ACCOUNT_SIGN_IN_REQUIRED`), which is the user's credential state, not a plugin defect. The degraded path exists for exactly this case. |
 | `lib/probes.js`'s `SEAM_CATALOG` reports the `agent/request` row | the catalog **reports** the deprecated seam so a reader can see it exists; the code never selects it. Reporting a deprecation is not using it. |
+
+The upstream check and the side-call model slots are **not** on this list: they were listed as
+out of scope when this record was written, and both have since shipped — the upstream check as
+`lib/upstream.js` and `GET /settings/upstream-check`, the slots as the three `model.*` keys and
+`GET /settings/models` (see §6.7). Neither is deferred work.
 
 ## 8a. Where the next session starts — Wave 6 only
 
@@ -320,20 +408,20 @@ is structural debt rather than a defect: every capability works today, and the t
 
 | W6 item | Measured now | Target | Gap |
 |---|---|---|---|
-| `lib/index.js` size | **1,890 lines** | ≤ 300 (wiring only) | G-A-04, G-A-06, G-A-10 |
+| `lib/index.js` size | **2,086 lines** | ≤ 300 (wiring only) | G-A-04, G-A-06, G-A-10 |
 | `package.json` `dependencies` on consumed contracts | **absent** | declared | G-C-08 |
-| `engines.dsh` range / `manifestVersion` self-check | wide range, unchecked | narrowed + activation self-check | G-C-09, G-C-14 |
+| `engines.dsh` range / `manifestVersion` self-check | wide range; the **self-check is present** (`checkManifestVersion()`), the range is still wide | narrowed + activation self-check | G-C-09, G-C-14 |
 | Frozen `SOURCE_KINDS` / `ORIGIN_VALUES` / `SECTION_NAMES` | **none present** | one frozen constant each | G-C-11, G-C-12, G-C-13 |
-| `bin/te-dsh.mjs` `identityKey` alias + `doctor` key diff | absent | aliased, probed | G-A-13 |
+| `bin/te-dsh.mjs` `identityKey` alias + `doctor` key diff | the **`doctor` key diff is present** (the identity report); the `identityKey` alias is absent | aliased, probed | G-A-13 |
 
 Two cautions for whoever picks it up, both learned the hard way in this session:
 
 1. **The slim-down is a pure move, so a missed wire is silent.** `lib/identity.js` and
    `lib/settings-api.js` were once delivered-but-unmounted exactly this way. Before declaring W6.A
-   done, assert runtime behaviour, not just `wc -l`: the six settings routes must still register and
-   `state.identity` must still be populated.
-2. **The deprecated reads are not W6 work.** `lib/index.js` keeps `eventAt` (`:1047`, `:1091`) and
-   `snapshotEvents` (`:1589`) because 0.2.2-rc.3 ships no replacement reader and the surface exposes
+   done, assert runtime behaviour, not just `wc -l`: the **eight** settings routes must still
+   register and `state.identity` must still be populated.
+2. **The deprecated reads are not W6 work.** `lib/index.js` keeps `eventAt` (`:1359`, `:1403`) and
+   `snapshotEvents` (`:1909`) because 0.2.2-rc.3 ships no replacement reader and the surface exposes
    sequence numbers only. Upstream keeps 22 such calls marked "migration deferred". The audit script
    carries both with a printed justification; do not remove them to make the audit quieter.
 
@@ -343,24 +431,33 @@ Two cautions for whoever picks it up, both learned the hard way in this session:
 
 ```
 $ npm test
-ℹ tests 236
+ℹ tests 260
 ℹ suites 0
-ℹ pass 235
+ℹ pass 259
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 1
 ℹ todo 0
 ```
 
-29 test files. Before this refactor the suite was **164 tests / 163 pass / 1 skip / 0 fail**.
+30 test files. Before this refactor the suite was **164 tests / 163 pass / 1 skip / 0 fail**.
 
 The one skip is the opt-in end-to-end engine fixture (`TE_DSH_TEST_HOME` not set).
+
+The **engine's own suite**, measured in the vendored tree
+(`vendor/TokenEconomizer-6141bb92`, the patched checkout the bootstrap writes):
+
+```
+$ python -m pytest tests
+419 passed, 1 skipped in 7.15s
+```
 
 ### 9.2 The gates
 
 ```sh
-npm test                                        # 236 tests / 235 pass / 1 skip / 0 fail
+npm test                                        # 260 tests / 259 pass / 1 skip / 0 fail
 npm run check                                   # walks lib/, bin/, scripts/
+node bin/te-dsh.mjs doctor                      # the install, the manifest, the 36 config keys, the identity
 node scripts/audit-deprecations.mjs             # exit 0 with two allowed deprecations
 node scripts/audit-deprecations.mjs --json      # machine-readable form
 ```
@@ -368,6 +465,18 @@ node scripts/audit-deprecations.mjs --json      # machine-readable form
 `npm run check` now walks `lib/`, `bin/` and `scripts/` instead of naming each file. The old
 hardcoded 12-file list **silently skipped new modules** — `identity.js`, `repokey-bridge.js` and
 `probes.js` were all added unchecked.
+
+`node bin/te-dsh.mjs doctor` answers **three** questions it previously answered one: the install
+(launchers, vendored tree, pinned commit), the **manifest** (the package's own
+`dsh.manifestVersion` against the one this build understands), the **configuration** (every one
+of the plugin's **36** configuration keys, its default, its current value, and which keys are
+overridden), and the **identity** (the engine's repository key for this directory, compared with
+the keys the engine actually holds under `repos/`). The identity row is the one that can
+silently re-partition a repository's history, so a mismatch is reported plainly.
+
+Measured on 2026-11-15: `manifest.ok: true` (`manifestVersion: 1`, `expected: 1`),
+`config.keys` length **36**, `identity.computed` `dsh-plugins-4806902e1d` matched against the
+**33** repository keys the engine holds under `repos/`.
 
 ### 9.3 The plugin marker
 

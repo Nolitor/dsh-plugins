@@ -50,7 +50,7 @@ export const SEAMS = [
     symbol: 'eventAt',
     allowDeprecated: true,
     migration: 'docs/ARCHITECTURE.md',
-    justification: 'No replacement reader exists in 0.2.2-rc.3; upstream keeps 20+ live calls with "migration deferred". Call sites: lib/index.js:1047, :1091.'
+    justification: 'No replacement reader exists in 0.2.2-rc.3; upstream keeps 20+ live calls with "migration deferred". Call sites: lib/index.js:1359, :1403.'
   },
   {
     id: 'session.snapshotEvents',
@@ -58,7 +58,7 @@ export const SEAMS = [
     symbol: 'snapshotEvents',
     allowDeprecated: true,
     migration: 'docs/ARCHITECTURE.md',
-    justification: 'Required for the full durable log (shadowed events included); the surface exposes sequence numbers only. Call site: lib/index.js:1589.'
+    justification: 'Required for the full durable log (shadowed events included); the surface exposes sequence numbers only. Call site: lib/index.js:1909.'
   },
   {
     id: 'session.deriveMessages',

@@ -42,8 +42,10 @@
  * call fails open: `{}` changes nothing, and a session keeps working without the engine.
  */
 import { randomUUID } from 'node:crypto'
-import { existsSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 
 import {
@@ -70,6 +72,7 @@ import { adoptLegacyKey, identityKeyOf, readIdentity, resolveIdentity, writeIden
 import { repoKeyFor } from './repokey.js'
 import { createSettingsRoutes } from './settings-api.js'
 import { mergeSettings, readSettingsFile } from './settings.js'
+import { checkUpstream, readEngineIdentity, PINNED_SHA } from './upstream.js'
 import { createLoopBreaker, createWatchdog } from './watchdog.js'
 import { createInterruptRecorder, WATCHDOG_ISSUER } from './interrupt-bridge.js'
 import {
@@ -87,6 +90,49 @@ import {
 
 /** One process-wide recorder: the interrupt registry it points at is process-wide too. */
 const interruptRecorder = createInterruptRecorder()
+
+/**
+ * This package's own directory — the tree the loader mounted.
+ *
+ * The engine keys its per-repository config by the directory it is asked about, so every
+ * settings read and write must name the SAME directory. This package's directory is the
+ * repository the plugin operates on, and it is stable regardless of what directory the
+ * hosting process happens to boot in.
+ *
+ * @returns {string} the absolute path of the package root.
+ */
+function packageDir () {
+  try {
+    // `new URL('..', import.meta.url)` resolves against THIS FILE's directory (`lib/`), so
+    // `..` is already the package root. No `dirname` on top: that would climb one level too
+    // far and name the package's PARENT — measured 2026-11-15, the settings page would then
+    // have filed its configuration under the workspace, not the plugin's repository.
+    return fileURLToPath(new URL('..', import.meta.url))
+  } catch {
+    return process.cwd()
+  }
+}
+
+/**
+ * Run one git command and answer its trimmed stdout, or null when it failed.
+ *
+ * The engine's own identity lives in a git checkout, so reading it means asking git. Every
+ * failure is a value: a machine without git, a checkout that was never made, or a tree whose
+ * history was pruned all answer null, and the caller reports "unknown" rather than a guess.
+ *
+ * @param {string[]} args - the git arguments.
+ * @returns {string | null} the trimmed stdout, or null.
+ */
+function gitOutput (args) {
+  try {
+    const result = spawnSync('git', args, { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] })
+    if (result.status !== 0) return null
+    const text = String(result.stdout ?? '').trim()
+    return text.length > 0 ? text : null
+  } catch {
+    return null
+  }
+}
 
 /** Cordis plugin name; must equal package.json `name` and the cordis.patch.yml row id. */
 export const name = 'dsh-tokeneconomizer'
@@ -230,6 +276,54 @@ const ENUM_SETTINGS = Object.freeze({
   watchdogProgress: Object.freeze(['any', 'committed']),
   mode: Object.freeze(['apply', 'observe']),
 })
+
+/**
+ * The plugin's own package manifest version, checked at activation.
+ *
+ * The loader does not enforce `dsh.manifestVersion` (measured 2026-11-15 in the installed
+ * `dsh-package-manifest` README: "Current installers and loaders do not enforce
+ * `dsh.manifestVersion` or `engines.dsh`"), so the plugin checks its own field. A mismatch
+ * degrades and warns; it never throws — a throw inside `apply()` costs the entire plugin.
+ */
+export const MANIFEST_VERSION = 1
+
+/**
+ * The manifest version this plugin's package declares.
+ *
+ * Read from the package manifest rather than hard-coded twice, so the check and the manifest
+ * cannot drift apart. A missing or unreadable manifest answers null, which the check treats
+ * as "cannot verify" rather than "mismatch".
+ *
+ * @returns {number | null} the declared version, or null when it cannot be read.
+ */
+function declaredManifestVersion () {
+  try {
+    const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+    const version = manifest?.dsh?.manifestVersion
+    return typeof version === 'number' ? version : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Compare the declared manifest version with the one this code understands.
+ *
+ * @param {number | null} declared - the version the package manifest carries.
+ * @returns {{ ok: boolean, reason: string }} the verdict and the sentence to show.
+ */
+export function checkManifestVersion (declared = declaredManifestVersion()) {
+  if (declared === null) {
+    return { ok: true, reason: 'the package manifest declares no version to check' }
+  }
+  if (declared === MANIFEST_VERSION) {
+    return { ok: true, reason: `manifest version ${declared} is the one this build understands` }
+  }
+  return {
+    ok: false,
+    reason: `the package manifest declares version ${declared}; this build understands ${MANIFEST_VERSION}`,
+  }
+}
 
 /** Settings that must be integers no smaller than the listed value. */
 const MINIMUM_SETTINGS = Object.freeze({
@@ -429,6 +523,12 @@ export function apply(ctx, config) {
   // Settings warnings go to stderr, never through noticeUser(): that helper injects a
   // user message, which would restart the watchdog budget the warning is about.
   const settingsWarn = (text) => process.stderr.write(`[tokeneconomizer] ${text}\n`)
+  // The manifest self-check runs before anything else is wired, so a version this build does
+  // not understand is reported once and up front. It warns and degrades; it never throws —
+  // a throw inside `apply()` costs the entire plugin, and a cost optimizer must not be the
+  // reason a session breaks.
+  const manifest = checkManifestVersion()
+  if (!manifest.ok) settingsWarn('manifest: ' + manifest.reason)
   /**
    * The mechanism status the settings page shows on its degraded-judge banner.
    *
@@ -544,10 +644,90 @@ export function apply(ctx, config) {
   const mountDevStats = (scoped) => {
     registerDevStatsRoutes({ ctx, scoped, server: devStats, log: { warn: settingsWarn } })
   }
-  // The interactive settings page. Its six routes are the write half of the seat the client
+  /**
+   * The embedded engine's identity plus the upstream comparison, as one value.
+   *
+   * The engine's own facts are read from the local installation and never fail; the upstream
+   * facts come from the network and may be unavailable, in which case the comparison says so
+   * rather than guessing. The page renders both.
+   * @returns {Promise<object>} the identity and the comparison.
+   */
+  const upstreamComparison = async () => {
+    const root = stateRoot(createEnv())
+    const identity = readEngineIdentity({
+      root,
+      sha: PINNED_SHA,
+      probe: {
+        exists: (path) => existsSync(path),
+        head: (tree) => gitOutput(['-C', tree, 'rev-parse', 'HEAD']),
+        describe: (tree) => gitOutput(['-C', tree, 'describe', '--tags']),
+      },
+    })
+    const comparison = await checkUpstream({ sha: PINNED_SHA })
+    return { ...comparison, engine: identity }
+  }
+
+  /**
+   * The provider/model pairs this deployment can route a side call to.
+   *
+   * The host's LLM registry is the only truthful source: `listProviders()` names the registered
+   * routes and `listModels(provider)` names what each one advertises. A deployment whose
+   * registry is absent answers an empty list, which the page renders as "no model provider is
+   * registered" — never a list this plugin made up.
+   * @returns {Promise<{ providers: object[], failures: object[] }>} the catalog.
+   */
+  const hostModelCatalog = async () => {
+    const providers = []
+    const failures = []
+    let registry = null
+    try {
+      registry = typeof ctx.get === 'function' ? ctx.get('llm') : undefined
+    } catch {
+      registry = null
+    }
+    if (registry === null || registry === undefined) return { providers, failures }
+    let listed = []
+    try {
+      listed = typeof registry.listProviders === 'function' ? registry.listProviders() : []
+    } catch (error) {
+      failures.push({ id: 'llm', name: 'the LLM registry', message: error instanceof Error ? error.message : String(error) })
+      return { providers, failures }
+    }
+    for (const provider of Array.isArray(listed) ? listed : []) {
+      const id = typeof provider?.id === 'string' ? provider.id : String(provider?.id ?? '')
+      const name = typeof provider?.name === 'string' ? provider.name : id
+      if (id.length === 0) continue
+      try {
+        const models = typeof registry.listModels === 'function' ? await registry.listModels(id) : []
+        providers.push({
+          id,
+          name,
+          models: (Array.isArray(models) ? models : [])
+            .filter((model) => typeof model?.id === 'string' && model.id.length > 0)
+            .map((model) => ({
+              id: model.id,
+              name: typeof model?.name === 'string' && model.name.length > 0 ? model.name : model.id,
+            })),
+        })
+      } catch (error) {
+        failures.push({ id, name, message: error instanceof Error ? error.message : String(error) })
+      }
+    }
+    return { providers, failures }
+  }
+
+  // The interactive settings page. Its eight routes are the write half of the seat the client
   // already renders, so registering them here is what removes the client's 404. Engine access
   // runs through the same `runJson` boundary every other engine call uses: the route layer never
   // opens `~/.tokeneconomizer/config.json` itself.
+  //
+  // The engine's per-repository config is keyed by the directory it is asked about, so the
+  // settings page must name ONE directory explicitly. It is this package's own directory —
+  // the tree the loader mounted — because that is the repository the plugin operates on, and
+  // because it is the same directory the operator sees in `te status` when they run it from
+  // here. Naming the SERVER's working directory instead would file the settings under
+  // whatever repository the host happened to boot in.
+  const settingsCwd = () => packageDir()
   const mountSettings = (scoped) => {
     const connection = scoped?.connection ?? (typeof ctx.get === 'function' ? ctx.get('connection') : undefined)
     const register = connection?.fetch?.register
@@ -557,7 +737,21 @@ export function apply(ctx, config) {
       // `te config show` prints JSON; `set`/`unset`/`restore` print a human-readable confirmation
       // and still exit 0. The status therefore has to travel with the text — passing only stdout
       // made a successful write look like a rejection, because a confirmation line is not JSON.
-      return runText(bins.te, ['config', kind, ...args], {
+      //
+      // `--cwd` is NOT optional here. The engine keys its per-repository config by the
+      // directory it is asked about, so WITHOUT it the settings page wrote into whichever
+      // repository the SERVER's working directory happened to be — measured 2026-11-15: the
+      // web profile's cwd is `~/.dsh`, so a save from the settings page landed in
+      // `repos/deepseek-harness-bbcdb118d8/config.json` while the operator's own repository
+      // (`repos/dsh-plugins-4806902e1d/config.json`) kept its old value. The page then read
+      // the same wrong bucket and showed the old value again: the setting looked like it
+      // "reverted to the default" on every save.
+      //
+      // The directory named is the one the settings are ABOUT: the plugin's own repository,
+      // which is the directory the plugin was loaded from and the one the operator is working
+      // in. It is resolved once, at mount time, from the same path the loader used.
+      const args2 = ['--cwd', settingsCwd(), 'config', kind, ...args]
+      return runText(bins.te, args2, {
         env: createEnv(),
         timeoutMs: opts.cliTimeoutMs,
       })
@@ -579,6 +773,8 @@ export function apply(ctx, config) {
         runEngine,
         register: registerPath,
         mechanismStatusOf: () => settingsMechanismStatus(),
+        upstreamCheck: () => upstreamComparison(),
+        modelCatalog: () => hostModelCatalog(),
         log: { warn: settingsWarn },
       })
       for (const [path, entry] of byPath) {

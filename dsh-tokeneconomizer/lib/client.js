@@ -71,14 +71,50 @@ window.__ModuleLoader__.load({
     }
 
     // Mirrors lib/settings-contract.js, which is the source of truth. The client half cannot import: the loader exposes a fixed module table and this file must carry no import statements.
-    /** The five settings routes, verbatim from the contract. */
+    /** The settings routes, verbatim from the contract. */
     const SETTINGS_ROUTES = Object.freeze({
       read: '/api/local/tokeneconomizer/settings',
       config: '/api/local/tokeneconomizer/settings/config',
       restore: '/api/local/tokeneconomizer/settings/restore',
       reset: '/api/local/tokeneconomizer/settings/reset',
       importJob: '/api/local/tokeneconomizer/settings/import',
+      upstreamCheck: '/api/local/tokeneconomizer/settings/upstream-check',
+      models: '/api/local/tokeneconomizer/settings/models',
     })
+
+    /**
+     * The three side-call model slots, verbatim from the contract.
+     *
+     * `default` is not an engine key: it is the deployment's own route. The other two name the
+     * engine's own config keys, so a value written here reaches `te config` and the engine's
+     * Micro-skills proposer and Loop Guard judge.
+     *
+     * The slot keys are namespaced with `model.` because they share one `set` object with the
+     * MECHANISM modes on the write path: the engine's `microskills` key is the mode, and an
+     * unnamespaced slot of the same name would be two different settings under one key.
+     *
+     * `label` is the key the READ payload carries (`modelSlots.microskills`), and `key` is the
+     * key the WRITE payload carries (`set["model.microskills"]`). The two are DIFFERENT
+     * strings on purpose, and a slot that omits `label` reads an undefined stored value — the
+     * select would then show the deployment default even after a successful save.
+     */
+    const SETTINGS_MODEL_SLOTS = Object.freeze([
+      Object.freeze({ key: 'model.default', label: 'default', engineKey: null }),
+      Object.freeze({ key: 'model.microskills', label: 'microskills', engineKey: 'microskills_model' }),
+      Object.freeze({ key: 'model.loopguard', label: 'loopguard', engineKey: 'loopguard_model' }),
+    ])
+
+    /**
+     * The slots that are WRITABLE — the two the engine has a key for.
+     *
+     * The `default` slot is a read-only fact, not a control: the engine has no "default
+     * model" setting, so there is nowhere to put a choice. Measured 2026-11-15: it was a
+     * select that accepted a value, sent it, had the server answer `ok: true` with an
+     * EMPTY value, and snapped back to "deployment default" on the next read.
+     */
+    const SETTINGS_WRITABLE_MODEL_SLOTS = Object.freeze(
+      SETTINGS_MODEL_SLOTS.filter((slot) => slot.engineKey !== null),
+    )
 
     /** The nine numeric settings, in the contract's own paint order. */
     const SETTINGS_THRESHOLDS = Object.freeze([
@@ -311,6 +347,30 @@ window.__ModuleLoader__.load({
         'settings.navTitle': "Token Economizer",
         'settings.summarySaving': "Saved {chars} characters so far — about {rate} of session context.",
         'settings.summaryIdle': "Nothing saved yet. Turn a feature on below and start using it.",
+        'settings.engine': "Engine",
+        'settings.pluginVersion': "Plugin version",
+        'settings.engineVersion': "Embedded engine version (upstream)",
+        'settings.engineCommit': "Commit {sha}",
+        'settings.engineMissing': "The embedded engine was not found at {path}",
+        'settings.upstream': "Upstream",
+        'settings.upstreamCheck': "Check upstream version",
+        'settings.upstreamChecking': "Checking…",
+        'settings.upstreamUpToDate': "The embedded engine matches the upstream branch head.",
+        'settings.upstreamBehind': "The upstream branch head is ahead by {count} commit(s).",
+        'settings.upstreamUnknown': "The upstream branch head could not be checked: {reason}",
+        'settings.upstreamRelease': "Latest release: {tag}",
+        'settings.upstreamChanged': "Changed files: {count}",
+        'settings.upstreamOffline': "The upstream could not be reached; the local version is unchanged.",
+        'settings.sidecallModels': "Side-call models",
+        'settings.sidecallModelsHint': "The Micro-skills proposer and the Loop Guard judge each make one LLM call per session. Choosing a lighter model here lowers that cost.",
+        'settings.modelDefault': "Default model",
+        'settings.modelDefaultHint': "Use the deployment's own route for every side call.",
+        'settings.modelMicroskills': "Micro-skills proposer model",
+        'settings.modelLoopguard': "Loop Guard judge model",
+        'settings.modelUnset': "Deployment default",
+        'settings.modelNoProviders': "No model provider is registered in this deployment.",
+        'settings.modelInvalid': "Expected \"provider/model\"",
+        'settings.modelCurrent': "Current: {value}",
       },
       ko: {
         'settings.title': "환경설정",
@@ -338,6 +398,30 @@ window.__ModuleLoader__.load({
         'settings.navTitle': "토큰절약기",
         'settings.summarySaving': "지금까지 {chars}자를 절감했습니다. 세션 컨텍스트의 약 {rate}입니다.",
         'settings.summaryIdle': "아직 절감 실적이 없습니다. 아래에서 기능을 켜고 사용해 보세요.",
+        'settings.engine': "엔진",
+        'settings.pluginVersion': "플러그인 버전",
+        'settings.engineVersion': "내장 원본 엔진 버전 (업스트림)",
+        'settings.engineCommit': "커밋 {sha}",
+        'settings.engineMissing': "{path} 에 내장 원본 엔진을 찾을 수 없습니다",
+        'settings.upstream': "업스트림",
+        'settings.upstreamCheck': "업스트림 버전 확인",
+        'settings.upstreamChecking': "확인 중…",
+        'settings.upstreamUpToDate': "내장 엔진이 업스트림 브랜치 헤드와 같습니다.",
+        'settings.upstreamBehind': "업스트림 브랜치 헤드가 {count}개 커밋 앞섭니다.",
+        'settings.upstreamUnknown': "업스트림 브랜치 헤드를 확인하지 못했습니다: {reason}",
+        'settings.upstreamRelease': "최신 릴리즈: {tag}",
+        'settings.upstreamChanged': "변경 파일: {count}개",
+        'settings.upstreamOffline': "업스트림에 연결할 수 없습니다. 로컬 버전은 그대로입니다.",
+        'settings.sidecallModels': "사이드콜 모델 설정",
+        'settings.sidecallModelsHint': "Micro-skills 제안기와 Loop Guard 판정기는 세션마다 LLM을 한 번씩 호출합니다. 여기서 더 가벼운 모델을 고르면 비용이 줄어듭니다.",
+        'settings.modelDefault': "기본 모델",
+        'settings.modelDefaultHint': "모든 사이드콜을 배포 환경의 기본 경로로 사용합니다.",
+        'settings.modelMicroskills': "Micro-skills 제안기 모델",
+        'settings.modelLoopguard': "Loop Guard 판정기 모델",
+        'settings.modelUnset': "배포 환경 기본값",
+        'settings.modelNoProviders': "이 배포 환경에 등록된 모델 프로바이더가 없습니다.",
+        'settings.modelInvalid': '"provider/model" 형식이 필요합니다',
+        'settings.modelCurrent': "현재: {value}",
       },
     }
 
@@ -1038,6 +1122,27 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Check one side-call model string.
+     *
+     * The engine takes a `provider/model` string: the route the DSH side call runs on, and the
+     * model within it. A string without the separator cannot name both, so it is refused here
+     * rather than written and silently ignored.
+     *
+     * @param {string} raw - the value to check.
+     * @returns {{ ok: boolean, value?: string }} the verdict.
+     */
+    function checkModelString(raw) {
+      const text = String(raw ?? '').trim()
+      if (text.length === 0) return { ok: true, value: '' }
+      const separator = text.indexOf('/')
+      if (separator <= 0 || separator === text.length - 1) return { ok: false }
+      const provider = text.slice(0, separator).trim()
+      const model = text.slice(separator + 1).trim()
+      if (provider.length === 0 || model.length === 0) return { ok: false }
+      return { ok: true, value: provider + '/' + model }
+    }
+
+    /**
      * The one settings page this plugin contributes: an internal tab pair, not two nav entries.
      *
      * Two `settings.section` rows meant two sidebar entries for one product surface, and the
@@ -1165,6 +1270,15 @@ window.__ModuleLoader__.load({
       const [phase, setPhase] = React.useState('idle')
       const [results, setResults] = React.useState([])
       const [importState, setImportState] = React.useState({ status: 'idle', jobId: '', error: '' })
+      // The embedded engine's identity and the upstream comparison. Both are answers from the
+      // host, never a local guess: the version is the pinned commit the engine tree carries, and
+      // the comparison is whatever the upstream lookup managed to establish.
+      const [engine, setEngine] = React.useState(null)
+      const [upstream, setUpstream] = React.useState(null)
+      const [upstreamPhase, setUpstreamPhase] = React.useState('idle')
+      // The registered provider/model pairs a side call may target. Loaded lazily with the
+      // page: a deployment with no registry answers an empty list, and the page says so.
+      const [catalog, setCatalog] = React.useState(null)
       const [, setTick] = React.useState(0)
       const alive = React.useRef(true)
 
@@ -1189,10 +1303,56 @@ window.__ModuleLoader__.load({
 
       React.useEffect(() => { void load() }, [load])
 
+      // The model catalog and the embedded engine's identity load alongside the settings.
+      // Both are optional: a failure leaves them absent, and the page states what it knows
+      // rather than blocking the settings themselves.
+      React.useEffect(() => {
+        let aliveLocal = true
+        const loadSide = async () => {
+          const [models, engineInfo] = await Promise.all([
+            settingsFetch(SETTINGS_ROUTES.models, { method: 'GET' }),
+            settingsFetch(SETTINGS_ROUTES.upstreamCheck, { method: 'GET' }),
+          ])
+          if (!aliveLocal) return
+          if (models.body?.ok === true) setCatalog(models.body)
+          if (engineInfo.body?.ok === true) {
+            setEngine(engineInfo.body.engine ?? null)
+            // The first load already answers the upstream question, so the button is only
+            // needed for a refresh — but the answer is shown either way.
+            setUpstream(engineInfo.body)
+          }
+        }
+        void loadSide()
+        return () => { aliveLocal = false }
+      }, [])
+
+      /**
+       * Ask the host to compare the pinned commit with the upstream branch head.
+       *
+       * The lookup crosses the network, so it is on demand: the page loads the answer once
+       * and the button refreshes it. A failure is shown as a fact, never as a broken page.
+       * @returns {Promise<void>} resolved when the answer has been applied.
+       */
+      const checkUpstreamNow = async () => {
+        setUpstreamPhase('running')
+        const answer = await settingsFetch(SETTINGS_ROUTES.upstreamCheck, { method: 'GET' })
+        if (!alive.current) return
+        if (answer.body === null) {
+          setUpstreamPhase('failed')
+          return
+        }
+        setUpstream(answer.body)
+        if (answer.body.engine !== undefined) setEngine(answer.body.engine ?? null)
+        setUpstreamPhase(answer.body.ok === true ? 'done' : 'failed')
+      }
+
       const payload = state.payload
       const modes = payload !== null && payload.modes !== null && typeof payload.modes === 'object' ? payload.modes : {}
       const thresholds = payload !== null && payload.thresholds !== null && typeof payload.thresholds === 'object' ? payload.thresholds : {}
       const judge = payload !== null && payload.judge !== null && typeof payload.judge === 'object' ? payload.judge : null
+      const modelSlots = payload !== null && payload.modelSlots !== null && typeof payload.modelSlots === 'object'
+        ? payload.modelSlots
+        : {}
 
       /** The stored value of one threshold, falling back to the inlined contract default. */
       const currentOf = (spec) => {
@@ -1220,6 +1380,17 @@ window.__ModuleLoader__.load({
           const selected = resolveMode(mode.key, raw)
           if (selected === String(modes[mode.key] ?? 'off')) continue
           set[mode.key] = selected
+        }
+        for (const slot of SETTINGS_WRITABLE_MODEL_SLOTS) {
+          const raw = edits[slot.key]
+          if (raw === undefined) continue
+          const value = String(raw).trim()
+          if (value === String(modelSlots[slot.label] ?? '')) continue
+          if (value.length > 0 && !checkModelString(value).ok) {
+            invalid = true
+            continue
+          }
+          set[slot.key] = value
         }
         if (invalid) {
           setPhase('invalid')
@@ -1320,6 +1491,76 @@ window.__ModuleLoader__.load({
           h('p', { className: 'tkdsWarnReason' }, String(judge.reason ?? '')))
         : null
 
+      // The embedded engine's identity, and the upstream comparison.
+      //
+      // The engine has no version string of its own (measured: no `__version__`, no VERSION
+      // file, and `te --version` is not even a valid invocation), so the version shown is the
+      // one upstream publishes for the pinned commit. The upstream answer may be unknown — an
+      // offline machine is not an out-of-date installation, and the page says which it is.
+      //
+      // TWO VERSIONS, NAMED SO THEY CANNOT BE READ AS ONE. The plugin's own version is the
+      // one an upgrade and a release note are about; the engine's is the upstream project's
+      // release line, which this plugin does not control. Measured 2026-11-15: the first
+      // version of this card showed only `v0.1.0` under an unlabelled heading, and the
+      // operator read it as the plugin's version.
+      const engineVersion = engine !== null && typeof engine?.version === 'string' ? engine.version : ''
+      const engineCommit = engine !== null && typeof engine?.installedShort === 'string' ? engine.installedShort : ''
+      const pluginVer = engine !== null && typeof engine?.pluginVersion === 'string' ? engine.pluginVersion : ''
+      const upstreamOk = upstream !== null && upstream?.ok === true
+      const upstreamHead = upstreamOk ? upstream.upstreamHead : null
+      const upstreamRelease = upstreamOk ? upstream.latestRelease : null
+      const upstreamBehind = upstreamOk ? upstream.commitsBehind : null
+      const upstreamChanged = upstreamOk && Array.isArray(upstream.changedFiles) ? upstream.changedFiles.length : 0
+      const upstreamLine = upstream === null
+        ? null
+        : upstreamOk
+          ? (upstream.updateAvailable === true
+              ? tSettings('settings.upstreamBehind', { count: String(upstreamBehind ?? '?') })
+              : tSettings('settings.upstreamUpToDate'))
+          : tSettings('settings.upstreamUnknown', {
+            reason: Array.isArray(upstream.errors) && upstream.errors.length > 0
+              ? upstream.errors[0]
+              : 'the upstream could not be reached',
+          })
+      const engineCard = h('div', { className: 'tkdsCard', 'data-tk-settings-engine': '1' },
+        h('h3', { className: 'tkdsCardTitle' }, tSettings('settings.engine')),
+        h('div', { className: 'tkdsRows' },
+          // The PLUGIN's version. It is the first row, because it is the version this page's
+          // owner controls and the one an upgrade is about.
+          h('div', { className: 'tkdsRow', 'data-tk-settings-plugin-version': '1' },
+            h('span', { className: 'tkdsLabel' }, tSettings('settings.pluginVersion')),
+            h('span', { className: 'tkdsBadge' }, pluginVer.length > 0 ? pluginVer : '—')),
+          // The ENGINE's version, labelled as the upstream project's own release line.
+          h('div', { className: 'tkdsRow' },
+            h('span', { className: 'tkdsLabel' }, tSettings('settings.engineVersion', {
+              version: engineVersion.length > 0 ? engineVersion : '—',
+            })),
+            h('span', { className: 'tkdsBadge' }, engineCommit.length > 0 ? engineCommit : '—')),
+          h('div', { className: 'tkdsRow' },
+            h('span', { className: 'tkdsLabel' }, tSettings('settings.upstream')),
+            h('div', { className: 'tkdsControls' },
+              h('button', {
+                type: 'button',
+                className: 'tkdsButton',
+                disabled: upstreamPhase === 'running',
+                onClick: () => void checkUpstreamNow(),
+                'data-tk-settings-upstream': 'check',
+              }, upstreamPhase === 'running'
+                ? tSettings('settings.upstreamChecking')
+                : tSettings('settings.upstreamCheck')))),
+          upstreamLine === null
+            ? null
+            : h('p', {
+              className: 'tkdsMeta',
+              'data-tk-settings-upstream-state': upstreamOk ? (upstream.updateAvailable === true ? 'behind' : 'current') : 'unknown',
+            }, upstreamLine),
+          upstreamRelease !== null
+            ? h('p', { className: 'tkdsMeta' }, tSettings('settings.upstreamRelease', { tag: upstreamRelease }))
+            : null,
+          upstreamOk && upstream.updateAvailable === true && upstreamChanged > 0
+            ? h('p', { className: 'tkdsMeta' }, tSettings('settings.upstreamChanged', { count: String(upstreamChanged) }))
+            : null))
+
       const modeRows = SETTINGS_MODES.map((mode) => {
         const stored = String(modes[mode.key] ?? 'off')
         const selected = edits[mode.key] === undefined ? stored : String(edits[mode.key])
@@ -1341,6 +1582,75 @@ window.__ModuleLoader__.load({
             },
           }, options))
       })
+
+      // The side-call model rows.
+      //
+      // Each slot is a dropdown of the deployment's own registered provider/model pairs, plus
+      // the deployment-default entry. The list comes from the host's LLM registry, so it names
+      // only routes this deployment can actually take; a value already stored but no longer
+      // advertised is still shown, because hiding it would lose the fact that it is set.
+      const catalogProviders = catalog !== null && Array.isArray(catalog.providers) ? catalog.providers : []
+      const modelOptions = []
+      for (const provider of catalogProviders) {
+        const models = Array.isArray(provider?.models) ? provider.models : []
+        for (const model of models) {
+          modelOptions.push({ id: provider.id + '/' + model.id, label: provider.id + '/' + model.id })
+        }
+      }
+      const slotLabels = {
+        'model.default': 'settings.modelDefault',
+        'model.microskills': 'settings.modelMicroskills',
+        'model.loopguard': 'settings.modelLoopguard',
+      }
+      const modelRows = SETTINGS_WRITABLE_MODEL_SLOTS.map((slot) => {
+        const stored = String(modelSlots[slot.label] ?? '')
+        const raw = edits[slot.key]
+        const selected = raw === undefined ? stored : String(raw)
+        const checked = raw === undefined ? { ok: true } : checkModelString(raw)
+        const options = [h('option', { key: '', value: '' }, tSettings('settings.modelUnset'))]
+        // A stored value the registry no longer advertises is still offered, so the page does
+        // not silently drop a setting the operator made.
+        if (stored.length > 0 && !modelOptions.some((entry) => entry.id === stored)) {
+          options.push(h('option', { key: stored, value: stored }, stored))
+        }
+        for (const entry of modelOptions) {
+          options.push(h('option', { key: entry.id, value: entry.id }, entry.label))
+        }
+        return h('div', { className: 'tkdsRow', key: slot.key },
+          h('div', { className: 'tkdsRowHead' },
+            h('label', { className: 'tkdsLabel', htmlFor: 'tk-settings-model-' + slot.key },
+              tSettings(slotLabels[slot.key])),
+            h('span', { className: 'tkdsBadge' }, stored.length > 0 ? stored : tSettings('settings.modelUnset'))),
+          h('select', {
+            id: 'tk-settings-model-' + slot.key,
+            className: 'tkdsSelect',
+            value: selected,
+            'data-tk-settings-model': slot.key,
+            'aria-invalid': checked.ok ? 'false' : 'true',
+            onChange: (event) => {
+              const value = event.target.value
+              setEdits((prev) => ({ ...prev, [slot.key]: value }))
+            },
+          }, options),
+          checked.ok
+            ? null
+            : h('p', { className: 'tkdsError' }, tSettings('settings.modelInvalid')))
+      })
+
+      const modelCard = h('div', { className: 'tkdsCard', 'data-tk-settings-models': '1' },
+        h('h3', { className: 'tkdsCardTitle' }, tSettings('settings.sidecallModels')),
+        h('p', { className: 'tkdsHint' }, tSettings('settings.sidecallModelsHint')),
+        // The deployment's own route is a FACT, not a control: the engine has no "default
+        // model" setting to write, so it is stated rather than offered as a choice.
+        h('div', { className: 'tkdsRow', 'data-tk-settings-model-default': '1' },
+          h('div', { className: 'tkdsRowHead' },
+            h('span', { className: 'tkdsLabel' }, tSettings('settings.modelDefault')),
+            h('span', { className: 'tkdsBadge' }, tSettings('settings.modelUnset'))),
+          h('p', { className: 'tkdsMeta' }, tSettings('settings.modelDefaultHint'))),
+        catalogProviders.length === 0
+          ? h('p', { className: 'tkdsMeta' }, tSettings('settings.modelNoProviders'))
+          : null,
+        h('div', { className: 'tkdsRows' }, modelRows))
 
       const thresholdRows = SETTINGS_THRESHOLDS.map((spec) => {
         const view = thresholds[spec.label]
@@ -1398,9 +1708,11 @@ window.__ModuleLoader__.load({
         banner,
         phase === 'saved' ? h('p', { className: 'tkdsMeta' }, tSettings('settings.saved')) : null,
         phase === 'invalid' ? h('p', { className: 'tkdsError' }, tSettings('settings.invalid')) : null,
+        engineCard,
         h('div', { className: 'tkdsCard' },
           h('h3', { className: 'tkdsCardTitle' }, tSettings('settings.mode')),
           h('div', { className: 'tkdsRows' }, modeRows)),
+        modelCard,
         h('div', { className: 'tkdsCard' },
           h('h3', { className: 'tkdsCardTitle' }, tSettings('settings.thresholds')),
           h('div', { className: 'tkdsRows' }, thresholdRows)),

@@ -1,11 +1,11 @@
 # Operations
 
 <!-- skeleton:
-version: 1.6
+version: 1.7
 kind: spec
 status: active
 updated: 2026-11-15
-summary: Bootstrap with its bounded install-time migration, profile install and FTS recall activation, guarded cold start, purge, verification, rollback, the configuration reference including the 2026-11-14 subagentMemory switch, the 2026-11-15 토큰절약기 · 환경설정 settings page and its six routes, the deprecation gate, the tree-walking check script, and the live-state rules for the DSH TokenEconomizer bridge.
+summary: Bootstrap with its bounded install-time migration, profile install and FTS recall activation, guarded cold start, purge, verification, rollback, the configuration reference including the 2026-11-14 subagentMemory switch, the 2026-11-15 토큰절약기 · 환경설정 settings page and its eight routes, the 2026-11-15 side-call model slots and upstream check, the deprecation gate, the tree-walking check script, and the live-state rules for the DSH TokenEconomizer bridge.
 -->
 
 ## 0. Rules that apply to every step
@@ -19,7 +19,7 @@ summary: Bootstrap with its bounded install-time migration, profile install and 
    **no tool and no model-facing route**: it only calls `tools.restrict` and `systemPrompt.context`
    on an agent's own scope. It does register **host-local routes under its own namespace**:
    one read-only route, `POST /api/local/tokeneconomizer/devstats` (`lib/devstats-server.js`),
-   which serves the developer-statistics card, and the six settings routes under
+   which serves the developer-statistics card, and the eight settings routes under
    `/api/local/tokeneconomizer/settings` (§5). None of them touches another plugin's surface.
 4. Never edit the engine's copy in place. The patched tree is a pinned clone under
    `$TOKENECONOMIZER_HOME/vendor/TokenEconomizer-<sha>`; `--force`-style edits there are lost on
@@ -229,16 +229,23 @@ repository's own `dsh-custom-router` settings section:
 | focus | `--dsw-focus-ring-*` outline with a 2px offset, never a box-shadow |
 | colours | host `--dsw-alias-*` / `--dsh-*` tokens only; no literal values |
 
-### 5.1 The six routes
+### 5.1 The eight routes
 
 | Route | Method | What it does |
 |---|---|---|
-| `/api/local/tokeneconomizer/settings` | GET | read: modes, thresholds (default / override / effective), mechanism status, judge status |
+| `/api/local/tokeneconomizer/settings` | GET | read: modes, thresholds (default / override / effective), side-call model slots, mechanism status, judge status |
 | `/api/local/tokeneconomizer/settings/config` | POST | batched write — one result per key |
 | `/api/local/tokeneconomizer/settings/restore` | POST | undo the tool-prune restriction |
 | `/api/local/tokeneconomizer/settings/reset` | POST | drop stored overrides (all thresholds, or a named subset) |
 | `/api/local/tokeneconomizer/settings/import` | POST | start the history import; answers **202** plus a job id |
 | `/api/local/tokeneconomizer/settings/import?jobId=<id>` | GET | the job's status, exit code and output. The id is a **query parameter**: DSH exact Fetch routes reject a `:param` path segment |
+| `/api/local/tokeneconomizer/settings/upstream-check` | GET | the embedded engine's identity and the upstream comparison: branch head, latest release, commit distance, changed files |
+| `/api/local/tokeneconomizer/settings/models` | GET | the registered provider/model pairs a side call may target |
+
+**The upstream route answers 200 in every case**, including the failure cases. The distinction
+is in `ok`: `false` means the question could not be answered, and the reasons are in `errors`.
+An unreachable network is **not** an out-of-date installation — saying so would cry wolf, and a
+real update would then go unnoticed.
 
 ### 5.2 The mode vocabulary
 
@@ -258,6 +265,56 @@ repository's own `dsh-custom-router` settings section:
 
 Each has its own per-key reset, and the page distinguishes the engine **default** from a stored
 **override** from the **effective** value.
+
+### 5.3a The side-call model slots
+
+The Micro-skills proposer and the Loop Guard judge are the two LLM side calls the engine makes.
+Each may name its own model; an empty value means "the deployment's own route", which is what an
+unmodified engine does today.
+
+| Slot | Engine config key | What it names |
+|---|---|---|
+| `model.default` | *(none)* | the deployment's own route — **stated, not offered**: the engine has no such setting, so there is nowhere to put a choice |
+| `model.microskills` | `microskills_model` | the model the Micro-skills proposer runs on |
+| `model.loopguard` | `loopguard_model` | the model the Loop Guard judge runs on |
+
+The value is a **`provider/model`** pair (`deepseek-account/deepseek-flash`). A string without
+the separator names no provider, so it is refused at the boundary rather than written and
+silently ignored.
+
+**The slot labels are namespaced with `model.`** because they share one `set` object with the
+mechanism modes on the write path: the engine's `microskills` key is the **mode**
+(`envfacts+distiller`), and an unnamespaced slot of the same name would be two different
+settings under one key. `test/upstream-models.test.mjs` pins this.
+
+**The read payload is keyed by the slot's `label`, not its `key`.** The two are different
+strings (`microskills` vs `model.microskills`) on purpose: the first is what the engine stores,
+the second is what the write path carries. A slot that declares only one of them reads an
+undefined stored value, and the select then shows the deployment default even after the engine
+has persisted the choice. `test/client.test.mjs` pins both.
+
+The model reaches the call through the engine's own `--patch` overlay: the side call adds one
+`agent-default-model` row to the overlay it already writes for the throwaway session store, so
+the call runs on that provider/model for **that call only**. Measured: `dsh --profile headless
+--patch <overlay> --dump-config` composes the row as
+`{provider: deepseek-account, model: deepseek-flash}`.
+
+### 5.3b The settings page names its repository
+
+**The engine's per-repository config is keyed by the directory it is asked about.** The settings
+page's engine calls therefore pass `--cwd` explicitly, naming **this package's own directory** —
+the tree the loader mounted, which is the repository the plugin operates on.
+
+Measured 2026-11-15: without `--cwd`, the engine used the **host process's** working directory.
+The web profile's cwd is `~/.dsh`, so a save from the settings page landed in
+`repos/deepseek-harness-bbcdb118d8/config.json` while the operator's own repository
+(`repos/dsh-plugins-4806902e1d/config.json`) kept its old value. The page then read the same
+wrong bucket and showed the old value again — the setting looked like it reverted to the
+default on every save.
+
+`new URL('..', import.meta.url)` already resolves to the **package root**; a `dirname` on top
+climbs one level too far and would file the configuration under the workspace instead.
+`test/settings-api.test.mjs` pins both halves.
 
 ### 5.4 Engine writes go through the process boundary
 
@@ -290,14 +347,38 @@ judge-independent strict heuristic, and its decision is marked degraded in the r
 ## 6. Verify and diagnose
 
 ```sh
-node bin/te-dsh.mjs doctor                 # launchers, vendored tree, HEAD, live check
+node bin/te-dsh.mjs doctor                 # launchers, vendored tree, HEAD, live check, manifest, config, identity
 node bin/te-dsh.mjs status --cwd <repo>    # what the engine knows about this repository
-npm test                                   # 236 tests, one needs TE_DSH_TEST_HOME
+npm test                                   # 252 tests, one needs TE_DSH_TEST_HOME
 TE_DSH_TEST_HOME=$TOKENECONOMIZER_HOME npm test  # includes the end-to-end session
 npm run check                              # syntax-check every module under lib/, bin/, scripts/
 npm run audit:deprecations                 # the deprecation gate
 (cd "$TOKENECONOMIZER_HOME/vendor/TokenEconomizer-<sha>" && python3 -m unittest tests.test_dsh_trace)
 ```
+
+### 6.0 What `doctor` reports
+
+The doctor answers three questions that used to be unanswerable from one place. Everything it
+prints is **measured**; nothing is inferred.
+
+| Section | What it answers |
+|---|---|
+| `te` / `hook` / `vendor` / `sha` / `verified` | is the installation in place, and does the pinned checkout answer |
+| `manifest` | does the package's own `dsh.manifestVersion` match the one this build understands |
+| `config` | every one of the plugin's configuration keys, its default, its current value, and which keys are overridden |
+| `identity` | the engine's repository key for this directory, compared with the keys the engine actually holds under `repos/` |
+
+**The `identity` section is the one that can silently re-partition a repository's history.** The
+engine keys a repository by its own canonicalization and the plugin's identity model derives its
+own key; when the two disagree, one repository is recorded under two keys and the evidence for
+one half never reaches the other. The doctor compares the computed key with the directories the
+engine actually holds, and a mismatch is reported plainly rather than folded into a summary line.
+
+**The `manifest` section exists because the host does not enforce it.** Measured 2026-11-15 in
+the installed `dsh-package-manifest` README: "Current installers and loaders do not enforce
+`dsh.manifestVersion` or `engines.dsh`". So the plugin checks its own field at activation
+(`lib/index.js`, `checkManifestVersion`) and warns and degrades — it never throws, because a
+throw inside `apply()` costs the entire plugin.
 
 ### 6.1 `npm run check`
 

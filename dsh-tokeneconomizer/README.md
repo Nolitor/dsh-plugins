@@ -5,10 +5,10 @@ version: 1.7
 kind: readme
 status: active
 updated: 2026-11-15
-summary: DSH 0.2.2 bridge for microsoft/TokenEconomizer: lifecycle mapping, in-memory tool mask, DSH trace reader, guarded migration, prior-session recall through the harness index, host-local in-memory features, plugin-record attribution, the agent/pre-step tiering trigger, and the Web developer-statistics and settings pages.
+summary: DSH 0.2.2 bridge for microsoft/TokenEconomizer: lifecycle mapping, in-memory tool mask, DSH trace reader, guarded migration, prior-session recall through the harness index, host-local in-memory features, plugin-record attribution, the agent/pre-step tiering trigger, and the Web developer-statistics and settings pages, the embedded engine's version and upstream check, and the side-call model slots.
 -->
 
-Version `0.0.1-rc.6`.
+Version `0.0.1-rc.8`.
 
 DSH-side bridge for [microsoft/TokenEconomizer](https://github.com/microsoft/TokenEconomizer) (Apache-2.0,
 pinned commit `6141bb92`). The economical behaviour stays in TokenEconomizer's stdlib-only Python
@@ -120,11 +120,47 @@ The Web client half (`lib/client.js`) registers **one** `settings.section` seat,
 
 | Tab | Content |
 |---|---|
-| **환경설정** | three mode selects, the nine engine thresholds (default / override / effective, with a per-key reset), `toolprune restore`, reset-to-defaults, history import, and a judge-unavailable banner |
+| **환경설정** | the embedded engine's version and pinned commit, an **upstream version check** button, three mode selects, the **side-call model slots**, the nine engine thresholds (default / override / effective, with a per-key reset), `toolprune restore`, reset-to-defaults, history import, and a judge-unavailable banner |
 | **통계** | what the plugin actually saved — total characters removed, that saving as a share of the session context, and a per-lever breakdown — then the read-only per-turn ledger |
 
 The section states the product name once and shows a one-line saving summary above the tabs, so the
 value is visible before choosing a tab.
+
+### The embedded engine and the upstream check
+
+The engine this plugin runs is **not vendored in this package**: `scripts/bootstrap.mjs` clones
+one pinned upstream commit (`6141bb92`) into the TokenEconomizer state root, applies this
+package's patch, and writes two launchers. The engine carries **no version string of its own**
+— no `__version__`, no `VERSION` file, and `te --version` is not a valid invocation — so its
+version on the page is the one upstream publishes for that commit.
+
+**TWO VERSIONS, NAMED SO THEY CANNOT BE CONFUSED.** The card shows the **plugin's** own
+version (`0.0.1-rc.N`, read from its manifest) and the **upstream engine's** version (an
+upstream tag plus a commit distance) under separate labels. A card that shows only the
+upstream tag reads as "the plugin is v0.1.0", which is false: the tag belongs to
+`microsoft/TokenEconomizer`, and this plugin's release line is `0.0.1-rc.N`.
+
+The **업스트림 버전 확인 / Check upstream version** button compares the pin with the upstream
+branch head, the latest release, the commit distance and the changed files. An unreachable
+network answers "could not check" with the reason; it never answers "out of date", because an
+update that turns out to be a network problem teaches the reader to ignore the button.
+
+### The side-call model slots
+
+The Micro-skills proposer and the Loop Guard judge are the two LLM calls the engine makes per
+session, and both ran on the deployment's own route. Each may now name its own model:
+
+| Slot | Engine config key |
+|---|---|
+| 기본 모델 / Default model | *(none — the deployment's own route; stated, not offered)* |
+| Micro-skills 제안기 모델 | `microskills_model` |
+| Loop Guard 판정기 모델 | `loopguard_model` |
+
+The value is a **`provider/model`** pair (`deepseek-account/deepseek-flash`), because DSH routes
+by provider and a model id alone belongs to one. The dropdown lists the **host's own registered
+provider/model pairs**, so it names only routes this deployment can actually take. The model
+reaches the call through the engine's `--patch` overlay, so it applies to **that side call
+only**.
 
 ### Host integration
 
@@ -163,9 +199,10 @@ The plugin's own locale files carry the display title: `locale/en.json` is
 `on` is a **write alias, never a stored value**. `history_import` is a plugin-owned action, not an
 engine key — it maps to `bin/te-dsh.mjs cold-start`.
 
-Six routes under `/api/local/tokeneconomizer/settings`: `GET /settings`,
+Eight routes under `/api/local/tokeneconomizer/settings`: `GET /settings`,
 `POST /settings/config` (batched, per-key results), `POST /settings/restore`,
-`POST /settings/reset`, `POST /settings/import` (202 + job id), `GET /settings/import/:jobId`.
+`POST /settings/reset`, `POST /settings/import` (202 + job id), `GET /settings/import/:jobId`,
+`GET /settings/upstream-check`, `GET /settings/models`.
 
 Engine writes go through the `child_process` boundary (`te config set`) — never a direct file write
 — and every write re-reads `te config show` before answering, so the page shows the persisted
@@ -183,7 +220,7 @@ lib/attribution.js  the record layer: plugin:tokeneconomizer/* records
 lib/rewriter.js     surface composition: the prune payload and the replacement
 lib/surface-attribution.js  the paired write: applyRewrite (validate -> decide -> prune -> replace -> record)
 lib/settings-contract.js  the browser-safe frozen settings contract (zero imports)
-lib/settings-api.js  the six settings routes
+lib/settings-api.js  the eight settings routes
 lib/bridge.js       the process boundary: te-hook, dsh-session, dsh-import, exports
 lib/repokey.js      host-local: cwd to the engine's repository key, in pure Node
 lib/dedup.js        host-local: tool-result hash deduplication
@@ -194,6 +231,7 @@ lib/devstats.js     the per-turn/per-step fold of the committed session ledger
 lib/devstats-server.js  the read-only host route behind the statistics card
 lib/settings.js     the external settings file, merged on top of the Cordis config
 lib/client.js       the Web half: one settings row with two internal tabs
+lib/upstream.js     the embedded engine's identity and the upstream comparison
 lib/types/records.d.ts  the PluginRecordMap augmentation for the three record types
 bin/te-dsh.mjs      operator commands: bootstrap, cold-start, purge, status, doctor
 scripts/bootstrap.mjs  pinned clone + patch + launchers + verification + bounded migration

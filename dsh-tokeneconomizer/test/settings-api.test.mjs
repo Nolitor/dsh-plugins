@@ -1,5 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 
 /**
  * The settings read/write seam, tested against its injected boundaries.
@@ -19,10 +20,14 @@ import {
   RESTORE_PATH,
   RESET_PATH,
   IMPORT_PATH,
+  UPSTREAM_PATH,
+  MODELS_PATH,
   MODE_VALUES,
   THRESHOLDS,
   ACTIONS,
   validateValue,
+  validateModel,
+  readModelSlots,
   diffAgainstDefaults,
   createSettingsRoutes,
 } from "../lib/settings-api.js"
@@ -174,7 +179,7 @@ test("validateValue rejects an out-of-range float and coerces a valid int", () =
 })
 
 test("every route path is distinctive and prefixed", () => {
-  const paths = [SETTINGS_PATH, CONFIG_PATH, RESTORE_PATH, RESET_PATH, IMPORT_PATH]
+  const paths = [SETTINGS_PATH, CONFIG_PATH, RESTORE_PATH, RESET_PATH, IMPORT_PATH, UPSTREAM_PATH, MODELS_PATH]
   const prefix = "/api/local/tokeneconomizer/settings"
   for (const path of paths) assert.equal(path.startsWith(prefix), true)
   assert.equal(new Set(paths).size, paths.length)
@@ -184,14 +189,48 @@ test("every route path is distinctive and prefixed", () => {
   const runEngine = async (kind) => (kind === "show" ? JSON.stringify({}) : JSON.stringify({ ok: true }))
   createSettingsRoutes({ runEngine, register })
 
-  // Six registrations: the five listed paths, with the import job's read sharing IMPORT_PATH
-  // because DSH exact Fetch routes reject a `:param` path segment (measured). The job id
-  // therefore travels as `?jobId=`.
-  assert.equal(routes.size, 6)
+  // Eight registrations: the seven listed paths, with the import job's read sharing
+  // IMPORT_PATH because DSH exact Fetch routes reject a `:param` path segment (measured). The
+  // job id therefore travels as `?jobId=`.
+  assert.equal(routes.size, 8)
   for (const route of routes.keys()) {
     const path = route.slice(route.indexOf(" ") + 1)
     assert.equal(path.startsWith(prefix), true, route + " escapes the settings namespace")
     assert.equal(path.includes(":"), false, route + " uses a path placeholder DSH rejects")
   }
   assert.equal(routes.has("GET " + IMPORT_PATH), true)
+})
+
+test("REGRESSION GATE: the settings engine calls name the repository explicitly", () => {
+  // Measured 2026-11-15: the engine keys its per-repository config by the directory it is
+  // asked about. The settings page's `runEngine` did NOT pass `--cwd`, so the engine used the
+  // HOST PROCESS's working directory — the web profile's cwd is `~/.dsh` — and a save from
+  // the settings page landed in `repos/deepseek-harness-bbcdb118d8/config.json` while the
+  // operator's own repository (`repos/dsh-plugins-4806902e1d/config.json`) kept its old
+  // value. The page then read the same wrong bucket and showed the old value again: the
+  // setting looked like it "reverted to the default" on every save.
+  //
+  // The fix names ONE directory explicitly: this package's own directory, which is the
+  // repository the plugin operates on.
+  const source = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8')
+  assert.match(
+    source,
+    /\['--cwd',\s*settingsCwd\(\),\s*'config'/,
+    "the engine call must pass --cwd, or the write lands in the host's repository",
+  )
+  assert.match(source, /function packageDir \(\)/, 'the package directory must be resolvable')
+  // The resolver must name the PACKAGE root, not its parent: `new URL('..', import.meta.url)`
+  // already resolves to the package root, and a `dirname` on top would climb one level too
+  // far and file the configuration under the workspace.
+  const packageDir = source.slice(source.indexOf('function packageDir ()'), source.indexOf('function packageDir ()') + 700)
+  assert.match(
+    packageDir,
+    /fileURLToPath\(new URL\('\.\.', import\.meta\.url\)\)/,
+    'the package root is the URL itself; a dirname on top climbs one level too far',
+  )
+  assert.equal(
+    /dirname\(fileURLToPath\(new URL\('\.\.'/.test(packageDir),
+    false,
+    'a dirname on the resolved package URL names the package PARENT',
+  )
 })

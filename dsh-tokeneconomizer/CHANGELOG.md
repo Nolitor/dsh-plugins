@@ -9,9 +9,250 @@ summary: Engineering history for @nolit/dsh-tokeneconomizer. Seeded from git his
 -->
 
 > History lives here (owner instruction 2026-11-04). Boot cards and `AGENTS.md` are narrowed to
-> the owner's unfinished asks; they are not a changelog. See [docs/RULES.md](../docs/RULES.md) §6.1.
+> the owner's unfinished asks; they are not a changelog. See `docs/RULES.md` §6.1 in the
+> `dsh-plugins` workspace (workspace-level document; not part of this package).
 
-Current version: `0.0.1-rc.6`
+Current version: `0.0.1-rc.8`
+
+## 0.0.1-rc.8 — three defects the operator found: the version, the model slots, the repository — 2026-11-15
+
+**Why.** The operator restarted the service and reported three symptoms. Each turned out to be a
+real defect in what this session shipped, and each was found by measurement, not by reading the
+code again.
+
+| Symptom | Actual cause |
+|---|---|
+| "버전 표시가 0.1.0지?" — the version reads `0.1.0` | The card showed only the **upstream engine's** release tag (`v0.1.0`) under a heading that did not say whose version it was. The plugin's own version (`0.0.1-rc.N`) was not shown at all, so an upstream tag read as the plugin's version. |
+| "하나는 계속 저장을 해도 기본값으로 바뀐다" — a saved model reverts to the default | **Three** separate defects, stacked. See below. |
+| The saved model never reached the engine | The engine's per-repository config is keyed by the directory it is asked about, and the settings page's engine call passed **no `--cwd`**. The engine therefore used the **host process's** working directory — the web profile's cwd is `~/.dsh` — so a save landed in `repos/deepseek-harness-bbcdb118d8/config.json` while the operator's own repository (`repos/dsh-plugins-4806902e1d/config.json`) kept its old value. |
+
+### The three model-slot defects
+
+**1. The read lookup used a property the slot did not have.** The client's slots declared only
+`key` (the WRITE key, `model.microskills`) while the stored value was read as
+`modelSlots[slot.label]` — `label` was `undefined`, so **every stored value read as
+undefined** and the select showed the deployment default even after the engine had persisted
+the choice. The read payload is keyed by the slot's `label` (`microskills`), which is a
+different string from its write `key` (`model.microskills`); both are now declared, and the
+gate pins the lookup.
+
+**2. The `default` slot was a control with nowhere to put its value.** The engine has **no**
+"default model" config key — the deployment's own route is whatever DSH's `agent-default-model`
+says. The slot was still a `<select>`: it accepted a value, the client sent it, the server
+answered `ok: true` with the value **empty** (there was nowhere to put it), and the select
+snapped back to "deployment default" on the next read. It is now a **read-only fact**, and only
+the two slots with an engine key are writable.
+
+**3. The write addressed the wrong repository.** Fixed above: `runEngine` now names the
+directory explicitly with `--cwd`, and the directory is **this package's own** — the tree the
+loader mounted, which is the repository the plugin operates on.
+
+The `--cwd` fix had one trap of its own: `new URL('..', import.meta.url)` already resolves to
+the package root, and a `dirname` on top climbs one level too far and would have filed the
+configuration under the **workspace** rather than the plugin's repository. The gate pins both
+halves.
+
+### The version, stated as two versions
+
+The card now shows **both**, named so they cannot be read as one:
+
+- **플러그인 버전 / Plugin version** — this package's own version, read from its manifest.
+  `0.0.1-rc.8`. The numeric part (`0.0.1`) is the owner's; the `rc.<n>` suffix is this
+  track's history marker.
+- **내장 원본 엔진 버전 (업스트림) / Embedded engine version (upstream)** — the upstream
+  project's own release line, which this plugin does not control and does not bump.
+
+### Measured, live, in a real browser
+
+| Fact | Before | After |
+|---|---|---|
+| Plugin version on the page | not shown | `0.0.1-rc.8`, under its own label |
+| Engine version on the page | `v0.1.0` under an unlabelled heading | `v0.1.0+22.g6141bb9`, labelled "(upstream)" |
+| Model slots that are controls | 3 (one of them unwritable) | 2 writable + 1 read-only fact |
+| A saved model, after a page reload | reverted to the default | **persists** |
+| Where a settings write lands | the server's repository | **the plugin's own repository** |
+
+**End-to-end, measured in headless Chromium against the running service**: a save of
+`exaone/k-exaone_v2.5` was still selected after a full page reload, and the engine's own config
+file carried `microskills_model: "exaone/k-exaone_v2.5"`.
+
+The three regression gates that keep these from coming back:
+`REGRESSION GATE: every model slot carries the label the read payload is keyed by`,
+`REGRESSION GATE: the default model slot is a fact, never a control`, and
+`REGRESSION GATE: the settings engine calls name the repository explicitly`.
+
+### The live engine's patch was also behind
+
+The running engine still carried the **previous** patch, so `te config set microskills_model`
+was refused with `unknown key 'microskills_model'` — the setting could not be saved at all.
+`scripts/bootstrap.mjs --refresh` re-applied the pinned patch to the live vendored tree; the
+engine's own state (`repos/`, `identities/`, `sessions/`, `errors.log`) was untouched by it,
+and the wrong-repository config written by defect 3 was restored by hand.
+
+### The documentation was brought to the current version
+
+Measured 2026-11-15: the track owned **16** documents, and the new work had reached only two of
+them (`OPERATIONS.md` and `README.md`). The rest still described `0.0.1-rc.5` / `rc.6`. The
+question "is there a specification, a configuration reference and a developer document?" was
+answered by measurement, not by assumption — **all three kinds existed**, and all three were
+stale in specific ways.
+
+| Document | Kind | What it said before | What it says now |
+|---|---|---|---|
+| `ARCHITECTURE.md` | spec | the module map's line counts were wrong and `lib/upstream.js` did not exist | every count re-measured, the new module added, and a new §2b for the engine identity, the model slots, the manifest self-check, the doctor and the `--cwd` rule |
+| `DSH-SCHEMA-IMPLEMENTATION.md` | report | "the six settings routes"; the client described as **two** `settings.section` seats | "the eight settings routes"; the client is **one** seat with two internal tabs; a new §6.7 for what shipped; §8 now states explicitly that the upstream check and the slots **are** shipped rather than deferred |
+| `IN_MEMORY_FEATURES.md` | spec | documented **30** of the plugin's **36** configuration keys | all 36, split into §7.1 (the host-local levers this document owns) and §7.2 (the six that select the engine), because one flat table of 36 would blur which keys the document is about |
+| `OPERATIONS.md` | spec | the routes, the slots and the `--cwd` rule | extended with §5.3b and the read-only default slot |
+| `README.md` / `README.ko.md` | readme | the Korean edition had no `환경설정` description at all | both editions carry the two versions, the upstream check and the model slots |
+| `FEATURE-SUMMARY.md` | index | the version table stopped at `rc.6` | the table runs to `rc.8`, with the two versions and the slots |
+| `HANDOFF.md` | report | described `0.0.1-rc.5` and a restart that had not happened | the current state, the three defects and their fixes, and what remains open |
+| **`DEVELOPER-GUIDE.md`** | spec | **did not exist** | **new** — the three surfaces a developer touches, the contract between them, the patch-regeneration procedure and its two traps, the gates, and the rules that bite |
+
+`DSH-SCHEMA-BLUEPRINT.md` and `DSH-SCHEMA-GAP-BRIEF.md` keep their `rc.5` / `rc.6` figures on
+purpose: they are the **design and audit snapshots** of those days, and rewriting their pinned
+versions would destroy the audit trail.
+
+**Three stale facts found while cross-checking the documents against the code**, all corrected:
+the module map's line counts (`lib/index.js` 1699 → 2086 and eleven others), the client's seat
+count (two → one), and the `import/:jobId` route form (the engine has no `:param` segment — the
+job id travels as `?jobId=`). Two further stale line citations survived in the **code** and were
+fixed there too: `scripts/audit-deprecations.mjs` printed `lib/index.js:1047, :1091` and `:1589`
+for seams that now live at `:1359`, `:1403` and `:1909`, and `lib/upstream.js` carried a comment
+saying the pin was "110 ahead" where the live figure is 187.
+
+## 0.0.1-rc.7 — upstream version check, side-call model slots, and the W6 boundary — 2026-11-15
+
+**Why.** Four gaps, measured rather than assumed.
+
+1. **The settings page could not answer "which engine am I running?"** The embedded engine has
+   no version string of its own — measured: no `__version__`, no `VERSION` file, and `te --version`
+   is not even a valid invocation (the CLI requires a subcommand). The engine is identified by the
+   upstream commit `scripts/bootstrap.mjs` pinned and patched, and nothing on the page said so.
+2. **The side calls could not be pointed at a cheaper model.** The Micro-skills proposer and the
+   Loop Guard judge are the two LLM calls the engine makes per session. Both were hard-wired to
+   the deployment's own route, so the one lever that actually lowers the cost of running this
+   plugin did not exist.
+3. **The shipped patch was not reproducible.** The patch's `sidecall.py` hunk header had been
+   hand-edited to `@@ -344,4 +393,6 @@`; the true regenerated value is `@@ -344,4 +408,6 @@`.
+   The tree it produced was correct, so nothing failed — but the patch could no longer be
+   regenerated from its own source, which is the property that makes it auditable.
+4. **`doctor` reported no configuration at all.** It answered whether the installation was in
+   place (7 operational keys) and nothing about the 36 settings the plugin actually supports.
+
+### What changed
+
+**The engine's identity is now on the page** (`lib/upstream.js`, new). The version shown is the
+one upstream publishes for the pinned commit — `v0.1.0+22.g6141bb9` for the measured tree — and
+the pinned commit's short id sits beside it.
+
+**The upstream check is a route, not a guess** (`GET /api/local/tokeneconomizer/settings/upstream-check`).
+It compares the pinned commit with the upstream branch head, the latest release and the commit
+distance, and reports the changed files. Every failure mode is a value: an unreachable network, a
+GitHub rate limit, a timeout and an unreadable answer all answer `ok: false` with the reason in
+`errors`. **`updateAvailable` is `null` when the question could not be answered — never `true`.**
+An out-of-date claim that turns out to be a network problem teaches the reader to ignore the
+button, and the next real update goes unnoticed.
+
+**Two bugs found by measuring the live upstream, and fixed.** The first run against
+`api.github.com` answered "the upstream branch head is **0** commit(s) ahead" while the head had
+actually moved **187** commits past the pin: the compare API's `behind_by` counts the commits the
+**pin** has and the head does not, so the number an operator reads — how far the HEAD is ahead —
+is `ahead_by`. Reading `behind_by` would have reported "the pin is current" on every run, which
+is the one answer that makes the button useless. The second: `git describe --tags` **fails** on
+the vendored checkout, because a filtered clone of one commit carries no tags — so the version
+label was `unknown` on exactly the tree the page is about. It now falls back to the short commit
+id (`unreleased+6141bb92`), which is the truthful identity: the commit names the exact engine.
+
+**The side-call model slots are real** (`settings-contract.js`, `settings-api.js`, `client.js`).
+Three slots — `model.default`, `model.microskills`, `model.loopguard` — write the engine's own
+new config keys `microskills_model` and `loopguard_model`. The value is a `provider/model` pair
+(`deepseek-account/deepseek-flash`), because DSH routes by provider and a model id alone belongs
+to one. The list of choices is the **host's own LLM registry** (`ctx.llm.listProviders()` and
+`ctx.llm.listModels(provider)`), so it names only routes this deployment can actually take; a
+deployment with no registry answers an empty list and the page says so.
+
+The engine side carries the model to the call through the `--patch` overlay it already writes for
+the throwaway session store: one extra `agent-default-model` row, so the call runs on that
+provider/model **for that call only**. Measured end to end: the patched engine writes
+
+```yaml
+- id: agent-default-model
+  config:
+    provider: "deepseek-account"
+    model: "deepseek-flash"
+```
+
+and real `dsh --profile headless --patch <overlay> --dump-config` composes it as
+`{provider: deepseek-account, model: deepseek-flash}`.
+
+**The slot labels are namespaced with `model.`** — a correction of a bug found while building
+this. The engine's `microskills` key is the **mode** (`envfacts+distiller`), and the model slot
+for the same mechanism is a different setting. Both travel in one `set` object on the write path,
+so an unnamespaced slot named `microskills` would have been two different settings under one key:
+the mode select would have written the model key. `test/upstream-models.test.mjs` pins it.
+
+**The patch is reproducible again.** It is regenerated from the pinned upstream commit with
+`git apply` → edit → `git add -N` → `git diff`, and the hunk header is the regenerated one. The
+engine tree carries the two new config keys, the `provider/model` parser, the slot-aware
+`runner_for`, and the engine's own tests for all of it.
+
+**`doctor` now answers three questions.** The install (unchanged), the **manifest** (the package's
+own `dsh.manifestVersion` against the one this build understands — the host does not enforce it:
+measured, the installed `dsh-package-manifest` README says "Current installers and loaders do
+not enforce `dsh.manifestVersion` or `engines.dsh`"), the **configuration** (all 36 keys, their
+defaults, their current values, and which are overridden), and the **identity** (the engine's
+repository key for this directory against the keys the engine actually holds under `repos/`).
+
+**The plugin checks its own manifest version at activation** (`checkManifestVersion`). A mismatch
+**warns and degrades**; it never throws, because a throw inside `apply()` costs the entire
+plugin and a cost optimizer must not be the reason a session breaks.
+
+### Measured
+
+| Fact | Before | After |
+|---|---|---|
+| Engine identity on the settings page | absent | version + pinned commit + upstream comparison |
+| Side-call model slots | none | 3 slots, 2 engine config keys, host-registry choices |
+| Engine patch reproducibility | hand-edited hunk header | regenerated; `git apply` → `git diff` round-trips |
+| `doctor` sections | 1 (install) | 4 (install, manifest, config, identity) |
+| `doctor` config coverage | 0 of 36 keys | 36 of 36 keys, with defaults and overrides |
+| Settings routes | 6 | 8 |
+| Plugin tests | 251 | 256 (18 new in `test/upstream-models.test.mjs`) |
+| Engine tests | 411 | 419 passed, 1 skipped (8 new) |
+
+**Engine suite, measured in the regenerated tree:** `419 passed, 1 skipped in 7.18s`.
+
+**Live upstream, measured 2026-11-15:** the pinned commit `6141bb92` is **187 commits behind**
+the upstream branch head `7042ea89`; the latest release is `v0.1.0`; 110 files differ. The
+installed engine still runs the **previous** patch — the new one is applied and verified in an
+isolated state root (`/tmp/te-iso`), and re-bootstrapping the live one is an operator action
+that writes the user's live state.
+
+**Live engine, measured 2026-11-15 (`te status`):** `microskills=envfacts+distiller
+toolprune=propose loopguard=nudge repomap=off mode=auto shadow=False` — 95 folded sessions,
+435.5M effective tokens, plugin overhead 3.3M (0.7%), 8 facts injected at session start, 81
+sessions observed for tool pruning, 4 loop-guard redirects over 465 turns.
+
+**Live UI, measured 2026-11-15 in headless Chromium against the running `dsh-web.service`:**
+the `토큰절약기` settings section renders, and the `환경설정` tab paints five cards —
+`내장 원본 엔진` (Embedded engine), `모드` (Mode), `사이드콜 모델 설정` (Side-call models),
+`임계값` (Thresholds), `동작` (Actions) — with the two tabs `환경설정` / `통계`, the
+`업스트림 버전 확인` button, and the three model slots
+(`model.default`, `model.microskills`, `model.loopguard`) as `<select>` elements.
+
+**The live server still answers 404 for the two new routes**, and the engine card shows `—`,
+because the running `dsh-web.service` booted at 03:35 — before this session's changes. The
+**client** half was picked up without a restart (the host's HMR rebuilt the bundle), but the
+**server** half (the routes and the engine identity) needs a restart to take effect. Restarting
+the user's live service is not this session's call.
+
+The routes were verified end to end in a **mounted, isolated** DSH instance (a copy of the web
+profile on port 3202, `TOKENECONOMIZER_HOME` pointed at an isolated state root carrying the new
+patch): `GET /settings/upstream-check` → `ok: true`, version `unreleased+6141bb92`, 187 commits
+behind, latest release `v0.1.0`; `GET /settings/models` → `ok: true`, provider
+`deepseek-account`; `GET /settings` → `modelSlots` present; and a write of
+`model.microskills = deepseek-account/deepseek-flash` persisted and was confirmed by the
+engine's own re-read.
 
 ## 0.0.1-rc.6 — DSH schema alignment and settings GUI — 2026-11-15
 
@@ -405,7 +646,7 @@ change closes the harness half.
 | Live state after the suite | — | `~/.dsh/sessions` count unchanged (**120**), no new files written under `~/.tokeneconomizer` by the tests |
 | Tests | 129 pass / 2 fail / 1 skipped | **131 pass / 0 fail / 1 skipped** |
 
-No plugin code changed. Policy and the guard: [docs/DSH-HOME-ISOLATION.md](../docs/DSH-HOME-ISOLATION.md).
+No plugin code changed. Policy and the guard: `docs/DSH-HOME-ISOLATION.md` in the `dsh-plugins` workspace (workspace-level document; not part of this package).
 
 ## Seeded history (from git, before this file existed)
 
