@@ -1,11 +1,11 @@
 # Custom Router — Handoff
 
 <!-- skeleton:
-version: 9.0
+version: 10.0
 kind: report
 status: active
 updated: 2026-11-14
-summary: Forward handoff for @nolit/dsh-custom-router at 0.0.1-rc.21. Phase 1 (core lock) and Phase 2 (vendor fan-out) of the horizontal layered architecture are DONE and measured. A3 is COMPLETE, R4 is CLOSED (L1 boundary lint + USAGE_READERS gate, with negative proofs), R3 is CLOSED (one retry core, one catalog cache), R5 is CLOSED (no vendor ids in L1), R2 is CLOSED (OpenCode's ledger, plans and usage constants now ride the core), R6 is CLOSED (the uniqueness greps are a WIRED gate with a negative proof), and A7 is CLOSED as a measurement (the host dsh-llm-pi-ai providers seam cannot replace this router). NEW in rc.21: the structural tool-argument contract seam at the L1 emission point, and the sync-derive idempotency fix. Active work is the FOUR-key rotation (owner), the EXAONE child turn from a NEW session (owner), the P0-3 scan, and the OPEN OpenCode-backend 404; closed items are in ROADMAP-ARCHIVE.md.
+summary: Forward handoff for @nolit/dsh-custom-router at 0.0.1-rc.22. Phase 1 (core lock) and Phase 2 (vendor fan-out) of the horizontal layered architecture are DONE and measured. A3 is COMPLETE, R4 is CLOSED (L1 boundary lint + USAGE_READERS gate, with negative proofs), R3 is CLOSED (one retry core, one catalog cache), R5 is CLOSED (no vendor ids in L1), R2 is CLOSED (OpenCode's ledger, plans and usage constants now ride the core), R6 is CLOSED (the uniqueness greps are a WIRED gate with a negative proof), and A7 is CLOSED as a measurement (the host dsh-llm-pi-ai providers seam cannot replace this router). NEW in rc.21: the structural tool-argument contract seam at the L1 emission point, and the sync-derive idempotency fix. NEW in rc.22: R8 is CLOSED (the OpenCode-backend 404 was a directory-vs-item-route misreading; endpoints now resolve from the daemon's authoritative provider DIRECTORY) and R9 is CLOSED (the build chain is idempotent — a full npm run build now produces zero diff). Active work is the FOUR-key rotation (owner), the EXAONE child turn from a NEW session (owner) and the P0-3 scan; closed items are in ROADMAP-ARCHIVE.md.
 -->
 
 > Active work: [ROADMAP.md](./ROADMAP.md). Closed/deprecated history:
@@ -16,14 +16,15 @@ summary: Forward handoff for @nolit/dsh-custom-router at 0.0.1-rc.21. Phase 1 (c
 
 | Item | Value |
 | :--- | :--- |
-| Package | `@nolit/dsh-custom-router@0.0.1-rc.21` (**bumped** — this session changed code and docs) |
-| Vendored | antigravity `rc.14`, opencode `rc.8`, deepinfra `rc.14`, exaone `rc.1` (peer pins aligned to `rc.21`) |
+| Package | `@nolit/dsh-custom-router@0.0.1-rc.22` (**bumped** — this session changed code and docs) |
+| Vendored | antigravity `rc.14`, opencode `rc.8`, deepinfra `rc.14`, exaone `rc.1` (peer pins aligned to `rc.22`) |
 | Host | DSH `0.2.2-rc.3` / Node `v24.22.1` |
-| Tests | router **843/843** (was 807 before this session; **+23** R6 uniqueness gate, **+13** tool-argument-contract gate); antigravity **193/193**; deepinfra **222 pass / 7 skip** (229 total); opencode **554/554**; exaone **19/19** — **the three non-OpenCode vendor suites are unchanged** |
-| Gates | `npm run verify` **exit 0** (check + 843 tests + `verify:stream` + `specs:check` — `5 protocols, 4 providers, 4 pricing`), `verify:presets` **OK** (declarations ↔ browser registry ↔ locales ↔ runtime registries agree), `verify:presets:mutation` **26/26** drift classes caught, **`verify:usage-readers` OK** (4 presets / 4 routes / 3 readers), **`node scripts/verify-uniqueness.mjs` clean, exit 0** |
+| Tests | router **848/848** (was **843/843** at rc.21 — **+5** from the R9 build-idempotency gate: `test/build-presets.test.mjs` **3 → 8** cases); antigravity **193/193**; deepinfra **222 pass / 7 skip** (229 total); opencode **565/565** (was **554/554** at rc.21 — **+11** from the R8 directory gate); exaone **19/19** — **the three non-OpenCode vendor suites are unchanged** |
+| Gates | `npm run verify` **exit 0** (check + 848 tests + `verify:stream` + `specs:check` — `5 protocols, 4 providers, 4 pricing`), `verify:presets` **OK** (declarations ↔ browser registry ↔ locales ↔ runtime registries agree), `verify:presets:mutation` **26/26** drift classes caught, **`verify:usage-readers` OK** (4 presets / 4 routes / 3 readers), **`node scripts/verify-uniqueness.mjs` clean, exit 0** |
+| **Build idempotency** | ✅ **`npm run build` produces ZERO diff** — the full chain (`gen-locale` → `sync-derive` → `build-presets` → `build-client`) is a **fixed point**. `lib/client.src.js` (**185 403 B** / **3 460 L**) and `lib/client.js` (**205 839 B** / **3 908 L**) are **byte-identical to HEAD**. `node scripts/build-presets.mjs` run **3×** is byte-identical (md5 `e53f6153…`, each printing `unchanged`); `--check` **exits 1** on real `lib/presets.js` drift and **0** after the revert. **This is the R9 closure (rc.22).** |
 | Vendor guard | `verify:stream` **8/8** dispatch cases · **4** vendored packages probed · **8/8** specifiers refused · **vendor loads 0** — the vendor set is *measured* from `vendor/*/package.json`, self-tested, control-probed and vacuity-guarded |
-| Boundary gates | **`test/stream-boundary.test.mjs` (15 cases)** enforces the L1 boundary; **`scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (12 cases)** gate the `usage.routes[].normalize` names with browser source↔bundle parity; the dead `classifyBlock` slot is **removed** from `lib/driver/contract.js`. Both carry **negative proofs** (a planted regression → failure → reverted with a hash check). **NEW in rc.21:** `test/uniqueness.test.mjs` (**23 cases**) + `scripts/verify-uniqueness.mjs` (the R6 uniqueness gate) and `test/tool-argument-contract.test.mjs` (**13 cases**) — the tool-argument contract gate |
-| Phase commits | Phase 1: `c0e48ab`, `3ac7a10`, `c2ba900`, `ae9fd1d` · Phase 2: `8ee4ef1` · A3 completion + R4 closure: `e8b39f7` · **R3 + R5 closure: `77a53b0`** · **R2 + R6 + A7 + the tool-argument contract seam + the sync-derive fix: the rc.21 commit (this session)** |
+| Boundary gates | **`test/stream-boundary.test.mjs` (15 cases)** enforces the L1 boundary; **`scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (12 cases)** gate the `usage.routes[].normalize` names with browser source↔bundle parity; the dead `classifyBlock` slot is **removed** from `lib/driver/contract.js`. Both carry **negative proofs** (a planted regression → failure → reverted with a hash check). **NEW in rc.21:** `test/uniqueness.test.mjs` (**23 cases**) + `scripts/verify-uniqueness.mjs` (the R6 uniqueness gate) and `test/tool-argument-contract.test.mjs` (**13 cases**) — the tool-argument contract gate. **NEW in rc.22:** `test/build-presets.test.mjs` (**8 cases**, the R9 build-idempotency gate) and `vendor/opencode/test/backend-directory.test.mjs` (**11 cases**, the R8 provider-directory gate) |
+| Phase commits | Phase 1: `c0e48ab`, `3ac7a10`, `c2ba900`, `ae9fd1d` · Phase 2: `8ee4ef1` · A3 completion + R4 closure: `e8b39f7` · **R3 + R5 closure: `77a53b0`** · **R2 + R6 + A7 + the tool-argument contract seam + the sync-derive fix: the rc.21 commit** · **R8 + R9 closure + the build-idempotency residue cleanup: the rc.22 commit (this session)** |
 | Live service | **`PID 361248`, started 09:37:14 KST** (`dsh` on `127.0.0.1:3080`) — **not restarted by this session** |
 | Credentials | store `~/.dsh/.credentials.yaml` (mode **0600**) holds refs for **`DEEPSEEK_API_KEY`, `OPENCODE_API_KEY`, `DEEPINFRA_API_KEY`, `EXAONE_API_KEY`** — **names only; no value is ever reproduced in this document.** Live profile patch `apiKey:` count = **0**; it carries `credentialRef: DEEPINFRA_API_KEY` / `EXAONE_API_KEY` |
 | Allowlist | **live 7 routes** incl. `exaone/k-exaone_v2.5`; repo default in `cordis.patch.yml` + `lib/allowlist.js` + `test/allowlist.test.mjs` |
@@ -113,6 +114,29 @@ A3-completed OpenCode vendor. The probes below are measured against that PID.
   diff** against HEAD (the accumulated padding collapsing to the canonical form) — expected and
   correct, not a functional change. Measured: the repo's own `stripCode()` comparison of HEAD vs
   the canonical rebuild is **byte-identical** for both files.
+- **The whole build chain is idempotent (new in rc.22 — the R9 closure).** The last
+  non-idempotent step was `scripts/build-presets.mjs`, which grew `lib/client.src.js` by **exactly
+  +1 byte per run**: `DECLARATION_LINE` was `/^\s*const PRESET_DECLARATIONS = .*$/m`, which never
+  captured the trailing newline, while `declarationSource()` returns a string that **ends** in
+  `"\n"` — so every bake replaced a match-**without**-newline with text-**with**-newline.
+  **Measured at HEAD in an isolated copy:** 4 consecutive runs grew the file
+  **185 405 → 185 406 → 185 407 → 185 408** bytes, code content unchanged. The **defect class**
+  was the **divergence between the gate and the bake** — `declarationsAreCurrent()` compared
+  `current === declarationSource().replace(/\n$/, '')` while `bakePresetDeclarations()` wrote the
+  raw newline-bearing string, so the gate could never see what the bake actually wrote. Now the
+  regex **owns its line terminator** (`^[ \t]*const PRESET_DECLARATIONS = .*\n?` — the indent
+  class is `[ \t]*`, **not** `\s*`, which would re-create the leak by consuming the preceding
+  blank line; `\n?` so a final line without a newline still matches) and **ONE** shared
+  `normalizeDeclarationLine()` helper is used by **BOTH** callers; the `.replace(/\n$/, '')` hack
+  is **gone**. **Measured after the fix:** 3 consecutive runs are **byte-identical**
+  (md5 `e53f6153…`, each printing `unchanged`); `--check` **exits 1** on a real `lib/presets.js`
+  drift and **exits 0** after the revert. The **residue** the old bug left behind — one stray
+  blank line in `lib/client.src.js` and `lib/client.js` — was **restored to HEAD** and rebuilt, so
+  both files are **byte-identical to HEAD** again (**185 403 B** / **3 460 L** and **205 839 B** /
+  **3 908 L**). **A full `npm run build` followed by `git status` produces ZERO diff** — the build
+  chain is a **fixed point**. Gate: `test/build-presets.test.mjs` **3 → 8** cases, including a
+  bake-twice regression test; the new tests were **falsified against the old code** (**4 of 8**
+  failed).
 
 ## 2. The three fixes (rc.20, same session)
 
@@ -522,40 +546,58 @@ suite.
 | ~~**R5**~~ | ~~`PLAN_PROVIDERS` in L1~~ — **CLOSED** by `77a53b0`: the vendor-id table moved to `lib/presets.js` (+ `planProvidersOf`); `lib/plan.js` takes an explicit `providers` argument or a `bindPlanProviders()` binding; vendor-id count **2 code ids (9 with comments) → 0**; `test/plan-boundary.test.mjs` (**5 cases**) measures the vendor words from `vendor/*/package.json` | — |
 | ~~**R6**~~ | ~~Uniqueness greps as a wired gate~~ — **CLOSED** in rc.21: `test/uniqueness.test.mjs` (**23 cases**, rides the `npm test` glob, **no `package.json` change**) + `scripts/verify-uniqueness.mjs` (standalone, `--json`, exit 0/1/2). Rule: one core implementation in `lib/**`; a vendor definition is legal only if it imports the core symbol **and** calls it; strays outside `lib/`+`vendor/` fail; the vendor set is **measured** from `vendor/*/package.json`. Negative proof: a dual plant produced **8** findings and reverted exactly | — |
 | ~~**A7**~~ | ~~Host seam~~ — **CLOSED as a MEASUREMENT** in rc.21: [HOST-PROVIDERS-SEAM.md](./HOST-PROVIDERS-SEAM.md). The seam is `providers: z.dict(profile)` with 4 wires; the catalog ships `opencode` (85 models) and `opencode-go` (32) but **none** of the router's four preset provider ids is a catalog route, and the seam models **profiles only** — so it **cannot replace this router**. Recommended: keep `llm-pi-ai` **dormant** | — |
-| **NEW** | **OpenCode-backend 404** — see *§3c*. A live-runtime observation at the **provider-id resolution seam**: the attached daemon's catalog does not expose `opencode-go`. Needs a fix that resolves the id **against the daemon's real catalog**, not a string substitution | `vendor/opencode/lib/http.js` |
-| **NEW** | **`build-presets.mjs` appends 1 byte per run** — a **pre-existing** defect (unchanged from HEAD), measured at **+1 byte / run**; recorded here, not fixed in this session | `scripts/build-presets.mjs` |
+| ~~**R8**~~ | ~~OpenCode-backend 404~~ — **CLOSED in rc.22**: the daemon's **LIST** route `GET /api/provider` is the **authoritative provider directory** and returns **both** `opencode` and `opencode-go` with **distinct** `settings.baseURL`s, while the **single-item** route serves only a **subset** (404 for the rest). `resolveBackend()` resolved **only** through the item route, so a directory-listed id became a **dead turn**. New `backendDirectory()` (one LIST fetch, indexed by `id`, cached with the same `credentialCacheMs`/`force` semantics as `backendCache`), `backendFromItem()` (**fallback only**) and the exported `noBackendEndpointError()`. `backendProviderForRoute()` is **byte-identical**; **per-provider cache keying is untouched**; `backendBaseUrl`/`apiKey` still short-circuit; **no** hardcoded model names, **no** `opencode-go` special-casing, **no** per-provider branch | `vendor/opencode/lib/http.js` |
+| ~~**R9**~~ | ~~`build-presets.mjs` appends 1 byte per run~~ — **CLOSED in rc.22**: the regex now **owns its line terminator** (`^[ \t]*const PRESET_DECLARATIONS = .*\n?` — `[ \t]*` so the match cannot start on the preceding blank line, `\n?` so a final line without a newline still matches) and **ONE shared `normalizeDeclarationLine()` helper** is used by **BOTH** `declarationsAreCurrent()` and `bakePresetDeclarations()`. The `.replace(/\n$/, '')` hack is **removed**. The **defect class** was the gate/bake **divergence** — the gate could never see what the bake wrote. Measured: 3 consecutive runs byte-identical (`e53f6153…`); `--check` exits **1** on real drift and **0** after the revert; the full `npm run build` now produces **zero diff** | `scripts/build-presets.mjs` |
 
-## 3c. OPEN — the OpenCode-backend 404 (provider-id resolution seam)
+## 3c. CLOSED — the OpenCode-backend 404 (the provider DIRECTORY is authoritative)
 
-**This is recorded, NOT fixed.** It is a **live-runtime observation**; it is **not reproduced in
-the test suite**, so no gate covers it today.
-
-**The observed failure.** When a subagent runs through the OpenCode backend, the runtime reports:
+**Status: CLOSED in rc.22.** The live symptom was:
 
 ```
 opencode GET /api/provider/opencode-go -> HTTP 404: {"_tag":"ProviderNotFoundError","providerID":"opencode-go","message":"Provider not found: opencode-go"} OPENCODE_BACKEND
 ```
 
-**Measured context (the three code sites that produce it).**
+**The root cause was a LIST-vs-item misunderstanding, not a missing provider.**
 
-| Site | Measured behaviour |
+| Route | Measured behaviour |
 | :--- | :--- |
-| `vendor/opencode/lib/http.js:263` | `backendProviderId` **defaults** to `'opencode-go'` |
-| `vendor/opencode/lib/http.js` `backendProviderForRoute()` (≈ **:2224**) | takes the **route's prefix** as the provider id and passes an **unknown prefix through**, rather than falling back to the configured default |
-| `vendor/opencode/lib/http.js` `ensure()` (≈ **:1193**) | issues `GET /api/provider/<id>` and **throws** when the response carries no `settings.baseURL` |
+| `GET /api/provider` (**LIST**) | the **authoritative provider directory** — returns **BOTH** `opencode` and `opencode-go`, each with its **own** `settings.baseURL` and `headers` |
+| `GET /api/provider/{id}` (**item**) | serves only a **SUBSET** of the ids the directory lists — a directory-listed id can still answer **404** `ProviderNotFoundError` here |
 
-**What the 404 means.** The **attached daemon's catalog does not expose that provider id**. The id
-must be **resolved against the daemon's real catalog** rather than **assumed** from the route
-prefix — the two are separate things, and the current code conflates them.
+The old `resolveBackend()` resolved **every** endpoint through the **item route alone**. So an id
+that the daemon genuinely serves, but does not serve *by item*, was reported as a missing
+provider and the turn died as `OPENCODE_BACKEND` — a **dead turn** for a provider the daemon was
+serving all along.
 
-**Where the fix belongs.** At the **provider-id resolution seam** (`backendProviderForRoute()` /
-`ensure()`), and it must be a **resolution** — read the daemon's catalog and pick the id that
-actually exists — **not a string-substitution patch**. Substituting a different literal would
-hardcode a second assumption in place of the first and would break again the moment the daemon's
-catalog changes.
+**The fix (a resolution, not a string substitution).** Three pieces in
+`vendor/opencode/lib/http.js`:
 
-**Status:** OPEN. Recorded so the next session does not rediscover it, and so the fix is done at
-the right seam rather than as a string swap.
+| Piece | What it does |
+| :--- | :--- |
+| `backendDirectory(signal, { force })` | fetches the **LIST** route **once** and indexes the rows by `id`; cached with the **same** `credentialCacheMs` / `force` semantics as the existing `backendCache` |
+| `backendFromItem(providerId, signal)` | the **fallback only**, used when the directory lacks the id; a **404** resolves to `null`, any **other** failure keeps its status (a 401 and a dead daemon are different problems) |
+| `noBackendEndpointError(providerId, directory)` | **newly exported**; names the missing id, the ids the daemon **DOES** serve, and the two bypass keys (`backendBaseUrl` + `apiKey`, or `backendProviderId`) |
+
+**What did NOT change, deliberately.**
+
+- `backendProviderForRoute()` is **byte-identical** to rc.21 — the route→provider mapping is not
+  where the bug was.
+- **Per-provider cache keying is UNTOUCHED.** `backendCache` is still keyed by `providerId`, so a
+  Zen route can never reuse the Go root. This is **load-bearing**, not incidental: a Zen route on
+  the Go root answers **400** "Model is unavailable." and a Go route on the Zen root answers
+  **402** "Insufficient account funds".
+- `backendBaseUrl` / `apiKey` still **short-circuit** the control-plane lookup.
+- There is **no** hardcoded model name, **no** `opencode-go` special-casing and **no** per-provider
+  branch. The gate proves genericity with the neutral ids `alpha-route` / `beta-route`.
+
+**The gate (new).** `vendor/opencode/test/backend-directory.test.mjs` — **11 cases**, including the
+exact measured shape: the directory lists an id whose **item** route answers **404**, and
+resolution still succeeds. The opencode vendor suite moved **554 → 565/565** (**+11**).
+
+**Falsification (the gate is load-bearing, not decorative).** The new test file was run against
+the **old** item-route-only resolution: **8 of 11** cases failed, including
+`a provider listed by the directory resolves even when the item route 404s for it` and
+`a turn on a directory-only provider is served by that provider root`.
 
 ## 4. What is open (details and criteria in ROADMAP.md)
 
@@ -574,7 +616,8 @@ the right seam rather than as a string swap.
 | **P2-A** | **R5 — no vendor ids in L1** | ✅ **CLOSED** (`77a53b0`) — `PLAN_PROVIDERS` moved to `lib/presets.js`; `lib/plan.js` vendor-id count **→ 0**; `test/plan-boundary.test.mjs` (**5 cases**) measures the vendor words from `vendor/*/package.json`. |
 | **P2-A** | **A7 — host seam** (measure-first) | ✅ **CLOSED as a MEASUREMENT** (rc.21) — [HOST-PROVIDERS-SEAM.md](./HOST-PROVIDERS-SEAM.md): the seam models **provider profiles only**, so it **cannot replace this router**; **recommended: keep `llm-pi-ai` dormant** (owner decision, and the recommended option changes nothing). |
 | **P2-A** | **R7 — tool-argument contract seam** (new, rc.21) | ✅ **SHIPPED** — `lib/stream/tool-argument-contract.js` (**163 L**) at the L1 emission point (`finalBlock`); the rule is **derived** from the host's `Required with <field>` schema prose; **five** vendor call sites pass `tools`; gate `test/tool-argument-contract.test.mjs` (**13 cases**). |
-| **P2-A** | **R8 — OpenCode-backend 404** (new, rc.21) | ⬜ **OPEN** — live-runtime observation at the **provider-id resolution seam**; the attached daemon's catalog does not expose `opencode-go`. Not reproduced in the test suite. See §3c. |
+| **P2-A** | **R8 — OpenCode-backend 404** (new, rc.21) | ✅ **CLOSED in rc.22** — the daemon's **provider DIRECTORY** (`GET /api/provider`) is authoritative; the single-item route serves only a subset, so item-route-only resolution turned a served id into a dead turn. `backendDirectory()` + `backendFromItem()` (fallback) + exported `noBackendEndpointError()`; `backendProviderForRoute()` byte-identical; per-provider cache keying untouched. Gate `vendor/opencode/test/backend-directory.test.mjs` (**11 cases**); opencode **554 → 565/565**. See §3c. |
+| **P2-A** | **R9 — build idempotency** (new, rc.21) | ✅ **CLOSED in rc.22** — `build-presets.mjs` grew `lib/client.src.js` **+1 byte per run** (measured at HEAD: **185 405 → 185 406 → 185 407 → 185 408** over 4 runs) because the regex never captured the trailing newline the bake wrote. The regex now owns its terminator and **one** `normalizeDeclarationLine()` helper serves **both** the gate and the bake. The residue (one stray blank line in `lib/client.src.js` and `lib/client.js`) was **restored to HEAD** and rebuilt — a full `npm run build` now produces **zero diff**. Gate `test/build-presets.test.mjs` (**3 → 8** cases). |
 | **P2** | P2-2 `pipe:'shared'` default | ✅ **DONE** — the `pipe` config key is deleted entirely; no config selects a pipeline any more |
 | **P2** | P2-3 canonical parser | ✅ **DONE** — the placement is recorded: `notation-classifier.js`, a vendor-local notation-quirk surface (single named export, one consumer) |
 | **P2** | P2-5 S3 Antigravity usage per model group | **Not started** (owner deferred 2026-11-08) |
@@ -605,11 +648,13 @@ track migrated. **No value is reproduced here or in any other document.**
    `e8b39f7`), **R3 and R5 are CLOSED** (both by `77a53b0`: one retry core, one catalog cache,
    no vendor ids in L1), and **R2 and R6 are CLOSED** and **A7 is CLOSED as a measurement** (all
    three in rc.21: the OpenCode ledger rides the core, the uniqueness greps are a wired gate,
-   and the host `dsh-llm-pi-ai` seam is measured and cannot replace this router). The
-   **rc.21 tail is now:** the **OpenCode-backend 404** (§3c — a fix at the **provider-id
-   resolution seam**, not a string patch) and the **pre-existing** `build-presets.mjs` +1 byte/run
-   growth. The `llm-pi-ai` **owner decision** (keep it dormant) is still the owner's, but the
-   recommended option changes nothing, so nothing is blocked on it.
+   and the host `dsh-llm-pi-ai` seam is measured and cannot replace this router). **The rc.22
+   session closed the last two: R8** (the **OpenCode-backend 404** — now resolved from the
+   daemon's authoritative provider **DIRECTORY**, with the single-item route as a fallback; see
+   §3c) **and R9** (the **build chain is idempotent** — a full `npm run build` produces **zero
+   diff**). **The P2-A queue is now EMPTY**; there is no remaining agent-side item on this track
+   that is not owner-gated. The `llm-pi-ai` **owner decision** (keep it dormant) is still the
+   owner's, but the recommended option changes nothing, so nothing is blocked on it.
 
 ## 5. Do not repeat these closed items
 
@@ -855,4 +900,89 @@ node scripts/sync-derive.mjs            # rewrites the derivation block; reports
   from a NEW session (P1-3, owner); the post-migration secret-hygiene scan (P0-3); the
   **OpenCode-backend 404** (§3c — needs a fix at the **provider-id resolution seam**); and the
   **pre-existing** `build-presets.mjs` **+1 byte/run** growth (measured, a different script from
-  the one this session fixed, and unchanged from HEAD).
+  the one this session fixed, and unchanged from HEAD). **Update (rc.22):** the last two are now
+  **CLOSED** — see §3c and the R9 closure in §1; see also the §13 session record.
+
+---
+
+## 13. Session record — 2026-11-14 (R8 + R9 closure, build idempotency, rc.22)
+
+- **Scope:** verification, documentation sync and commit of the work that landed in this session:
+  **R9** (`scripts/build-presets.mjs` is idempotent — the build chain is a fixed point), the
+  **build-residue cleanup** (the stray blank line the old bug left in `lib/client.src.js` and
+  `lib/client.js`, restored to HEAD and rebuilt), and **R8** (the **OpenCode-backend 404** — the
+  daemon's provider **DIRECTORY** is authoritative, not the single-item route).
+  **Version bumped `rc.21` → `rc.22`** (code and docs changed). **No** `~/.dsh` write, **no**
+  service restart, **no** API key read, printed or reproduced, and **no other track's pending
+  change** was touched or committed.
+- **Measured (independently re-run by this session, not quoted from a commit message):**
+  router `npm test` **848/848**, **0 fail**; `npm run verify` **exit 0** (check + 848 tests +
+  `verify:stream` + `specs:check` — `5 protocols, 4 providers, 4 pricing`); `verify:stream`
+  **8/8** dispatch cases with **4** vendored packages probed, **8/8** specifiers refused,
+  **vendor loads 0**; **`node scripts/verify-uniqueness.mjs` clean, exit 0**; vendor suites
+  antigravity **193/193**, deepinfra **222 pass / 7 skip**, opencode **565/565**, exaone **19/19**.
+- **Baseline of record (measured, not quoted).** HEAD `499e8f7` (rc.21) was checked out to an
+  isolated copy and measured with the same commands: router **843/843**, opencode **554/554**,
+  `test/build-presets.test.mjs` **3** cases, antigravity **193/193**, deepinfra **222 pass /
+  7 skip**, exaone **19/19**. So the deltas are **+5** (router, all from `build-presets` **3 → 8**)
+  and **+11** (opencode, all from the new directory gate). **An earlier brief quoted the router
+  baseline as 843; the measured baseline at HEAD is 843 and the post-fix figure is 848 — the
+  "843 was current" reading was correct for the *pre-fix* tree and wrong for the *post-fix* one.**
+- **R9 evidence (measured):** at HEAD, four consecutive `node scripts/build-presets.mjs` runs grew
+  `lib/client.src.js` **185 405 → 185 406 → 185 407 → 185 408** bytes — **exactly +1 byte per
+  run**, code content unchanged. After the fix, three consecutive runs are **byte-identical**
+  (md5 `e53f6153…`), each printing `unchanged`. `--check` **exits 1** on a planted real
+  `lib/presets.js` drift and **exits 0** after the revert.
+- **Build-idempotency evidence (measured):** `npm run build` followed by `git status --porcelain`
+  produced **NO CHANGE** — **zero diff**. `lib/client.src.js` (**185 403 B** / **3 460 L**) and
+  `lib/client.js` (**205 839 B** / **3 908 L**) are **byte-identical to HEAD** (`git diff --stat
+  -- lib/client.src.js lib/client.js` is empty). The **residue** the old bug left — one stray
+  blank line in each file (3461 vs 3460 lines) — was restored to HEAD and rebuilt, so the **full
+  build chain** (`gen-locale` → `sync-derive` → `build-presets` → `build-client`) is now a
+  **fixed point**.
+- **R9 falsification (the gate is load-bearing):** the new `test/build-presets.test.mjs` was run
+  against the **old** semantics (old regex `/^\s*const PRESET_DECLARATIONS = .*$/m`, old gate
+  comparison `current === declarationSource().replace(/\n$/, '')`, old bake string) with the new
+  export kept in place: **4 of 8** cases failed — `the declaration regex owns its line
+  terminator`, `baking twice changes nothing the second time`, `a stale file is repaired in
+  exactly one bake, then stays fixed`, and `the checked-in client source is already canonical,
+  so a re-bake is identity`.
+- **R8 evidence (measured):** the daemon's **LIST** route `GET /api/provider` is the
+  **authoritative provider directory** and returns **both** `opencode` and `opencode-go` with
+  **distinct** `settings.baseURL`s; the **single-item** route `GET /api/provider/{id}` serves only
+  a **subset**, so a directory-listed id can still **404** there. The old item-route-only
+  resolution turned such an id into a **dead turn** as `OPENCODE_BACKEND`. The new
+  `backendDirectory()` fetches the LIST route **once** and indexes the rows by `id` (cached with
+  the **same** `credentialCacheMs` / `force` semantics as `backendCache`);
+  `backendFromItem()` is the **fallback only**; `noBackendEndpointError()` is newly **exported**
+  and names the missing id, the ids the daemon **DOES** serve, and the two bypass keys.
+  `backendProviderForRoute()` is **byte-identical** to rc.21. The **per-provider cache keying is
+  untouched** — load-bearing, because a Zen route on the Go root answers **400** "Model is
+  unavailable." and a Go route on the Zen root answers **402** "Insufficient account funds".
+  `backendBaseUrl` / `apiKey` still short-circuit. **No** hardcoded model names, **no**
+  `opencode-go` special-casing, **no** per-provider branch.
+- **R8 falsification (the gate is load-bearing):** the new
+  `vendor/opencode/test/backend-directory.test.mjs` was run against the **old** item-route-only
+  resolution: **8 of 11** cases failed, including `a provider listed by the directory resolves
+  even when the item route 404s for it` and `a turn on a directory-only provider is served by that
+  provider root`. The **3** that still passed are exactly the **fallback** cases
+  (`an empty directory falls back to the single-item route`, `a daemon without a directory route
+  resolves through the item route`, and the pure error-factory unit test) — which is the correct
+  shape for a fallback-only path.
+- **Docs changed:** [ROADMAP.md](./ROADMAP.md) (R8 / R9 marked CLOSED with their measured
+  evidence; the header summary, the two inline summary lines, the §7 evidence block and the size
+  table updated with an **rc.22** column and a correction-of-record for the baseline),
+  [ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md) (the build-idempotency gate added to the
+  enforcement list and the provider-resolution seam noted), this file (§1 state table, §1 shipped
+  list, the rewritten §3c, the follow-up table, §4 open items, §4 next-session order, and this
+  record), [CHANGELOG.md](../CHANGELOG.md) (the `0.0.1-rc.22` section), and the regenerated
+  [INDEX.md](./INDEX.md).
+- **Deliberately left open:** the four-key rotation (P0-1/P0-2, owner); the EXAONE **child** turn
+  from a NEW session (P1-3, owner); the post-migration secret-hygiene scan (P0-3). **Nothing else**
+  on this track is open — the P2-A queue is empty.
+- **Not done, and why:** no live OpenCode turn was re-run after the R8 fix. The R8 gate proves the
+  resolution against a **fake daemon** that reproduces the measured directory/item shape
+  (including the 404 body), and the live daemon was **not** contacted — this session was scoped to
+  verification, docs and a commit, and a live turn would need the service to pick up the new
+  vendor code (a restart, which is owner-gated). The next owner restart therefore also becomes
+  the live proof of R8.

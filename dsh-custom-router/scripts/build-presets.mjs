@@ -29,8 +29,39 @@ import { PRESETS } from '../lib/presets.js'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const srcPath = join(root, 'lib', 'client.src.js')
 
-/** The one line the bake rewrites. */
-export const DECLARATION_LINE = /^\s*const PRESET_DECLARATIONS = .*$/m
+/**
+ * The one line the bake rewrites — a WHOLE line, terminator included.
+ *
+ * The trailing `\n?` is load-bearing. A match that stops before the newline
+ * (`.*$`, which is what this regex used to be) makes a bake that replaces it
+ * with `declarationSource()` — a string that *ends* with `\n` — insert one
+ * extra newline on every run: `lib/client.src.js` grew an exact +1 byte per
+ * `node scripts/build-presets.mjs`, measured 185404 → 185405 → 185406.
+ * Owning the terminator means line-in, line-out and the bake is a fixed point.
+ * `\n?` (not `\n`) also matches a file whose declaration is its last line
+ * without a final newline. The indent is `[ \t]*`, not `\s*`, so the match can
+ * never start on the preceding blank line and eat its newline.
+ */
+export const DECLARATION_LINE = /^[ \t]*const PRESET_DECLARATIONS = .*\n?/m
+
+/**
+ * The single normalisation both the gate and the bake call.
+ *
+ * This is the fix for the defect *class*: `declarationsAreCurrent()` used to
+ * compare `current === declarationSource().replace(/\n$/, '')` (strip the
+ * newline) while `bakePresetDeclarations()` inserted the raw newline-bearing
+ * string. Two hand-written expressions of "the same" line meant the gate could
+ * never see what the bake actually wrote. Now exactly one function defines the
+ * canonical line text, and both callers go through it.
+ *
+ * A declaration line is one whole line: it ends with exactly one newline,
+ * whether it was matched from a file (terminator maybe absent) or derived.
+ * @param {string} line - a matched or derived declaration line.
+ * @returns {string} the same line with exactly one trailing newline.
+ */
+export function normalizeDeclarationLine(line) {
+  return `${String(line).replace(/\n+$/, '')}\n`
+}
 
 /**
  * The declarations a browser half renders, as plain JSON.
@@ -74,19 +105,19 @@ export function browserDeclarations(presets = PRESETS) {
   }))
 }
 
-/** Format the assignment line for the current declarations. */
+/** Format the assignment line for the current declarations (one whole line). */
 export function declarationSource(presets = PRESETS) {
   const literal = JSON.stringify(browserDeclarations(presets))
-  return `    const PRESET_DECLARATIONS = Object.freeze(JSON.parse(?))\n`.replace('?', JSON.stringify(literal))
+  return normalizeDeclarationLine(
+    `    const PRESET_DECLARATIONS = Object.freeze(JSON.parse(?))`.replace('?', JSON.stringify(literal)),
+  )
 }
 
 /**
  * Whether a client source already carries the declarations `presets` derive.
  *
- * `declarationSource()` ends with the assignment line's trailing newline, while
- * `DECLARATION_LINE` (`/m`, `.*$`) never captures it. Comparing the raw strings
- * made `--check` fail forever on a semantically identical tree (measured
- * 2026-11-13), so the gate could no longer tell real drift from its own newline.
+ * Compares through `normalizeDeclarationLine()`, the same helper the bake
+ * writes through, so the gate and the bake cannot disagree about the line.
  * @param {string} source - `lib/client.src.js` text.
  * @param {readonly object[]} [presets] - declarations to derive from.
  * @returns {boolean} true when the baked line already equals the derived one.
@@ -94,11 +125,15 @@ export function declarationSource(presets = PRESETS) {
 export function declarationsAreCurrent(source, presets = PRESETS) {
   const current = DECLARATION_LINE.exec(String(source ?? ''))?.[0]
   if (current === undefined) return false
-  return current === declarationSource(presets).replace(/\n$/, '')
+  return normalizeDeclarationLine(current) === declarationSource(presets)
 }
 
 /**
  * Rewrite `lib/client.src.js` in place with the current declarations.
+ *
+ * Idempotent by construction: the match is a whole line and the replacement is
+ * a whole line, so on an already-baked file `next === source`, no write happens,
+ * and `changed` is `false`.
  * @param {object} [options] - `{ presets?, srcPath? }`.
  * @returns {{changed: boolean, count: number}} what happened.
  */
@@ -106,7 +141,7 @@ export function bakePresetDeclarations(options = {}) {
   const path = options.srcPath ?? srcPath
   const presets = options.presets ?? PRESETS
   const source = readFileSync(path, 'utf8')
-  const line = declarationSource(presets)
+  const line = normalizeDeclarationLine(declarationSource(presets))
   if (!DECLARATION_LINE.test(source)) {
     throw new Error('build-presets: client.src.js has no "const PRESET_DECLARATIONS = …" line')
   }

@@ -5,7 +5,7 @@ version: 1.1
 kind: reference
 status: active
 updated: 2026-11-14
-summary: Copy-paste dispatch packages for Phase 1 (serial core lock W1-1..W1-4) and Phase 2 (parallel upper-layer fan-out W2-A..W2-E) with disjoint write scopes and exact gates. W2-A (A3) and W2-D (A6 gates) are SHIPPED as of 2026-11-14 (e8b39f7); R2, R3, R5, R6 and A7 are ALL CLOSED as of rc.21, so the remaining queue is the OpenCode-backend 404.
+summary: Copy-paste dispatch packages for Phase 1 (serial core lock W1-1..W1-4) and Phase 2 (parallel upper-layer fan-out W2-A..W2-E) with disjoint write scopes and exact gates. W2-A (A3) and W2-D (A6 gates) are SHIPPED as of 2026-11-14 (e8b39f7); R2, R3, R5, R6 and A7 are ALL CLOSED as of rc.21; R8 and R9 are CLOSED as of rc.22, so the P2-A queue is EMPTY and the remaining work is owner-gated.
 -->
 
 > **Execution guide.** Follow [ROADMAP.md](./ROADMAP.md) §4 P2-A and the layer contract in
@@ -21,9 +21,11 @@ summary: Copy-paste dispatch packages for Phase 1 (serial core lock W1-1..W1-4) 
 >   - **W2-D (A6 gates)** — DONE. `test/stream-boundary.test.mjs` (**15** cases),
 >     `scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (**12** cases), and the
 >     dead `classifyBlock` slot removed.
->   - The blocks below are kept as the **record of what shipped**; the *open* work is
+>   - The blocks below are kept as the **record of what shipped**; the *open* work was
 >     **R8** (the OpenCode-backend 404, provider-id resolution seam) in
->     [ROADMAP.md](./ROADMAP.md) §6 — **not** a re-run of W2-A / W2-D.
+>     [ROADMAP.md](./ROADMAP.md) §6 — **not** a re-run of W2-A / W2-D. **CLOSED in rc.22**: R8
+>     resolved endpoints from the daemon's authoritative provider **DIRECTORY**, and R9 made the
+>     build chain idempotent. **The P2-A queue is now EMPTY** — nothing here should be re-run.
 > - **CLOSED 2026-11-14 (rc.21) — R2, R3, R5, R6 and A7 are all closed:**
 >   - **R2** — OpenCode's private ledger, plan table and usage constants now delegate to the
 >     core (`numberOrNull` / `pickSession` / `USAGE_BUCKETS` / `usageTotal` are each defined
@@ -718,5 +720,7 @@ ledger/billing, no plan windows, no picker, no dispatch gates — so it **cannot
 router**, and none of this router's four preset provider ids is a pi-ai catalog route.
 **Recommended owner decision: keep `llm-pi-ai` dormant.**
 
-The remaining open item is **R8** (the OpenCode-backend 404) — a fix at the **provider-id
-resolution seam**, not a string patch.
+The P2-A queue is now **EMPTY**. The last two items were closed in **rc.22**: **R8** (the
+OpenCode-backend 404 — resolved from the daemon's authoritative provider **DIRECTORY**, with the
+single-item route as a fallback only) and **R9** (the build chain is idempotent — a full
+`npm run build` produces **zero diff**). See [ROADMAP.md](./ROADMAP.md) §6.

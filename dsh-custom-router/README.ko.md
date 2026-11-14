@@ -1,14 +1,14 @@
 # @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.21
+version: 0.0.1-rc.22
 kind: readme
 status: active
 updated: 2026-11-14
-summary: Korean entry for @nolit/dsh-custom-router 0.0.1-rc.21. Mirrors README.md; the English README is authoritative and this file only restates the version, the four vendored providers and the changelog link.
+summary: Korean entry for @nolit/dsh-custom-router 0.0.1-rc.22. Mirrors README.md; the English README is authoritative and this file only restates the version, the four vendored providers and the changelog link.
 -->
 
-> 현재 버전: 0.0.1-rc.21
+> 현재 버전: 0.0.1-rc.22
 > 기능 요약: 다중 LLM 프로바이더(Antigravity, OpenCode, DeepInfra, EXAONE)의 프리셋 및 라우팅을 통합 관리하는 DSH 엔진 어댑터입니다.
 > 상세 설명: [문서 인덱스](docs/INDEX.md)
 

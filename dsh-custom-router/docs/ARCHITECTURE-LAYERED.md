@@ -1,18 +1,18 @@
 # Custom Router — Horizontal Layered Architecture
 
 <!-- skeleton:
-version: 1.2
+version: 1.3
 kind: design
 status: active
 updated: 2026-11-14
-summary: Horizontal L0–L4 architecture for @nolit/dsh-custom-router: exact L1 protocol interfaces (OpenAI/Anthropic/Gemini), L2 vendor contract, core-lock gates, and static enforcement. A3 is complete (one OpenCode pipeline); the L1 boundary, USAGE_READERS and uniqueness gates are shipped; the L1 emission point now reconciles tool arguments against the host's declared contracts (the tool-argument contract seam).
+summary: Horizontal L0–L4 architecture for @nolit/dsh-custom-router: exact L1 protocol interfaces (OpenAI/Anthropic/Gemini), L2 vendor contract, core-lock gates, and static enforcement. A3 is complete (one OpenCode pipeline); the L1 boundary, USAGE_READERS, uniqueness and build-idempotency gates are shipped; the L1 emission point now reconciles tool arguments against the host's declared contracts (the tool-argument contract seam), and the OpenCode provider endpoints resolve from the daemon's authoritative provider DIRECTORY.
 -->
 
 > **Design target (owner principle, 2026-11-14).** LOWER layer = a thin, standardized shared
 > pipeline for the three standard protocols (**OpenAI / Anthropic / Gemini**). UPPER layer = thin
 > vendor/preset adapters that translate **vendor quirks only** and hand off to the lower pipeline.
 >
-> Measured baseline: `@nolit/dsh-custom-router@0.0.1-rc.21` (audit base `ead9daf`,
+> Measured baseline: `@nolit/dsh-custom-router@0.0.1-rc.22` (audit base `ead9daf`,
 > [HANDOFF.md](./HANDOFF.md) §3). **Current state:** Phase 1 + Phase 2 are done and **A3 is
 > complete** (`e8b39f7` — one OpenCode pipeline, no `pipe` config key). Active execution order
 > lives in [ROADMAP.md](./ROADMAP.md) §4; worker packages live in
@@ -400,7 +400,8 @@ the following lock conditions:
 Prose rules decay; Phase 2 (**W2-D / A6**) closed the horizontal boundary with automated static
 gates. **Status: gates 1, 2 and 3 are SHIPPED** (`e8b39f7` for 1 and 2, `rc.21` for the
 uniqueness part of 3); a **fourth** gate — the tool-argument contract seam — now enforces the
-host's execution contracts at the L1 emission point.
+host's execution contracts at the L1 emission point; a **fifth** gate — the **build-idempotency
+gate** (rc.22) — now enforces that the L3→L4 **build chain is a fixed point**.
 
 1. **L1 boundary lint test — ✅ SHIPPED (`test/stream-boundary.test.mjs`, 15 cases):**
    - Scans every `*.js` under `lib/stream/` (and `lib/cost.js`, `lib/plan.js`, `lib/usage.js`,
@@ -491,3 +492,63 @@ host's execution contracts at the L1 emission point.
      byte-for-byte, that a differently-named pair is covered with no edit (the anti-hardcoding
      proof), and that the derivation is **pinned against the measured host text** — so an
      upstream rephrasing fails a test instead of going quiet.
+5. **Build idempotency — ✅ SHIPPED (R9 closed in rc.22):**
+   - **What it enforces:** the **L3 → L4 build chain** (`gen-locale` → `sync-derive` →
+     `build-presets` → `build-client`) must be a **fixed point**. A generator that rewrites a
+     tracked artifact on every run is not a generator; it is a slow source of drift, and it
+     makes every "is the tree clean?" question ambiguous.
+   - **The defect it closes (measured):** `scripts/build-presets.mjs` grew `lib/client.src.js` by
+     **exactly +1 byte per run** — **185 405 → 185 406 → 185 407 → 185 408** over 4 runs at HEAD,
+     code content unchanged. The root cause was **two** things, and the second one is the real
+     lesson: (a) `DECLARATION_LINE` (`/^\s*const PRESET_DECLARATIONS = .*$/m`) never captured the
+     trailing newline that `declarationSource()` **writes**; and (b) — the **defect class** — the
+     **gate and the bake expressed "the same line" two different ways** (`declarationsAreCurrent()`
+     compared `current === declarationSource().replace(/\n$/, '')`, the bake wrote the raw
+     newline-bearing string), so the gate could never see what the bake actually wrote. Fixing
+     only the regex would have left the divergence in place.
+   - **The fix:** the regex now **owns its line terminator**
+     (`^[ \t]*const PRESET_DECLARATIONS = .*\n?` — the indent class is `[ \t]*`, **not** `\s*`,
+     which would re-create the leak by consuming the preceding blank line; `\n?` so a final line
+     without a newline still matches), and **ONE shared `normalizeDeclarationLine()` helper** is
+     used by **BOTH** `declarationsAreCurrent()` and `bakePresetDeclarations()`. The
+     `.replace(/\n$/, '')` hack is **removed**. This is a **single-writer** rule applied to a
+     *derived* artifact: one function defines the canonical line text, and every caller goes
+     through it.
+   - **Measured after the fix:** three consecutive `node scripts/build-presets.mjs` runs are
+     **byte-identical** (md5 `e53f6153…`), each printing `unchanged`; `--check` **exits 1** on a
+     real `lib/presets.js` drift and **exits 0** after the revert; and a full `npm run build`
+     followed by `git status --porcelain` produces **ZERO diff**. The **residue** the old bug left
+     (one stray blank line in `lib/client.src.js` and `lib/client.js`) was **restored to HEAD** and
+     rebuilt, so both files are byte-identical to HEAD again (**185 403 B** / **3 460 L** and
+     **205 839 B** / **3 908 L**).
+   - **Gate:** `test/build-presets.test.mjs` (**3 → 8** cases, rc.22), including a bake-twice
+     regression test. **Falsified against the old code:** restoring the old regex, the old gate
+     comparison and the old bake string made **4 of 8** cases fail.
+
+### The provider-resolution seam (L2, OpenCode)
+
+The **R8 closure** (rc.22) sits at an **L2** seam and is worth recording here, because it is the
+shape of a correct fix for a control-plane misreading:
+
+- **The seam:** `resolveBackend()` in `vendor/opencode/lib/http.js` resolves the **backend
+  endpoint** for a route. It must answer "which base URL does this route's provider actually
+  serve?", and the daemon is the only authority for that.
+- **The defect:** the daemon's **LIST** route `GET /api/provider` is the **authoritative provider
+  directory** — it returns **both** `opencode` and `opencode-go`, each with its **own**
+  `settings.baseURL` — while the **single-item** route `GET /api/provider/{id}` serves only a
+  **subset** of those ids. Resolving through the item route alone therefore turned a
+  directory-listed id into a **dead turn** (`OPENCODE_BACKEND`).
+- **The fix is a resolution, not a substitution:** `backendDirectory()` fetches the LIST route
+  **once** and indexes the rows by `id`; `backendFromItem()` is the **fallback only**; and the
+  newly exported `noBackendEndpointError()` names the missing id, the ids the daemon **DOES**
+  serve, and the two bypass keys (`backendBaseUrl` + `apiKey`, or `backendProviderId`). There is
+  **no** hardcoded model name, **no** `opencode-go` special-casing and **no** per-provider branch —
+  the gate proves genericity with the neutral ids `alpha-route` / `beta-route`.
+- **What was deliberately NOT changed:** `backendProviderForRoute()` is **byte-identical** to
+  rc.21, and the **per-provider cache keying is untouched** — a Zen route must never reuse the Go
+  root. That keying is **load-bearing**, measured: a Zen route on the Go root answers **400**
+  "Model is unavailable." and a Go route on the Zen root answers **402** "Insufficient account
+  funds".
+- **Gate:** `vendor/opencode/test/backend-directory.test.mjs` (**11 cases**), including the exact
+  measured shape (the directory lists an id whose item route answers 404, and resolution still
+  succeeds). **Falsified against the old resolution:** **8 of 11** cases failed.

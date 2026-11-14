@@ -14,7 +14,13 @@
  * Measured control-plane surface (OpenCode v2.2.0):
  *   - `GET /api/info`       -> liveness/version
  *   - `GET /api/model`      -> catalog: `limit.context`, `limit.output`, `variants[]`
- *   - `GET /api/provider/{id}` -> provider `settings.baseURL`, `headers`
+ *   - `GET /api/provider`   -> the provider DIRECTORY: `data[]` rows, each with
+ *                              its own `settings.baseURL` and `headers`. This is
+ *                              the authoritative list of provider ids.
+ *   - `GET /api/provider/{id}` -> the same row for ONE id, but only for the
+ *                              subset the single-item route serves (measured
+ *                              2026-11-14: an id present in the directory can
+ *                              404 here). Used as a fallback only.
  *   - `GET /api/credential` -> active credential (key or OAuth access token)
  *
  * Generation surface:
@@ -958,6 +964,14 @@ export class OpencodeHttpAdapter {
     /** Short cache for the Go plan window panel (60 s, as the operator sees it). */
     this.planCache = null
     this.backendCache = null
+    /**
+     * The provider DIRECTORY (`GET /api/provider`, id -> row), cached for the
+     * same lifetime as `backendCache`. Separate from `backendCache` on purpose:
+     * the directory is one fetch shared by every route, while the resolved
+     * `{ baseURL, headers }` pair stays keyed by provider id so a Zen route can
+     * never reuse the Go root.
+     */
+    this.backendDirectoryCache = null
     this.lastWorkspace = ''
     // The cache is the router's one module (`lib/catalog-cache.js`); this
     // adapter keeps only the probe, the snapshot path, and the timings.
@@ -1143,7 +1157,9 @@ export class OpencodeHttpAdapter {
    *
    * Priority:
    *   1. explicit `backendBaseUrl` / `apiKey` (or `OPENCODE_API_KEY`)
-   *   2. local control plane: `/api/provider/{id}` + active `/api/credential`
+   *   2. local control plane: the provider DIRECTORY (`GET /api/provider`) +
+   *      active `/api/credential`; the single-item `/api/provider/{id}` route is
+   *      only a fallback (see `backendDirectory()` for why).
    *
    * The result is cached for `credentialCacheMs`; a 401 forces one refresh.
    */
@@ -1190,10 +1206,13 @@ export class OpencodeHttpAdapter {
     let provider = null
     let baseURL = this.config.backendBaseUrl.get()
     if (!baseURL) {
-      const payload = await this.server.request('GET', `/api/provider/${encodeURIComponent(providerId)}`, undefined, { signal })
-      provider = payload?.data
+      // The DIRECTORY is authority: its LIST route returns every provider the
+      // daemon can serve, while the single-item route serves only a subset
+      // (measured 2026-11-14, see `backendDirectory()`).
+      const directory = await this.backendDirectory(signal, { force })
+      provider = directory.get(providerId) ?? (await this.backendFromItem(providerId, signal))
       baseURL = provider?.settings?.baseURL
-      if (!baseURL) throw new Error(`OpenCode provider "${providerId}" exposes no settings.baseURL`)
+      if (!baseURL) throw noBackendEndpointError(providerId, directory)
     }
     let credential = this.config.apiKey.get()
     if (!credential && this.config.apiKeyEnv.get()) credential = process.env[this.config.apiKeyEnv.get()] ?? ''
@@ -1211,6 +1230,92 @@ export class OpencodeHttpAdapter {
     }
     this.backendCache = { at: now, providerId, value }
     return value
+  }
+
+  /**
+   * The daemon's provider DIRECTORY, indexed by provider id.
+   *
+   * Measured 2026-11-14 against OpenCode v2.2.6 (fresh daemon and the live one):
+   *
+   *   GET /api/provider        -> 200, `data[]` carries every provider, each with
+   *                               its OWN `settings.baseURL` and `headers`
+   *   GET /api/provider/{id}   -> 200 for a SUBSET of those ids and 404
+   *                               `ProviderNotFoundError` for the rest, even
+   *                               though the directory lists them
+   *
+   * So the LIST route is the authority and the item route cannot be trusted to
+   * enumerate what the daemon serves. Resolving through the item route alone is
+   * what failed a live turn:
+   *
+   *   opencode GET /api/provider/opencode-go -> HTTP 404
+   *   {"_tag":"ProviderNotFoundError",...} OPENCODE_BACKEND
+   *
+   * The directory is cached for `credentialCacheMs` — the same lifetime as
+   * `backendCache`, refreshed by the same `force` — because it is one fetch
+   * shared by every route, not per-route state.
+   *
+   * @param {AbortSignal} [signal] - caller abort.
+   * @param {{ force?: boolean }} [options] - bypass the cached directory.
+   * @returns {Promise<Map<string, object>>} provider id -> directory row.
+   */
+  async backendDirectory(signal, { force = false } = {}) {
+    const now = Date.now()
+    if (
+      !force &&
+      this.backendDirectoryCache &&
+      now - this.backendDirectoryCache.at < this.config.credentialCacheMs.get()
+    ) {
+      return this.backendDirectoryCache.value
+    }
+    let rows = []
+    try {
+      const payload = await this.server.request('GET', '/api/provider', undefined, { signal })
+      rows = Array.isArray(payload?.data) ? payload.data : []
+    } catch (error) {
+      // An older daemon without a LIST route (or a transient control-plane
+      // failure) must not become a dead turn: an empty directory sends the
+      // caller to the single-item fallback below, which is what this adapter
+      // used before the directory existed.
+      this.ctx?.logger?.warn?.(
+        `opencode-http-agent: provider directory unavailable (${errorText(error)}); falling back to per-provider lookup`,
+      )
+      rows = []
+    }
+    const value = new Map()
+    for (const row of rows) {
+      if (typeof row?.id === 'string' && row.id.length > 0) value.set(row.id, row)
+    }
+    this.backendDirectoryCache = { at: now, value }
+    return value
+  }
+
+  /**
+   * Single-item provider lookup, used ONLY when the directory has no row.
+   *
+   * A 404 here is expected for an id the directory lists but the item route does
+   * not serve, so it resolves to `null` and the caller reports the miss with
+   * full context (`noBackendEndpointError`). Any OTHER failure keeps its status:
+   * a 401 and a daemon that is gone are different problems, and reporting them
+   * as "unknown provider" would send the operator looking in the wrong place.
+   *
+   * @param {string} providerId - the route's provider id.
+   * @param {AbortSignal} [signal] - caller abort.
+   * @returns {Promise<object|null>} the provider row, or null when unresolved.
+   */
+  async backendFromItem(providerId, signal) {
+    try {
+      const payload = await this.server.request(
+        'GET',
+        `/api/provider/${encodeURIComponent(providerId)}`,
+        undefined,
+        { signal },
+      )
+      const row = payload?.data
+      return row && typeof row === 'object' ? row : null
+    } catch (error) {
+      if (statusOf(error) === 404) return null
+      throw error
+    }
   }
 
   /**
@@ -2218,13 +2323,37 @@ export function sessionHeaders(headers, options, config) {
  *
  * @param {string} model - the route as the host passes it (`provider/id` or bare id).
  * @param {{ backendProviderId: { get: () => string } }} config - row config.
- * @returns {string} provider id whose `/api/provider/{id}` supplies baseURL + headers.
+ * @returns {string} provider id whose directory row (or `/api/provider/{id}`) supplies baseURL + headers.
  */
 export function backendProviderForRoute(model, config) {
   const route = typeof model === 'string' ? model : ''
   const slash = route.indexOf('/')
   if (slash <= 0) return config.backendProviderId.get()
   return route.slice(0, slash)
+}
+
+/**
+ * The error for a provider id that resolved to no endpoint at all.
+ *
+ * A dead turn is the wrong outcome here, so the message names the id, the ids
+ * the daemon DOES serve, and both keys that can bypass the resolution. Measured
+ * 2026-11-14: the failing turn reported only
+ * `Provider not found: opencode-go` — it named the id it could not find and
+ * nothing the operator could act on.
+ *
+ * @param {string} providerId - the id that resolved to nothing.
+ * @param {Map<string, object>} directory - what the daemon actually serves.
+ * @returns {Error} an actionable resolution error.
+ */
+export function noBackendEndpointError(providerId, directory) {
+  const served = [...(directory?.keys?.() ?? [])]
+  const listed = served.length
+    ? `the daemon's provider directory lists ${served.map((id) => `"${id}"`).join(', ')}`
+    : 'the daemon returned no provider directory (the list route was empty or unavailable, and the single-item route did not serve the id)'
+  return new Error(
+    `OpenCode provider "${providerId}" resolves to no backend endpoint: ${listed}. ` +
+      `Set backendBaseUrl (with apiKey) to bypass the control plane, or backendProviderId to a served provider.`,
+  )
 }
 
 /** Legacy OpenCode `tokens` mapper, kept for batch-worker consumers/tests. */

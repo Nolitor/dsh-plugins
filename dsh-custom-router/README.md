@@ -1,14 +1,14 @@
 # @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.21
+version: 0.0.1-rc.22
 kind: readme
 status: active
 updated: 2026-11-14
-summary: Package entry for @nolit/dsh-custom-router 0.0.1-rc.21 — the single DSH plugin owning the preset registry, the browser dashboard, the OpenCodex bridge library, and four vendored adapters (Antigravity, OpenCode, DeepInfra, EXAONE). Points to the doc index, the specs registry and the compatibility matrix.
+summary: Package entry for @nolit/dsh-custom-router 0.0.1-rc.22 — the single DSH plugin owning the preset registry, the browser dashboard, the OpenCodex bridge library, and four vendored adapters (Antigravity, OpenCode, DeepInfra, EXAONE). Points to the doc index, the specs registry and the compatibility matrix.
 -->
 
-> 현재 버전: 0.0.1-rc.21
+> 현재 버전: 0.0.1-rc.22
 > 기능 요약: 다중 LLM 프로바이더(Antigravity, OpenCode, DeepInfra, EXAONE)의 프리셋과 라우팅을 통합 관리하는 DSH 엔진 어댑터입니다.
 > 상세 설명: [문서 인덱스](docs/INDEX.md)
 > 호스트 기준: DSH `0.2.2-rc.3`, Node `v24.22.1` (실측 2026-11-14)
