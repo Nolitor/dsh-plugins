@@ -157,17 +157,150 @@ function checkSpec(kind, entry, errors) {
   }
 }
 
-/** Preset ids from `lib/presets.js`, or null when the file cannot be read. */
-async function presetIds(root) {
+/** Preset declarations from `lib/presets.js`, or null when they cannot be read. */
+async function readPresets(root) {
   const path = join(root, 'lib', 'presets.js')
   if (!existsSync(path)) return null
   try {
     const mod = await import(pathToFileURL(path).href)
     if (!Array.isArray(mod.PRESETS)) return null
-    return new Set(mod.PRESETS.map((preset) => preset?.id).filter(Boolean))
+    return mod.PRESETS
   } catch {
     return null
   }
+}
+
+
+/**
+ * The ONE explicit reconciliation between the two billing vocabularies.
+ *
+ * `specs/pricing/<id>.json` says `kind` (`subscription` / `flat` /
+ * `live-catalog` / `free`) while `preset.usage.billing.mode` says `mode`
+ * (`subscription` / `flat` / `pay-per-token` / `none`). They are different
+ * words for the same fact, and nothing compared them: a pricing file could say
+ * `free` while the preset bills per token and every gate stayed green. The map
+ * below is the whole translation; a `kind` outside it is a VOCABULARY gap and
+ * is reported as such instead of being silently accepted.
+ */
+export const PRICING_KIND_TO_BILLING_MODE = Object.freeze({
+  subscription: 'subscription',
+  flat: 'flat',
+  'live-catalog': 'pay-per-token',
+  free: 'none',
+  none: 'none',
+})
+
+/**
+ * Spec ↔ preset mirror check: the `specs/` layer is a SECOND registry, so every
+ * fact it restates about a preset must equal the runtime declaration.
+ *
+ * Measured before this gate existed (2026-11-14): rewriting
+ * `specs/providers/deepinfra.json` to a bogus endpoint, a different protocol or
+ * another model id still exited 0, because the two registries were validated
+ * independently and only joined by `preset` id. The mirror is therefore
+ * checked field by field:
+ *   - `specs/providers/<id>.json` exists for every preset id, and is that id;
+ *   - `spec.protocol === preset.endpoint.protocol` and
+ *     `spec.endpoint === preset.endpoint.baseUrl` — except `mode: 'daemon'`,
+ *     whose base URL is resolved at runtime and legitimately absent;
+ *   - `spec.pricing` names the preset's own pricing file, which exists;
+ *   - `specs/pricing/<id>.kind` maps to `preset.usage.billing.mode` through
+ *     {@link PRICING_KIND_TO_BILLING_MODE};
+ *   - a STATIC model list (`catalog.layers[].models`) is a declaration and must
+ *     equal `spec.models`; a live-catalog preset declares no ids, so only its
+ *     non-empty `models` is enforced (there is nothing to compare to).
+ * @param {object} specs - loaded specs.
+ * @param {{presets?: readonly object[]}} [options] - declarations to mirror.
+ * @returns {{errors: string[], warnings: string[]}} the verdict.
+ */
+export function checkPresetMirror(specs, { presets } = {}) {
+  const errors = []
+  const warnings = []
+  if (!Array.isArray(presets) || presets.length === 0) return { errors, warnings }
+
+  const knownIds = new Set(presets.map((preset) => preset?.id).filter(Boolean))
+  const providers = new Map()
+  for (const entry of specs?.providers ?? []) {
+    const doc = docOf(entry)
+    if (!isPlainObject(doc) || !isNonEmptyString(doc.id)) continue
+    providers.set(doc.id, { doc, file: entry?.file })
+  }
+  const pricing = new Map()
+  for (const entry of specs?.pricing ?? []) {
+    const doc = docOf(entry)
+    if (isPlainObject(doc) && isNonEmptyString(doc.provider)) pricing.set(doc.provider, { doc, file: entry?.file })
+  }
+
+  for (const preset of presets) {
+    const id = preset?.id
+    if (!isNonEmptyString(id)) continue
+    const label = `preset ${id}`
+
+    const mirror = providers.get(id)
+    if (mirror === undefined) {
+      errors.push(`${label}: no specs/providers/${id}.json — the spec layer must mirror every preset`)
+      continue
+    }
+    const spec = mirror.doc
+    // `file` is absent when a caller validates in-memory documents (tests do);
+    // only compare it when the loader supplied one.
+    const file = mirror.file ?? `${id}.json`
+    if (mirror.file !== undefined && mirror.file !== `${id}.json`) {
+      errors.push(`${label}: declared in specs/providers/${mirror.file}, expected ${id}.json`)
+    }
+    // A spec naming a DIFFERENT, EXISTING preset is a contradiction (two
+    // presets joined to one spec). An unknown name is only a warning, reported
+    // by the preset soft-check below, so this never masks that softer case.
+    if (spec.preset !== undefined && spec.preset !== id && knownIds.has(spec.preset)) {
+      errors.push(`${label}: specs/providers/${file} names preset "${String(spec.preset)}", which is another preset`)
+    }
+
+    const endpoint = preset?.endpoint ?? {}
+    if (endpoint.mode !== 'daemon') {
+      if (isNonEmptyString(endpoint.protocol) && spec.protocol !== endpoint.protocol) {
+        errors.push(`${label}: specs/providers/${file} names protocol "${String(spec.protocol)}" but the preset speaks "${endpoint.protocol}"`)
+      }
+      if (isNonEmptyString(endpoint.baseUrl) && spec.endpoint !== endpoint.baseUrl) {
+        errors.push(`${label}: specs/providers/${file} names endpoint "${String(spec.endpoint)}" but the preset serves "${endpoint.baseUrl}"`)
+      }
+    }
+
+    if (isNonEmptyString(spec.pricing) && spec.pricing !== id) {
+      errors.push(`${label}: "pricing" names "${spec.pricing}" but the preset's pricing file is specs/pricing/${id}.json`)
+    }
+    const price = pricing.get(id)
+    if (price === undefined) {
+      errors.push(`${label}: no specs/pricing/${id}.json — the preset's billing facts have no source file`)
+    } else {
+      const mapped = PRICING_KIND_TO_BILLING_MODE[price.doc.kind]
+      const declared = preset?.usage?.billing?.mode
+      if (mapped === undefined) {
+        warnings.push(`${label}: specs/pricing/${id}.json kind "${String(price.doc.kind)}" is not in PRICING_KIND_TO_BILLING_MODE — add the mapping or fix the kind`)
+      } else if (isNonEmptyString(declared) && mapped !== declared) {
+        errors.push(`${label}: specs/pricing/${id}.json kind "${price.doc.kind}" maps to billing "${mapped}" but the preset declares usage.billing.mode "${declared}"`)
+      }
+    }
+
+    // A declared (static) model list is a second registry of ids; a live
+    // catalog preset declares none, so its spec's models are simply the last
+    // measured subset and there is no counterpart to disagree with.
+    const staticModels = []
+    for (const layer of Array.isArray(preset?.catalog?.layers) ? preset.catalog.layers : []) {
+      for (const model of Array.isArray(layer?.models) ? layer.models : []) {
+        if (isNonEmptyString(model?.id)) staticModels.push(model.id)
+      }
+    }
+    if (staticModels.length > 0 && Array.isArray(spec.models)) {
+      for (const model of staticModels) {
+        if (!spec.models.includes(model)) errors.push(`${label}: preset declares model "${model}" but specs/providers/${file} does not list it`)
+      }
+      for (const model of spec.models) {
+        if (!staticModels.includes(model)) errors.push(`${label}: specs/providers/${file} lists model "${String(model)}" the preset does not declare`)
+      }
+    }
+  }
+
+  return { errors, warnings }
 }
 
 /**
@@ -223,7 +356,8 @@ export async function validateSpecs(specs, { root } = {}) {
   // Soft check: the preset declaration is the runtime surface, but a missing or
   // unparseable `lib/presets.js` must not hide a real spec error behind a crash.
   const base = resolve(root ?? specs?.root ?? DEFAULT_ROOT)
-  const known = await presetIds(base)
+  const presets = await readPresets(base)
+  const known = presets === null ? null : new Set(presets.map((preset) => preset?.id).filter(Boolean))
   if (known) {
     for (const entry of specs?.providers ?? []) {
       const doc = docOf(entry)
@@ -233,6 +367,11 @@ export async function validateSpecs(specs, { root } = {}) {
       }
     }
   }
+  // The mirror is a HARD check: a spec that contradicts the runtime preset is
+  // not a freshness question, it is a wrong value that would be served.
+  const mirror = checkPresetMirror(specs, { presets: presets ?? [] })
+  errors.push(...mirror.errors)
+  warnings.push(...mirror.warnings)
 
   return { errors, warnings }
 }

@@ -2,7 +2,7 @@
  * Per-request cost and per-session spend, from DeepInfra's own accounting.
  *
  * DeepInfra reports the cost of every completion on the wire, so this module
- * PARSE it rather than deriving it. Measured 2026-11-04, the final streaming
+ * PARSES it rather than deriving it. Measured 2026-11-04, the final streaming
  * event carries:
  *
  *   "usage": {
@@ -30,31 +30,32 @@
  *                         (gpt-oss-120b, claude-sonnet-5). Absence is "not
  *                         reported", never a fabricated zero.
  *
- * This module is standalone: it parses and accumulates, and the adapter calls it.
- * Nothing here reaches into the streaming or display path.
+ * WHAT IS LOCAL AND WHAT IS SHARED (Phase 2):
+ *   - LOCAL: the wire parsing (`parseCost`), the catalog list-price projection
+ *     (`listPriceOf`) and the chip renderer (`formatCost`) — DeepInfra-specific
+ *     vocabulary that no other vendor shares.
+ *   - SHARED: the ledger, the persisted store, `pickSession` and `numberOrNull`,
+ *     imported from `@nolit/dsh-custom-router/cost`. This file used to carry a
+ *     byte-derived copy of all four; that copy is deleted, not forked.
+ *
+ * The two thin wrappers below exist only because this vendor's call sites use a
+ * positional turn argument and a `{ store }` ledger factory, while the shared
+ * core takes an options object and separates `merge()` from construction. The
+ * arithmetic and the persisted shape are entirely the core's.
  *
  * @module @nolit/dsh-deepinfra/cost
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 
-/** The ledger schema version, so a future reader can migrate instead of guess. */
-export const LEDGER_VERSION = 1
+import {
+  LEDGER_VERSION,
+  createCostLedger as createSharedLedger,
+  createCostStore as createSharedStore,
+  numberOrNull,
+  pickSession,
+} from '../../../lib/cost.js'
 
-/**
- * Read a finite number, or null.
- *
- * 0 is a real answer ("this call was free"), so only a missing or unusable value
- * becomes null.
- *
- * @param {unknown} value - wire value.
- * @returns {number|null} the number, or null when absent/not finite.
- */
-export function numberOrNull(value) {
-  if (value === null || value === undefined || value === '') return null
-  const n = Number(value)
-  return Number.isFinite(n) ? n : null
-}
+export { LEDGER_VERSION, numberOrNull, pickSession }
 
 /**
  * Parse one wire `usage` object into a cost record.
@@ -135,206 +136,6 @@ export function listPriceOf(raw, pricing) {
   return amount
 }
 
-/** The zeroed per-session accumulator. */
-function zeroTotals() {
-  return {
-    requests: 0,
-    // costUsd      = actually billed (what the provider charged)
-    // listCostUsd  = at catalog list price, before any promotion
-    costUsd: 0,
-    listCostUsd: 0,
-    pricedRequests: 0,
-    unpricedRequests: 0,
-    byModel: {},
-    turns: {},
-    tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
-    lastAt: null,
-    firstAt: null,
-  }
-}
-
-/**
- * Create the per-session cost ledger.
- *
- * Records are partitioned the way the owner asked for: by SESSION (the
- * accumulator's key), by MODEL (inside it), and by TURN (a turn index the caller
- * supplies, so one DSH turn that makes two model calls is still one turn's cost).
- *
- * @param {{ now?: () => number, store?: object|null }} [options] - clock and store seams.
- * @returns {object} the ledger.
- */
-export function createCostLedger({ now = Date.now, store = null } = {}) {
-  /** @type {Map<string, object>} */
-  const sessions = new Map()
-  /** @type {Array<object>} recent per-request records, newest last (bounded) */
-  const recent = []
-  const RECENT_LIMIT = 500
-
-  const load = () => {
-    if (store === null) return
-    const saved = store.read()
-    if (saved === null) return
-    for (const [sessionId, totals] of Object.entries(saved?.sessions ?? {})) {
-      if (sessionId && totals && typeof totals === 'object') sessions.set(sessionId, { ...zeroTotals(), ...totals })
-    }
-    if (Array.isArray(saved?.recent)) recent.push(...saved.recent.slice(-RECENT_LIMIT))
-  }
-  let flushTimer = null
-  const snapshot = () => {
-    const out = {}
-    for (const [sessionId, totals] of sessions) out[sessionId] = totals
-    return { version: LEDGER_VERSION, sessions: out, recent: recent.slice(-RECENT_LIMIT), savedAt: new Date(now()).toISOString() }
-  }
-  const persist = () => {
-    if (store === null) return
-    // WRITE SYNCHRONOUSLY.
-    //
-    // A 1-second debounce with `.unref()` looked harmless and was not: measured
-    // 2026-11-05, a one-turn `dsh headless` run exits in well under a second, so
-    // the pending timer never fired, the ledger file was never created, and the
-    // usage panel reported zero for work that had genuinely been billed. An
-    // unref'd timer is a promise the process is free to break.
-    //
-    // The write is small (one JSON object per session) and happens once per model
-    // call, which is already an I/O-bound operation.
-    store.write(snapshot())
-    if (flushTimer !== null) {
-      clearTimeout(flushTimer)
-      flushTimer = null
-    }
-  }
-  load()
-
-  const totalsOf = (sessionId) => {
-    let totals = sessions.get(sessionId)
-    if (totals === undefined) {
-      totals = zeroTotals()
-      sessions.set(sessionId, totals)
-    }
-    return totals
-  }
-
-  /**
-   * Record one completed request.
-   * @param {string} sessionId - DSH session id.
-   * @param {string} model - the exact route on the wire.
-   * @param {ReturnType<typeof parseCost>} cost - parsed record.
-   * @param {number} [turn] - DSH turn index, for the per-turn partition.
-   * @returns {object} the session totals after the record.
-   */
-  const record = (sessionId, model, cost, turn) => {
-    const id = typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : '(no session)'
-    const route = typeof model === 'string' && model.length > 0 ? model : '(no model)'
-    const at = now()
-    const totals = totalsOf(id)
-    totals.requests += 1
-    totals.lastAt = at
-    if (totals.firstAt === null) totals.firstAt = at
-
-    if (cost?.costUsd === null || cost?.costUsd === undefined) totals.unpricedRequests += 1
-    else {
-      totals.pricedRequests += 1
-      totals.costUsd += cost.costUsd
-    }
-    if (typeof cost?.listCostUsd === 'number') totals.listCostUsd = (totals.listCostUsd ?? 0) + cost.listCostUsd
-
-    const perModel = totals.byModel[route] ?? (totals.byModel[route] = {
-      requests: 0, costUsd: 0, listCostUsd: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
-    })
-    perModel.requests += 1
-    if (typeof cost?.costUsd === 'number') perModel.costUsd += cost.costUsd
-    if (typeof cost?.listCostUsd === 'number') perModel.listCostUsd = (perModel.listCostUsd ?? 0) + cost.listCostUsd
-
-    // The per-turn partition: a turn may make several calls (tool loop), and the
-    // owner asked for the split by turn, not only by session.
-    const turnKey = Number.isInteger(turn) && turn >= 0 ? String(turn) : 'unassigned'
-    const perTurn = totals.turns[turnKey] ?? (totals.turns[turnKey] = {
-      requests: 0, costUsd: 0, listCostUsd: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
-    })
-    perTurn.requests += 1
-    if (typeof cost?.costUsd === 'number') perTurn.costUsd += cost.costUsd
-    if (typeof cost?.listCostUsd === 'number') perTurn.listCostUsd = (perTurn.listCostUsd ?? 0) + cost.listCostUsd
-
-    if (cost?.tokens) {
-      for (const bucket of ['input', 'output', 'reasoning', 'cacheRead', 'cacheWrite']) {
-        const delta = cost.tokens[bucket] ?? 0
-        totals.tokens[bucket] = (totals.tokens[bucket] ?? 0) + delta
-        perModel.tokens[bucket] = (perModel.tokens[bucket] ?? 0) + delta
-        perTurn.tokens[bucket] = (perTurn.tokens[bucket] ?? 0) + delta
-      }
-    }
-
-    recent.push({
-      at, sessionId: id, model: route, turn: turnKey,
-      costUsd: cost?.costUsd ?? null,
-      listCostUsd: cost?.listCostUsd ?? null,
-      costSource: cost?.costSource ?? null,
-      tokens: cost?.tokens ?? null,
-    })
-    if (recent.length > RECENT_LIMIT) recent.splice(0, recent.length - RECENT_LIMIT)
-
-    persist()
-    return totals
-  }
-
-  return {
-    record,
-    session(sessionId) {
-      const totals = sessions.get(sessionId)
-      return totals === undefined ? null : { sessionId, ...totals }
-    },
-    summary() {
-      const bySession = []
-      let costUsd = 0
-      let listCostUsd = 0
-      let requests = 0
-      for (const [sessionId, totals] of sessions) {
-        costUsd += totals.costUsd
-        listCostUsd += totals.listCostUsd ?? 0
-        requests += totals.requests
-        bySession.push({ sessionId, ...totals })
-      }
-      bySession.sort((left, right) => (right.lastAt ?? 0) - (left.lastAt ?? 0))
-      return { sessions: bySession.length, requests, costUsd, listCostUsd, bySession, recent: recent.slice(-50).reverse() }
-    },
-    reset(sessionId) {
-      if (sessionId === undefined) {
-        sessions.clear()
-        recent.length = 0
-      } else sessions.delete(sessionId)
-      persist()
-    },
-    flush() {
-      if (store === null) return false
-      return store.write(snapshot())
-    },
-  }
-}
-
-/**
- * Pick the session whose spend describes the screen.
- *
- * Exact id first (with or without the `session-` prefix), then the most recently
- * active session. An exact-only match reports nothing for a live conversation
- * whose DOM carries a different id (the lesson recorded in opencode-v2).
- *
- * @param {{ bySession?: object[] }|null} summary - ledger summary.
- * @param {string|null|undefined} sessionId - the id the page reports.
- * @returns {object|null} the entry, or null when nothing has been spent.
- */
-export function pickSession(summary, sessionId) {
-  const list = Array.isArray(summary?.bySession) ? summary.bySession : []
-  if (list.length === 0) return null
-  const bare = (value) => String(value ?? '').replace(/^session-/, '')
-  if (typeof sessionId === 'string' && sessionId.length > 0) {
-    const exact = list.find((row) => row?.sessionId === sessionId || bare(row?.sessionId) === bare(sessionId))
-    if (exact !== undefined) return exact
-  }
-  return list.reduce((best, row) => (best === null || (row?.lastAt ?? 0) > (best.lastAt ?? 0) ? row : best), null)
-}
-
 /**
  * Render a cost figure the way the composer chip shows it.
  *
@@ -361,31 +162,70 @@ export const COST_FILE_NAME = 'deepinfra-session-cost.json'
 /**
  * Reader/writer pair for the persisted ledger.
  *
+ * The shared store takes an injected `fs` so it stays loadable from the browser
+ * bundle; this wrapper supplies `node:fs` once, here, where the server side is
+ * the only caller. Writes are atomic through the shared implementation.
+ *
  * @param {{ path: string }} options - resolved ledger path.
  * @returns {{ path: string, read: () => object|null, write: (snapshot: object) => boolean }}
  */
 export function createCostStore({ path } = {}) {
+  return createSharedStore({ path, fs: { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } })
+}
+
+/**
+ * Create the per-session cost ledger.
+ *
+ * Records are partitioned the way the owner asked for: by SESSION (the
+ * accumulator's key), by MODEL (inside it), and by TURN (a turn index the caller
+ * supplies, so one DSH turn that makes two model calls is still one turn's cost).
+ *
+ * The shared ledger owns the accumulator, the partitions, the merge and the
+ * snapshot. This wrapper adds the two things this vendor's call sites need and
+ * the core deliberately does not do itself:
+ *   - a POSITIONAL turn argument (`record(id, model, cost, turn)`);
+ *   - a SYNCHRONOUS persistence on every record, and a restart load at
+ *     construction. Measured 2026-11-05: a debounced write with `.unref()` lost
+ *     the bill entirely on a one-turn headless run, so nothing here is deferred.
+ *
+ * @param {{ now?: () => number, store?: object|null }} [options] - clock and store seams.
+ * @returns {object} the ledger.
+ */
+export function createCostLedger({ now = Date.now, store = null } = {}) {
+  const ledger = createSharedLedger({ now })
+
+  // Restart recovery: fold the last persisted snapshot in exactly once. The
+  // shared merge is additive and idempotent, and it tolerates every row shape
+  // this plugin has ever written.
+  if (store !== null) {
+    const saved = store.read()
+    if (saved !== null) ledger.merge(saved)
+  }
+
+  const persist = () => (store === null ? false : store.write(ledger.snapshot()))
+
+  /**
+   * Record one completed request.
+   * @param {string} sessionId - DSH session id.
+   * @param {string} model - the exact route on the wire.
+   * @param {ReturnType<typeof parseCost>} cost - parsed record.
+   * @param {number} [turn] - DSH turn index, for the per-turn partition.
+   * @returns {object} the session totals after the record.
+   */
+  const record = (sessionId, model, cost, turn) => {
+    const outcome = ledger.record(sessionId, model, cost, { turn })
+    persist()
+    return outcome.totals
+  }
+
   return {
-    path,
-    read() {
-      if (!path) return null
-      try {
-        const raw = JSON.parse(readFileSync(path, 'utf8'))
-        return raw && typeof raw.sessions === 'object' ? raw : null
-      } catch {
-        // Missing or corrupt state is "nothing measured yet", never a crash.
-        return null
-      }
+    record,
+    session: (sessionId) => ledger.session(sessionId),
+    summary: () => ledger.summary(),
+    reset(sessionId) {
+      ledger.reset(sessionId)
+      persist()
     },
-    write(value) {
-      if (!path) return false
-      try {
-        mkdirSync(dirname(path), { recursive: true })
-        writeFileSync(path, JSON.stringify(value, null, 2) + '\n')
-        return true
-      } catch {
-        return false
-      }
-    },
+    flush: () => persist(),
   }
 }

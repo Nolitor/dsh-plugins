@@ -4,7 +4,17 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { createCostLedger, createCostStore, formatCost, parseCost, pickSession } from '../lib/cost.js'
+import * as core from '../../../lib/cost.js'
+import {
+  COST_FILE_NAME,
+  LEDGER_VERSION,
+  createCostLedger,
+  createCostStore,
+  formatCost,
+  numberOrNull,
+  parseCost,
+  pickSession,
+} from '../lib/cost.js'
 
 /**
  * The provider's real usage object, captured 2026-11-04 from
@@ -89,6 +99,10 @@ test('spend survives a restart through the store', async () => {
   const raw = JSON.parse(readFileSync(path, 'utf8'))
   assert.equal(raw.version, 1)
   assert.ok(raw.sessions['session-1'])
+  // Phase 2: the snapshot is the SHARED ledger's, so it names its canonical
+  // buckets — a re-forked local ledger would fail this key check.
+  assert.deepEqual(raw.buckets, [...core.TOKEN_BUCKETS])
+  assert.equal(COST_FILE_NAME, 'deepinfra-session-cost.json')
 })
 
 test('the ledger stores BILLED and LIST as separate figures', () => {
@@ -155,6 +169,11 @@ test('a corrupt ledger file is "nothing measured yet", not a crash', () => {
 })
 
 test('pickSession prefers the exact id, then the most recent', () => {
+  // Phase 2: the session picker and the number reader are the SHARED ledger's,
+  // re-exported by identity — this file's copies were byte-derived from it.
+  assert.equal(pickSession, core.pickSession)
+  assert.equal(numberOrNull, core.numberOrNull)
+  assert.equal(LEDGER_VERSION, core.LEDGER_VERSION)
   const ledger = createCostLedger()
   ledger.record('session-aaa', 'm', parseCost(MEASURED), 1)
   ledger.record('session-bbb', 'm', parseCost({ prompt_tokens: 1, completion_tokens: 1, estimated_cost: 9 }), 1)

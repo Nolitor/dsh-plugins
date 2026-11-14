@@ -32,11 +32,14 @@ import { planApplications, presetEntries } from '../lib/index.js'
 import {
   BILLING_MODES,
   CATALOG_LAYERS,
+  DECLARATION_DEAD_FIELDS,
+  DECLARATION_RUNTIME_FIELDS,
   ENDPOINT_MODES,
   PRESET_JSON_SCHEMA,
   PROBE_KINDS,
   PROBE_SHAPES,
   WIRE_SERVERS,
+  checkDeclarationFields,
 } from '../lib/preset-schema.js'
 
 test('the three measured presets validate cleanly', () => {
@@ -444,5 +447,59 @@ test('every provider package in this track agrees with the router version it pee
       routerPkg.version,
       `${pkg.name} must peer on @nolit/dsh-custom-router@${routerPkg.version}`,
     )
+  }
+})
+
+// ------------------------------------------ declaration runtime-field allowlist
+// MEASURED GAP (2026-11-14): preset declarations carried fields with no runtime
+// consumer, and a NEW dead field could be added without any gate noticing. The
+// allowlist is closed: an unlisted field is an error, a listed-but-dead field is
+// a visible warning.
+
+test('every shipped declaration passes the runtime-field allowlist', () => {
+  for (const preset of [...PRESETS, DECLARATION_EXAMPLE]) {
+    const verdict = checkDeclarationFields(preset)
+    assert.deepEqual(verdict.errors, [], `${preset.id} declares an unknown field`)
+  }
+})
+
+test('a field with no measured consumer is rejected, naming the field', () => {
+  const candidate = structuredClone(PRESETS[2])
+  candidate.endpoint.frobnicate = true
+  const verdict = checkDeclarationFields(candidate)
+  assert.equal(verdict.ok, false)
+  assert.match(verdict.errors.join('\n'), /unknown declaration field "endpoint\.frobnicate"/)
+  assert.match(verdict.errors.join('\n'), /DECLARATION_RUNTIME_FIELDS/)
+})
+
+test('an invented field inside the usage block is rejected', () => {
+  const candidate = structuredClone(PRESETS[2])
+  candidate.usage.billing.currency = 'USD'
+  assert.match(checkDeclarationFields(candidate).errors.join('\n'), /usage\.billing\.currency/)
+})
+
+test('a listed-but-dead field is a warning, never an error', () => {
+  const candidate = structuredClone(PRESETS[2])
+  delete candidate.auth
+  candidate.auth = { mode: 'api-key', sources: [...PRESETS[2].auth.sources] }
+  const verdict = checkDeclarationFields(candidate)
+  assert.equal(verdict.ok, true, 'a dead field must not fail the tree')
+  assert.ok(verdict.warnings.some((warning) => /dead declaration field "auth\.mode"/.test(warning)), verdict.warnings.join('\n'))
+})
+
+test('the allowlist names usage.billing.windows (it has a consumer: readDeclaredWindows)', () => {
+  // Phase 1 wave 3 gave this field a consumer; a stale allowlist that still
+  // called it dead would be the same defect in the other direction.
+  assert.ok(DECLARATION_RUNTIME_FIELDS.includes('usage.billing.windows'))
+  assert.equal(Object.prototype.hasOwnProperty.call(DECLARATION_DEAD_FIELDS, 'usage.billing.windows'), false)
+  const candidate = structuredClone(findPreset('antigravity'))
+  const verdict = checkDeclarationFields(candidate)
+  assert.equal(verdict.ok, true)
+  assert.ok(!verdict.warnings.some((warning) => /windows/.test(warning)), 'windows must not be reported dead')
+})
+
+test('the dead-field report lists the measured dead fields', () => {
+  for (const field of ['auth.mode', 'auth.sources', 'endpoint.mode', 'catalog.mode', 'surfaces.skill']) {
+    assert.equal(Object.prototype.hasOwnProperty.call(DECLARATION_DEAD_FIELDS, field), true, `${field} should be documented as dead`)
   }
 })

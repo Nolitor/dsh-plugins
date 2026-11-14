@@ -29,6 +29,8 @@
  */
 import Schema from '@deepseek-ai/schemastery'
 
+import { createCatalogCache, DEFAULT_CATALOG_TTL_MS } from '../../../lib/catalog-cache.js'
+
 import { AntigravityAdapter } from './adapter.js'
 import { TokenProvider } from './auth.js'
 import { DEFAULT_EFFORT, DEFAULT_MODE, DEFAULT_MODEL, EFFORTS, MODES } from './backends.js'
@@ -198,11 +200,10 @@ function optional(ctx, service) {
  * @returns `{ list, find, account, snapshot }`.
  */
 export function createCatalog({ config, tokens, fetchImpl, log, now, onChanged }) {
-  let cache = null
-  let inflight = null
+  const clock = typeof now === 'function' ? now : Date.now
   // Weekly / 5-hour limits live on a separate RPC (retrieveUserQuotaSummary),
-  // measured 2026-11-05. They move faster than the model catalog, so cache them
-  // for a minute only.
+  // measured 2026-11-05. They move faster than the model catalog, so they keep
+  // their own minute-long cache rather than riding the 15-minute one.
   let quotaCache = null
   let quotaInflight = null
 
@@ -260,34 +261,36 @@ export function createCatalog({ config, tokens, fetchImpl, log, now, onChanged }
       entries: enabled.length > 0 ? entries.filter((entry) => enabled.includes(entry.id)) : entries,
       all: entries,
       account: account ? parseAccount(account) : undefined,
-      fetchedAt: now(),
+      fetchedAt: clock(),
     }
   }
 
-  /** Cached snapshot or a fresh load. */
+  // The TTL, the single-flight probe, the stale answer and the "a failed refresh
+  // never becomes fresh data" rule are the router's one cache
+  // (`lib/catalog-cache.js`). The TTL stays read from config on every call, so a
+  // settings change applies without rebuilding this reader.
+  const cache = createCatalogCache({
+    fetch: load,
+    ttlMs: () => Number(configValue(config, 'catalogTtlMs')) || DEFAULT_CATALOG_TTL_MS,
+    now: clock,
+    warn: (message) => log?.warn?.(`antigravity: ${message}`),
+    onChanged: (value) => onChanged?.(value),
+  })
+
+  /**
+   * Cached snapshot or a fresh load.
+   *
+   * A cold probe failure leaves the cache empty and `read()` answers
+   * `undefined`; this returns a usable empty catalog instead of rejecting, since
+   * the routes and the model picker call it without a `catch`. It deliberately
+   * does NOT cache that empty answer — the previous reader did, which blanked the
+   * picker for a whole TTL after one bad poll.
+   */
   async function snapshot(signal) {
-    const ttl = Number(configValue(config, 'catalogTtlMs')) || 900000
-    if (cache && now() - cache.fetchedAt < ttl) return cache
-    if (inflight) return inflight
-    inflight = load(signal)
-      .then((value) => {
-        cache = value
-        onChanged?.(value)
-        return value
-      })
-      .catch((error) => {
-        if (cache) {
-          log?.warn?.(`antigravity: catalog refresh failed, serving stale: ${error?.message ?? error}`)
-          return cache
-        }
-        log?.warn?.(`antigravity: catalog unavailable: ${error?.message ?? error}`)
-        cache = { entries: [], all: [], account: undefined, fetchedAt: now() }
-        return cache
-      })
-      .finally(() => {
-        inflight = null
-      })
-    return inflight
+    const value = await cache.read(signal)
+    if (value !== undefined) return value
+    log?.warn?.('antigravity: catalog unavailable; serving an empty model list')
+    return { entries: [], all: [], account: undefined, fetchedAt: clock() }
   }
 
   /**
@@ -320,7 +323,7 @@ export function createCatalog({ config, tokens, fetchImpl, log, now, onChanged }
     quotaSummary,
     /** Drop the cached catalog so the next list read re-applies enabledModels. */
     invalidate() {
-      cache = null
+      cache.invalidate()
     },
     /** Normalized model list (efforts attached). */
     list: async (signal) => (await snapshot(signal)).entries,

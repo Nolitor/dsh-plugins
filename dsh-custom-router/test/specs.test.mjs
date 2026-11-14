@@ -12,9 +12,11 @@ import { fileURLToPath } from 'node:url'
 
 import {
   DEFAULT_WATCH_MAX_AGE_DAYS,
+  PRICING_KIND_TO_BILLING_MODE,
   WATCH_LOCK_PATH,
   ageDays,
   checkFreshness,
+  checkPresetMirror,
   checkWatchBaseline,
   loadSpecs,
   loadWatchBaseline,
@@ -560,4 +562,89 @@ test('CLI build-spec-matrix: --check without --out targets docs/COMPATIBILITY-MA
   assert.equal(run(BUILD, ['--root', root, '--now', NOW]).status, 0)
   assert.ok(existsSync(join(root, 'docs', 'COMPATIBILITY-MATRIX.md')))
   assert.equal(run(BUILD, ['--root', root, '--now', NOW, '--check']).status, 0)
+})
+
+// --------------------------------------------------- spec ↔ preset mirror
+// MEASURED GAP (2026-11-14): mutating `specs/providers/deepinfra.json` to a
+// wrong endpoint, protocol or model exited 0. The specs layer is a second
+// registry; these tests are the proof that it can no longer contradict the
+// runtime declaration silently.
+
+/** One preset + the matching spec triple, as the mirror sees them. */
+function mirrorFixture(presetExtra = {}, specExtra = {}, pricingExtra = {}) {
+  const preset = {
+    id: 'alpha',
+    endpoint: { mode: 'http', protocol: 'wire-a', baseUrl: 'https://api.example.test/v1' },
+    usage: { billing: { mode: 'pay-per-token' } },
+    catalog: { layers: [{ source: 'override', models: [{ id: 'alpha-model' }] }] },
+    ...presetExtra,
+  }
+  const specs = {
+    providers: [{ file: 'alpha.json', value: provider('alpha', { protocol: 'wire-a', endpoint: 'https://api.example.test/v1', models: ['alpha-model'], ...specExtra }) }],
+    pricing: [{ file: 'alpha.json', value: pricing('alpha', { kind: 'live-catalog', ...pricingExtra }) }],
+  }
+  return { preset, specs }
+}
+
+test('checkPresetMirror: a matching spec passes', () => {
+  const { preset, specs } = mirrorFixture()
+  const verdict = checkPresetMirror(specs, { presets: [preset] })
+  assert.deepEqual(verdict.errors, [])
+})
+
+test('checkPresetMirror: a wrong endpoint is a hard error (measured gap)', () => {
+  const { preset, specs } = mirrorFixture({}, { endpoint: 'https://api.example.test/v9' })
+  const errors = checkPresetMirror(specs, { presets: [preset] }).errors
+  assert.ok(errors.some((error) => /names endpoint .* but the preset serves/.test(error)), errors.join('\n'))
+})
+
+test('checkPresetMirror: a wrong protocol is a hard error (measured gap)', () => {
+  const { preset, specs } = mirrorFixture({}, { protocol: 'wire-b' })
+  const errors = checkPresetMirror(specs, { presets: [preset] }).errors
+  assert.ok(errors.some((error) => /names protocol "wire-b" but the preset speaks "wire-a"/.test(error)), errors.join('\n'))
+})
+
+test('checkPresetMirror: a wrong model id is a hard error (measured gap)', () => {
+  const { preset, specs } = mirrorFixture({}, { models: ['alpha-model-v9'] })
+  const errors = checkPresetMirror(specs, { presets: [preset] }).errors
+  assert.match(errors.join('\n'), /does not list it/)
+  assert.match(errors.join('\n'), /the preset does not declare/)
+})
+
+test('checkPresetMirror: a pricing kind that contradicts the billing mode is a hard error', () => {
+  // `free` → `none`, while the preset declares `pay-per-token`.
+  const { preset, specs } = mirrorFixture({}, {}, { kind: 'free' })
+  const errors = checkPresetMirror(specs, { presets: [preset] }).errors
+  assert.ok(errors.some((error) => /kind "free" maps to billing "none" but the preset declares usage\.billing\.mode "pay-per-token"/.test(error)), errors.join('\n'))
+})
+
+test('checkPresetMirror: a missing provider spec is a hard error', () => {
+  const { preset, specs } = mirrorFixture()
+  specs.providers = []
+  const errors = checkPresetMirror(specs, { presets: [preset] }).errors
+  assert.match(errors.join('\n'), /no specs\/providers\/alpha\.json/)
+})
+
+test('checkPresetMirror: a daemon preset has no base URL to compare', () => {
+  const { preset, specs } = mirrorFixture(
+    { endpoint: { mode: 'daemon', protocol: 'wire-a', baseUrl: '' } },
+    { endpoint: 'daemon (resolved at runtime)' },
+  )
+  const verdict = checkPresetMirror(specs, { presets: [preset] })
+  assert.deepEqual(verdict.errors, [], 'a daemon base URL is resolved at runtime, never mirrored')
+})
+
+test('checkPresetMirror: the kind→billing table covers exactly the measured vocabulary', () => {
+  assert.deepEqual({ ...PRICING_KIND_TO_BILLING_MODE }, {
+    subscription: 'subscription',
+    flat: 'flat',
+    'live-catalog': 'pay-per-token',
+    free: 'none',
+    none: 'none',
+  })
+})
+
+test('checkPresetMirror: no presets means no mirror check, never a crash', () => {
+  assert.deepEqual(checkPresetMirror({ providers: [], pricing: [] }, { presets: [] }), { errors: [], warnings: [] })
+  assert.deepEqual(checkPresetMirror({ providers: [], pricing: [] }), { errors: [], warnings: [] })
 })

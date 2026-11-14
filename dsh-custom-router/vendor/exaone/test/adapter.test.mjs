@@ -110,6 +110,16 @@ test('reasoning effort is folded onto low|high|max and preserve_thinking is alwa
     await collect(adapter, { reasoningEffort: requested })
     assert.equal(JSON.parse(calls[0].init.body).reasoning_effort, wired, `${requested} must map to ${wired}`)
   }
+  // The 16-stop ceiling is still EXAONE's own value, even though the projection
+  // that enforces it is now the shared OpenAI core's.
+  const full = Array.from({ length: 16 }, (_, i) => `s${i}`)
+  const { adapter, calls } = adapterWith({ body: sse([{ choices: [{ delta: { content: 'ok' } }] }]) })
+  await collect(adapter, { stop: full })
+  assert.deepEqual(JSON.parse(calls[0].init.body).stop, full)
+  const over = Array.from({ length: 17 }, (_, i) => `s${i}`)
+  const rejected = adapterWith({ body: sse([{ choices: [{ delta: { content: 'ok' } }] }]) })
+  await assert.rejects(() => collect(rejected.adapter, { stop: over }), (error) => error.code === 'UNSUPPORTED_OPTION')
+  assert.equal(rejected.calls.length, 0, 'an unhonorable option must fail before any request is made')
 })
 
 test('a missing key fails before any request is made', async () => {

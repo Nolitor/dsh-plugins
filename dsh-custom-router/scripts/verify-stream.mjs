@@ -15,26 +15,113 @@
  *
  * @module @nolit/dsh-custom-router/scripts/verify-stream
  */
+import { readdirSync, readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const ENTRIES = ['dsh-antigravity', 'dsh-deepinfra', 'dsh-opencode-v2']
-const FORBIDDEN = ENTRIES.map((name) => new RegExp(name))
+
+/**
+ * The vendor set is MEASURED from `vendor/<name>/package.json`, never typed in.
+ *
+ * A hand-written list is how this guard was blind to a whole vendor: it named
+ * three of the four vendored packages, so `dsh-exaone` — a full vendored
+ * adapter with its own package name — was simply not guarded, and "vendor
+ * loads: 0" was true only for the three the list happened to remember. Reading
+ * the tree means a fifth vendor is guarded the moment it is vendored.
+ */
+function vendoredVendors() {
+  const dir = join(HERE, '..', 'vendor')
+  const out = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    let name
+    try {
+      name = JSON.parse(readFileSync(join(dir, entry.name, 'package.json'), 'utf8')).name
+    } catch {
+      continue // a directory without a package manifest mounts nothing
+    }
+    if (typeof name !== 'string' || name === '') continue
+    // `@nolit/dsh-exaone` publishes as `@nolit/…`; the coupling the guard blocks
+    // is either form, so both specifiers are forbidden.
+    out.push({ dir: entry.name, name, alias: name.split('/').pop() })
+  }
+  return out.sort((left, right) => left.dir.localeCompare(right.dir))
+}
+
+const VENDORS = vendoredVendors()
+if (VENDORS.length === 0) {
+  console.error('verify-stream: no vendored package found under vendor/ — the guard would be vacuous')
+  process.exit(2)
+}
+
+/** Specifiers (bare alias and scoped name) that must never resolve. */
+const FORBIDDEN = VENDORS.flatMap((vendor) => [vendor.alias, vendor.name])
+  .filter((value, index, all) => all.indexOf(value) === index)
+
+/** True when `specifier` is a vendored package or one of its subpaths. */
+function isVendorSpecifier(specifier) {
+  return FORBIDDEN.some((name) => specifier === name || specifier.startsWith(`${name}/`))
+}
+
 const attempted = []
+/** True while the guard probes itself; those refusals are not vendor loads. */
+let probing = false
 
 // Refuse at resolution, not after import: a vendor module that is merely
 // imported is already a coupling, even if nothing calls it.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (FORBIDDEN.some((re) => re.test(specifier))) {
-      attempted.push(specifier)
+    if (isVendorSpecifier(specifier)) {
+      if (!probing) attempted.push(specifier)
       throw new Error(`vendor module must not load: ${specifier}`)
     }
     return nextResolve(specifier, context)
   },
 })
+
+/**
+ * Prove the guard is LIVE for every vendor instead of trusting the list.
+ *
+ * `attempted.length === 0` on its own proves nothing: a vendor the guard does
+ * not know can never appear in that array, so a blind spot reads as a clean
+ * run. Each probe asks the resolver for a vendor specifier and REQUIRES the
+ * refusal; a specifier that resolves to something is reported as an unguarded
+ * vendor and fails the run. A control probe (`node:fs`) proves the resolver is
+ * actually consulted, so the self-test cannot pass by all calls being ignored.
+ */
+function guardSelfTest() {
+  probing = true
+  const unguarded = []
+  const probed = []
+  try {
+    for (const vendor of VENDORS) {
+      for (const specifier of [vendor.alias, vendor.name]) {
+        let resolved = null
+        try {
+          resolved = import.meta.resolve(specifier)
+        } catch (error) {
+          if (!/vendor module must not load/.test(String(error?.message))) unguarded.push(`${specifier} (${error?.code ?? 'error'})`)
+          else probed.push(specifier)
+          continue
+        }
+        unguarded.push(`${specifier} resolved to ${resolved}`)
+      }
+    }
+  } finally {
+    probing = false
+  }
+  let control = null
+  try {
+    control = import.meta.resolve('node:fs')
+  } catch {
+    control = null
+  }
+  return { vendors: VENDORS, probed, unguarded, control }
+}
+
+const guard = guardSelfTest()
 
 const { normalizeStream, readSseEvents, CODES } = await import(join(HERE, '..', 'lib', 'stream', 'index.js'))
 
@@ -359,16 +446,35 @@ for (const [name, fn] of cases) {
   }
 }
 
-const ok = pass === cases.length && attempted.length === 0
+/**
+ * The honest reading of "vendor loads: 0".
+ *
+ * Zero attempted loads is only meaningful when every vendored package was
+ * actually probed and refused. Otherwise an unguarded vendor is invisible: it
+ * cannot load (nothing imports it in this script) and it cannot appear in
+ * `attempted`. Both numbers are therefore asserted, plus the control probe.
+ */
+const guardOk = guard.unguarded.length === 0 && guard.control !== null && guard.probed.length === 2 * guard.vendors.length
+const ok = pass === cases.length && attempted.length === 0 && guardOk
 if (json) {
-  console.log(JSON.stringify({ ok, passed: pass, total: cases.length, vendorLoads: attempted, results }, null, 2))
+  console.log(JSON.stringify({
+    ok,
+    passed: pass,
+    total: cases.length,
+    vendorLoads: attempted,
+    guard: { vendors: guard.vendors.map((vendor) => vendor.name), probed: guard.probed, unguarded: guard.unguarded, control: guard.control },
+    results,
+  }, null, 2))
 } else {
   console.log('')
   console.log(`dispatch cases : ${pass}/${cases.length}`)
-  console.log(`vendor loads   : ${attempted.length} (must be 0)`)
+  console.log(`vendor guard   : ${guard.vendors.length} vendored package(s) probed, ${guard.probed.length}/${2 * guard.vendors.length} specifiers refused`)
+  for (const vendor of guard.vendors) console.log(`                 ${vendor.name} (vendor/${vendor.dir})`)
+  if (guard.unguarded.length > 0) console.log(`UNGUARDED      : ${guard.unguarded.join(', ')}`)
+  console.log(`vendor loads   : ${attempted.length} (must be 0, and every vendor above must be guarded)`)
   if (attempted.length > 0) console.log(`attempted      : ${attempted.join(', ')}`)
   console.log(ok
-    ? 'RESULT: the shared pipe dispatched standalone with zero vendor modules'
+    ? `RESULT: the shared pipe dispatched standalone with zero vendor modules, all ${guard.vendors.length} vendor guards proven live`
     : 'RESULT: FAILED')
 }
 process.exit(ok ? 0 : 1)

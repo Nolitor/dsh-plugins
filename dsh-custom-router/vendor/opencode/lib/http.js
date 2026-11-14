@@ -25,6 +25,15 @@
  *   - `POST /api/session/{id}/prompt` and `agent:"build"` session loops
  *   - persona `brief` strings or `[note: the caller declared ...]`
  *   - static `cwd` overrides for model context
+ *
+ * Stream implementation (Phase 2). This adapter now rides the shared downstream
+ * pipe by default: `pipe` defaults to `'shared'`, so `streamViaSharedPipe()` is
+ * the live path and the block lifecycle, finish table, usage ordering and the
+ * empty/cut/abort terminal policy come from `lib/stream`. The pre-Phase-B loop
+ * below is reachable only through the explicit opt-out `pipe: 'legacy'`; it is
+ * kept byte-identical so the shared path can still be diffed against it, and
+ * **W2-A2 deletes it** together with the vendor-local notation classifier it
+ * shares with the shared branch.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
@@ -293,13 +302,14 @@ export const Config = Schema.object({
   /**
    * Which stream implementation serves a generation request.
    *
-   * `legacy` is the default and is byte-identical to the pre-Phase-B loop.
-   * `shared` routes the response through the shared downstream pipe
-   * (`lib/stream/index.js`) with this provider's own hook set, so the block
-   * lifecycle, terminal policy and usage ordering come from the one core.
+   * `shared` is the DEFAULT (Phase 2): the response goes through the shared
+   * downstream pipe (`lib/stream`) with this provider's own hook set, so the
+   * block lifecycle, terminal policy and usage ordering come from the one core.
+   * `legacy` is an explicit OPT-OUT that keeps the pre-Phase-B loop, byte for
+   * byte; the follow-up cell (W2-A2) deletes it once the shared path has held.
    * Read per request (volatile), so a mode can be flipped without a restart.
    */
-  pipe: Schema.union(['legacy', 'shared']).default('legacy').volatile(),
+  pipe: Schema.union(['legacy', 'shared']).default('shared').volatile(),
   /**
    * Adapter-level retries when the backend answers a generation request with a
    * retryable status (see `httpRetryStatuses`). Exponential backoff:
@@ -2059,23 +2069,70 @@ export class OpencodeHttpAdapter {
         // A served route clears any stale refusal recorded for it.
         if (String(options.model ?? '').includes('/')) this.observe(options.model, 'usable')
 
-        // Phase B, B-2b2: the whole downstream stream may be served by the
-        // shared pipe instead of the loop below. The legacy loop stays exactly
-        // as it was; this branch owns every difference, and the flag is read
-        // per request so a mode can be flipped without a restart.
+        // Phase 2: the shared pipe IS the live path (`pipe` defaults to
+        // `'shared'`). The loop below survives only behind the explicit
+        // `pipe: 'legacy'` opt-out, kept for one more cell so the two paths can
+        // still be diffed; W2-A2 deletes it. The flag is read per request, so a
+        // mode can be flipped without a restart.
         if (config.pipe.get() === 'shared') {
-          yield* this.streamViaSharedPipe(options, {
-            response,
-            declaredTools,
-            declaredToolNames,
-            routeReasoningField: routeReasoningField ?? config.reasoningField.get(),
-            config,
-            signal,
-            timeout,
-            sseState,
-            jsonProbeState: { probe: '', textBlockEmpty: () => !textStarted },
-          })
-          return
+          // The shared pipe owns the terminal policy, but the transparent retry
+          // of a cut that produced NO visible output stays here: the pipe rethrows
+          // that case precisely so this loop can re-run the request from a clean
+          // attempt, which is invisible to the transcript.
+          let streamAttempt = 0
+          for (;;) {
+            try {
+              yield* this.streamViaSharedPipe(options, {
+                response,
+                declaredTools,
+                declaredToolNames,
+                routeReasoningField: routeReasoningField ?? config.reasoningField.get(),
+                config,
+                signal,
+                timeout,
+                sseState,
+              })
+              return
+            } catch (error) {
+              if (options.signal?.aborted) {
+                yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } } }
+                return
+              }
+              const detail = errorText(error)
+              const transient = isTransientStreamError(error)
+              trace.error({ detail: detail.slice(0, 240), transient, emitted: 0, retried: streamAttempt })
+              // Only a transport cut with nothing on screen is retryable, and the
+              // budget is the same `streamRetries` the legacy loop honours.
+              if (transient && streamAttempt < maxStreamRetries) {
+                streamAttempt += 1
+                this.ctx?.logger?.warn?.(
+                  `opencode-http-agent: upstream stream cut before any output (${detail}); retry ${streamAttempt}/${maxStreamRetries}`,
+                )
+                response = await send()
+                if (response.status === 401) {
+                  backend = await this.resolveBackend(signal, { force: true })
+                  response = await send()
+                }
+                if (!response.ok) {
+                  yield {
+                    type: 'finish',
+                    reason: {
+                      kind: 'error',
+                      failure: { code: 'OPENCODE_BACKEND_HTTP', message: `OpenCode backend HTTP ${response.status}` },
+                    },
+                  }
+                  return
+                }
+                continue
+              }
+              // Nothing to preserve: keep the honest error verdict.
+              yield {
+                type: 'finish',
+                reason: { kind: 'error', failure: { code: 'OPENCODE_BACKEND', message: detail } },
+              }
+              return
+            }
+          }
         }
 
         usage = null
@@ -2260,15 +2317,26 @@ export class OpencodeHttpAdapter {
    *      `recordCost` path.
    *   2. **A protocol defect is thrown**, not turned into an in-band finish: the
    *      pipe rethrows it, and it leaves this method as an `LlmError`.
-   *   3. **A transport cut stays in-band**, so partial output is preserved.
+   *   3. **A transport cut stays in-band**, so partial output is preserved —
+   *      except when nothing reached the host at all, where this method rethrows
+   *      so the caller's retry loop can re-run the request invisibly.
+   *
+   * The policy seams the pipe leaves to a provider are all used here: `mapFinish`
+   * (a missing `finish_reason` is a TRANSPORT cut, not a clean `stop`), `onCut`
+   * (preserve-after-output vs rethrow-before-output), `classifyText` (the JSON
+   * body probe) and `beforeSettle` (the probe drains before the gate decides).
    *
    * @param options - the caller's request options.
-   * @param context - `{ response, declaredTools, declaredToolNames, routeReasoningField, config, signal, timeout, sseState, jsonProbeState }`.
+   * @param context - `{ response, declaredTools, declaredToolNames, routeReasoningField, config, signal, timeout, sseState }`.
    * @returns async generator of `StreamChunk`s.
    */
   async *streamViaSharedPipe(options, context) {
     const { response, declaredTools, declaredToolNames, routeReasoningField, config, signal, timeout, sseState } = context
-    const logger = this.ctx?.logger
+    const schemaFor = (name) => {
+      const tool = declaredTools.find((item) => item.name === name)
+      const parameters = tool?.parameters
+      return parameters && typeof parameters === 'object' ? parameters : null
+    }
 
     // One lifecycle owner per stream (CP3): one controller, the caller's abort
     // forwarded into it, and the listener removed on dispose.
@@ -2277,26 +2345,40 @@ export class OpencodeHttpAdapter {
     // The display gate is the same one the legacy path uses, built from the
     // same declared names, so a recovered call is judged identically.
     const gate = createDisplayGate({ toolNames: declaredToolNames })
+    // The probe drain is handed to the contract as its pre-settle seam, so a body
+    // payload that is really a tool call is still a candidate when the gate
+    // decides. It is installed after the probe exists; the closure reads it late.
+    let drainProbe = () => []
     const hooks = createStreamHooks({
       reasoningField: routeReasoningField,
       toolNames: declaredToolNames,
       tools: declaredTools,
-      parser: 'legacy',
       gate,
+      beforeSettle: () => drainProbe(),
     })
+
+    /* ---------------------------------------------------------------------- */
+    /* State the pipe does not own, kept here (it is provider policy, not core) */
+    /* ---------------------------------------------------------------------- */
+    /** Whether a visible block (text or tool call) reached the host. */
+    let sawVisible = false
+    /** Whether ANY chunk reached the host, reasoning included. */
+    let emittedAny = false
+    /** The terminal cut, once known: only a cut justifies repairing arguments. */
+    let cutFailure = null
 
     // The JSON probe is the one legacy behaviour the contract does not model:
     // a body that is nothing but a JSON object may be a tool call the route
-    // failed to send structurally. Its drain must run AFTER the contract's own
-    // flush (which settles the gate), and both must reach the host in that
-    // order, so the probe is composed around `hooks.flush` rather than beside it.
+    // failed to send structurally. It holds such text back instead of showing
+    // it, and its drain must run AFTER the contract's own flush (which settles
+    // the gate), so it is composed around `hooks.flush` rather than beside it.
     const probeState = { buffered: '' }
     const MAX_JSON_PROBE = 65536
     const fencedBody = (text) => {
       const match = /^\s```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/.exec(text)
       return match ? match[1].trim() : null
     }
-    /** Feed text to the probe; returns a text part to emit, or null when held. */
+    /** Feed text to the probe; returns null when held, a part to emit otherwise. */
     const holdJsonText = (text) => {
       probeState.buffered += text
       const fenced = fencedBody(probeState.buffered)
@@ -2318,7 +2400,7 @@ export class OpencodeHttpAdapter {
       }
       return null
     }
-    /** Drain the probe at end of stream. */
+    /** Drain the probe at end of stream (called before the gate settles). */
     const flushJsonProbe = () => {
       if (probeState.buffered.length === 0) return []
       const pending = probeState.buffered
@@ -2328,25 +2410,109 @@ export class OpencodeHttpAdapter {
       return [{ kind: 'text', text: pending }]
     }
 
-    // Contract flush first (text -> reasoning -> gate.settle), then the probe.
-    const contractFlush = hooks.flush
-    const composedFlush = () => [...contractFlush(), ...flushJsonProbe()]
-
-    let usage = null
-    let sawVisible = false
     // Cost is parsed from the RAW usage object, which the pipe does not hand
-    // back to `onUsage` (it passes the normalized usage). The record list keeps
-    // the last raw object so cost is written exactly once, on arrival.
-    let lastRawUsage = null
-    const rawHooks = hooks
+    // back to `onUsage` (it passes the normalized usage), so the raw object is
+    // kept on arrival and cost is written exactly once, through the same
+    // ledger path as the legacy loop.
     const readEventWithCost = (payload) => {
-      const record = rawHooks.readEvent(payload)
-      if (record?.usage !== undefined) {
-        lastRawUsage = record.usage
-        // Once per usage event, through the same ledger path as the legacy loop.
-        this.recordCost(options.sessionId, options.model, parseCost(record.usage))
-      }
+      const record = hooks.readEvent(payload)
+      if (record?.usage !== undefined) this.recordCost(options.sessionId, options.model, parseCost(record.usage))
       return record
+    }
+
+    // The probe owns text BEFORE it becomes a block: a body that is only a
+    // tool-shaped JSON object must never reach the screen. This is the same
+    // predicate the legacy `routeParts` used (probe already holding, or the
+    // text block has not started and the text opens like JSON).
+    const classifyText = (text) => {
+      const parts = hooks.classifyText(text)
+      const out = []
+      for (const part of Array.isArray(parts) ? parts : []) {
+        if (part?.kind !== 'text' || typeof part.text !== 'string' || part.text.length === 0) {
+          out.push(part)
+          continue
+        }
+        if (probeState.buffered.length > 0) {
+          const held = holdJsonText(part.text)
+          if (held !== null) out.push(held)
+          continue
+        }
+        const trimmed = part.text.trimStart()
+        if (!sawVisible && (trimmed.startsWith('{') || trimmed.startsWith('```'))) {
+          const held = holdJsonText(part.text)
+          if (held !== null) out.push(held)
+          continue
+        }
+        out.push(part)
+      }
+      return out
+    }
+
+    // The contract flush already drains both classifiers, runs the probe through
+    // the `beforeSettle` seam, then settles the gate — exactly the legacy order.
+    drainProbe = flushJsonProbe
+
+    const createHooks = () => ({
+      ...hooks,
+      readEvent: readEventWithCost,
+      classifyText,
+      flush: () => hooks.flush(),
+      // A finish_reason that never arrived is a CUT, not a completion. Measured
+      // 2026-11-03: four requests ended exactly this way carrying reasoning only;
+      // the default table reported them as a clean `stop`, so the host committed
+      // a half response and no retry ran. Reporting a retryable TRANSPORT failure
+      // hands the step back to llm-retry.
+      mapFinish: (value) => {
+        if (value === undefined && sawVisible === false) {
+          const reason = sseState?.done ? 'without finish_reason' : 'before [DONE]'
+          return {
+            kind: 'error',
+            failure: {
+              code: 'TRANSPORT',
+              message: `OpenCode backend stream ended ${reason} after no visible output`,
+            },
+          }
+        }
+        return hooks.mapFinish(value)
+      },
+      // Keep the terminal policy: a cut after visible output is preserved as a
+      // `stop` (the host keeps the partial turn), a cut with nothing to keep is
+      // rethrown so the caller's own retry loop can re-run the request, and a
+      // caller that opted out keeps the honest error verdict.
+      onCut: (failure) => {
+        cutFailure = failure
+        const detail = failure?.message ?? 'the upstream stream was cut'
+        const transient = isTransientStreamError(Object.assign(new Error(detail), { code: failure?.code }))
+        // The retry is only invisible to the transcript when NOTHING was emitted:
+        // once any chunk (reasoning included) reached the host, re-running the
+        // request would duplicate it, so the cut is handled in-band instead.
+        if (emittedAny === false && transient) {
+          throw Object.assign(new Error(detail), { code: failure?.code ?? 'STREAM_CUT' })
+        }
+        if (config.streamCutPreserve.get()) {
+          return { type: 'finish', reason: { kind: 'stop' } }
+        }
+        return {
+          type: 'finish',
+          reason: {
+            kind: 'error',
+            failure: { code: 'OPENCODE_BACKEND', message: detail, ...(transient ? {} : {}) },
+          },
+        }
+      },
+    })
+
+    // A tool call's final arguments are normalised before the host sees them: the
+    // route re-sends a whole arguments snapshot instead of a fragment (measured
+    // 2026-11-01: 30 of 80 calls), and a cut can leave one unparseable. Both are
+    // repaired here, at the boundary, so the pipe stays canonical.
+    const finalizeToolBlock = (block) => {
+      const normalized = normalizeArguments(block.arguments, schemaFor(block.name))
+      if (normalized.mode === 'invalid') {
+        const repaired = cutFailure !== null ? (repairJson(block.arguments) ?? '{}') : normalized.value
+        return { ...block, arguments: repaired }
+      }
+      return { ...block, arguments: normalized.value }
     }
 
     try {
@@ -2355,14 +2521,47 @@ export class OpencodeHttpAdapter {
       const stream = normalizeStream({
         events,
         descriptor: OPENCODE_DESCRIPTOR,
-        createHooks: () => ({ ...hooks, readEvent: readEventWithCost, flush: composedFlush }),
+        createHooks,
         signal: lifecycle.signal,
-        onUsage: (normalized) => { usage = normalized },
       })
+      // A tool block's final arguments depend on whether the stream was CUT: only
+      // a cut justifies repairing invalid JSON. The pipe closes its blocks
+      // BEFORE it calls `onCut`, so every tool `block-end` is buffered here and
+      // released once the terminal state is known — order is preserved because
+      // the pipe emits `block-end`s first and its terminal chunk after.
+      const pendingToolEnds = []
+      const releaseToolEnds = function* () {
+        for (const chunk of pendingToolEnds.splice(0)) {
+          yield { ...chunk, block: finalizeToolBlock(chunk.block) }
+        }
+      }
       for await (const chunk of stream) {
-        if (chunk?.type === 'block-start') sawVisible = true
+        emittedAny = true
+        if (chunk?.type === 'block-start' && (chunk.blockType === 'text' || chunk.blockType === 'tool-call')) sawVisible = true
+        if (chunk?.type === 'block-end' && chunk.block?.type === 'tool-call') {
+          pendingToolEnds.push(chunk)
+          continue
+        }
+        // Any other chunk means the pipe is past its block-closing phase.
+        yield* releaseToolEnds()
+        // A caller timeout reaches the pipe as an abort; the adapter publishes
+        // its own stable code for it, exactly as the legacy loop did.
+        if (chunk?.type === 'finish' && chunk.reason?.kind === 'aborted' && timeout?.aborted && !options.signal?.aborted) {
+          yield {
+            type: 'finish',
+            reason: {
+              kind: 'error',
+              failure: {
+                code: 'OPENCODE_TIMEOUT',
+                message: `OpenCode backend exceeded timeoutMs=${config.timeoutMs.get()}`,
+              },
+            },
+          }
+          continue
+        }
         yield chunk
       }
+      yield* releaseToolEnds()
     } catch (error) {
       // A protocol defect leaves as a thrown failure (contract rule N5); a
       // transport cut is already in-band from the pipe's terminal policy.

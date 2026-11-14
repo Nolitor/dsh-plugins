@@ -116,6 +116,133 @@ export const PLAN_VERDICTS = Object.freeze(['match', 'mismatch', 'throttled', 'u
 /** CLI worker shapes. */
 export const CLI_SHAPES = Object.freeze(['async', 'sync'])
 
+/**
+ * Every declaration field with a MEASURED runtime consumer.
+ *
+ * WHY THIS EXISTS (measured 2026-11-14): a preset could declare a field that
+ * nothing reads and every gate stayed green — the declaration looked like a
+ * contract while half of it was documentation. `auth.mode`, `auth.sources`,
+ * `endpoint.mode/route/transport/chatPath`, `catalog.mode`, the probe layer's
+ * `kind`/`ttlMs` and `surfaces.skill` are all validated by this module and
+ * projected to the browser, but no runtime path consumes them: changing one
+ * changes nothing that runs.
+ *
+ * A field is listed here only with the evidence RECORDED, so the next reader
+ * can re-measure instead of trusting the list:
+ *   - `usage.billing.windows` → `lib/plan.js readDeclaredWindows()` (added in
+ *     the same wave this list was written; it was dead before that, and the
+ *     `usage.js` comment at its call site says so);
+ *   - `endpoint.baseUrl` → `lib/index.js probeOptions()` and
+ *     the vendored adapter entry modules, which build the request URL;
+ *   - `catalog.layers[].endpoint` → `lib/probe.js` (`probeUrl`);
+ *   - `catalog.layers[].shape` → `lib/probe.js` (vendor vs generic executor);
+ *   - `catalog.layers[].namespace` → `lib/probe.js` (`ctx.llm.discoverModels`);
+ *   - `catalog.layers[].models` → `lib/index.js mergeCatalog`, `lib/catalog.js`.
+ *
+ * The list is EXHAUSTIVE and closed: a new field must arrive with a consumer
+ * and an entry here, which is the point. `DECLARATION_DEAD_FIELDS` names the
+ * remainder that is still accepted for compatibility, with the reason it is
+ * dead, so the report can be read as a to-do list rather than a mystery.
+ */
+export const DECLARATION_RUNTIME_FIELDS = Object.freeze([
+  'id',
+  'name',
+  'kind',
+  'package',
+  'row',
+  'entries',
+  'entries[].row',
+  'entries[].specifier',
+  // `entry.config` is merged and handed to the mounted child verbatim
+  // (lib/index.js entryConfig), so its KEYS belong to the child plugin and are
+  // validated by that child's own Config schema, not here.
+  'entries[].config.*',
+  'providerId',
+  'modelPrefixes',
+  'catalogRoute',
+  // Consumed by lib/index.js + lib/catalog.js/probe.js.
+  'catalog.layers',
+  'catalog.layers[].source',
+  'catalog.layers[].endpoint',
+  'catalog.layers[].shape',
+  'catalog.layers[].namespace',
+  // A model ROW's keys are governed by `validateCatalogModel()` (its own
+  // schema, whose fields the catalog merge validates and the pipe reads), so
+  // the subtree is delegated rather than re-listed here.
+  'catalog.layers[].models.*',
+  'catalog.layers[].pricing',
+  // Consumed by lib/index.js probeOptions().
+  'endpoint.baseUrl',
+  // Consumed by lib/probe.js/plan.js/usage.js and the descriptor derivation.
+  'usage.record',
+  'usage.plan',
+  'usage.billing',
+  'usage.billing.mode',
+  'usage.billing.windows',
+  // readDeclaredWindows() reads `row?.label` (a bare string is also accepted).
+  'usage.billing.windows[].label',
+  'usage.routes',
+  'usage.routes[].path',
+  'usage.routes[].normalize',
+  // Consumed by lib/preset-derive.js and scripts/verify-presets.mjs.
+  'switches',
+  'switches[].name',
+  'switches[].module',
+  'switches[].role',
+  'switches[].default',
+  'surfaces',
+  'surfaces.model',
+  'surfaces.model.adapter',
+  'surfaces.model.factory',
+  'surfaces.subagent',
+  'surfaces.subagent.toolRow',
+  'surfaces.subagent.toolName',
+  'surfaces.subagent.maxDepth',
+  'surfaces.cli',
+  'surfaces.cli.shape',
+  'surfaces.cli.toolName',
+  'surfaces.cli.commandName',
+  'surfaces.cli.gates',
+  'surfaces.batch',
+  'surfaces.batch.shape',
+  'surfaces.batch.toolName',
+  'surfaces.batch.gate',
+  'surfaces.batch.default',
+  'surfaces.tools',
+  'surfaces.commands',
+])
+
+/**
+ * Declared-and-validated fields with NO runtime consumer (measured 2026-11-14).
+ *
+ * These are accepted — existing presets declare them and the JSON Schema
+ * mirrors them — but changing one changes nothing that runs. They are reported
+ * by `checkDeclarationFields()` so the gap stays visible; the alternative
+ * (rejecting them outright) would fail every current declaration and turn a
+ * report into an outage.
+ *
+ * `surfaces.skill` is the one entry that is NOT plainly dead: the type is
+ * validated and it is projected to the browser, but no surface in this package
+ * renders or dispatches it, so no preset may rely on it today.
+ */
+export const DECLARATION_DEAD_FIELDS = Object.freeze({
+  'auth.mode': 'validated and projected; no runtime path reads it (auth is resolved vendor-side from config/env)',
+  'auth.sources': 'validated and projected; no runtime path reads it',
+  'endpoint.mode': 'validated; no runtime path branches on it (transport is per-vendor code)',
+  'endpoint.protocol': 'mounted into the descriptor and the JSON Schema; the adapter is selected by the vendor package, not by this field',
+  'endpoint.route': 'validated (pi-ai vs own); the row specifier decides the mount, not this field',
+  'endpoint.transport': 'validated; the vendored adapters hard-code their transport',
+  'endpoint.chatPath': 'validated; each vendored adapter hard-codes its chat path',
+  'catalog.mode': 'validated (live/cached/static); the probe layer list decides discovery',
+  'catalog.layers[].kind': 'validated as probe kind; lib/probe.js branches on `shape`, not `kind`',
+  'catalog.layers[].ttlMs': 'validated; lib/catalog-cache.js takes its ttl from the caller, not from the declaration',
+  'catalog.layers[].providers': 'validated; mergeCatalog() reads only models/pricing from a layer',
+  'usage.billing.service': 'validated; lib/usage.js uses `usage.record` as the service label',
+  'surfaces.model.factory': 'contract-only: required by lib/driver/contract.js, which no preset declaration feeds today',
+  'surfaces.cli.gates': 'validated and projected; the CLI gate list is registered vendor-side',
+  'surfaces.skill': 'validated and projected to the browser; no surface renders or dispatches it',
+})
+
 const SCOPED_PACKAGE = /^@[a-z0-9-]+\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/
 const KEBAB = /^[a-z][a-z0-9-]*$/
 const CAMEL = /^[a-z][a-zA-Z0-9]*$/
@@ -366,6 +493,101 @@ export function validatePresetModel(preset) {
   }
 
   return { ok: errors.length === 0, errors }
+}
+
+/**
+ * Every leaf path a declaration actually sets, e.g. `usage.billing.mode`.
+ *
+ * Leaves, not containers: `endpoint` alone says nothing about which of its
+ * fields is read, and the dead-field question is asked per leaf. Arrays of
+ * objects are described by their first element (`entries[].row`) because the
+ * shape is what the allowlist names, not the values.
+ * @param {unknown} value - declaration (or sub-object).
+ * @param {string} [prefix] - path accumulated so far.
+ * @param {Set<string>} [out] - sink.
+ * @returns {Set<string>} the leaf paths.
+ */
+export function declarationLeafPaths(value, prefix = '', out = new Set()) {
+  if (Array.isArray(value)) {
+    // An array of objects is described by its element SHAPE (`entries[].row`);
+    // an array of scalars (or an empty one) is a leaf at its own path, so a
+    // dead list field cannot hide behind "it is a container".
+    if (value.some((item) => item !== null && typeof item === 'object')) {
+      for (const item of value) {
+        if (item !== null && typeof item === 'object') declarationLeafPaths(item, `${prefix}[]`, out)
+      }
+    } else if (prefix !== '') {
+      out.add(prefix)
+    }
+    return out
+  }
+  if (value !== null && typeof value === 'object') {
+    for (const [key, child] of Object.entries(value)) {
+      const path = prefix === '' ? key : `${prefix}.${key}`
+      if (child !== null && typeof child === 'object') declarationLeafPaths(child, path, out)
+      else out.add(path)
+    }
+    return out
+  }
+  if (prefix !== '') out.add(prefix)
+  return out
+}
+
+/**
+ * Static dead-field report for one declaration.
+ *
+ * TWO severities, deliberately different:
+ *   - a field that is in NEITHER list is an ERROR: it is a field nobody has
+ *     ever measured a consumer for, which is exactly the class this gate
+ *     exists to stop — the declaration would grow a contract nothing honours;
+ *   - a field listed in `DECLARATION_DEAD_FIELDS` is a WARNING: it is accepted
+ *     for compatibility (every current preset declares some), so failing on it
+ *     would replace a report with an outage.
+ * This split keeps the gate usable on the current tree while making a NEW dead
+ * field impossible to add silently. The message always names the field path,
+ * so the fix is copy-paste visible.
+ * @param {unknown} preset - candidate declaration.
+ * @returns {{ok: boolean, errors: string[], warnings: string[]}} the report.
+ */
+export function checkDeclarationFields(preset) {
+  const errors = []
+  const warnings = []
+  if (preset === null || typeof preset !== 'object') return { ok: false, errors: ['preset must be an object'], warnings }
+
+  // `auth.sources[].kind` and `auth.sources[].name` are one field shape; the
+  // allowlist names the container once (`auth.sources`), so both sides are
+  // compared with the array markers removed.
+  const plain = (path) => path.replace(/\[\]/g, '')
+  const runtime = new Set(DECLARATION_RUNTIME_FIELDS.map(plain))
+  const dead = new Map(Object.entries(DECLARATION_DEAD_FIELDS).map(([key, reason]) => [plain(key), reason]))
+
+  /** The dead reason (or null) of the nearest listed ancestor of `path`. */
+  const deadReasonOf = (path) => {
+    const parts = plain(path).split('.')
+    for (let end = parts.length; end > 0; end -= 1) {
+      const prefix = parts.slice(0, end).join('.')
+      if (dead.has(prefix)) return dead.get(prefix)
+    }
+    return null
+  }
+
+  for (const path of declarationLeafPaths(preset)) {
+    const reason = deadReasonOf(path)
+    // A listed DEAD ancestor settles its whole subtree as dead, never as live:
+    // a dead container cannot vouch for its children.
+    if (reason !== null) {
+      warnings.push(`dead declaration field "${path}": ${reason}`)
+      continue
+    }
+    // A `.*` entry settles every key beneath it (a delegated subtree).
+    const starred = plain(path).split('.').map((_, index, all) => all.slice(0, index + 1).join('.') + '.*')
+    if (runtime.has(plain(path)) || starred.some((candidate) => runtime.has(candidate))) continue
+    errors.push(
+      `unknown declaration field "${path}": no measured runtime consumer — add one and list it in ` +
+        'DECLARATION_RUNTIME_FIELDS (lib/preset-schema.js), or remove the field',
+    )
+  }
+  return { ok: errors.length === 0, errors, warnings }
 }
 
 /** Validate one catalog model entry (the merged/override shape). */

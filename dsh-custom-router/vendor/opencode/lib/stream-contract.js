@@ -39,28 +39,51 @@
  * The translation is done once, at the boundary, so a raw pass-through cannot
  * make every fragment of every call look like ordinal 0.
  *
- * The parser is the LEGACY classifier (lib/stream-parser.js) by owner decision
- * D-4: the canonical parser stays ported-but-off until Phase F.
+ * The parser is now the SHARED OpenAI core (lib/stream/openai.js): `readEvent`
+ * delegates to it, so the wire boundary is one implementation shared with
+ * DeepInfra and EXAONE. The three OpenCode wire facts the core does not model
+ * (a route-configured reasoning field name, structured `content` arrays, and the
+ * legacy top-level `{ name, arguments }` tool-call entry) are folded into the
+ * core's vocabulary by `adaptForSharedCore()` before the delegation, never by a
+ * second classifier. The vendor-local NOTATION classifier (lib/stream-parser.js)
+ * still classifies text/reasoning prose and is now the only legacy piece left;
+ * the explicit `pipe: 'legacy'` opt-out in http.js is deleted together with it
+ * by W2-A2.
  *
  * @module @nolit/dsh-opencode-v2/stream-contract
  */
 
 import { createStreamClassifier } from './stream-parser.js'
-import { mapChatDelta } from './upstream-map.js'
+import { contentText } from './upstream-map.js'
 import { finishFromOpenAi, usageFromOpenAi } from './openai-mapping.js'
+import {
+  REASONING_FIELDS as CORE_REASONING_FIELDS,
+  STREAM_DESCRIPTOR,
+  readEvent as readSharedOpenAiEvent,
+} from '../../../lib/stream/openai.js'
+
+/**
+ * The parser identity this hook set speaks.
+ *
+ * It names the SHARED OpenAI core (`lib/stream/openai.js`), which now answers
+ * the wire boundary. The value is data: nothing branches on it, so a future
+ * parser change is a label change in one place, not a hunt for a hardcoded
+ * `'legacy'` string in the HTTP adapter.
+ */
+export const OPENCODE_PARSER = 'shared-openai'
 
 /**
  * The descriptor handed to `normalizeStream`.
  *
- * `malformedRecord: 'fail'` is what this provider already did: an undecodable
- * record threw instead of being skipped, because a skipped frame silently
- * truncates a turn.
+ * It is the SHARED core's descriptor itself (`STREAM_DESCRIPTOR`), not a copy:
+ * OpenCode's measured wire facts — fragmented tool calls, `prompt+output` total,
+ * and `malformedRecord: 'fail'` (an undecodable record threw rather than being
+ * skipped, because a skipped frame silently truncates a turn) — are exactly the
+ * OpenAI facts the core already states. Re-exporting the same frozen object
+ * keeps one source of truth and keeps the
+ * `@nolit/dsh-opencode-v2/stream-contract` export list stable.
  */
-export const OPENCODE_DESCRIPTOR = Object.freeze({
-  toolCallShape: 'fragmented',
-  usage: Object.freeze({ totalFormula: 'prompt+output' }),
-  malformedRecord: 'fail',
-})
+export const OPENCODE_DESCRIPTOR = STREAM_DESCRIPTOR
 
 /**
  * Map an upstream `finish_reason` onto a DSH finish reason.
@@ -87,6 +110,96 @@ export function usageFrom(raw) {
 }
 
 /**
+ * Fold this adapter's three extra wire shapes into the shared core's vocabulary.
+ *
+ * The shared OpenAI core reads exactly one shape per field. A route served by
+ * this adapter can differ in three measured ways, and each is rewritten here
+ * BEFORE the core sees the payload, so the core stays the single classifier:
+ *
+ *   1. **The reasoning field name is configurable** (`reasoningField`, from the
+ *      route's `compatibility`). The core reads its three OpenAI aliases only,
+ *      so a configured field is copied onto `reasoning_content`, which wins.
+ *   2. **`content` may be a structured array** (`{ type: 'text', text }` parts).
+ *      The core reads a string, so the array's text items are joined in order —
+ *      byte-identical to what this adapter's own `contentText()` produced.
+ *   3. **A tool-call entry may carry `name` / `arguments` at the top level**
+ *      instead of under `function`. The core reads `function` only, so a
+ *      top-level value is moved under it. A fragment with no usable `index`
+ *      also keeps its array position as the ordinal, which is what this
+ *      adapter's own mapper did.
+ *
+ * The payload is never mutated: a copy is made only when a fold is needed.
+ *
+ * @param payload - one decoded SSE payload.
+ * @param {string} reasoningField - the route's reasoning field name.
+ * @returns the payload in the core's vocabulary, or `undefined` when the payload
+ *   is not an object (the caller turns that into a protocol defect).
+ */
+function adaptForSharedCore(payload, reasoningField) {
+  if (payload === null || typeof payload !== 'object') return undefined
+  const choice = payload.choices?.[0]
+  const delta = choice?.delta
+  if (delta === null || typeof delta !== 'object') return payload
+
+  const nextDelta = { ...delta }
+  let changed = false
+
+  // 1. The route's own reasoning field, when the core does not read it already.
+  if (typeof reasoningField === 'string' && reasoningField.length > 0 && !CORE_REASONING_FIELDS.includes(reasoningField)) {
+    const value = delta[reasoningField]
+    if (typeof value === 'string' && value.length > 0) {
+      nextDelta.reasoning_content = value
+      changed = true
+    }
+  }
+
+  // 2. Structured content arrays become one string, in wire order.
+  if (Array.isArray(delta.content)) {
+    nextDelta.content = contentText(delta).join('')
+    changed = true
+  }
+
+  // 3. Tool-call entries the core would drop or mis-key.
+  if (Array.isArray(delta.tool_calls)) {
+    let callsChanged = false
+    const calls = delta.tool_calls.map((entry, position) => {
+      if (entry === null || typeof entry !== 'object') return entry
+      const next = { ...entry }
+      const fn = entry.function !== null && typeof entry.function === 'object' ? { ...entry.function } : {}
+      let entryChanged = false
+      if (typeof fn.name !== 'string' || fn.name.length === 0) {
+        if (typeof entry.name === 'string' && entry.name.length > 0) {
+          fn.name = entry.name
+          entryChanged = true
+        }
+      }
+      if (typeof fn.arguments !== 'string') {
+        if (typeof entry.arguments === 'string') {
+          fn.arguments = entry.arguments
+          entryChanged = true
+        }
+      }
+      if (!(Number.isInteger(entry.index) && entry.index >= 0)) {
+        next.index = position
+        entryChanged = true
+      }
+      if (entryChanged) {
+        next.function = fn
+        callsChanged = true
+      }
+      return next
+    })
+    if (callsChanged) {
+      nextDelta.tool_calls = calls
+      changed = true
+    }
+  }
+
+  if (!changed) return payload
+  return { ...payload, choices: [{ ...choice, delta: nextDelta }, ...payload.choices.slice(1)] }
+}
+
+/**
  * Create the hook set of ONE stream.
  *
  * The hook set is per-stream on purpose: the classifier that holds back a
@@ -99,8 +212,11 @@ export function usageFrom(raw) {
  *   the OpenAI aliases always follow it.
  * @param {Iterable<string>|Set<string>} [options.toolNames] - declared tool names.
  * @param {object[]} [options.tools] - declared tools (schemas), for inference.
- * @param {string} [options.parser] - `'legacy'` (the only parser shipped in
- *   Phase B; the canonical parser arrives in Phase F).
+ * @param {string} [options.parser] - the parser identity to report; defaults to
+ *   `OPENCODE_PARSER` (the shared OpenAI core). Data only: nothing branches on
+ *   it, and the legacy text-notation classifier is still used for prose.
+ * @param {(context: object) => object[]} [options.beforeSettle] - drain run
+ *   between the classifier flush and the gate's verdict; returns parts to emit.
  * @param {object} [options.gate] - a display gate (lib/display-gate.js). When a
  *   gate is present, a call recovered from text is QUEUED for the gate instead
  *   of being emitted: the gate can only tell promote from echo once the
@@ -122,8 +238,9 @@ export function createStreamHooks(options = {}) {
     reasoningField = 'reasoning_content',
     toolNames = [],
     tools = [],
-    parser = 'legacy',
+    parser = OPENCODE_PARSER,
     gate = null,
+    beforeSettle = null,
   } = options
 
   // ONE classifier per stream, held in this closure. Two streams never share it.
@@ -149,18 +266,16 @@ export function createStreamHooks(options = {}) {
   /**
    * The `readEvent` hook: one decoded payload in, one normalized record out.
    *
-   * The shared pipe never inspects provider JSON. This function is the whole
-   * boundary: it decides what one event means and hands over plain parts, the
-   * raw usage object and the raw finish value.
+   * The record itself comes from the SHARED OpenAI core
+   * (`lib/stream/openai.js#readEvent`), so this adapter no longer owns a second
+   * classifier for the OpenAI wire. What stays here is the fold: the three
+   * shapes this route produces that the core does not model are rewritten into
+   * the core's own vocabulary by `adaptForSharedCore()` before the delegation —
+   * the route-configured reasoning field name, structured `content` arrays, and
+   * the legacy top-level `{ name, arguments }` tool-call entry.
    *
-   * The part vocabulary is translated here, once. `mapChatDelta` (this
-   * adapter's own mapper) names the fragment ordinal `ordinal` and the argument
-   * slice `arguments`; the shared pipe reads the ordinal as `index` and the
-   * slice as `argumentsDelta` (the vocabulary of every other vendor's map).
-   * Passing `mapChatDelta`'s output through unchanged would make every
-   * fragment of every call look like ordinal 0, so two parallel calls would
-   * collapse into one block. The wire's own ordinal is reused here, never
-   * re-invented.
+   * The core emits the pipe vocabulary directly (`index` / `argumentsDelta`, and
+   * `content` arrays are already unwrapped), so no second translation runs here.
    *
    * @param {object} payload - one decoded SSE payload.
    * @returns `{ parts?, usage?, finish? }`, `{ defect }` when the payload is not
@@ -168,47 +283,26 @@ export function createStreamHooks(options = {}) {
    *   cares about.
    */
   const readEvent = (payload) => {
-    if (payload === null || typeof payload !== 'object') {
+    // The wire boundary is the SHARED OpenAI core. This adapter folds the three
+    // shapes the core does not model into the core's own vocabulary first, so
+    // there is exactly one classifier for the wire and no OpenCode fork of it.
+    const normalized = adaptForSharedCore(payload, reasoningField)
+    if (normalized === undefined) {
       return {
         defect: { code: 'PROTOCOL_DEFECT', message: 'OpenCode event is not a JSON object' },
       }
     }
-    const choice = payload.choices?.[0]
-    const delta = choice?.delta ?? {}
-    const parts = []
-    for (const part of mapChatDelta(delta, { reasoningField })) {
-      if (part.kind === 'tool-call') {
-        // Absent identity is omitted rather than reported as an empty string, so
-        // the pipe's "has an id or a name" test reads the value, not the key.
-        parts.push({
-          kind: 'tool-call',
-          index: part.ordinal,
-          ...(part.id ? { id: part.id } : {}),
-          ...(part.name ? { name: part.name } : {}),
-          argumentsDelta: part.arguments,
-        })
-        continue
-      }
-      parts.push(part)
-    }
-    const finish = typeof choice?.finish_reason === 'string' && choice.finish_reason.length > 0
-      ? choice.finish_reason
-      : undefined
-    const usage = payload.usage !== null && typeof payload.usage === 'object' ? payload.usage : undefined
-    if (parts.length === 0 && usage === undefined && finish === undefined) return undefined
-    return {
-      ...(parts.length > 0 ? { parts } : {}),
-      ...(usage === undefined ? {} : { usage }),
-      ...(finish === undefined ? {} : { finish }),
-    }
+    return readSharedOpenAiEvent(normalized)
   }
 
   /**
    * The `classifyText` hook: notation the route left inside a text payload.
    *
-   * This is the LEGACY path (owner decision D-4): the restored classifier
+   * This is the remaining VENDOR-LOCAL piece: the notation classifier
    * (lib/stream-parser.js) recovers a tool call the model wrote as prose and
-   * holds back a marker that is split across two deltas.
+   * holds back a marker that is split across two deltas. The WIRE classifier is
+   * the shared core; only this prose-notation recovery is still per-vendor, and
+   * W2-A2 deletes it together with the legacy loop it came from.
    *
    * A recovered call gets its own ordinal, from a space the wire never uses.
    * The legacy path assigns it "the next free ordinal after the structured
@@ -300,6 +394,14 @@ export function createStreamHooks(options = {}) {
       ...collectGateParts(classifier.flush()),
       ...asReasoning(collectGateParts(reasoningClassifier.flush())),
     ]
+    // The pre-settle seam: a caller that holds text outside the classifier (the
+    // JSON-body probe in http.js) must drain BEFORE the gate decides, because
+    // what it drains can itself be a candidate. Anything it releases is emitted
+    // in this same flush, in this position.
+    if (typeof beforeSettle === 'function') {
+      const released = beforeSettle({ descriptor: OPENCODE_DESCRIPTOR })
+      for (const part of Array.isArray(released) ? released : []) parts.push(part)
+    }
     const { promote } = gate.settle(structuredCalls)
     for (const call of promote) {
       parts.push(translatePromoted(call, promotedOrdinal))
@@ -402,7 +504,7 @@ export function createStreamHooks(options = {}) {
     flush,
     mapFinish,
     usageFrom,
-    /** The parser this hook set speaks; `'legacy'` in Phase B. */
+    /** The parser this hook set reports; the shared OpenAI core. */
     parser,
   }
 }

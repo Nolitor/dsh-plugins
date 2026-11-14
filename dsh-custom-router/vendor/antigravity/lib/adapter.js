@@ -24,6 +24,7 @@ import { GENERATION_PATH, modelForEffort, requestBody } from './wire.js'
 import { groupByBase, toModelInfo, toResolvedModelInfo } from './catalog.js'
 import { STREAM_DESCRIPTOR, STREAM_HOOKS } from './stream-contract.js'
 import { configValue, resolveEndpoint } from './settings.js'
+import { DEFAULT_RETRY_STATUSES, isRetryableStatus, statusOf, withRetry } from '../../../lib/retry.js'
 
 /**
  * Statuses an Antigravity generation request is retried on.
@@ -33,33 +34,29 @@ import { configValue, resolveEndpoint } from './settings.js'
  * (500/502/503/504), or a legal/unavailable refusal (451) says nothing about the
  * request body. 401/403/404 are excluded: they need a new credential or a
  * different model, not another attempt.
+ *
+ * This IS the router's shared measured set (`lib/retry.js`), re-exported so the
+ * route's config default and the loop cannot name different statuses.
  */
-export const DEFAULT_ANTIGRAVITY_RETRY_STATUSES = Object.freeze([429, 451, 500, 502, 503, 504])
+export const DEFAULT_ANTIGRAVITY_RETRY_STATUSES = Object.freeze([...DEFAULT_RETRY_STATUSES])
 
-/** Abortable sleep used by the retry loop. */
-async function sleepFor(ms, signal) {
-  if (!(ms > 0)) return !signal?.aborted
-  if (signal?.aborted) return false
-  return new Promise((resolve) => {
-    let settled = false
-    const finish = (elapsed) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      signal?.removeEventListener?.('abort', onAbort)
-      resolve(elapsed)
-    }
-    const timer = setTimeout(() => finish(true), ms)
-    const onAbort = () => finish(false)
-    signal?.addEventListener?.('abort', onAbort, { once: true })
-  })
-}
-
-/** Exponential backoff step: `base`, `base*2`, `base*4`, ... */
-export function backoffDelay(baseMs, attempt) {
-  const base = Number(baseMs)
-  if (!Number.isFinite(base) || base <= 0) return 0
-  return Math.round(base * 2 ** Math.max(0, Math.trunc(attempt)))
+/**
+ * HTTP status of one generation failure, wherever the layer that built it kept it.
+ *
+ * `classifyHttpError` returns an `LlmError`, whose constructor records the status
+ * inside its frozen `failure` record rather than as an own property (measured:
+ * `error.status === undefined`), so the shared loop's `statusOf` cannot see it.
+ * Reading both keeps the retry predicate honest without reshaping the provider's
+ * error, which callers match on `message` and `code`.
+ *
+ * @param error - thrown value.
+ * @returns the status, or undefined when the failure carries none.
+ */
+function generationStatus(error) {
+  const direct = statusOf(error)
+  if (direct !== undefined) return direct
+  const recorded = Number(error?.failure?.status)
+  return Number.isFinite(recorded) ? recorded : undefined
 }
 
 
@@ -222,55 +219,68 @@ export class AntigravityAdapter extends LlmAdapter {
     const retryStatuses = new Set(
       (configValue(config, 'httpRetryStatuses') ?? DEFAULT_ANTIGRAVITY_RETRY_STATUSES).map((value) => Number(value)),
     )
-    let statusRetries = 0
+    // The 401 token refresh is a ONE-SHOT outside the backoff budget, not another
+    // status retry: it fires at most once per call, inside one outer attempt, and
+    // never sleeps — exactly the `continue` it replaced.
     let authRetried = false
-    let response
-    for (;;) {
-      // The token is re-read on every attempt: a 401 invalidates it, and a
-      // retry after backoff may sit long enough for the access token to rotate.
-      const token = await this.dependencies.tokens.get(options.signal)
-      const headers = {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-        'user-agent': endpoint.userAgent,
-        accept: 'text/event-stream',
-      }
-      try {
-        response = await this.dependencies.fetch(url, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-          signal: options.signal,
-        })
-      } catch (error) {
-        if (error?.name === 'AbortError') throw error
-        throw new LlmError(`Antigravity request failed: ${error?.message ?? error}`, 'TRANSPORT', { cause: error })
-      }
-      if (response.ok) break
+    let statusRetries = 0
+    const response = await withRetry(async () => {
+      for (;;) {
+        // The token is re-read on every attempt: a 401 invalidates it, and a
+        // retry after backoff may sit long enough for the access token to rotate.
+        const token = await this.dependencies.tokens.get(options.signal)
+        const headers = {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'user-agent': endpoint.userAgent,
+          accept: 'text/event-stream',
+        }
+        let attemptResponse
+        try {
+          attemptResponse = await this.dependencies.fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+            signal: options.signal,
+          })
+        } catch (error) {
+          if (error?.name === 'AbortError') throw error
+          // A transport throw is not a status, so the shared loop does not retry
+          // it — unchanged from the measured behaviour.
+          throw new LlmError(`Antigravity request failed: ${error?.message ?? error}`, 'TRANSPORT', { cause: error })
+        }
+        if (attemptResponse.ok) return attemptResponse
 
-      const text = await response.text().catch(() => '')
-      if (response.status === 401 && !authRetried) {
-        authRetried = true
-        this.dependencies.tokens.invalidate()
-        this.dependencies.log?.warn?.('antigravity: 401 from the generation endpoint; refreshing the token and retrying once')
-        continue
+        const text = await attemptResponse.text().catch(() => '')
+        if (attemptResponse.status === 401 && !authRetried) {
+          authRetried = true
+          this.dependencies.tokens.invalidate()
+          this.dependencies.log?.warn?.('antigravity: 401 from the generation endpoint; refreshing the token and retrying once')
+          continue
+        }
+        if (attemptResponse.status === 401) this.dependencies.tokens.invalidate()
+        // The status rides the provider's own error shape (`classifyHttpError`);
+        // `generationStatus` reads it back for the retry predicate.
+        throw classifyHttpError(attemptResponse.status, text)
       }
-      if (retryStatuses.has(response.status) && statusRetries < maxRetries) {
-        const delay = backoffDelay(baseMs, statusRetries)
+    }, {
+      retries: maxRetries,
+      baseMs,
+      retryStatuses,
+      signal: options.signal,
+      // `generationStatus` also reads the `LlmError` failure record, so the set
+      // checked here is exactly `httpRetryStatuses`.
+      shouldRetry: (error) => {
+        const status = generationStatus(error)
+        return status !== undefined && isRetryableStatus(status, retryStatuses)
+      },
+      onRetry: ({ delay, error }) => {
         statusRetries += 1
         this.dependencies.log?.warn?.(
-          `antigravity: generation HTTP ${response.status}; retry ${statusRetries}/${maxRetries} in ${delay}ms`,
+          `antigravity: generation HTTP ${generationStatus(error)}; retry ${statusRetries}/${maxRetries} in ${delay}ms`,
         )
-        if (!(await sleepFor(delay, options.signal))) {
-          const aborted = new Error('Antigravity request aborted during retry backoff')
-          aborted.name = 'AbortError'
-          throw aborted
-        }
-        continue
-      }
-      if (response.status === 401) this.dependencies.tokens.invalidate()
-      throw classifyHttpError(response.status, text)
-    }
+      },
+    })
 
     // The downstream half is the workspace's one shared pipeline
     // (`@nolit/dsh-custom-router/stream`): block lifecycle, first-seen indexes,

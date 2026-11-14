@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import * as core from '../../../lib/stream/openai.js'
 import { MAX_STOP_SEQUENCES, requestBody, serializeMessages, serializeTools } from '../lib/wire.js'
 
 test('every harness role maps explicitly; an unknown role throws', () => {
+  // Phase 2: the chat projection IS the shared OpenAI core, not a second copy.
+  // Identity, not equivalence, is the assertion, so a future edit that re-forks
+  // the projection fails here instead of drifting away from the exaone vendor.
+  assert.equal(serializeMessages, core.serializeMessages)
+  assert.equal(serializeTools, core.serializeTools)
+  assert.equal(requestBody, core.requestBody)
   // Failure ledger F-33: a role that falls through to "user" silently sends the
   // system prompt as a user turn.
   const messages = serializeMessages([
@@ -137,7 +144,10 @@ test('reasoning effort reaches the wire as its id', () => {
 test('a stop list above the provider ceiling throws UNSUPPORTED_OPTION', () => {
   // Measured: 4, 5, 8 and 16 all return 200; 32 returns
   // 422 "maximum of 16 stop sequences allowed". The brief said the limit was 4.
+  // Phase 2: the constant is now the shared core's, re-exported by identity, so
+  // one measured ceiling serves every OpenAI-compatible route.
   assert.equal(MAX_STOP_SEQUENCES, 16)
+  assert.equal(MAX_STOP_SEQUENCES, core.MAX_STOP_SEQUENCES)
   const tooMany = Array.from({ length: 17 }, (_, i) => String(i))
   assert.throws(
     () => requestBody({ model: 'm', messages: [], stop: tooMany }),

@@ -3,8 +3,8 @@
  *
  * The pipe (`@nolit/dsh-custom-router/stream`) owns the block lifecycle, the
  * finish table, the usage writer, the failure shape and the empty/cut/abort
- * terminal policy. Everything DeepInfra-specific lives here as data plus pure
- * hooks, so a wire quirk never edits the core.
+ * terminal policy. Everything DeepInfra-specific lives in `map.js` plus this
+ * module's prose, so a wire quirk never edits the core.
  *
  * Measured DeepInfra shapes (2026-11-04, api.deepinfra.com/v1/openai/chat/completions):
  *
@@ -19,7 +19,7 @@
  *                         estimated_cost, prompt_tokens_details.cached_tokens,
  *                         completion_tokens_details.reasoning_tokens }
  *
- * Three measured consequences this file encodes:
+ * Three measured consequences this module encodes:
  *   1. tool calls arrive in fragments, so `toolCallShape` is `'fragmented'`
  *      (the wire's own fragment ordinals are reused, never re-invented here);
  *   2. `total_tokens === prompt_tokens + completion_tokens` held on all four
@@ -32,97 +32,35 @@
  *      Adding a provider-local writer would be a second implementation of a
  *      rule that already has one.
  *
+ * WHAT WAS DELETED IN PHASE 2: this file carried its own 40-line `readEvent`,
+ * its own descriptor literal and its own `mapFinish` delegation — a copy of
+ * `vendor/exaone/lib/stream-contract.js` with zero non-comment difference. All
+ * three are now the shared OpenAI protocol core at `../../../lib/stream/openai.js`.
+ * No behaviour changes; the only delta is one shared error string, which now
+ * names the protocol ("OpenAI-compatible event is not a JSON object") instead of
+ * the vendor. The defect CODE is unchanged (`PROTOCOL_DEFECT`).
+ *
  * @module @nolit/dsh-deepinfra/stream-contract
  */
 
-import { finishReasonFor } from '../../../lib/stream/index.js'
+import {
+  STREAM_DESCRIPTOR as CORE_DESCRIPTOR,
+  STREAM_HOOKS as CORE_HOOKS,
+  mapFinish,
+  readEvent,
+} from '../../../lib/stream/openai.js'
 
-import { mapDelta } from './map.js'
+export { mapFinish, readEvent }
 
 /**
- * The descriptor handed to `normalizeStream`.
+ * The descriptor handed to `normalizeStream` — the shared OpenAI descriptor,
+ * re-exported under this module's historical name.
  *
  * `malformedRecord: 'fail'` is what this provider already did: an undecodable
  * record threw instead of being skipped, because a skipped frame silently
  * truncates a turn.
  */
-export const STREAM_DESCRIPTOR = Object.freeze({
-  toolCallShape: 'fragmented',
-  usage: Object.freeze({ totalFormula: 'prompt+output' }),
-  malformedRecord: 'fail',
-})
-
-/**
- * Map this provider's `finish_reason` onto the host `FinishReason`.
- *
- * DeepInfra speaks the OpenAI vocabulary, which the shared table already
- * covers, so this is a re-export with the intent documented rather than a
- * second table. D4 closes here: `content_filter` is now an error with code
- * `CONTENT_FILTERED`, not a clean `stop`.
- *
- * @param value - `choices[0].finish_reason`.
- * @returns the host `FinishReason` (`{ kind, failure? }`).
- */
-export function mapFinish(value) {
-  return finishReasonFor(value)
-}
-
-/**
- * The provider's `readEvent` hook: one decoded payload in, one normalized
- * record out.
- *
- * The shared pipe never inspects provider JSON. This function is the whole
- * boundary: it decides what one event means and hands over plain parts, the
- * raw usage object and the raw finish value. Nothing here synthesises identity
- * (a tool-call id or name a fragment omitted) — the pipe owns first-seen
- * allocation, so a `call_N` fallback exists in exactly one place.
- *
- * @param payload - one decoded SSE payload. The shared reader ends iteration at
- *   `[DONE]`, so the sentinel never reaches this function.
- * @returns `{ parts?, usage?, finish? }`, `{ defect }` when the payload is not an
- *   object, or undefined when the event carries nothing this provider cares about.
- */
-export function readEvent(payload) {
-  if (payload === null || typeof payload !== 'object') {
-    return {
-      defect: { code: 'PROTOCOL_DEFECT', message: 'DeepInfra event is not a JSON object' },
-    }
-  }
-
-  const choice = payload.choices?.[0]
-  const finish = typeof choice?.finish_reason === 'string' && choice.finish_reason.length > 0
-    ? choice.finish_reason
-    : undefined
-
-  const parts = []
-  for (const part of mapDelta(choice?.delta)) {
-    if (part.kind === 'tool-call') {
-      // map.js reports the fragment as `{ index, id, name, argumentsDelta }` with
-      // `id`/`name` present-but-undefined; the record shape omits absent identity
-      // so the pipe's `part.id`/`part.name` reads test the value, not the key.
-      parts.push({
-        kind: 'tool-call',
-        index: part.index,
-        ...(part.id !== undefined ? { id: part.id } : {}),
-        ...(part.name !== undefined ? { name: part.name } : {}),
-        argumentsDelta: part.argumentsDelta,
-      })
-      continue
-    }
-    parts.push(part)
-  }
-
-  // Usage may arrive with an empty `choices` array (measured: the cost-bearing
-  // event is the last one), so it is read independently of the choice.
-  const usage = payload.usage !== null && typeof payload.usage === 'object' ? payload.usage : undefined
-
-  if (parts.length === 0 && usage === undefined && finish === undefined) return undefined
-  return {
-    ...(parts.length > 0 ? { parts } : {}),
-    ...(usage === undefined ? {} : { usage }),
-    ...(finish === undefined ? {} : { finish }),
-  }
-}
+export const STREAM_DESCRIPTOR = CORE_DESCRIPTOR
 
 /**
  * The hook set handed to `normalizeStream`.
@@ -130,4 +68,4 @@ export function readEvent(payload) {
  * Pure: no I/O, no context. There is deliberately no `usageFrom` override; see
  * the module note above.
  */
-export const STREAM_HOOKS = Object.freeze({ readEvent, mapFinish })
+export const STREAM_HOOKS = CORE_HOOKS

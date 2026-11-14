@@ -33,6 +33,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { PRESETS, validatePresets } from '../lib/presets.js'
 import { checkDeriveMirror, checkGeneratedArtifacts, checkPresetRegistry, readLocales, readModelPresets } from '../lib/preset-drift.js'
+import { checkDeclarationFields } from '../lib/preset-schema.js'
 import { presetSettings } from '../lib/preset-derive.js'
 
 const argv = process.argv.slice(2)
@@ -72,10 +73,30 @@ try {
   problems.push(`registry: could not evaluate lib/client.js: ${error instanceof Error ? error.message : String(error)}`)
 }
 
+// ---------------------------------------------------- dead-field static report
+// The declaration surface is checked for fields with NO measured consumer. A
+// field nobody measured is an ERROR (a new dead field is exactly the drift this
+// wave measured); a field already listed in DECLARATION_DEAD_FIELDS is a
+// WARNING, because every current preset declares some and turning them into
+// failures would break the tree instead of reporting it.
+const fieldWarnings = []
+let fieldErrors = 0
+for (const preset of PRESETS) {
+  const report = checkDeclarationFields(preset)
+  fieldErrors += report.errors.length
+  for (const error of report.errors) problems.push(`declaration: ${preset.id}: ${error}`)
+  for (const warning of report.warnings) fieldWarnings.push(`${preset.id}: ${warning}`)
+}
+
 process.stdout.write(
   `static registry: ${staticVerdict ? (staticVerdict.ok ? 'OK' : `${staticVerdict.problems.length} problem(s)`) : 'FAILED'}` +
     ` (${PRESETS.length} presets, ${staticVerdict ? readModelPresets().length : 0} descriptors, ${Object.keys(readLocales()).length} locales)\n`,
 )
+process.stdout.write(
+  `static fields  : ${fieldErrors === 0 ? 'OK' : `${fieldErrors} unknown field(s)`}` +
+    ` (${fieldWarnings.length} declared-but-dead field warning(s) across ${PRESETS.length} presets)\n`,
+)
+for (const warning of fieldWarnings) process.stdout.write(`dead field: ${warning}\n`)
 
 if (STATIC_ONLY) {
   reportAndExit()

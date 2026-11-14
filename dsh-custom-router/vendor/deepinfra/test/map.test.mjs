@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import * as core from '../../../lib/stream/openai.js'
 import { finishReason, isFinishEvent, mapDelta, reasoningText, toolCallFragments } from '../lib/map.js'
 
 test('the delta type comes from the wire field, never the characters', () => {
+  // Phase 2: the delta mapper is the shared OpenAI core, re-exported by
+  // identity. This file's own 90-line copy was byte-identical to exaone's and is
+  // deleted, so the assertion is identity and not behaviour equivalence.
+  assert.equal(mapDelta, core.mapDelta)
+  assert.equal(reasoningText, core.reasoningText)
+  assert.equal(toolCallFragments, core.toolCallFragments)
   // Failure ledger F-22: a text scanner is forbidden. Prose that carries
   // protocol notation is still text because it arrived as content.
   const parts = mapDelta({ content: '[tool call get_weather #1]: {"city":"Seoul"}' })

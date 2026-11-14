@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import * as core from '../../../lib/stream/openai.js'
 import {
   STREAM_DESCRIPTOR,
   STREAM_HOOKS,
@@ -32,6 +33,12 @@ test('the descriptor declares the fragmented tool-call shape and the prompt+outp
     usage: { totalFormula: 'prompt+output' },
     malformedRecord: 'fail',
   })
+  // Phase 2: the descriptor and the hooks ARE the shared core objects by
+  // identity, so a re-forked literal fails here instead of drifting.
+  assert.equal(STREAM_DESCRIPTOR, core.STREAM_DESCRIPTOR)
+  assert.equal(STREAM_HOOKS, core.STREAM_HOOKS)
+  assert.equal(readEvent, core.readEvent)
+  assert.equal(mapFinish, core.mapFinish)
 })
 
 test('a text delta becomes exactly one text part', () => {

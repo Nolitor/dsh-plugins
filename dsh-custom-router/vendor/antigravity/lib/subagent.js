@@ -17,6 +17,8 @@ import { accessSync, constants, statSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { delimiter, extname, isAbsolute, join } from 'node:path'
 
+import { agyTokenUsage } from './backends.js'
+
 /** Largest diagnostic the seam accepts, in bytes. */
 const MAX_DIAGNOSTIC_BYTES = 4096
 const MAX_STDOUT_BYTES = 8 * 1024 * 1024
@@ -77,39 +79,19 @@ function parseAgyEnvelope(stdout) {
 }
 
 /**
- * Count one token bucket, accepting missing or non-numeric values.
- * @param value - raw counter.
- * @returns a non-negative integer.
- */
-function tokenCount(value) {
-  return Number.isFinite(value) ? Math.max(0, value) : 0
-}
-
-/**
  * Map the CLI envelope's `usage` to the host TokenUsage shape.
  *
  * Required buckets are always present; optional ones are omitted when zero so
  * a caller can tell "no reasoning" from "reasoning was not reported".
+ *
+ * The field set and the arithmetic live in ONE place, `agyTokenUsage` in
+ * `./backends.js`, so this delegation surface and the `agy_cli` tool surface can
+ * never disagree about what the same CLI envelope means.
  * @param usage - the CLI envelope's raw `usage` object.
  * @returns TokenUsage, or undefined when there is nothing to record.
  */
 export function toSubagentTokenUsage(usage) {
-  if (usage === null || typeof usage !== 'object') return undefined
-  const inputTokens = tokenCount(usage.input_tokens ?? usage.inputTokens)
-  const outputTokens = tokenCount(usage.output_tokens ?? usage.outputTokens)
-  const reasoningTokens = tokenCount(usage.thinking_tokens ?? usage.thinkingTokens)
-  // Measured 2026-11-08: the envelope spells the cache bucket
-  // `cache_read_tokens` (see `parseAgyOutput` in backends.js), while the
-  // documented provider spelling is `cache_read_input_tokens`. Accept both
-  // rather than silently reporting zero for the field the CLI really emits.
-  const cacheReadTokens = tokenCount(
-    usage.cache_read_input_tokens ?? usage.cache_read_tokens ?? usage.cacheReadTokens,
-  )
-  if (inputTokens + outputTokens + reasoningTokens + cacheReadTokens === 0) return undefined
-  const mapped = { inputTokens, outputTokens }
-  if (reasoningTokens > 0) mapped.reasoningTokens = reasoningTokens
-  if (cacheReadTokens > 0) mapped.cacheReadTokens = cacheReadTokens
-  return mapped
+  return agyTokenUsage(usage)
 }
 
 /**

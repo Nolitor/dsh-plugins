@@ -1,10 +1,10 @@
 # Custom Router — Service Preset Schema, Standardisation, and Extension Limits
 
 <!-- skeleton:
-version: 0.0.1-rc.1
+version: 0.0.1-rc.2
 kind: spec
 status: active
-updated: 2026-11-06
+updated: 2026-11-14
 summary: Normative per-service preset schema, the common preset data model (delivery kind, authentication mode, endpoint protocol/transport), the standardisation boundary, how far preset extension can go, and the coverage ceiling for services added in the future.
 -->
 
@@ -315,6 +315,8 @@ invents a User-Agent — an override wins, otherwise the vendor's resolved value
 | S7 | writes go only to `settings.update(<own id>, …)`; never to `.credentials.yaml` `refs` | [PRESET §1.2](./CUSTOM-ROUTER-PRESET-SURFACE.md), owner decision 2 |
 | S8 | each preset owns **one** `settings.section` entry with a unique `id` + `order` | `SlotCore.register` `StoredEntry.options {key,id,order,label,priority}` |
 | S9 | locale-aware `label` + `name`; typography consumes live tokens | [PLUGIN-STYLE-STANDARD.md](../../docs/PLUGIN-STYLE-STANDARD.md) |
+| S10 | every declaration field must be listed in `DECLARATION_RUNTIME_FIELDS` — the allowlist of fields with a **measured** consumer; an unlisted field is rejected (measured 2026-11-14: a field nothing reads could be added with every gate green). Fields validated but read by no runtime path are listed in `DECLARATION_DEAD_FIELDS` and reported as warnings, so the gap stays visible without failing the tree | `lib/preset-schema.js` `DECLARATION_RUNTIME_FIELDS` / `checkDeclarationFields()`; `node scripts/verify-presets.mjs --static-only` |
+| S11 | `specs/` must MIRROR the declaration: protocol, base URL (non-`daemon`), models and the pricing `kind`→billing `mode` mapping (`scripts/verify-specs.mjs`, `PRICING_KIND_TO_BILLING_MODE`). A contradiction exits 1 | measured 2026-11-14: a wrong endpoint/protocol/model in `specs/providers/*.json` still exited 0 |
 
 ## 4. How far preset extension can go (프리셋 확장 기능)
 

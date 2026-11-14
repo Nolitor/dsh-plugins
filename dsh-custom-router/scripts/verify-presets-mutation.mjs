@@ -31,6 +31,8 @@ import { PRESETS } from '../lib/presets.js'
 import { PRESETS as DECLARED } from '../lib/presets.js'
 import { checkDeriveMirror, checkGeneratedArtifacts, checkPresetRegistry, readModelPresets } from '../lib/preset-drift.js'
 import { presetSettings } from '../lib/preset-derive.js'
+import { checkDeclarationFields } from '../lib/preset-schema.js'
+import { checkPresetMirror, loadSpecs } from './verify-specs.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const VERBOSE = process.argv.includes('--verbose')
@@ -297,6 +299,91 @@ fileCases.push(fileCase('F4-descriptor-fact-not-derived', (dir) => {
   locales: { en: JSON.parse(readFileSync(join(dir, 'locale', 'en.json'), 'utf8')) },
 })))
 
+// ------------------------------------------------- spec ↔ preset mirror cases
+// These are the SPECS-layer gates added in the same wave: `specs/` is a second
+// registry, so a value that contradicts the preset must be rejected, not
+// merely loaded. Each case damages an in-memory copy of the loaded specs and
+// asserts that `checkPresetMirror()` reports the preset it damaged.
+const specCases = []
+{
+  const base = loadSpecs({ root })
+  if (base.errors.length > 0) {
+    process.stderr.write('verify-presets-mutation: the specs tree does not load:\n')
+    for (const error of base.errors) process.stderr.write('  - ' + error + '\n')
+    process.exit(2)
+  }
+  const specsOf = () => ({
+    protocols: clone(base.protocols),
+    providers: clone(base.providers),
+    pricing: clone(base.pricing),
+  })
+  const providerOf = (specs, id) => specs.providers.find((entry) => entry.value.id === id).value
+  const pricingOf = (specs, id) => specs.pricing.find((entry) => entry.value.provider === id).value
+  const mirrorCase = (id, why, mutate) => {
+    const specs = specsOf()
+    mutate(specs)
+    const verdict = checkPresetMirror(specs, { presets: DECLARED })
+    specCases.push({ id, why, caught: verdict.errors.length > 0, problems: verdict.errors })
+  }
+
+  mirrorCase('S1-spec-endpoint-contradicts-preset', 'a provider spec naming an endpoint the preset does not serve', (specs) => {
+    providerOf(specs, 'deepinfra').endpoint = 'https://api.deepinfra.com/v1/not-the-endpoint'
+  })
+  mirrorCase('S2-spec-protocol-contradicts-preset', 'a provider spec naming a protocol the preset does not speak', (specs) => {
+    providerOf(specs, 'deepinfra').protocol = 'anthropic-messages'
+  })
+  mirrorCase('S3-spec-model-not-in-preset', 'a provider spec listing a model id the preset does not declare', (specs) => {
+    providerOf(specs, 'exaone').models = ['k-exaone_v9.9']
+  })
+  mirrorCase('S4-pricing-kind-contradicts-billing', 'a pricing kind that maps to a billing mode the preset does not declare', (specs) => {
+    pricingOf(specs, 'exaone').kind = 'live-catalog' // → pay-per-token; the preset declares "none"
+  })
+  mirrorCase('S5-provider-spec-missing-for-a-preset', 'a preset with no specs/providers file at all', (specs) => {
+    specs.providers = specs.providers.filter((entry) => entry.value.id !== 'deepinfra')
+  })
+  mirrorCase('S6-spec-pricing-names-another-file', 'a provider spec pointing its "pricing" at another preset', (specs) => {
+    providerOf(specs, 'exaone').pricing = 'deepinfra'
+  })
+}
+
+// ------------------------------------------------- declaration dead-field cases
+// The allowlist is a CLOSED set: a field with no measured consumer is an error,
+// so a declaration cannot grow a contract nothing honours.
+const fieldCases = []
+{
+  const fieldCase = (id, why, mutate) => {
+    const preset = clone(PRESETS.find((candidate) => candidate.id === 'deepinfra'))
+    mutate(preset)
+    const verdict = checkDeclarationFields(preset)
+    fieldCases.push({ id, why, caught: !verdict.ok, problems: verdict.errors })
+  }
+  fieldCase('D1-new-dead-field-on-a-declaration', 'a declaration field with no measured runtime consumer', (preset) => {
+    preset.endpoint.frobnicate = true
+  })
+  fieldCase('D2-dead-field-inside-the-usage-block', 'a billing field nothing reads (an invented currency block)', (preset) => {
+    preset.usage.billing.currency = 'USD'
+  })
+  fieldCase('D3-new-surface-with-no-consumer', 'a top-level surface block nothing renders', (preset) => {
+    preset.surfaces.widget = { enabled: true }
+  })
+}
+
+const specFailures = specCases.filter((item) => !item.caught)
+if (VERBOSE || specFailures.length > 0) {
+  for (const item of specCases) {
+    process.stdout.write((item.caught ? 'caught   ' : 'SURVIVED ') + item.id + '\n')
+    for (const problem of item.problems.slice(0, 2)) process.stdout.write('         → ' + problem + '\n')
+  }
+}
+
+const fieldFailures = fieldCases.filter((item) => !item.caught)
+if (VERBOSE || fieldFailures.length > 0) {
+  for (const item of fieldCases) {
+    process.stdout.write((item.caught ? 'caught   ' : 'SURVIVED ') + item.id + '\n')
+    for (const problem of item.problems.slice(0, 2)) process.stdout.write('         → ' + problem + '\n')
+  }
+}
+
 const fileFailures = fileCases.filter((item) => !item.caught)
 if (VERBOSE || fileFailures.length > 0) {
   for (const item of fileCases) {
@@ -307,16 +394,21 @@ if (VERBOSE || fileFailures.length > 0) {
 
 // -------------------------------------------------------------------- report
 
-const caughtCount = cases.length - failures + fileCases.filter((item) => item.caught).length
-const total = cases.length + fileCases.length
-process.stdout.write('\npreset drift-gate mutation: ' + caughtCount + '/' + total + ' drift classes caught\n')
-for (const item of [...cases, ...fileCases]) {
+const all = [...cases, ...fileCases, ...specCases, ...fieldCases]
+const missing = all.filter((item) => !item.caught).length
+const caughtCount = all.length - missing
+process.stdout.write('\npreset drift-gate mutation: ' + caughtCount + '/' + all.length + ' drift classes caught\n')
+process.stdout.write(
+  '  registry ' + cases.length + ', files ' + fileCases.length +
+    ', specs ' + specCases.length + ', declaration fields ' + fieldCases.length + '\n',
+)
+for (const item of all) {
   const mark = item.caught ? 'caught  ' : 'SURVIVED'
   process.stdout.write('  ' + mark + ' ' + item.id + '\n')
 }
 
-if (failures + fileFailures.length > 0) {
-  process.stderr.write('\nGATE GAP: ' + (failures + fileFailures.length) + ' drift class(es) pass the gate unnoticed\n')
+if (missing > 0) {
+  process.stderr.write('\nGATE GAP: ' + missing + ' drift class(es) pass the gate unnoticed\n')
   process.exit(1)
 }
 process.stdout.write('\nOK: every documented drift class is rejected by the gate\n')

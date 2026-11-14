@@ -12,6 +12,8 @@
  * 131,072 bytes by the kernel, so callers must reject overlong tasks.
  */
 
+import { ADDITIVE_FORMULA, usageFromProjection } from '../../../lib/stream/usage.js'
+
 /** Default model: flash with low thinking effort. */
 export const DEFAULT_MODEL = 'gemini-3.8-flash-low'
 
@@ -93,6 +95,75 @@ export function buildAgyArgv(options) {
 const NO_USAGE = Object.freeze({ inputTokens: 0, outputTokens: 0, thinkingTokens: 0, cacheReadTokens: 0 })
 
 /**
+ * Map the `agy` envelope's `usage` object onto the host's disjoint buckets.
+ *
+ * THE one mapper for the CLI envelope. It was duplicated once here (10 L) and
+ * once in `subagent.js` (18 L) with diverging field sets, so the two surfaces
+ * could disagree about the same CLI output.
+ *
+ * Field names are the union of what the two call sites accepted, in the CLI's own
+ * snake_case plus the camelCase spellings a hand-written envelope may carry:
+ *   `input_tokens`/`inputTokens`, `output_tokens`/`outputTokens`,
+ *   `thinking_tokens`/`thinkingTokens`,
+ *   `cache_read_tokens`/`cache_read_input_tokens`/`cacheReadTokens`.
+ * Measured 2026-11-08: the CLI really prints `cache_read_tokens`, while the
+ * documented provider spelling is `cache_read_input_tokens`; both are read rather
+ * than silently reporting zero for a bucket the CLI emitted.
+ *
+ * The arithmetic is the router's one usage writer (`lib/stream/usage.js`) under
+ * the ADDITIVE cache convention: measured `agy` output reports `input_tokens`
+ * WITHOUT the cache read (10 + 6, not 10 of which 6 cached), which is exactly
+ * what `input+output+cache` declares. A zero total yields `undefined` — "nothing
+ * was reported" is not "nothing was used", and the ledger would otherwise record
+ * a phantom request.
+ *
+ * @param usage - the CLI envelope's raw `usage` object.
+ * @returns `{ inputTokens, outputTokens, reasoningTokens?, cacheReadTokens? }`,
+ *   or undefined when the object carries no usable count.
+ */
+export function agyTokenUsage(usage) {
+  if (usage === null || typeof usage !== 'object') return undefined
+  const mapped = usageFromProjection(
+    usage,
+    (raw) => ({
+      // The CLI's own `input_tokens` EXCLUDES cache, so it is the additive input
+      // bucket verbatim; nothing is subtracted here.
+      prompt: raw.input_tokens ?? raw.inputTokens,
+      completion: raw.output_tokens ?? raw.outputTokens,
+      reasoning: raw.thinking_tokens ?? raw.thinkingTokens,
+      cached: raw.cache_read_tokens ?? raw.cache_read_input_tokens ?? raw.cacheReadTokens,
+    }),
+    { formula: ADDITIVE_FORMULA },
+  )
+  if (mapped === undefined) return undefined
+  const total = (mapped.inputTokens ?? 0) + (mapped.outputTokens ?? 0)
+    + (mapped.reasoningTokens ?? 0) + (mapped.cacheReadTokens ?? 0)
+  return total === 0 ? undefined : mapped
+}
+
+/**
+ * The CLI tool surface's fixed four-counter row for one envelope's usage.
+ *
+ * `agy` reports no per-bucket absence contract and this row feeds a JSON schema
+ * whose four counters are required, so an unreported bucket is published as 0
+ * here — the one place that trade-off is made, on top of {@link agyTokenUsage}.
+ *
+ * @param usage - the CLI envelope's raw `usage` object, or undefined.
+ * @returns `{ inputTokens, outputTokens, thinkingTokens, cacheReadTokens }`.
+ */
+export function agyUsageCounters(usage) {
+  const mapped = agyTokenUsage(usage)
+  return {
+    inputTokens: mapped?.inputTokens ?? 0,
+    outputTokens: mapped?.outputTokens ?? 0,
+    // The CLI and the tool schema spell the reasoning bucket `thinking`; the host
+    // TokenUsage calls it `reasoning`. Same count, published name of this surface.
+    thinkingTokens: mapped?.reasoningTokens ?? 0,
+    cacheReadTokens: mapped?.cacheReadTokens ?? 0,
+  }
+}
+
+/**
  * Parse the JSON envelope printed by `--output-format json`.
  *
  * An unrecognised or truncated payload degrades to the raw text so a caller
@@ -106,16 +177,9 @@ export function parseAgyOutput(stdout) {
   try {
     const result = JSON.parse(text)
     if (result && typeof result === 'object') {
-      const usage = result.usage && typeof result.usage === 'object' ? result.usage : {}
-      const num = (value) => (Number.isFinite(value) ? value : 0)
       return {
         summary: typeof result.response === 'string' ? result.response.trim() : text,
-        usage: {
-          inputTokens: num(usage.input_tokens),
-          outputTokens: num(usage.output_tokens),
-          thinkingTokens: num(usage.thinking_tokens),
-          cacheReadTokens: num(usage.cache_read_tokens),
-        },
+        usage: agyUsageCounters(result.usage),
         conversationId: typeof result.conversation_id === 'string' ? result.conversation_id : '',
         status: typeof result.status === 'string' ? result.status : '',
         parsed: true,

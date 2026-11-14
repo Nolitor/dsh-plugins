@@ -1,11 +1,11 @@
 # `specs/` — Living provider & protocol registry
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: spec
 status: active
-updated: 2026-11-13
-summary: Machine-readable protocols, providers and pricing for the Custom Router, plus the freshness rules and generated compatibility matrix that keep the preset layer honest.
+updated: 2026-11-14
+summary: Machine-readable protocols, providers and pricing for the Custom Router, plus the freshness rules, the spec-to-preset mirror gate and the generated compatibility matrix that keep the preset layer honest.
 -->
 
 This directory is the **slow/fast split** of the router's update loop:
@@ -125,6 +125,38 @@ Rules:
 - `none` — no billing relationship.
 
 `ttlDays` defaults to **30** for pricing.
+
+## Spec ↔ preset mirror (hard gate)
+
+These files are a **second registry**: `lib/presets.js` is the runtime
+declaration, and `specs/` restates some of it. `npm run specs:check` therefore
+compares the two, and a contradiction is a **hard error** (exit 1) — not a
+freshness question, because a wrong value here would be served:
+
+| Spec field | Must equal |
+|---|---|
+| `providers/<id>.json` exists | one per preset id in `lib/presets.js` |
+| `protocol` | `preset.endpoint.protocol` |
+| `endpoint` | `preset.endpoint.baseUrl` (skipped when `endpoint.mode` is `daemon`, whose URL is resolved at runtime) |
+| `pricing` | the preset's own pricing file name, i.e. `<id>` |
+| `models` (static catalog only) | the ids of `preset.catalog.layers[].models` |
+| `pricing/<id>.json` → `kind` | `preset.usage.billing.mode` through the table below |
+
+The two layers use **different words for the same fact**, so the translation is
+explicit and lives in one place (`PRICING_KIND_TO_BILLING_MODE` in
+`scripts/verify-specs.mjs`):
+
+| `specs/pricing/*.kind` | `preset.usage.billing.mode` |
+|---|---|
+| `subscription` | `subscription` |
+| `flat` | `flat` |
+| `live-catalog` | `pay-per-token` |
+| `free` | `none` |
+| `none` | `none` |
+
+A `kind` outside this table is reported as a **warning** (a vocabulary gap, not
+a contradiction), so adding a kind forces a decision instead of defaulting to
+"whatever the preset says".
 
 ## Freshness rules
 
