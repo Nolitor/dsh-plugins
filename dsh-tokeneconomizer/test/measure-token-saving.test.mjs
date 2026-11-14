@@ -25,7 +25,7 @@ import { promisify } from 'node:util'
 import { zstdCompressSync } from 'node:zlib'
 
 const run = promisify(execFile)
-const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'scripts', 'measure-token-saving.mjs')
+const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'measure-token-saving.mjs')
 const MARKER = 'tool result middle pruned'
 
 /** A tool output long enough to be an ordinary, non-duplicate result. */
