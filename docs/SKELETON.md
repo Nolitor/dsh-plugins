@@ -184,19 +184,19 @@
 - **1.0** · active · 2026-11-06 · [archive/dsh-subrouter/docs/INDEX.md](../archive/dsh-subrouter/docs/INDEX.md)
   Generated per-subproject index for @nolit/dsh-subrouter: every document this track owns, one line each.
 
-## boot (newest 5 of 63)
+## boot (newest 5 of 64)
 
 - **active** · INDEX.md · [card](../bootcards/INDEX.md)
   Newest-first list of dated boot cards.
+- **active** · 2026-11-14T1044+0900.md · [card](../bootcards/2026-11-14T1044+0900.md)
+  Dated session card (tier 5). State, active task, and handoff for 2026-11-14T1044+0900. Older cards are historical.
 - **active** · 2026-11-14T1002+0900.md · [card](../bootcards/2026-11-14T1002+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-14T1002+0900. Older cards are historical.
 - **active** · 2026-11-14T0930+0900.md · [card](../bootcards/2026-11-14T0930+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-14T0930+0900. Older cards are historical.
 - **active** · 2026-11-14T0717+0900.md · [card](../bootcards/2026-11-14T0717+0900.md)
   Dated session card (tier 5). State, active task, and handoff for 2026-11-14T0717+0900. Older cards are historical.
-- **active** · 2026-11-14T0625+0900.md · [card](../bootcards/2026-11-14T0625+0900.md)
-  Dated session card (tier 5). State, active task, and handoff for 2026-11-14T0625+0900. Older cards are historical.
 
 ---
 
-65 workspace docs (63 boot cards), 0 with problems, 5 subprojects.
+65 workspace docs (64 boot cards), 0 with problems, 5 subprojects.

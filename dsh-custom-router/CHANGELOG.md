@@ -8,6 +8,64 @@ updated: 2026-11-14
 summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events) and rc.15 with the preset-registry drift gate (static registry diff, `usageRoutes` on every preset, and a mutation harness that proves each drift class is rejected), and rc.17 with the `google-generative-ai` vendor wire plus JSON-Schema enums derived from their constant arrays instead of hand-copied, rc.18 with the subagent-activation contract migration that restores the `opencode`/`agy_worker` managed-child delegation on DSH 0.2.2-rc.3, and rc.19 with the living-spec gates (a 14-day age check on the manual `spec:watch` baseline, the four-preset live-route smoke gate), the vendored Antigravity fix that replays a Gemini `thoughtSignature` as a part-level sibling of `functionCall` instead of nesting it inside (live 400 → 200), the Anthropic/Google conformance fixtures, the approved deletion of two dead surfaces, and DSH credential-store support (`credentialRef`) for the DeepInfra and EXAONE keys, and rc.20 with the automatic plaintext-key migration (profile patch → DSH credential store), the EXAONE subagent-allowlist entry in both the live profile and the repo default, the atomic owner-only write the migration commits through, and the removal of the synthetic `OpenCode (config default)` model row from the picker (the `default` pseudo-route still resolves server-side), three post-rc.20 fixes found by live probing (the credential-store ref read through the inject-free accessor, the Gemini replay argument pruning, and the deferred credential injection) with a live verification block, and the A3 completion plus R4 closure (the OpenCode legacy pipeline and the `pipe` config key deleted — one pipeline, no config selects it — `stream-parser.js` renamed to `notation-classifier.js` because it was measured to be shared-path glue, the L1 boundary lint and the `USAGE_READERS` gate shipped with negative proofs, and the dead `classifyBlock` slot removed).
 -->
 
+## 0.0.1-rc.20 (cont. 4) — R3 closed (one retry, one catalog cache) and R5 closed (no vendor ids in L1) — 2026-11-14
+
+> Code commit: `77a53b0` (`refactor(custom-router): close R3 (duplicate retry/catalog caches) and R5 (plan vendor ids out of L1)`).
+> This section records it; the code commit itself carried no CHANGELOG entry.
+
+### R3 — one retry and one catalog cache
+
+| Item | Before | After | Evidence |
+|---|---|---|---|
+| OpenCode `sleepFor` | vendor-local, **24 L** | **deleted** | `grep -rn "function sleepFor" lib/ vendor/` → **1** hit, `lib/retry.js:147` |
+| OpenCode `backoffDelay` | vendor-local, **12 L**, **inverted signature** `backoffDelay(baseMs, attempt)` vs the core's `backoffDelay(attempt, baseMs, capMs)` | **deleted** — both retry sites call `lib/retry.js` | `grep -rn "function backoffDelay" lib/ vendor/` → **1** hit, `lib/retry.js:130` |
+| `vendor/opencode/lib/catalog-cache.js` | **362 L** (durable class bound to fs/probe/timer) | **deleted** — split into `catalog-file.js` (**236 L**) + `catalog-lifecycle.js` (**181 L**) over the core `createCatalogCache` | `git show --stat 77a53b0`; single-flight and the durable snapshot round-trip preserved |
+| DeepInfra catalog cache | local 30-min in-memory closure + `invalidateCatalog` closure + `fetchedAt` math | core `createCatalogCache` with a `ttlMs` **function** — the plugin's **30-min default** and its `catalogTtlMs` **config key** are unchanged | `vendor/deepinfra/lib/index.js:237` → `numberAt('catalogTtlMs', DEFAULT_CATALOG_TTL_MS)` |
+| OpenCode vendor suite | 553 | **554/554** | `npm test` in `vendor/opencode` |
+| Router suite | 802 | **807/807** | `npm test` in the track |
+
+**Preserved deliberately (the semantics that must not drift):** the vendor's **own** retry status
+set — **429 / 451 / 502 / 503 / 504** — was **not** widened to the core's wider set; the
+**unbounded** progression (the cap is deliberately raised); the **abort semantics**; and the
+**one-shot 401 refresh**, kept as an **in-attempt** action that never consumes a retry.
+
+**Measured benefit (DeepInfra):** **5 concurrent cold reads → 1 probe** (the old closure had no
+in-flight dedupe); a **failed cold fetch is still served as an empty catalog and is not cached**,
+so one bad poll does not blank the picker for a whole TTL.
+
+⚠️ **Known divergence (not a defect).** `DEFAULT_CATALOG_TTL_MS` now exists in **two** places:
+`vendor/deepinfra/lib/catalog.js:111` (**30 min** — the one actually used) and
+`lib/catalog-cache.js:42` (**15 min** — the core default when no `ttl` is passed). DeepInfra passes
+its own 30-minute constant explicitly, so the **runtime** TTL is unambiguous — but the two names
+coexist, and a reader who sees only the core constant will read the wrong default.
+
+### R5 — no vendor ids in L1
+
+| Item | Before | After | Evidence |
+|---|---|---|---|
+| `PLAN_PROVIDERS` | declared in `lib/plan.js` (the shared L1 core) as `{ go: 'opencode-go', zen: 'opencode' }` | moved to the **declaration layer** `lib/presets.js` (+ `PLAN_PROVIDERS_BY_PRESET`, `planProvidersOf(presetId)`) | `lib/presets.js:397` |
+| `lib/plan.js` plan→provider seam | read a module-level literal | `bindPlanProviders(map)` + an **explicit `providers` argument** on `planOfProvider` / `planOfRoute` / `availabilityOf` / `orderModels`; unbound, the map is empty and every provider classifies as `other` | `lib/plan.js:388-404` |
+| Vendor-id count in `lib/plan.js` | **2 code ids** (9 including comments) | **0** | `grep -ciE "opencode\|antigravity\|deepinfra\|exaone" lib/plan.js` → **0** |
+| Plan-boundary lint | **did not exist** | **`test/plan-boundary.test.mjs` (5 cases)** — measures the vendor words **from `vendor/*/package.json`** instead of hand-listing them, so a new vendor cannot slip past an out-of-date lint list | `npm test` in the track |
+
+### Gates (re-measured)
+
+router `npm test` **807/807**; `verify:stream` **8/8** with **4** vendored packages probed,
+**8/8** specifiers refused, **vendor loads 0**; `specs:check` OK (`5 protocols, 4 providers,
+4 pricing`); `verify:presets:mutation` **26/26**; `verify:usage-readers` OK (4 presets / 4 routes /
+3 readers); vendor suites antigravity **193/193**, deepinfra **222 pass / 7 skip**,
+opencode **554/554**, exaone **19/19**.
+
+### Not done, deliberately
+
+**No restart** — the live service still runs the `e8b39f7` build, so the live-probe record in
+[HANDOFF.md](./docs/HANDOFF.md) §1 is unchanged and remains the last measured live state.
+**No version bump** — held at `rc.20` (the numeric part is the owner's; this was a code change
+inside the same session, not a release). **No** `~/.dsh` write. **No** API key was read, printed
+or reproduced. The remaining consolidation queue is **R2** (OpenCode's private cost ledger),
+**R6** (the repo-wide uniqueness greps are still a manual grep, not a wired gate) and **A7**
+(the host `dsh-llm-pi-ai` `providers` seam — measure-first, owner-gated).
+
 ## 0.0.1-rc.20 (cont. 3) — A3 complete (one OpenCode pipeline) and R4 closed — 2026-11-14
 
 ### What changed

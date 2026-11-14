@@ -5,7 +5,7 @@ version: 2.0
 kind: design
 status: active
 updated: 2026-11-14
-summary: Active roadmap for @nolit/dsh-custom-router at 0.0.1-rc.20: P0 security, P1 checks, and P2-A phased horizontally. Phase 1 (core lock) and Phase 2 (vendor fan-out) are DONE and measured; A3 is COMPLETE (the OpenCode legacy pipeline is gone — no config selects a pipeline any more) and R4 is CLOSED (the L1 boundary lint and the USAGE_READERS gate exist). The remaining queue is R2, R3, R5, R6 and A7; Phase 3 (A7 host seam) is still measure-first.
+summary: Active roadmap for @nolit/dsh-custom-router at 0.0.1-rc.20: P0 security, P1 checks, and P2-A phased horizontally. Phase 1 (core lock) and Phase 2 (vendor fan-out) are DONE and measured; A3 is COMPLETE (the OpenCode legacy pipeline is gone — no config selects a pipeline any more), R4 is CLOSED (the L1 boundary lint and the USAGE_READERS gate exist), R3 is CLOSED (one retry core, one catalog cache) and R5 is CLOSED (no vendor ids in L1). The remaining queue is R2, R6 and A7; Phase 3 (A7 host seam) is still measure-first.
 -->
 
 > This is the **only** document that lists active work. Historical phases are in
@@ -38,8 +38,10 @@ summary: Active roadmap for @nolit/dsh-custom-router at 0.0.1-rc.20: P0 security
   `vendor/opencode/lib/notation-classifier.js` (679 L, single named export, one consumer).
   **R4 is CLOSED**: `test/stream-boundary.test.mjs` (15 cases) and
   `scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (12 cases) now enforce the
-  L1 boundary and the `usage.routes[].normalize` names. The remaining consolidation queue is
-  **§4 P2-A**.
+  L1 boundary and the `usage.routes[].normalize` names. **R3 is CLOSED** (`77a53b0`): **one** retry
+  core (`lib/retry.js`) and **one** catalog cache (`lib/catalog-cache.js`) now serve every vendor.
+  **R5 is CLOSED** (`77a53b0`): `lib/plan.js` names **0** vendor ids. The remaining consolidation
+  queue is **§4 P2-A**: **R2**, **R6** and **A7**.
 - **Specs and conformance are part of the product.** `specs/` holds the protocol/provider/pricing
   registry, `verify-specs` enforces freshness, `build-spec-matrix` generates the compatibility
   matrix, `spec:watch` reports upstream changes manually, and `test/conformance/` replays one
@@ -251,7 +253,7 @@ hand-written `USAGE_READERS` table (`lib/client.src.js:772`) with **no gate**.
 > (one `lib/stream/openai.js`); the **Anthropic** protocol is shared (one
 > `lib/stream/anthropic.js` on the shared SSE reader); the **Gemini** protocol was already thin
 > and stays thin. **What is NOT done:** A3 is COMPLETE (`e8b39f7`) and R4 is CLOSED; the remaining
-> open items are R2, R3, R5, R6 and A7 — see the open-item table
+> open items are R2, R6 and A7 — see the open-item table
 > below and the boundary verdict in [HANDOFF.md](./HANDOFF.md) §3.
 >
 > **Removed, not closed:** the former **P2-1** ("data-only preset install") remains **DELETED** as an
@@ -265,6 +267,11 @@ hand-written `USAGE_READERS` table (`lib/client.src.js:772`) with **no gate**.
 | **1 — Core lock** | **SERIAL** (1 worker at a time) | ✅ **DONE** | `c0e48ab`, `3ac7a10`, `c2ba900`, `ae9fd1d` | `lib/stream/openai.js` (467 L) extracted; `anthropic.js` 614 → **433 L** (own SSE reader / usage writer / `abortError` copies deleted); `lib/stream/usage.js` 90 → **217 L** with `input+output+cache` as a first-class `TOTAL_FORMULAS` entry; `lib/stream/failure.js` 83 → **105 L** with one `abortError`; `lib/driver/contract.js` derives its formula vocabulary from the core; `lib/cost.js` 85 → **727 L**, `lib/plan.js` 254 → **510 L**, `lib/usage.js` 192 → **432 L**; new `lib/retry.js` (255 L) + `lib/catalog-cache.js` (314 L). Router suite **649 → 759** over the four commits. |
 | **2 — Upper-layer fan-out** | **PARALLEL** (disjoint scopes) | ✅ **DONE** | `8ee4ef1`, `e8b39f7` | DeepInfra `map`/`wire`/`stream-contract`/`cost` now re-export the shared cores **by identity** (vendor `lib/` 3 950 → **3 480**); EXAONE the same (1 176 → **842**, dead `finishReason`/`isFinishEvent` gone); Antigravity retry → `lib/retry.js`, catalog cache → `lib/catalog-cache.js`, one `agy` usage mapper instead of two (5 216 → **5 275 L**, +59 = the core's own seams); **OpenCode `http.js` 3 272 → 2 721 L** — the legacy branch body, its prelude, its own SSE reader (`chatSseEvents`/`parseSseBlock`), the `pipe` config key and 4 orphaned imports are deleted, so **no config selects a pipeline any more**; `stream-parser.js` (679 L) was measured to be **shared-path glue**, not dead code, and was renamed `notation-classifier.js` (single named export, one consumer). Gates: `verify:stream` 8/8 with **4 vendors probed, 8/8 specifiers refused, 0 loads**; `specs:check` OK; `verify:presets:mutation` **17 → 26/26**; `verify:usage-readers` OK (4 presets / 4 routes / 3 readers); **new** `test/stream-boundary.test.mjs` (15 cases) + `test/usage-readers.test.mjs` (12 cases); the dead `classifyBlock` slot is removed from `lib/driver/contract.js`. Router **774 → 802/802**; vendors 193 / 222+7 / **553** / 19 (opencode 555 → 553: two legacy-only tests removed, the legacy↔shared parity tests replaced by golden sequences captured from the shared path **before** deletion). |
 | **3 — A7 host seam** | **SERIAL / measure-first** | ⬜ **NOT STARTED** | — | Measure `dsh-llm-pi-ai` `providers: z.dict(profile)` first; produce a written owner decision **before** any code or profile mutation. |
+
+> **Post-Phase-2 closures (measured 2026-11-14, `77a53b0`).** **R3 is CLOSED** and **R5 is CLOSED**
+> — see the A4/A5 result blocks in §4. Since Phase 2 the router suite moved **802 → 807/807** and
+> the opencode vendor suite **553 → 554/554**; the other three vendor suites are unchanged
+> (antigravity **193**, deepinfra **222 pass / 7 skip**, exaone **19**).
 
 **Horizontal split (replaces the vertical A2 → A1 → … single-worker silo):** lock all L0/L1 lower
 interfaces **serially** first (Phase 1), then fan out L2 vendor clean-ups and L3 gates **in parallel**
@@ -326,8 +333,8 @@ plus optional disjoint **`W2-E`** (Antigravity A4/A5 rewiring) simultaneously. E
 
 | Worker | Task | Allowed write scope (disjoint) | Forbidden paths | Owns `verify-stream.mjs`? | Measured outcome |
 |---|---|---|---|---|---|
-| **W2-A** | **A3 — OpenCode onto shared pipe** (+ OpenCode ledger/retry/cache rewiring) | `vendor/opencode/lib/**`, `vendor/opencode/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,deepinfra,exaone}/**` | No | ✅ **DONE** (`e8b39f7`) — `http.js` **3 272 → 2 721 L** (−630/+79): the legacy branch body, its prelude, its own SSE reader (`chatSseEvents`/`parseSseBlock`), the `pipe` config key and 4 orphaned imports are deleted, so **no config selects a pipeline any more**. `stream-parser.js` (679 L) was **measured to be shared-path glue, not dead code** → renamed `notation-classifier.js` (single named export, one consumer). Suite **555 → 553/553** (two legacy-only tests removed; the legacy↔shared parity tests were replaced by **golden sequences captured from the shared path before deletion**). See **A3 (complete)** below. The OpenCode ledger/retry/cache rewiring is **not** part of A3 — it is R2 / R3. |
-| **W2-B** | **DeepInfra dedup** (OpenAI `map`/`wire`/`stream-contract` + `cost` ledger + catalog TTL cache) | `vendor/deepinfra/lib/**`, `vendor/deepinfra/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,opencode,exaone}/**` | No | ✅ `stream-contract`/`wire`/`map`/`cost` re-export the shared cores **by identity**; `lib/` **3 950 → 3 480 L**; suite **222 pass / 7 skip** unchanged. The Anthropic-native route stays vendor-local by design. Its **catalog cache** is still local → R3. |
+| **W2-A** | **A3 — OpenCode onto shared pipe** (+ OpenCode ledger/retry/cache rewiring) | `vendor/opencode/lib/**`, `vendor/opencode/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,deepinfra,exaone}/**` | No | ✅ **DONE** (`e8b39f7`) — `http.js` **3 272 → 2 721 L** (−630/+79): the legacy branch body, its prelude, its own SSE reader (`chatSseEvents`/`parseSseBlock`), the `pipe` config key and 4 orphaned imports are deleted, so **no config selects a pipeline any more**. `stream-parser.js` (679 L) was **measured to be shared-path glue, not dead code** → renamed `notation-classifier.js` (single named export, one consumer). Suite **555 → 553/553** (two legacy-only tests removed; the legacy↔shared parity tests were replaced by **golden sequences captured from the shared path before deletion**). See **A3 (complete)** below. The OpenCode ledger rewiring is **not** part of A3 — it is **R2**; the retry/cache rewiring was **R3** and is now **CLOSED** (`77a53b0`). |
+| **W2-B** | **DeepInfra dedup** (OpenAI `map`/`wire`/`stream-contract` + `cost` ledger + catalog TTL cache) | `vendor/deepinfra/lib/**`, `vendor/deepinfra/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,opencode,exaone}/**` | No | ✅ `stream-contract`/`wire`/`map`/`cost` re-export the shared cores **by identity**; `lib/` **3 950 → 3 480 L**; suite **222 pass / 7 skip** unchanged. The Anthropic-native route stays vendor-local by design. Its **catalog cache** was still local at that time → **R3, now CLOSED** (`77a53b0`: DeepInfra rides the core `createCatalogCache`). |
 | **W2-C** | **EXAONE dedup + dead exports** (OpenAI `map`/`wire`/`stream-contract` + `map.js:96-130` 35 L dead exports) | `vendor/exaone/lib/**`, `vendor/exaone/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,opencode,deepinfra}/**` | No | ✅ `map.js` 130 → **32 L** (a re-export shim), `wire.js` 292 → **116 L**, `stream-contract.js` 141 → **81 L**; the dead `finishReason`/`isFinishEvent` (35 L) is gone; `lib/` **1 176 → 842 L**; suite **19/19** unchanged. EXAONE's effort fold / `preserve_thinking` / 16-stop cap stay local. |
 | **W2-D** | **A6 — Dead surface removal & gate hardening** (`dsh-exaone` stream guard, spec↔preset mirror, dead-field allowlist, `L1` boundary lint) | `scripts/verify-stream.mjs`, `scripts/verify-specs.mjs`, `scripts/verify-presets-mutation.mjs`, `scripts/verify-usage-readers.mjs`, `lib/driver/contract.js`, `lib/preset-drift.js`, `specs/**`, `test/specs.test.mjs`, `test/preset-drift.test.mjs`, `test/driver-contract.test.mjs`, `test/stream-boundary.test.mjs`, `test/usage-readers.test.mjs` | `lib/stream/**`, `lib/{cost,plan,usage,retry,catalog-cache}.js`, `vendor/**`, `package.json` | **YES (sole owner)** | ✅ **DONE** (`e8b39f7` closes the last remnant) — the stream guard probes **all 4** vendored packages (**8/8 specifiers refused, 0 loads**, self-tested + vacuity-guarded); `checkPresetMirror` landed (protocol/endpoint/pricing/model + `pricing.kind`↔`billing.mode`); `DECLARATION_RUNTIME_FIELDS` / `DECLARATION_DEAD_FIELDS` landed; mutation harness **17 → 26/26**; **the `L1` boundary lint now exists** — `test/stream-boundary.test.mjs` (**15 cases**): no vendor import or vendor identifier in `lib/stream/*`, no `ctx` / `process.env` / `node:fs` / `fetch(` / `require(` / dynamic `import(`, no per-vendor equality, and **exactly one** SSE decoder / usage writer / finish table / `abortError`; **`scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (12 cases)** gate every `usage.routes[].normalize` name against the real reader table with browser source↔bundle parity; the dead `classifyBlock` slot is **removed** from `lib/driver/contract.js`. Both gates carry **negative proofs** (a planted regression → failure → reverted with a hash check). |
 | **W2-E** *(optional Wave 2)* | **Antigravity A4/A5 rewiring** (70 L retry + 92 L catalog cache + 28 L `agy` usage double-map) | `vendor/antigravity/lib/**`, `vendor/antigravity/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{opencode,deepinfra,exaone}/**` | No | ✅ retry loop → `lib/retry.js` (`adapter.js:27`); catalog cache → `lib/catalog-cache.js` (`index.js:32`); the `agy` usage double-map collapsed to **one** mapper (`backends.js:15` → `usageFromProjection`), `subagent.js` now delegates to it; suite **193/193** unchanged. |
@@ -342,6 +349,13 @@ plus optional disjoint **`W2-E`** (Antigravity A4/A5 rewiring) simultaneously. E
 > (PID 361248) — OpenCode shared pipe, DeepInfra OpenAI core and Antigravity core all returned
 > OK with no error. **The owner-verified live EXAONE child turn is still outstanding** — it is an
 > owner action, not a worker action, and it is listed in §4's open items.
+>
+> **Current bar (`77a53b0`, R3 + R5 closed):** router **807/807**; `verify:stream` **8/8** with
+> **4** probed / 8/8 refused / 0 loads; `specs:check` OK; `verify:presets:mutation` **26/26**;
+> `verify:usage-readers` OK; vendors antigravity **193**, deepinfra **222 pass / 7 skip**,
+> opencode **554**, exaone **19**. **No restart** was performed for `77a53b0`, so the live
+> service still runs the `e8b39f7` build — the live-probe record in §7 and in
+> [HANDOFF.md](./HANDOFF.md) §1 is unchanged and remains the last measured live state.
 
 #### Phase 3 — A7 Host Seam (measure-first, owner decision, sequential)
 
@@ -488,8 +502,9 @@ owner decision before any code or profile mutation is attempted.
   - **One live turn** on an OpenCode route through the shared pipe — ✅ **owner-verified after the
     09:37:14 KST restart (PID 361248): the OpenCode shared pipe returned OK with no error.**
 - **Still open under the same vendor scope** — these are the A4/A5 remnants, tracked separately:
-  the OpenCode private cost ledger (**R2**), its two retry loops + its own `backoffDelay`, and
-  the OpenCode + DeepInfra catalog caches (**R3**).
+  the OpenCode private cost ledger (**R2**) and the OpenCode + DeepInfra catalog caches / retry
+  loops (**R3**). **R3 is now CLOSED** (`77a53b0`) — see the A5 result block below. **R2** (the
+  OpenCode private ledger) is still open.
 
 ---
 
@@ -558,6 +573,12 @@ owner decision before any code or profile mutation is attempted.
   own wire vocabulary (`usage.opencode.billing_source`, `usage.opencode.allowance`, the
   `list_cost` / `estimated` facts) in the vendor.
 
+> **R5 note (measured `77a53b0`).** The `lib/plan.js:372` `PLAN_PROVIDERS` line quoted above is
+> **gone** — the vendor-id table moved to the declaration layer (`lib/presets.js` →
+> `PLAN_PROVIDERS` + `planProvidersOf(presetId)`), and `lib/plan.js` now takes the map as an
+> explicit `providers` argument or through `bindPlanProviders()`. The **remaining** L1 vendor-id
+> residue in this A4 area is the **OpenCode private ledger** — that is **R2**, still open.
+
 ---
 
 #### A5 — one retry/backoff + one catalog cache in the core
@@ -589,7 +610,7 @@ owner decision before any code or profile mutation is attempted.
   - The three catalog caches are replaced by one core cache with the same TTL semantics; a
      refresh (`?refresh=1`) still bypasses it for every vendor.
 
-#### A5 result (measured 2026-11-14) — the CORE is done; two vendor caches remain
+#### A5 result (measured 2026-11-14) — the CORE is done; the vendor remnants are **now closed**
 
 - ✅ **Core (Phase 1, `c0e48ab`):** `lib/retry.js` **255 L** — `DEFAULT_RETRY_STATUSES`
   (429/451/500/502/503/504), `isRetryableStatus`, `statusOf`, `isRetryableError`, `isAbortError`,
@@ -602,20 +623,40 @@ owner decision before any code or profile mutation is attempted.
   core — `vendor/antigravity/lib/index.js:32` imports `createCatalogCache`,
   `DEFAULT_CATALOG_TTL_MS` from `../../../lib/catalog-cache.js` (instantiated at `:272`).
   The live quota RPC and its separate quota window stay vendor-local (a product fact).
-- ⚠️ **OpenCode's `backoffDelay` is still its own** (`vendor/opencode/lib/http.js:540`) and its
-  **two** retry loops are still local (`http.js:574` control-plane, `http.js:2021` backend status).
-  The signature is **inverted** relative to the core's — the vendor one is `backoffDelay(baseMs,
-  attempt)`, the core's is `backoffDelay(attempt, baseMs, capMs)` — so this is a real
-  re-implementation, not an alias. Measured: `grep -rn "function backoffDelay"` → **2** hits.
-- ⚠️ **Two vendor catalog caches remain**: `vendor/deepinfra/lib/index.js:209-237` (an in-memory
-  TTL closure, **not** routed through `lib/catalog-cache.js`) and
-  `vendor/opencode/lib/catalog-cache.js` (**362 L**, a durable class bound to fs/probe/timer).
-  Measured: `grep -rn "lib/catalog-cache.js" vendor/` → **1** hit (antigravity only).
-- **Open A5 remnant (next workers, scopes `vendor/opencode/lib/**` and `vendor/deepinfra/lib/**`):**
-  route OpenCode's two retry loops onto `lib/retry.js` (and reconcile the `backoffDelay`
-  signature) and route both remaining catalog caches onto `lib/catalog-cache.js`. Antigravity's
-  quota-window cache is a **legitimate exception** — it caches a *quota* fact, not a catalog, and
-  it has its own 1-minute window.
+- ✅ **OpenCode + DeepInfra (Phase 2 follow-up, `77a53b0`):** both remaining vendor-local
+  mechanics are gone — **R3 is CLOSED**. The measured detail is in the next block. The former
+  ⚠️ rows ("OpenCode's `backoffDelay` is still its own", "two vendor catalog caches remain",
+  "Open A5 remnant") are **closed** and are kept below only as the Phase-1/2-era record.
+
+- ✅ **OpenCode — one retry core.** The vendor's own `sleepFor` (**24 L**) and its
+  **inverted-signature** `backoffDelay` (**12 L**) are **deleted**; **both** retry sites — the
+  control-plane request and the generation-status loop — now call `lib/retry.js`. Measured:
+  `grep -rn "function backoffDelay\|function sleepFor" lib/ vendor/` → **2** hits, **both** in
+  `lib/retry.js` (`backoffDelay` `:130`, `sleepFor` `:147`) — **0** in any vendor.
+  **Preserved exactly** (these are the semantics that must not drift):
+  - the **vendor's own status set** — **429 / 451 / 502 / 503 / 504** — deliberately **NOT** widened
+    to the core's wider set;
+  - **unbounded progression** (the cap is deliberately raised);
+  - the **abort semantics**;
+  - the **one-shot 401 refresh**, kept as an **in-attempt** action that never consumes a retry.
+- ✅ **OpenCode — one catalog cache.** `vendor/opencode/lib/catalog-cache.js` (**362 L**) is
+  **deleted**. Its snapshot file and its stale-while-revalidate lifecycle are split into
+  `vendor/opencode/lib/catalog-file.js` (**236 L**) + `vendor/opencode/lib/catalog-lifecycle.js`
+  (**181 L**) on top of the core `createCatalogCache` (single-flight and the durable snapshot
+  round-trip preserved). OpenCode suite **553 → 554/554**.
+- ✅ **DeepInfra — one catalog cache.** The local 30-minute in-memory cache, the
+  `invalidateCatalog` closure and the `fetchedAt` math are **replaced** by the core
+  `createCatalogCache` fed by a `ttlMs` **function**, so the plugin's **own 30-minute default**
+  and its **config key** (`catalogTtlMs`) are **unchanged**
+  (`vendor/deepinfra/lib/index.js:237` → `numberAt('catalogTtlMs', DEFAULT_CATALOG_TTL_MS)`).
+  **Measured benefit:** **5 concurrent cold reads → 1 probe** (the old closure had no in-flight
+  dedupe); a **failed cold fetch is still served as an empty catalog and is not cached**, so one
+  bad poll does not blank the picker for a whole TTL.
+- ⚠️ **Known divergence (not a defect).** `DEFAULT_CATALOG_TTL_MS` now exists in **two** places:
+  `vendor/deepinfra/lib/catalog.js:111` (**30 min**, the one actually used) and
+  `lib/catalog-cache.js:42` (**15 min**, the core default when no `ttl` is passed). DeepInfra
+  passes its own 30-minute constant explicitly, so the **runtime** TTL is unambiguous — but the
+  two names coexist and a reader who sees only the core constant will read the wrong default.
 
 ---
 
@@ -705,9 +746,11 @@ owner decision before any code or profile mutation is attempted.
   `lib/driver/contract.js` no longer declares it; `test/driver-contract.test.mjs` asserts
   `'classifyBlock' in driver.hooks === false`.
 - ⬜ **Still open (not A6, tracked separately):** the **repo-wide uniqueness greps** are still a
-  manual grep, not a wired gate (**R6**), and `numberOrNull` / `pickSession` / `createCostStore` /
-  `backoffDelay` are still defined more than once because of the OpenCode ledger and retry
-  remnants (**R2** / **R3**).
+  manual grep, not a wired gate (**R6**), and `numberOrNull` / `pickSession` / `createCostStore`
+  are still defined more than once because of the OpenCode ledger remnant (**R2**). The
+  `backoffDelay` duplicate is **gone** — **R3 is CLOSED** (`77a53b0`): OpenCode's own `sleepFor`
+  (24 L) and inverted-signature `backoffDelay` (12 L) are deleted, and both retry sites ride
+  `lib/retry.js`.
 
 ---
 
@@ -843,10 +886,16 @@ turn works, confirmed by the owner.
    | :-: |---|---|---|
    | ~~**R1**~~ | ~~Finish A3~~ — **CLOSED** by `e8b39f7`: the `pipe` config key, the legacy branch body, its prelude and its own SSE reader are deleted (`http.js` 3 272 → **2 721 L**); `stream-parser.js` was measured to be **shared-path glue** and was **renamed** `notation-classifier.js` (679 L, one named export, one consumer); the legacy↔shared parity tests were replaced by **golden sequences captured from the shared path before deletion** (opencode 555 → **553/553**) | — | ✅ opencode **553/553**; `verify:stream` **8/8**; the `pipe` key is gone from the config union; the live OpenCode shared-pipe turn is **owner-verified** |
    | **R2** | **A4 remnant** — route OpenCode's private ledger (`numberOrNull`, `pickSession`, `createCostStore`, `createCostLedger`) and its re-declared `plans.js` / `usage-ledger.js` constants onto `lib/{cost,plan,usage}.js` | `vendor/opencode/lib/**` only | a grep gate proves `numberOrNull` / `pickSession` are defined **once** repo-wide |
-   | **R3** | **A5 remnant** — route OpenCode's two retry loops + its own `backoffDelay` onto `lib/retry.js`, and route OpenCode's + DeepInfra's catalog caches onto `lib/catalog-cache.js` | `vendor/opencode/lib/**`, `vendor/deepinfra/lib/**` | a grep gate proves `backoffDelay` is defined **once** repo-wide; `?refresh=1` still bypasses the cache for every vendor |
+   | ~~**R3**~~ | ~~A5 remnant~~ — **CLOSED** by `77a53b0`: OpenCode's own `sleepFor` (24 L) and inverted-signature `backoffDelay` (12 L) are deleted and **both** retry sites use `lib/retry.js`; `vendor/opencode/lib/catalog-cache.js` (362 L) is deleted and split into `catalog-file.js` (236 L) + `catalog-lifecycle.js` (181 L) over the core `createCatalogCache`; DeepInfra's local 30-min cache + `invalidateCatalog` closure + `fetchedAt` math are replaced by the core cache with a `ttlMs` function (its 30-min default and config key unchanged) | — | ✅ opencode **554/554**; deepinfra **222 pass / 7 skip**; `grep "function backoffDelay\|function sleepFor"` → **2** hits, both in `lib/retry.js`; `grep "lib/catalog-cache.js" vendor/` → **3** hits (antigravity, deepinfra, opencode) — **one** core cache for every vendor; 5 concurrent cold reads → **1** probe |
    | ~~**R4**~~ | ~~A6 remnant~~ — **CLOSED** by `e8b39f7`: `test/stream-boundary.test.mjs` (**15** cases) enforces the L1 boundary; `scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (**12** cases) gate the `usage.routes[].normalize` names with browser source↔bundle parity; the dead `classifyBlock` slot is removed from `lib/driver/contract.js` | — | ✅ the lint fails on a planted vendor import / vendor name / `ctx.` / `process.env` / `fetch(` inside `lib/stream/*`; an unregistered `normalize` name fails; **both gates carry negative proofs** (a planted regression → failure → reverted with a hash check) |
-   | **R5** | **A7** — measure the host `providers: z.dict(profile)` seam, then produce the owner decision | `docs/**` first, then owner-gated code | a written, measured answer; no unmeasured data-only promise |
+   | ~~**R5**~~ | ~~No vendor ids in L1~~ — **CLOSED** by `77a53b0`: `PLAN_PROVIDERS` moved from `lib/plan.js` into the declaration layer `lib/presets.js` (+ `planProvidersOf(presetId)`); `lib/plan.js` exposes `bindPlanProviders(map)` and takes an **explicit** `providers` argument. Vendor-id count in `lib/plan.js`: **2 code ids (9 with comments) → 0** | — | ✅ `test/plan-boundary.test.mjs` (**5 cases**) measures the vendor words from `vendor/*/package.json` instead of hand-listing them; the lint fails on a planted vendor id in `lib/plan.js` |
    | **R6** | **Uniqueness greps as a wired gate** — `mapDelta` / `numberOrNull` / `pickSession` / `createCostStore` / `backoffDelay` are currently a manual grep, not a test | `test/**` or `scripts/**` | each name has exactly one definition repo-wide, enforced by a test |
+   | **A7** | **Host seam** — measure the host `providers: z.dict(profile)` seam, then produce the owner decision | `docs/**` first, then owner-gated code | a written, measured answer; no unmeasured data-only promise |
+
+   > **R5 naming note.** Earlier revisions used **R5** for two different things (the
+   > `PLAN_PROVIDERS` L1 vendor-id table **and** the host `providers`-seam measurement). The
+   > **host seam is now called A7 everywhere** (it is **Phase 3** in the matrix above); **R5** is
+   > unambiguously the `PLAN_PROVIDERS` closure, which is **CLOSED** by `77a53b0`.
 
 4. The remaining **P2** items keep their own order and gates: **P2-2** and **P2-3** are superseded by
    **A3** (tracked there); **P2-5** (S3, owner deferred 2026-11-08) and **P2-6** (S4, blocked on owner
@@ -856,14 +905,14 @@ turn works, confirmed by the owner.
 
 ## 7. Evidence
 
-Current gates (re-measured 2026-11-14, after Phase 1 + Phase 2 + the A3 completion): router
-`npm test` **802/802** (was 774),
-`npm run verify` exit 0 (check + 802 tests + `verify:stream` + `specs:check` — `5 protocols, 4
+Current gates (re-measured 2026-11-14, after Phase 1 + Phase 2 + the A3 completion + **R3/R5
+closure**): router `npm test` **807/807** (was 802 at `e8b39f7`),
+`npm run verify` exit 0 (check + 807 tests + `verify:stream` + `specs:check` — `5 protocols, 4
 providers, 4 pricing` — OK), `verify:presets` OK (`OK: preset declarations, the browser registry,
 the locales and the runtime registries all agree`; runtime providers `deepseek-account, antigravity,
 deepinfra, deepinfra-anthropic, exaone, opencode-http-agent`). Vendor suites: antigravity **193/193**
-(+3 from `642ee06`), deepinfra **222 pass / 7 skip** (229 total), opencode **553/553** (555 → 553:
-the two legacy-only tests were removed with the legacy pipeline), exaone
+(+3 from `642ee06`), deepinfra **222 pass / 7 skip** (229 total), opencode **554/554** (553 → 554:
+the R3 catalog split added one case), exaone
 **19/19** — **the three non-OpenCode vendor suites are unchanged by the refactor.**
 
 `verify:stream` (re-measured 2026-11-14): **8/8** dispatch cases, **4** vendored packages probed
@@ -878,29 +927,34 @@ files 4, specs 6, declaration fields 3).
 `verify:usage-readers` (re-measured 2026-11-14): **OK** — 4 presets, 4 routes, 3 readers
 (`normalizeAntigravityUsage`, `normalizeOpencodeUsage`, `normalizeDeepinfraUsage`).
 
-**Size movement (measured by `wc -l`, `ead9daf` → `8ee4ef1` → `e8b39f7`):**
+**Size movement (measured by `wc -l`, `ead9daf` → `8ee4ef1` → `e8b39f7` → `77a53b0`):**
 
-| Surface | `@ead9daf` | `8ee4ef1` | `e8b39f7` | Δ (audit → now) |
-|---|---:|---:|---:|---:|
-| `lib/stream/` total | **1 378** | **1 851** | **1 851** | **+473** |
-| ↳ `lib/stream/anthropic.js` | **614** | 433 | **433** | **−181** |
-| ↳ `lib/stream/usage.js` | 90 | 217 | 217 | +127 |
-| ↳ `lib/stream/sse.js` | 180 | 216 | 216 | +36 |
-| ↳ `lib/stream/openai.js` | — | **467** | **467** | **+467** |
-| `lib/{cost,plan,usage}.js` | **531** | **1 669** | **1 669** | **+1 138** |
-| `lib/retry.js` + `lib/catalog-cache.js` | — | **569** | **569** | **+569** |
-| ↳ `vendor/opencode/lib/http.js` | **3 073** | **3 272** | **2 721** | **−352** |
-| vendor antigravity `lib/` | 5 216 | 5 275 | **5 275** | +59 |
-| vendor opencode `lib/` | 12 330 | 12 631 | **12 083** | **−247** |
-| vendor deepinfra `lib/` | 3 950 | 3 480 | **3 480** | **−470** |
-| vendor exaone `lib/` | 1 176 | 842 | **842** | **−334** |
-| **vendor total** | **22 672** | **22 228** | **21 680** | **−992** |
+| Surface | `@ead9daf` | `8ee4ef1` | `e8b39f7` | `77a53b0` | Δ (audit → now) |
+|---|---:|---:|---:|---:|---:|
+| `lib/stream/` total | **1 378** | **1 851** | **1 851** | **1 851** | **+473** |
+| ↳ `lib/stream/anthropic.js` | **614** | 433 | **433** | **433** | **−181** |
+| ↳ `lib/stream/usage.js` | 90 | 217 | 217 | 217 | +127 |
+| ↳ `lib/stream/sse.js` | 180 | 216 | 216 | 216 | +36 |
+| ↳ `lib/stream/openai.js` | — | **467** | **467** | **467** | **+467** |
+| `lib/{cost,plan,usage}.js` | **531** | **1 669** | **1 669** | **1 702** | **+1 171** |
+| `lib/retry.js` + `lib/catalog-cache.js` | — | **569** | **569** | **569** | **+569** |
+| ↳ `vendor/opencode/lib/http.js` | **3 073** | **3 272** | **2 721** | **2 697** | **−376** |
+| vendor antigravity `lib/` | 5 216 | 5 275 | **5 275** | **5 275** | +59 |
+| vendor opencode `lib/` | 12 330 | 12 631 | **12 083** | **12 115** | **−215** |
+| vendor deepinfra `lib/` | 3 950 | 3 480 | **3 480** | **3 517** | **−433** |
+| vendor exaone `lib/` | 1 176 | 842 | **842** | **842** | **−334** |
+| **vendor total** | **22 672** | **22 228** | **21 680** | **21 749** | **−923** |
 
-The reading: the **duplication left the upper layer** (**−992 L** across the four vendors since the
-audit) and the **standardisation entered the lower one** (+2 180 L across `lib/stream/` and the
+The reading: the **duplication left the upper layer** (**−923 L** across the four vendors since the
+audit) and the **standardisation entered the lower one** (+2 213 L across `lib/stream/` and the
 accounting / retry / cache cores). The core is bigger; the *vendors* are smaller and now bind to
 it by identity instead of carrying copies. The A3 completion removed the last **−551 L** of
 OpenCode's own pipeline (12 631 → 12 083) — the second, vendor-local implementation is gone.
+**R3 (`77a53b0`) moved the last two vendor-local mechanics out:** OpenCode's `lib/` went
+**12 083 → 12 115** (+32 = the `catalog-file.js` / `catalog-lifecycle.js` split minus the deleted
+362 L cache minus the deleted 36 L of retry helpers), DeepInfra's `lib/` went **3 480 → 3 517**
+(+37 = the core-cache wiring), and the core grew **+33 L** in `lib/plan.js` (the `providers`
+parameter and the `bindPlanProviders` seam) — **net −923 L** in the vendors against the audit.
 
 The **synthetic `OpenCode (config default)` row** is closed: it was produced in
 `vendor/opencode/lib/http.js` (the `models` config default and the `listModels` prepend) and in
