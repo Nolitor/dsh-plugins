@@ -5,10 +5,15 @@ version: 1.3
 kind: design
 status: historical
 updated: 2026-11-14
-summary: Historical design record (phases A/C/D/E delivered; residuals in ROADMAP P2-2/P2-3). Originally a phased plan to absorb @nolit/dsh-opencode-v2 into dsh-custom-router/vendor/opencode, aligned against the three existing pipelines — DeepInfra for the shared stream pipe, Antigravity for the surface/dispatch supervisor, and the router preset slot for registry and dynamic activation — with file moves, fallback shims, per-phase verification gates, the four owner decisions recorded, and every OpenCode beta-roadmap milestone assigned to a phase. Phase A closed 2026-11-10; Phase B (stream unification) is delivered as of 2026-11-14 — B-1, B-2 and B-3 landed, leaving only the OpenCode `pipe:'shared'` default and the Phase F parity work (ROADMAP P2-2/P2-3).
+summary: Historical design record (phases A/C/D/E delivered; residuals in ROADMAP P2-2/P2-3 — now closed). Originally a phased plan to absorb @nolit/dsh-opencode-v2 into dsh-custom-router/vendor/opencode, aligned against the three existing pipelines — DeepInfra for the shared stream pipe, Antigravity for the surface/dispatch supervisor, and the router preset slot for registry and dynamic activation — with file moves, fallback shims, per-phase verification gates, the four owner decisions recorded, and every OpenCode beta-roadmap milestone assigned to a phase. Phase A closed 2026-11-10; Phase B (stream unification) is delivered as of 2026-11-14 — B-1, B-2 and B-3 landed; the OpenCode `pipe:'shared'` default and the Phase F parity work (ROADMAP P2-2/P2-3) were closed on 2026-11-14 by e8b39f7 (one pipeline, no config selects it; stream-parser.js renamed notation-classifier.js).
 -->
 
-> **HISTORICAL DESIGN RECORD (2026-11-14).** Phases A, C, D, E and B-1..B-3 are implemented. Only the OpenCode `pipe:'shared'` default and the Phase F residuals remain, tracked in [ROADMAP.md](./ROADMAP.md) P2-2/P2-3. Do not execute the phase list below as a plan. Closed items: [ROADMAP-ARCHIVE.md](./ROADMAP-ARCHIVE.md).
+> **HISTORICAL DESIGN RECORD (2026-11-14).** Phases A, C, D, E and B-1..B-3 are implemented, and
+> the `pipe:'shared'` default + Phase F parity residuals (P2-2/P2-3) were **closed on 2026-11-14**
+> by `e8b39f7`: there is now **one** OpenCode pipeline, the `pipe` config key is deleted, and
+> `stream-parser.js` was renamed `notation-classifier.js` (it is shared-path glue, not legacy-only
+> code). Do not execute the phase list below as a plan. Open items live in
+> [ROADMAP.md](./ROADMAP.md) §6. Closed items: [ROADMAP-ARCHIVE.md](./ROADMAP-ARCHIVE.md).
 
 > **Historical status (2026-11-14).** Phase A, C, D, E and B-1..B-3 are delivered. The only
 > live residuals are the OpenCode `pipe:'shared'` default and the Phase F canonical-parser/parity

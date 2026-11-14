@@ -5,11 +5,24 @@ version: 1.0
 kind: reference
 status: active
 updated: 2026-11-14
-summary: Copy-paste dispatch packages for Phase 1 (serial core lock W1-1..W1-4) and Phase 2 (parallel upper-layer fan-out W2-A..W2-E) with disjoint write scopes and exact gates.
+summary: Copy-paste dispatch packages for Phase 1 (serial core lock W1-1..W1-4) and Phase 2 (parallel upper-layer fan-out W2-A..W2-E) with disjoint write scopes and exact gates. W2-A (A3) and W2-D (A6 gates) are SHIPPED as of 2026-11-14 (e8b39f7); the remaining queue is R2, R3, R5, R6.
 -->
 
 > **Execution guide.** Follow [ROADMAP.md](./ROADMAP.md) §4 P2-A and the layer contract in
 > [ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md).
+>
+> - **SHIPPED 2026-11-14 (`e8b39f7`) — do not re-run these blocks:**
+>   - **W2-A (A3, OpenCode onto the shared pipe)** — DONE. `http.js` **3 272 → 2 721 L**; the
+>     legacy loop, its prelude, the vendor's own SSE reader (`chatSseEvents`/`parseSseBlock`), the
+>     `pipe` config key and 4 orphaned imports are deleted — **no config selects a pipeline any
+>     more**. `stream-parser.js` was measured to be **shared-path glue** and was **renamed**
+>     `notation-classifier.js` (679 L, one named export, one consumer). OpenCode suite
+>     **553/553**; the live shared-pipe turn is owner-verified.
+>   - **W2-D (A6 gates)** — DONE. `test/stream-boundary.test.mjs` (**15** cases),
+>     `scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (**12** cases), and the
+>     dead `classifyBlock` slot removed.
+>   - The blocks below are kept as the **record of what shipped**; the *open* work is
+>     **R2 / R3 / R5 / R6** in [ROADMAP.md](./ROADMAP.md) §6, not a re-run of W2-A / W2-D.
 >
 > - **Phase 1 (`W1-1` → `W1-2` → `W1-3` → `W1-4`) is STRICTLY SERIAL.** Never run two Phase 1
 >   workers concurrently: they share `lib/stream/index.js`, `lib/driver/contract.js`, and
@@ -339,7 +352,12 @@ CONSTRAINTS:
 > `W2-A`, `W2-B`, `W2-C`, `W2-D` (and optional `W2-E`) in parallel. Each worker touches **only** its
 > listed write scope; none edits `package.json`, `lib/stream/**`, or another worker's vendor folder.
 
-### W2-A — A3: OpenCode onto Shared Pipe + Ledger/Retry/Cache Rewiring
+### W2-A — A3: OpenCode onto Shared Pipe + Ledger/Retry/Cache Rewiring — ✅ **SHIPPED** (`e8b39f7`)
+
+> **This block is the record of what shipped — do not execute it again.** The A3 half is DONE
+> (see the note at the top of this file). The **ledger / retry / cache rewiring** steps 4–5 below
+> are **NOT** done — they are now tracked as **R2** and **R3** in
+> [ROADMAP.md](./ROADMAP.md) §6, with their own gates.
 
 ```text
 WORKER_ID: W2-A
@@ -366,10 +384,10 @@ READING_LIST:
   - dsh-custom-router/docs/ROADMAP.md (§4 P2-A A3/A4/A5, P2-2/P2-3)
   - dsh-custom-router/lib/stream/index.js
   - dsh-custom-router/lib/cost.js, lib/plan.js, lib/usage.js, lib/retry.js, lib/catalog-cache.js
-  - dsh-custom-router/vendor/opencode/lib/http.js (lines 290-330, 440-600, 1590-1924, 2065-2375)
+  - dsh-custom-router/vendor/opencode/lib/http.js
   - dsh-custom-router/vendor/opencode/lib/openai-mapping.js
   - dsh-custom-router/vendor/opencode/lib/stream-contract.js
-  - dsh-custom-router/vendor/opencode/lib/stream-parser.js
+  - dsh-custom-router/vendor/opencode/lib/notation-classifier.js   # was stream-parser.js (renamed)
 
 STEPS:
   1. In vendor/opencode/lib/http.js:
@@ -389,11 +407,20 @@ STEPS:
      identical StreamChunks, usage buckets, finish reason, and failure code through the shared path.
 
 ACCEPTANCE_GATES:
-  - (cd dsh-custom-router/vendor/opencode && npm test) -> 555/555 (plus new parity tests) pass
-  - (cd dsh-custom-router && npm run verify)           -> exit 0 (router >= 649, verify:stream 8/8, specs:check OK)
+  - (cd dsh-custom-router/vendor/opencode && npm test) -> 553/553 pass
+  - (cd dsh-custom-router && npm run verify)           -> exit 0 (router >= 802, verify:stream 8/8, specs:check OK)
   - grep -rn "parser: 'legacy'" dsh-custom-router/vendor/opencode/ -> 0 matches
   - grep -rn "default('legacy')" dsh-custom-router/vendor/opencode/ -> 0 matches
   - Live probe (owner or isolated DSH_HOME post-merge): 1 OpenCode route turn through shared pipe
+                                        # MET: owner-verified after the 2026-11-14 09:37:14 KST restart (PID 361248)
+
+MEASURED_OUTCOME:
+  - Steps 1-3: DONE (e8b39f7). http.js 3272 -> 2721 L (-630/+79); the pipe config key is deleted,
+    so NO config selects a pipeline any more; stream-parser.js was measured to be shared-path
+    glue and was RENAMED notation-classifier.js (679 L, one named export, one consumer).
+    Parity coverage: the two legacy<->shared parity tests were replaced by golden sequences
+    captured from the shared path BEFORE the deletion; opencode 555 -> 553 (2 legacy-only tests removed).
+  - Steps 4-5: NOT DONE -> R2 (ledger) and R3 (retry loops + catalog caches).
 
 COMMIT_TEMPLATE:
   git add dsh-custom-router/vendor/opencode/
@@ -512,7 +539,11 @@ CONSTRAINTS:
 
 ---
 
-### W2-D — A6: Dead Surface Removal + Spec/Preset/Boundary Gates (Sole `verify-stream.mjs` Owner)
+### W2-D — A6: Dead Surface Removal + Spec/Preset/Boundary Gates (Sole `verify-stream.mjs` Owner) — ✅ **SHIPPED** (`8ee4ef1` + `e8b39f7`)
+
+> **This block is the record of what shipped — do not execute it again.** The only open part is
+> **R6** (the repo-wide uniqueness greps as a wired gate), tracked in
+> [ROADMAP.md](./ROADMAP.md) §6.
 
 ```text
 WORKER_ID: W2-D
@@ -572,6 +603,17 @@ ACCEPTANCE_GATES (run inside dsh-custom-router/):
   - npm run verify:presets                    -> OK
   - npm run verify:presets:mutation           -> >= 17/17 (17 baseline + new spec-mirror & dead-field mutations)
   - npm run verify                            -> exit 0 (router >= 649 + new boundary/spec tests)
+
+MEASURED_OUTCOME:
+  - SHIPPED in two commits: 8ee4ef1 (the 4-vendor guard, the spec<->preset mirror, the dead-field
+    allowlist, the EXAONE dead exports, the mutation harness 17 -> 26/26) and e8b39f7 (the L1
+    boundary lint + the USAGE_READERS gate + the classifyBlock slot removal).
+  - test/stream-boundary.test.mjs -> 15 cases, live; scripts/verify-usage-readers.mjs +
+    test/usage-readers.test.mjs -> 12 cases, live (4 presets / 4 routes / 3 readers).
+  - Both gates carry NEGATIVE PROOFS: a planted forbidden import failed 3 boundary rules; a renamed
+    usage route exits 1. Both plants were reverted with a sha256 verification.
+  - STILL OPEN -> R6: the repo-wide uniqueness greps (mapDelta / numberOrNull / pickSession /
+    createCostStore / backoffDelay) are still a manual grep, not a wired gate.
 
 COMMIT_TEMPLATE:
   git add dsh-custom-router/scripts/ dsh-custom-router/lib/driver/contract.js dsh-custom-router/lib/preset-drift.js dsh-custom-router/test/

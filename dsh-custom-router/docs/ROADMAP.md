@@ -5,7 +5,7 @@ version: 2.0
 kind: design
 status: active
 updated: 2026-11-14
-summary: Active roadmap for @nolit/dsh-custom-router at 0.0.1-rc.20: P0 security, P1 checks, and P2-A phased horizontally. Phase 1 (core lock) and Phase 2 (vendor fan-out) are DONE and measured; A3 is deliberately PARTIAL (the OpenCode legacy opt-out branch and stream-parser.js survive), A6 has remnants, and Phase 3 (A7 host seam) is still measure-first.
+summary: Active roadmap for @nolit/dsh-custom-router at 0.0.1-rc.20: P0 security, P1 checks, and P2-A phased horizontally. Phase 1 (core lock) and Phase 2 (vendor fan-out) are DONE and measured; A3 is COMPLETE (the OpenCode legacy pipeline is gone — no config selects a pipeline any more) and R4 is CLOSED (the L1 boundary lint and the USAGE_READERS gate exist). The remaining queue is R2, R3, R5, R6 and A7; Phase 3 (A7 host seam) is still measure-first.
 -->
 
 > This is the **only** document that lists active work. Historical phases are in
@@ -31,10 +31,15 @@ summary: Active roadmap for @nolit/dsh-custom-router at 0.0.1-rc.20: P0 security
   and **no longer contains a protocol fork**: Anthropic rides the shared SSE reader
   (`anthropic.js` 614 → **433 L**), OpenAI has one core (`lib/stream/openai.js`, **467 L**), and
   `verify:stream` now proves the core runs with zero vendor loads against **all 4** vendored
-  packages (measured: **4 probed, 8/8 specifiers refused, 0 loads**). The **OpenCode legacy
-  opt-out branch still exists** and `vendor/opencode/lib/stream-parser.js` (679 L) is still
-  imported by the shared path — so **A3 is PARTIAL**, not done. The remaining consolidation
-  queue is **§4 P2-A**.
+  packages (measured: **4 probed, 8/8 specifiers refused, 0 loads**). **A3 is COMPLETE**
+  (measured 2026-11-14, `e8b39f7`): the OpenCode legacy pipeline is gone — `http.js` **3 272 →
+  2 721 L** (−630/+79), **no config selects a pipeline any more**, and the vendor's
+  `stream-parser.js` was **not** dead code but shared-path glue, so it was **renamed** to
+  `vendor/opencode/lib/notation-classifier.js` (679 L, single named export, one consumer).
+  **R4 is CLOSED**: `test/stream-boundary.test.mjs` (15 cases) and
+  `scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (12 cases) now enforce the
+  L1 boundary and the `usage.routes[].normalize` names. The remaining consolidation queue is
+  **§4 P2-A**.
 - **Specs and conformance are part of the product.** `specs/` holds the protocol/provider/pricing
   registry, `verify-specs` enforces freshness, `build-spec-matrix` generates the compatibility
   matrix, `spec:watch` reports upstream changes manually, and `test/conformance/` replays one
@@ -245,7 +250,8 @@ hand-written `USAGE_READERS` table (`lib/client.src.js:772`) with **no gate**.
 > the upper layer and the standardisation entered the lower one. The **OpenAI** protocol is shared
 > (one `lib/stream/openai.js`); the **Anthropic** protocol is shared (one
 > `lib/stream/anthropic.js` on the shared SSE reader); the **Gemini** protocol was already thin
-> and stays thin. **What is NOT done:** A3 is partial, A6 has remnants — see the open-item table
+> and stays thin. **What is NOT done:** A3 is COMPLETE (`e8b39f7`) and R4 is CLOSED; the remaining
+> open items are R2, R3, R5, R6 and A7 — see the open-item table
 > below and the boundary verdict in [HANDOFF.md](./HANDOFF.md) §3.
 >
 > **Removed, not closed:** the former **P2-1** ("data-only preset install") remains **DELETED** as an
@@ -257,7 +263,7 @@ hand-written `USAGE_READERS` table (`lib/client.src.js:772`) with **no gate**.
 | Phase | Mode | Status | Commits | Measured result |
 | :-: |---|---|---|---|
 | **1 — Core lock** | **SERIAL** (1 worker at a time) | ✅ **DONE** | `c0e48ab`, `3ac7a10`, `c2ba900`, `ae9fd1d` | `lib/stream/openai.js` (467 L) extracted; `anthropic.js` 614 → **433 L** (own SSE reader / usage writer / `abortError` copies deleted); `lib/stream/usage.js` 90 → **217 L** with `input+output+cache` as a first-class `TOTAL_FORMULAS` entry; `lib/stream/failure.js` 83 → **105 L** with one `abortError`; `lib/driver/contract.js` derives its formula vocabulary from the core; `lib/cost.js` 85 → **727 L**, `lib/plan.js` 254 → **510 L**, `lib/usage.js` 192 → **432 L**; new `lib/retry.js` (255 L) + `lib/catalog-cache.js` (314 L). Router suite **649 → 759** over the four commits. |
-| **2 — Upper-layer fan-out** | **PARALLEL** (disjoint scopes) | ✅ **DONE** | `8ee4ef1` | DeepInfra `map`/`wire`/`stream-contract`/`cost` now re-export the shared cores **by identity** (vendor `lib/` 3 950 → **3 480**); EXAONE the same (1 176 → **842**, dead `finishReason`/`isFinishEvent` gone); Antigravity retry → `lib/retry.js`, catalog cache → `lib/catalog-cache.js`, one `agy` usage mapper instead of two (5 216 → **5 275 L**, +59 = the core's own seams); OpenCode `pipe` default flipped to `'shared'` and the hardcoded `parser:'legacy'` literal removed (12 330 → **12 631 L**); gates: `verify:stream` 8/8 with **4 vendors probed, 8/8 specifiers refused, 0 loads**; `specs:check` OK; `verify:presets:mutation` **17 → 26/26**. Router **774/774**; vendors 193 / 222+7 / 555 / 19 unchanged. |
+| **2 — Upper-layer fan-out** | **PARALLEL** (disjoint scopes) | ✅ **DONE** | `8ee4ef1`, `e8b39f7` | DeepInfra `map`/`wire`/`stream-contract`/`cost` now re-export the shared cores **by identity** (vendor `lib/` 3 950 → **3 480**); EXAONE the same (1 176 → **842**, dead `finishReason`/`isFinishEvent` gone); Antigravity retry → `lib/retry.js`, catalog cache → `lib/catalog-cache.js`, one `agy` usage mapper instead of two (5 216 → **5 275 L**, +59 = the core's own seams); **OpenCode `http.js` 3 272 → 2 721 L** — the legacy branch body, its prelude, its own SSE reader (`chatSseEvents`/`parseSseBlock`), the `pipe` config key and 4 orphaned imports are deleted, so **no config selects a pipeline any more**; `stream-parser.js` (679 L) was measured to be **shared-path glue**, not dead code, and was renamed `notation-classifier.js` (single named export, one consumer). Gates: `verify:stream` 8/8 with **4 vendors probed, 8/8 specifiers refused, 0 loads**; `specs:check` OK; `verify:presets:mutation` **17 → 26/26**; `verify:usage-readers` OK (4 presets / 4 routes / 3 readers); **new** `test/stream-boundary.test.mjs` (15 cases) + `test/usage-readers.test.mjs` (12 cases); the dead `classifyBlock` slot is removed from `lib/driver/contract.js`. Router **774 → 802/802**; vendors 193 / 222+7 / **553** / 19 (opencode 555 → 553: two legacy-only tests removed, the legacy↔shared parity tests replaced by golden sequences captured from the shared path **before** deletion). |
 | **3 — A7 host seam** | **SERIAL / measure-first** | ⬜ **NOT STARTED** | — | Measure `dsh-llm-pi-ai` `providers: z.dict(profile)` first; produce a written owner decision **before** any code or profile mutation. |
 
 **Horizontal split (replaces the vertical A2 → A1 → … single-worker silo):** lock all L0/L1 lower
@@ -320,18 +326,21 @@ plus optional disjoint **`W2-E`** (Antigravity A4/A5 rewiring) simultaneously. E
 
 | Worker | Task | Allowed write scope (disjoint) | Forbidden paths | Owns `verify-stream.mjs`? | Measured outcome |
 |---|---|---|---|---|---|
-| **W2-A** | **A3 — OpenCode onto shared pipe** (+ OpenCode ledger/retry/cache rewiring) | `vendor/opencode/lib/**`, `vendor/opencode/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,deepinfra,exaone}/**` | No | ⚠️ **PARTIAL** — `pipe` default is now `'shared'` (`http.js:312`) and the hardcoded `parser:'legacy'` literal is gone; the legacy opt-out branch and `stream-parser.js` survive. Suite **555/555**. See **A3 (partial)** below. |
-| **W2-B** | **DeepInfra dedup** (OpenAI `map`/`wire`/`stream-contract` + `cost` ledger + catalog TTL cache) | `vendor/deepinfra/lib/**`, `vendor/deepinfra/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,opencode,exaone}/**` | No | ✅ `stream-contract`/`wire`/`map`/`cost` re-export the shared cores **by identity**; `lib/` **3 950 → 3 480 L**; suite **222 pass / 7 skip** unchanged. The Anthropic-native route stays vendor-local by design. |
+| **W2-A** | **A3 — OpenCode onto shared pipe** (+ OpenCode ledger/retry/cache rewiring) | `vendor/opencode/lib/**`, `vendor/opencode/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,deepinfra,exaone}/**` | No | ✅ **DONE** (`e8b39f7`) — `http.js` **3 272 → 2 721 L** (−630/+79): the legacy branch body, its prelude, its own SSE reader (`chatSseEvents`/`parseSseBlock`), the `pipe` config key and 4 orphaned imports are deleted, so **no config selects a pipeline any more**. `stream-parser.js` (679 L) was **measured to be shared-path glue, not dead code** → renamed `notation-classifier.js` (single named export, one consumer). Suite **555 → 553/553** (two legacy-only tests removed; the legacy↔shared parity tests were replaced by **golden sequences captured from the shared path before deletion**). See **A3 (complete)** below. The OpenCode ledger/retry/cache rewiring is **not** part of A3 — it is R2 / R3. |
+| **W2-B** | **DeepInfra dedup** (OpenAI `map`/`wire`/`stream-contract` + `cost` ledger + catalog TTL cache) | `vendor/deepinfra/lib/**`, `vendor/deepinfra/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,opencode,exaone}/**` | No | ✅ `stream-contract`/`wire`/`map`/`cost` re-export the shared cores **by identity**; `lib/` **3 950 → 3 480 L**; suite **222 pass / 7 skip** unchanged. The Anthropic-native route stays vendor-local by design. Its **catalog cache** is still local → R3. |
 | **W2-C** | **EXAONE dedup + dead exports** (OpenAI `map`/`wire`/`stream-contract` + `map.js:96-130` 35 L dead exports) | `vendor/exaone/lib/**`, `vendor/exaone/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,opencode,deepinfra}/**` | No | ✅ `map.js` 130 → **32 L** (a re-export shim), `wire.js` 292 → **116 L**, `stream-contract.js` 141 → **81 L**; the dead `finishReason`/`isFinishEvent` (35 L) is gone; `lib/` **1 176 → 842 L**; suite **19/19** unchanged. EXAONE's effort fold / `preserve_thinking` / 16-stop cap stay local. |
-| **W2-D** | **A6 — Dead surface removal & gate hardening** (`dsh-exaone` stream guard, spec↔preset mirror, dead-field allowlist, `L1` boundary lint) | `scripts/verify-stream.mjs`, `scripts/verify-specs.mjs`, `scripts/verify-presets-mutation.mjs`, `lib/driver/contract.js`, `lib/preset-drift.js`, `specs/**`, `test/specs.test.mjs`, `test/preset-drift.test.mjs`, `test/driver-contract.test.mjs`, `test/stream-boundary.test.mjs` | `lib/stream/**`, `lib/{cost,plan,usage,retry,catalog-cache}.js`, `vendor/**`, `package.json` | **YES (sole owner)** | ⚠️ **PARTIAL** — the stream guard now probes **all 4** vendored packages (**8/8 specifiers refused, 0 loads**, self-tested + vacuity-guarded); `checkPresetMirror` landed (protocol/endpoint/pricing/model + `pricing.kind`↔`billing.mode`); `DECLARATION_RUNTIME_FIELDS` / `DECLARATION_DEAD_FIELDS` landed; mutation harness **17 → 26/26**. **The `L1` boundary lint (`test/stream-boundary.test.mjs`) was NOT written** — see **A6 (remnants)** below. |
+| **W2-D** | **A6 — Dead surface removal & gate hardening** (`dsh-exaone` stream guard, spec↔preset mirror, dead-field allowlist, `L1` boundary lint) | `scripts/verify-stream.mjs`, `scripts/verify-specs.mjs`, `scripts/verify-presets-mutation.mjs`, `scripts/verify-usage-readers.mjs`, `lib/driver/contract.js`, `lib/preset-drift.js`, `specs/**`, `test/specs.test.mjs`, `test/preset-drift.test.mjs`, `test/driver-contract.test.mjs`, `test/stream-boundary.test.mjs`, `test/usage-readers.test.mjs` | `lib/stream/**`, `lib/{cost,plan,usage,retry,catalog-cache}.js`, `vendor/**`, `package.json` | **YES (sole owner)** | ✅ **DONE** (`e8b39f7` closes the last remnant) — the stream guard probes **all 4** vendored packages (**8/8 specifiers refused, 0 loads**, self-tested + vacuity-guarded); `checkPresetMirror` landed (protocol/endpoint/pricing/model + `pricing.kind`↔`billing.mode`); `DECLARATION_RUNTIME_FIELDS` / `DECLARATION_DEAD_FIELDS` landed; mutation harness **17 → 26/26**; **the `L1` boundary lint now exists** — `test/stream-boundary.test.mjs` (**15 cases**): no vendor import or vendor identifier in `lib/stream/*`, no `ctx` / `process.env` / `node:fs` / `fetch(` / `require(` / dynamic `import(`, no per-vendor equality, and **exactly one** SSE decoder / usage writer / finish table / `abortError`; **`scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (12 cases)** gate every `usage.routes[].normalize` name against the real reader table with browser source↔bundle parity; the dead `classifyBlock` slot is **removed** from `lib/driver/contract.js`. Both gates carry **negative proofs** (a planted regression → failure → reverted with a hash check). |
 | **W2-E** *(optional Wave 2)* | **Antigravity A4/A5 rewiring** (70 L retry + 92 L catalog cache + 28 L `agy` usage double-map) | `vendor/antigravity/lib/**`, `vendor/antigravity/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{opencode,deepinfra,exaone}/**` | No | ✅ retry loop → `lib/retry.js` (`adapter.js:27`); catalog cache → `lib/catalog-cache.js` (`index.js:32`); the `agy` usage double-map collapsed to **one** mapper (`backends.js:15` → `usageFromProjection`), `subagent.js` now delegates to it; suite **193/193** unchanged. |
 
 > **Integration bar after Phase 2 — MEASURED GREEN.** `npm run verify` exit 0; router
-> **774/774**; `verify:stream` **8/8** with **4 vendored packages probed, 8/8 specifiers refused,
+> **802/802**; `verify:stream` **8/8** with **4 vendored packages probed, 8/8 specifiers refused,
 > vendor loads 0**; `specs:check` OK (`5 protocols, 4 providers, 4 pricing`); `verify:presets`
-> OK; `verify:presets:mutation` **26/26**; all 4 vendor suites at baseline
-> (antigravity **193**, deepinfra **222 pass / 7 skip**, opencode **555**, exaone **19**).
-> **The owner-verified live OpenCode shared-pipe turn is still outstanding** — it is an
+> OK; `verify:presets:mutation` **26/26**; `verify:usage-readers` OK (4 presets / 4 routes /
+> 3 readers); all 4 vendor suites at baseline
+> (antigravity **193**, deepinfra **222 pass / 7 skip**, opencode **553**, exaone **19**).
+> **The live OpenCode shared-pipe turn was verified by the owner after the 09:37:14 KST restart**
+> (PID 361248) — OpenCode shared pipe, DeepInfra OpenAI core and Antigravity core all returned
+> OK with no error. **The owner-verified live EXAONE child turn is still outstanding** — it is an
 > owner action, not a worker action, and it is listed in §4's open items.
 
 #### Phase 3 — A7 Host Seam (measure-first, owner decision, sequential)
@@ -438,76 +447,49 @@ owner decision before any code or profile mutation is attempted.
 
 ---
 
-#### A3 — OpenCode onto the shared pipe — ⚠️ **PARTIAL** (shared default landed; the deletion did not)
+#### A3 — OpenCode onto the shared pipe — ✅ **COMPLETE** (`e8b39f7`)
 
-- **Status:** **PARTIAL — deliberately not claimed as done.** The Phase 2 commit (`8ee4ef1`)
-  records this explicitly: *"A3 DELETION NOT DONE: measured after A1, the opt-out branch is still
-  an explicit config path and `vendor/opencode/lib/stream-parser.js` is still imported by the
-  shared path (`http.js:66`, `stream-contract.js:56`), so the 629-line delete list was wrong.
-  Recorded as a follow-up, not silently dropped."*
-- **What IS done (measured).**
-  - `vendor/opencode/lib/http.js:312` — `pipe: Schema.union(['legacy','shared']).default('shared')`.
-    The **shared path IS the default** now.
-  - The hardcoded `parser: 'legacy'` literal is **gone**; the parser identity is now the data
-    value `OPENCODE_PARSER = 'shared-openai'` (`vendor/opencode/lib/stream-contract.js:71`), and
-    the wire boundary is the **shared OpenAI core** (`readSharedOpenAiEvent`, `stream-contract.js:63`).
-  - The live path is `streamViaSharedPipe()` (`http.js:2333`) over `lib/stream/openai.js` +
-    `normalizeStream` + `readSseEvents` (`http.js:70`).
-  - The shared path rides the core's seams: `createHooks` (`http.js:2455`), `mapFinish`, `onCut`,
-    `classifyText`, `beforeSettle`.
-  - Suite **555/555** green; `verify:stream` **8/8** with **4** vendors guarded, **0** loads.
-- **What is NOT done (measured, 2026-11-14).**
-  - **The legacy opt-out branch is still reachable.** `http.js:2078` reads `config.pipe.get()` per
-    request, so `pipe: 'legacy'` is a live, config-settable path — the legacy loop (its own
-    `chatSseEvents` SSE reader at `http.js:471`, its own `emitPart` tool-call assembly around
-    `http.js:1741`, its own `usageFromOpenAi`/`finishFromOpenAi` calls at `http.js:2150`/`2241`)
-    still exists in the file.
-  - **`vendor/opencode/lib/stream-parser.js` (679 L) is still imported by the SHARED path**:
-    `http.js:66` (`import { createStreamClassifier } from './stream-parser.js'`) and
-    `stream-contract.js:56` (the same import). The shared path's `classifyText` /
-    `classifyReasoning` hooks ARE the vendor-local notation classifier
-    (`stream-contract.js:302-340`), so the classifier is **not** legacy-only.
-  - **Consequence:** the originally-measured **629-line** delete list was wrong, because
-    `stream-parser.js` and the notation-recovery semantics are **shared-path live**, not
-    legacy-only. Deleting them without a replacement would change the shared path's behaviour.
-  - The vendor-local finish table (`vendor/opencode/lib/openai-mapping.js:37-92`) and usage
-    writer (`:14-28`) are **still vendor-local** and still used by the shared path's hook set
-    (`stream-contract.js:99`, `:109`) — a deliberate vendor-published-code exception, not a core
-    fork (see the boundary verdict in [HANDOFF.md](./HANDOFF.md) §3).
-- **Concrete next task to finish A3** (a single worker, scope `vendor/opencode/**` only):
-  1. **Decide and record the placement of `stream-parser.js` (679 L).** It is a *notation*
-     classifier (a tool call the model wrote as prose, and a marker split across deltas) — a
-     **vendor quirk**, not a protocol fact. The two admissible answers, and only these two:
-     (a) keep it vendor-local under an explicitly named quirk surface and say so in writing, or
-     (b) add a **named notation-classifier slot** to the core (`lib/stream/notation.js`) with the
-     hook seam (`classifyText` / `classifyReasoning` / `flush`) that already exists in
-     `normalizeStream` (`lib/stream/index.js:148-165`, `:192-197`). Option (b) is the one that
-     makes the core reusable by a second prose-notation provider; option (a) is the honest
-     minimal one. **Whichever is chosen must be recorded in
-     [ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md) §3.**
-  2. **Delete the legacy opt-out branch** — the `pipe: 'legacy'` union member
-     (`http.js:312`), the branch itself (`http.js:2078` → the end of `stream()`), the private
-     `chatSseEvents` SSE reader (`http.js:471`), and the legacy-only tool-call assembly
-     (`http.js:1741` `emitPart` and its callers). This is now safe **because** step 1 has
-     decided where the notation classifier lives and the shared path's hook set already consumes
-     it.
-  3. **Measure the real delete volume** and replace the wrong **629 L** figure with the measured
-     one. Do not carry the old number forward.
-  4. **Add the parity fixture** the original acceptance criteria named: replay one recorded
-     OpenCode response through the legacy path and the shared path and assert identical stream
-     parts, usage buckets, finish reason and failure code. **Do this BEFORE deleting the legacy
-     branch** — it is the only proof that the deletion is behaviour-preserving. (This is also the
-     natural home for the missing `openai-responses` conformance fixture.)
-  5. Then delete `openai-mapping.js:14-92` (the vendor-local usage writer + finish table) **only
-     if** step 1's placement decision says the core owns them; otherwise keep them and record
-     them as the vendor-published-code exception.
-- **Acceptance criteria (gate-provable), still open.**
-  - opencode suite **555/555** green — ✅ already met.
-  - `npm run verify:stream` green — ✅ already met.
-  - `pipe: 'legacy'` no longer exists as a config union member — ⬜ **open**.
-  - `stream-parser.js` placement recorded in writing — ⬜ **open**.
-  - A **parity fixture** over legacy vs shared — ⬜ **open**.
-  - **One live turn** on an OpenCode route through the shared pipe — ⬜ **open (owner action)**.
+- **Status:** **DONE — measured, not claimed.** The Phase 2 commit (`8ee4ef1`) had recorded A3 as
+  *"DELETION NOT DONE … the opt-out branch is still an explicit config path and
+  `vendor/opencode/lib/stream-parser.js` is still imported by the shared path … the 629-line
+  delete list was wrong. Recorded as a follow-up, not silently dropped."* That follow-up
+  (**R1**) is now closed by `e8b39f7`.
+- **What is done (measured, 2026-11-14).**
+  - **The legacy pipeline is gone.** `vendor/opencode/lib/http.js` **3 272 → 2 721 L**
+    (**−630 / +79**): the legacy branch body, its prelude, its **own** SSE reader
+    (`chatSseEvents` / `parseSseBlock`), the **`pipe` config key** and **4 orphaned imports** are
+    deleted. **No config selects a pipeline any more** — the file header now states the pipeline
+    explicitly.
+  - **`stream-parser.js` was NOT dead code — it is shared-path glue.** The earlier measurement
+    that overturned the 629 L delete list was right: the classifier is live on the shared path.
+    It was therefore **renamed, not deleted**: `vendor/opencode/lib/stream-parser.js` →
+    `vendor/opencode/lib/notation-classifier.js` (**679 L**, one named export
+    `createNotationClassifier`, **one consumer** — `stream-contract.js:58`). The rename records
+    the placement decision R1 asked for: a **vendor-local notation-quirk surface**, not a core
+    parser slot.
+  - **Coverage did not depend on the oracle that was removed.** Two legacy-only tests were
+    removed (**555 → 553**), and the two legacy↔shared parity tests were **replaced by literal
+    golden sequences captured from the shared path BEFORE the deletion** — so the expected output
+    is a recorded constant, not a live re-derivation.
+  - Suite **553/553** green; router **802/802** (was 774); `verify:stream` **8/8** with **4**
+    vendors guarded and **0** loads; `specs:check` OK; `verify:presets:mutation` **26/26**;
+    `verify:usage-readers` OK (4 presets / 4 routes / 3 readers).
+- **Acceptance criteria (gate-provable) — all met.**
+  - opencode suite green — ✅ **553/553**.
+  - `npm run verify:stream` green — ✅ **8/8**, 4 vendors guarded, 0 loads.
+  - `pipe: 'legacy'` no longer exists as a config union member — ✅ **the `pipe` config key is
+    deleted entirely; no config selects a pipeline.**
+  - `stream-parser.js` placement recorded in writing — ✅ **renamed to
+    `notation-classifier.js`** (vendor-local notation quirk surface, single named export, one
+    consumer).
+  - A **parity fixture** over legacy vs shared — ✅ **superseded by golden sequences captured
+    from the shared path before deletion** (the legacy oracle no longer exists, so a live
+    legacy↔shared diff is impossible to write).
+  - **One live turn** on an OpenCode route through the shared pipe — ✅ **owner-verified after the
+    09:37:14 KST restart (PID 361248): the OpenCode shared pipe returned OK with no error.**
+- **Still open under the same vendor scope** — these are the A4/A5 remnants, tracked separately:
+  the OpenCode private cost ledger (**R2**), its two retry loops + its own `backoffDelay`, and
+  the OpenCode + DeepInfra catalog caches (**R3**).
 
 ---
 
@@ -705,22 +687,27 @@ owner decision before any code or profile mutation is attempted.
 - ✅ **The EXAONE dead exports are gone** (`vendor/exaone/lib/map.js` 130 → **32 L**, a pure
   re-export shim); the 3 `abortError` copies are one (`lib/stream/failure.js:101`).
 - ✅ **The mutation harness grew 17 → 26/26** (registry 13, files 4, specs 6, declaration fields 3).
-- ⬜ **OPEN 1 — the L1 boundary lint was NOT written.** `test/stream-boundary.test.mjs` — the file
-  named in [ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md) §6.1 and in the W2-D dispatch
-  scope — **does not exist**. Measured: `ls test/stream-boundary.test.mjs` → no such file, and
-  `grep -rn "boundary" test/ scripts/` finds no such gate. The rule it was to enforce is currently
-  **unenforced by a gate**; it holds today by inspection (this doc's §3 verdict), but nothing
-  prevents a regression. **Concrete next task:** write `test/stream-boundary.test.mjs` scanning
-  `lib/stream/*` + `lib/{cost,plan,usage,retry,catalog-cache}.js` for (a) a `vendor/` or
-  `@nolit/dsh-(antigravity|deepinfra|exaone|opencode)` import, (b) a vendor name in a
-  non-comment token, (c) a forbidden runtime dependency (`ctx.`, `process.env`, `node:fs`,
-  `fetch(`), and (d) a per-vendor branch. Scope: `test/**` only, no `lib/**` change.
-- ⬜ **OPEN 2 — `USAGE_READERS` is still ungated.** `usage.routes[].normalize` still joins to the
-  hand-written `USAGE_READERS` table (`lib/client.src.js:772`) with **no gate**; measured:
-  `grep -rn "USAGE_READERS" lib/ scripts/ test/` → **2** hits, both in the browser bundle, **0**
-  in any script or test.
-- ⬜ **OPEN 3 — `classifyBlock` is still a dead hook slot.** `lib/driver/contract.js:27` declares
-  it in `OPTIONAL_HOOKS`; measured: **1** hit repo-wide (the declaration itself).
+- ✅ **OPEN 1 is now CLOSED — the L1 boundary lint exists** (`e8b39f7`).
+  `test/stream-boundary.test.mjs` (**15 cases**) scans `lib/stream/*` + the core accounting /
+  retry / cache modules and fails on: (a) a `vendor/` or `@nolit/dsh-(antigravity|deepinfra|
+  exaone|opencode)` import, (b) a vendor name in a non-comment token, (c) a forbidden runtime
+  dependency (`ctx.`, `process.env`, `node:fs`, `fetch(`, `require(`, dynamic `import(`),
+  (d) a per-vendor equality branch, and (e) more than one SSE decoder / usage writer / finish
+  table / `abortError`. **Negative proof:** a planted forbidden import failed **3** rules; the
+  plant was reverted with a **sha256 verification**.
+- ✅ **OPEN 2 is now CLOSED — `USAGE_READERS` is gated** (`e8b39f7`).
+  `scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (**12 cases**) check that
+  every preset's `usage.routes[].normalize` names a **real** reader, that no reader is dead, and
+  that the browser **source↔bundle** stay in parity. Measured: **4 presets / 4 routes / 3 readers**
+  (`normalizeAntigravityUsage`, `normalizeOpencodeUsage`, `normalizeDeepinfraUsage`); a renamed
+  route exits **1**.
+- ✅ **OPEN 3 is now CLOSED — the dead `classifyBlock` slot is removed** (`e8b39f7`).
+  `lib/driver/contract.js` no longer declares it; `test/driver-contract.test.mjs` asserts
+  `'classifyBlock' in driver.hooks === false`.
+- ⬜ **Still open (not A6, tracked separately):** the **repo-wide uniqueness greps** are still a
+  manual grep, not a wired gate (**R6**), and `numberOrNull` / `pickSession` / `createCostStore` /
+  `backoffDelay` are still defined more than once because of the OpenCode ledger and retry
+  remnants (**R2** / **R3**).
 
 ---
 
@@ -761,33 +748,34 @@ owner decision before any code or profile mutation is attempted.
 
 ---
 
-### P2-2. Flip OpenCode's `pipe: 'shared'` default — ✅ **the default is flipped; the removal is not**
+### P2-2. Flip OpenCode's `pipe: 'shared'` default — ✅ **DONE (the key is gone entirely)**
 
-- **Status:** **half done** (2026-11-14). The default IS now `'shared'`
-  (`vendor/opencode/lib/http.js:312`); the legacy path is **still present and still reachable** as
-  an explicit opt-out (`http.js:2078` reads `config.pipe.get()` per request). The rest of this item
-  is folded into [A3](#a3--opencode-onto-the-shared-pipe-partial-shared-default-landed-the-deletion-did-not),
-  which owns the deletion and the parity fixture.
-- **Why:** the shared path is implemented and test-proven, but two stream implementations still
-  exist in the serving path.
-- **Done when:** one owner-verified live turn runs with `pipe: 'shared'`, the legacy path is either
-  removed or kept as a documented fallback, and `verify:stream` stays green. **The live turn is
-  still an owner action; the removal is task R1.**
+- **Status:** **done** (2026-11-14, `e8b39f7`). The `pipe` config key is **deleted**: the legacy
+  branch body, its prelude and its own SSE reader (`chatSseEvents` / `parseSseBlock`) are gone,
+  and **no config selects a pipeline any more** — the file header states the pipeline explicitly.
+  There is no opt-out left to flip.
+- **Why it mattered:** the shared path had to be implemented and test-proven before the second
+  implementation could be removed.
+- **Done when:** one owner-verified live turn runs on the shared pipe, the legacy path is removed,
+  and `verify:stream` stays green. **Met** — the owner-verified live turn ran after the
+  09:37:14 KST restart (PID 361248) and the OpenCode shared pipe returned OK with no error.
 
-### P2-3. Canonical parser (the only genuinely unstarted Phase F item) — ⚠️ **PARTIAL**
+### P2-3. Canonical parser (the Phase F parser item) — ✅ **DONE (placement recorded)**
 
-- **Status:** **half done** (2026-11-14). The hardcoded `parser: 'legacy'` literal is **gone** and
-  the parser identity is now the data value `OPENCODE_PARSER = 'shared-openai'`
-  (`vendor/opencode/lib/stream-contract.js:71`); the wire boundary is the shared OpenAI core.
-  **What is still missing** is the *placement decision* for
-  `vendor/opencode/lib/stream-parser.js` (679 L) — and the measurement that overturned the
-  original plan: the shared path **imports it** (`http.js:66`, `stream-contract.js:56`), so it is
-  **not** legacy-only. That is why the 629-line delete list was wrong.
-- **Why:** the core still has **no parser slot** for the notation classifier; without a recorded
-  decision the “one protocol standard” claim stays incomplete for OpenCode.
-- **Done when:** the placement is **recorded in writing** (a vendor-local quirk surface, or a named
-  notation-classifier slot in the core), the parity fixture covers it, and the prose/glyph/
-  `content_filter` gates named in the old Phase F are measurable. **Task R1.**
+- **Status:** **done** (2026-11-14, `e8b39f7`). The hardcoded `parser: 'legacy'` literal is gone,
+  the parser identity is the data value `OPENCODE_PARSER = 'shared-openai'`, and the wire boundary
+  is the shared OpenAI core. The *placement decision* R1 asked for is now recorded: the classifier
+  is a **vendor-local notation-quirk surface** —
+  `vendor/opencode/lib/stream-parser.js` → `vendor/opencode/lib/notation-classifier.js`
+  (679 L, single named export `createNotationClassifier`, one consumer). It is **not** promoted
+  into a core parser slot, because a second prose-notation provider has not appeared.
+- **Why the earlier measurement mattered:** the shared path **imports** the classifier, so it was
+  never legacy-only. That is why the original 629-line delete list was wrong — and why the file was
+  renamed rather than deleted.
+- **Done when:** the placement is recorded in writing ✅, the coverage survives the deletion ✅
+  (golden sequences captured from the shared path before the deletion), and the prose/glyph/
+  `content_filter` gates named in the old Phase F are measurable. **The parser-placement half is
+  met; the old Phase F content-filter gates were never part of A3 and remain unstarted.**
 
 ### P2-5. S3 — Antigravity usage per model group
 
@@ -846,18 +834,19 @@ turn works, confirmed by the owner.
    | Phase | Mode | Tasks | Gate / Exit Bar | Status |
    | :-: |---|---|---|---|
    | **1** | **SERIAL** (1 worker, sequential) | **W1-1 (A2-core)** → **W1-2 (A1-core)** → **W1-3 (A4-core)** → **W1-4 (A5-core)** | **Core Interface Locked:** `lib/stream/*`, `lib/driver/contract.js`, `lib/{cost,plan,usage,retry,catalog-cache}.js` frozen; `anthropic.js` ≤ 434 L; `npm run verify` + all 4 vendor suites green | ✅ **DONE** — `c0e48ab`, `3ac7a10`, `c2ba900`, `ae9fd1d`; `anthropic.js` **433 L** ≤ 434 |
-   | **2** | **PARALLEL** (disjoint write scopes) | **W2-A (A3 OpenCode)** ‖ **W2-B (DeepInfra)** ‖ **W2-C (EXAONE)** ‖ **W2-D (A6 Gates, owns `scripts/verify-stream.mjs`)** ‖ **W2-E (Antigravity A4/A5)** | Zero vendor-local wire/ledger/retry/cache copies left; `verify:stream` 8/8 with `dsh-exaone` guarded (`vendor loads: 0`); `verify:presets:mutation` 17/17 + spec↔preset mirror + boundary lint green; 1 live OpenCode shared-pipe turn | ✅ **DONE** — `8ee4ef1`; `verify:stream` 8/8 with **4** vendors probed / 8/8 refused / 0 loads; mutation **26/26**; spec↔preset mirror green. ⚠️ **A3 partial** (legacy opt-out + `stream-parser.js` remain); ⚠️ **A6 remnant**: the boundary lint was not written; ⚠️ the live OpenCode shared-pipe turn is still an **owner** action |
+   | **2** | **PARALLEL** (disjoint write scopes) | **W2-A (A3 OpenCode)** ‖ **W2-B (DeepInfra)** ‖ **W2-C (EXAONE)** ‖ **W2-D (A6 Gates, owns `scripts/verify-stream.mjs`)** ‖ **W2-E (Antigravity A4/A5)** | Zero vendor-local wire/ledger/retry/cache copies left; `verify:stream` 8/8 with `dsh-exaone` guarded (`vendor loads: 0`); `verify:presets:mutation` 17/17 + spec↔preset mirror + boundary lint green; 1 live OpenCode shared-pipe turn | ✅ **DONE** — `8ee4ef1` + `e8b39f7`; `verify:stream` 8/8 with **4** vendors probed / 8/8 refused / 0 loads; mutation **26/26**; spec↔preset mirror green; **A3 COMPLETE** (legacy pipeline deleted, `pipe` config key gone, `notation-classifier.js` rename); **R4 CLOSED** (L1 boundary lint **15** cases + `verify-usage-readers` **12** cases, dead `classifyBlock` slot removed); the **live OpenCode shared-pipe turn is owner-verified** (09:37:14 KST restart, PID 361248) |
    | **3** | **SERIAL / Measure-first** | **W3-1 (A7 host seam)** | Measured answer on `dsh-llm-pi-ai` `providers` dict + owner decision (no unmeasured data-only promise) | ⬜ **NOT STARTED** |
 
    **What remains in the P2-A queue, in order** (everything else is closed or owner-gated):
 
    | # | Task | Scope | Gate |
    | :-: |---|---|---|
-   | **R1** | **Finish A3** — decide + record the placement of `stream-parser.js` (679 L), add the **legacy↔shared parity fixture**, then delete the `pipe:'legacy'` opt-out branch and the legacy-only SSE reader / tool-call assembly, and re-measure the real delete volume (the 629 L figure was wrong) | `vendor/opencode/**` only | opencode suite **555/555**; `verify:stream` green; a grep gate proves `pipe:'legacy'` is gone from the config union; a **parity fixture** passes |
+   | ~~**R1**~~ | ~~Finish A3~~ — **CLOSED** by `e8b39f7`: the `pipe` config key, the legacy branch body, its prelude and its own SSE reader are deleted (`http.js` 3 272 → **2 721 L**); `stream-parser.js` was measured to be **shared-path glue** and was **renamed** `notation-classifier.js` (679 L, one named export, one consumer); the legacy↔shared parity tests were replaced by **golden sequences captured from the shared path before deletion** (opencode 555 → **553/553**) | — | ✅ opencode **553/553**; `verify:stream` **8/8**; the `pipe` key is gone from the config union; the live OpenCode shared-pipe turn is **owner-verified** |
    | **R2** | **A4 remnant** — route OpenCode's private ledger (`numberOrNull`, `pickSession`, `createCostStore`, `createCostLedger`) and its re-declared `plans.js` / `usage-ledger.js` constants onto `lib/{cost,plan,usage}.js` | `vendor/opencode/lib/**` only | a grep gate proves `numberOrNull` / `pickSession` are defined **once** repo-wide |
    | **R3** | **A5 remnant** — route OpenCode's two retry loops + its own `backoffDelay` onto `lib/retry.js`, and route OpenCode's + DeepInfra's catalog caches onto `lib/catalog-cache.js` | `vendor/opencode/lib/**`, `vendor/deepinfra/lib/**` | a grep gate proves `backoffDelay` is defined **once** repo-wide; `?refresh=1` still bypasses the cache for every vendor |
-   | **R4** | **A6 remnant** — write `test/stream-boundary.test.mjs` (the L1 boundary lint named in [ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md) §6.1) and a `USAGE_READERS` gate | `test/**`, `scripts/**` | the lint fails on a planted vendor import / vendor name / `ctx.` / `process.env` / `fetch(` inside `lib/stream/*`; a `usage.routes[].normalize` that names an unregistered reader fails |
+   | ~~**R4**~~ | ~~A6 remnant~~ — **CLOSED** by `e8b39f7`: `test/stream-boundary.test.mjs` (**15** cases) enforces the L1 boundary; `scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (**12** cases) gate the `usage.routes[].normalize` names with browser source↔bundle parity; the dead `classifyBlock` slot is removed from `lib/driver/contract.js` | — | ✅ the lint fails on a planted vendor import / vendor name / `ctx.` / `process.env` / `fetch(` inside `lib/stream/*`; an unregistered `normalize` name fails; **both gates carry negative proofs** (a planted regression → failure → reverted with a hash check) |
    | **R5** | **A7** — measure the host `providers: z.dict(profile)` seam, then produce the owner decision | `docs/**` first, then owner-gated code | a written, measured answer; no unmeasured data-only promise |
+   | **R6** | **Uniqueness greps as a wired gate** — `mapDelta` / `numberOrNull` / `pickSession` / `createCostStore` / `backoffDelay` are currently a manual grep, not a test | `test/**` or `scripts/**` | each name has exactly one definition repo-wide, enforced by a test |
 
 4. The remaining **P2** items keep their own order and gates: **P2-2** and **P2-3** are superseded by
    **A3** (tracked there); **P2-5** (S3, owner deferred 2026-11-08) and **P2-6** (S4, blocked on owner
@@ -867,13 +856,15 @@ turn works, confirmed by the owner.
 
 ## 7. Evidence
 
-Current gates (re-measured 2026-11-14, after Phase 1 + Phase 2): router `npm test` **774/774**,
-`npm run verify` exit 0 (check + 774 tests + `verify:stream` + `specs:check` — `5 protocols, 4
+Current gates (re-measured 2026-11-14, after Phase 1 + Phase 2 + the A3 completion): router
+`npm test` **802/802** (was 774),
+`npm run verify` exit 0 (check + 802 tests + `verify:stream` + `specs:check` — `5 protocols, 4
 providers, 4 pricing` — OK), `verify:presets` OK (`OK: preset declarations, the browser registry,
 the locales and the runtime registries all agree`; runtime providers `deepseek-account, antigravity,
 deepinfra, deepinfra-anthropic, exaone, opencode-http-agent`). Vendor suites: antigravity **193/193**
-(+3 from `642ee06`), deepinfra **222 pass / 7 skip** (229 total), opencode **555/555**, exaone
-**19/19** — **all four unchanged by the refactor.**
+(+3 from `642ee06`), deepinfra **222 pass / 7 skip** (229 total), opencode **553/553** (555 → 553:
+the two legacy-only tests were removed with the legacy pipeline), exaone
+**19/19** — **the three non-OpenCode vendor suites are unchanged by the refactor.**
 
 `verify:stream` (re-measured 2026-11-14): **8/8** dispatch cases, **4** vendored packages probed
 (`@nolit/dsh-antigravity`, `@nolit/dsh-deepinfra`, `@nolit/dsh-exaone`, `@nolit/dsh-opencode-v2`),
@@ -884,27 +875,32 @@ vacuity guard — see A6's result above.
 `verify:presets:mutation` (re-measured 2026-11-14): **26/26** drift classes caught (registry 13,
 files 4, specs 6, declaration fields 3).
 
-**Size movement (measured by `wc -l`, `ead9daf` → `8ee4ef1`):**
+`verify:usage-readers` (re-measured 2026-11-14): **OK** — 4 presets, 4 routes, 3 readers
+(`normalizeAntigravityUsage`, `normalizeOpencodeUsage`, `normalizeDeepinfraUsage`).
 
-| Surface | `@ead9daf` | `8ee4ef1` | Δ |
-|---|---:|---:|---:|
-| `lib/stream/` total | **1 378** | **1 851** | **+473** |
-| ↳ `lib/stream/anthropic.js` | **614** | **433** | **−181** |
-| ↳ `lib/stream/usage.js` | 90 | 217 | +127 |
-| ↳ `lib/stream/sse.js` | 180 | 216 | +36 |
-| ↳ `lib/stream/openai.js` | — | **467** | **+467** |
-| `lib/{cost,plan,usage}.js` | **531** | **1 669** | **+1 138** |
-| `lib/retry.js` + `lib/catalog-cache.js` | — | **569** | **+569** |
-| vendor antigravity `lib/` | 5 216 | 5 275 | +59 |
-| vendor opencode `lib/` | 12 330 | 12 631 | +301 |
-| vendor deepinfra `lib/` | 3 950 | 3 480 | **−470** |
-| vendor exaone `lib/` | 1 176 | 842 | **−334** |
-| **vendor total** | **22 672** | **22 228** | **−444** |
+**Size movement (measured by `wc -l`, `ead9daf` → `8ee4ef1` → `e8b39f7`):**
 
-The reading: the **duplication left the upper layer** (−444 L across the four vendors) and the
-**standardisation entered the lower one** (+2 180 L across `lib/stream/` and the accounting /
-retry / cache cores). The core is bigger; the *vendors* are smaller and now bind to it by
-identity instead of carrying copies.
+| Surface | `@ead9daf` | `8ee4ef1` | `e8b39f7` | Δ (audit → now) |
+|---|---:|---:|---:|---:|
+| `lib/stream/` total | **1 378** | **1 851** | **1 851** | **+473** |
+| ↳ `lib/stream/anthropic.js` | **614** | 433 | **433** | **−181** |
+| ↳ `lib/stream/usage.js` | 90 | 217 | 217 | +127 |
+| ↳ `lib/stream/sse.js` | 180 | 216 | 216 | +36 |
+| ↳ `lib/stream/openai.js` | — | **467** | **467** | **+467** |
+| `lib/{cost,plan,usage}.js` | **531** | **1 669** | **1 669** | **+1 138** |
+| `lib/retry.js` + `lib/catalog-cache.js` | — | **569** | **569** | **+569** |
+| ↳ `vendor/opencode/lib/http.js` | **3 073** | **3 272** | **2 721** | **−352** |
+| vendor antigravity `lib/` | 5 216 | 5 275 | **5 275** | +59 |
+| vendor opencode `lib/` | 12 330 | 12 631 | **12 083** | **−247** |
+| vendor deepinfra `lib/` | 3 950 | 3 480 | **3 480** | **−470** |
+| vendor exaone `lib/` | 1 176 | 842 | **842** | **−334** |
+| **vendor total** | **22 672** | **22 228** | **21 680** | **−992** |
+
+The reading: the **duplication left the upper layer** (**−992 L** across the four vendors since the
+audit) and the **standardisation entered the lower one** (+2 180 L across `lib/stream/` and the
+accounting / retry / cache cores). The core is bigger; the *vendors* are smaller and now bind to
+it by identity instead of carrying copies. The A3 completion removed the last **−551 L** of
+OpenCode's own pipeline (12 631 → 12 083) — the second, vendor-local implementation is gone.
 
 The **synthetic `OpenCode (config default)` row** is closed: it was produced in
 `vendor/opencode/lib/http.js` (the `models` config default and the `listModels` prepend) and in

@@ -5,8 +5,45 @@ version: 0.0.1-rc.20
 kind: report
 status: active
 updated: 2026-11-14
-summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events) and rc.15 with the preset-registry drift gate (static registry diff, `usageRoutes` on every preset, and a mutation harness that proves each drift class is rejected), and rc.17 with the `google-generative-ai` vendor wire plus JSON-Schema enums derived from their constant arrays instead of hand-copied, rc.18 with the subagent-activation contract migration that restores the `opencode`/`agy_worker` managed-child delegation on DSH 0.2.2-rc.3, and rc.19 with the living-spec gates (a 14-day age check on the manual `spec:watch` baseline, the four-preset live-route smoke gate), the vendored Antigravity fix that replays a Gemini `thoughtSignature` as a part-level sibling of `functionCall` instead of nesting it inside (live 400 → 200), the Anthropic/Google conformance fixtures, the approved deletion of two dead surfaces, and DSH credential-store support (`credentialRef`) for the DeepInfra and EXAONE keys, and rc.20 with the automatic plaintext-key migration (profile patch → DSH credential store), the EXAONE subagent-allowlist entry in both the live profile and the repo default, the atomic owner-only write the migration commits through, and the removal of the synthetic `OpenCode (config default)` model row from the picker (the `default` pseudo-route still resolves server-side), and three post-rc.20 fixes found by live probing (the credential-store ref read through the inject-free accessor, the Gemini replay argument pruning, and the deferred credential injection) with a live verification block.
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events) and rc.15 with the preset-registry drift gate (static registry diff, `usageRoutes` on every preset, and a mutation harness that proves each drift class is rejected), and rc.17 with the `google-generative-ai` vendor wire plus JSON-Schema enums derived from their constant arrays instead of hand-copied, rc.18 with the subagent-activation contract migration that restores the `opencode`/`agy_worker` managed-child delegation on DSH 0.2.2-rc.3, and rc.19 with the living-spec gates (a 14-day age check on the manual `spec:watch` baseline, the four-preset live-route smoke gate), the vendored Antigravity fix that replays a Gemini `thoughtSignature` as a part-level sibling of `functionCall` instead of nesting it inside (live 400 → 200), the Anthropic/Google conformance fixtures, the approved deletion of two dead surfaces, and DSH credential-store support (`credentialRef`) for the DeepInfra and EXAONE keys, and rc.20 with the automatic plaintext-key migration (profile patch → DSH credential store), the EXAONE subagent-allowlist entry in both the live profile and the repo default, the atomic owner-only write the migration commits through, and the removal of the synthetic `OpenCode (config default)` model row from the picker (the `default` pseudo-route still resolves server-side), three post-rc.20 fixes found by live probing (the credential-store ref read through the inject-free accessor, the Gemini replay argument pruning, and the deferred credential injection) with a live verification block, and the A3 completion plus R4 closure (the OpenCode legacy pipeline and the `pipe` config key deleted — one pipeline, no config selects it — `stream-parser.js` renamed to `notation-classifier.js` because it was measured to be shared-path glue, the L1 boundary lint and the `USAGE_READERS` gate shipped with negative proofs, and the dead `classifyBlock` slot removed).
 -->
+
+## 0.0.1-rc.20 (cont. 3) — A3 complete (one OpenCode pipeline) and R4 closed — 2026-11-14
+
+### What changed
+
+| Item | Before | After | Evidence |
+|---|---|---|---|
+| OpenCode `http.js` | **3 272 L** | **2 721 L** (**−630 / +79**) | `git diff e8b39f7^..e8b39f7 -- vendor/opencode/lib/http.js` |
+| OpenCode pipelines | 2 (a `pipe` config key selected one) | **1** — the `pipe` config key is **deleted**, no config selects a pipeline | `grep -n "pipe" vendor/opencode/lib/http.js` |
+| Vendor-local SSE reader | `chatSseEvents` / `parseSseBlock` (~60 L) | **deleted** | grep: 0 code hits |
+| `vendor/opencode/lib/stream-parser.js` | 679 L, imported by the shared path | **renamed** `notation-classifier.js` (679 L, one named export `createNotationClassifier`, **one** consumer `stream-contract.js:58`) | `grep -rn "notation-classifier" vendor/` |
+| OpenCode vendor suite | 555 | **553/553** (two legacy-only tests removed; the legacy↔shared parity tests replaced by **golden sequences captured from the shared path before the deletion**) | `npm test` in `vendor/opencode` |
+| Router suite | 774 | **802/802** | `npm test` in the track |
+| L1 boundary lint | **did not exist** | `test/stream-boundary.test.mjs` (**15 cases**) — no vendor import/identifier, no `ctx`/`process.env`/`node:fs`/`fetch(`/`require(`/dynamic `import(`, no per-vendor equality, exactly one SSE decoder / usage writer / finish table / `abortError` | `npm test`; **negative proof**: a planted forbidden import failed 3 rules, reverted with a sha256 check |
+| `USAGE_READERS` gate | **did not exist** | `scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (**12 cases**) — every `usage.routes[].normalize` must name a real reader, no dead reader, browser source↔bundle parity | `node scripts/verify-usage-readers.mjs` → **OK** (4 presets / 4 routes / 3 readers); a renamed route exits 1 |
+| Dead `classifyBlock` hook slot | declared in `lib/driver/contract.js` `OPTIONAL_HOOKS` | **removed** | `test/driver-contract.test.mjs` asserts `'classifyBlock' in driver.hooks === false` |
+| Version | `0.0.1-rc.20` | `0.0.1-rc.20` (**held** — the numeric part is the owner's) | `package.json` |
+
+### Gates (re-measured)
+
+router `npm test` **802/802**; `verify:stream` **8/8** with **4** vendored packages probed,
+**8/8** specifiers refused, **vendor loads 0**; `specs:check` OK (`5 protocols, 4 providers,
+4 pricing`); `verify:presets:mutation` **26/26**; `verify:usage-readers` OK; vendor suites
+antigravity **193/193**, deepinfra **222 pass / 7 skip**, opencode **553/553**, exaone **19/19**.
+
+### Live verification
+
+After the owner's restart at **09:37:14 KST** (PID 361248): the **OpenCode shared pipe**,
+the **DeepInfra OpenAI core** and the **Antigravity core** all returned **OK with no error**.
+
+### Note on the measured correction
+
+The earlier **629-line** delete list was measured wrong: `stream-parser.js` is **shared-path
+glue**, not legacy-only code. It was therefore **renamed, not deleted** — a vendor-local
+notation-quirk surface — and the legacy↔shared parity coverage was replaced by golden
+sequences captured from the shared path **before** the deletion, so the expected output is a
+recorded constant rather than a live re-derivation.
 
 ## 0.0.1-rc.20 (cont. 2) — three post-rc.20 fixes found by live probing — 2026-11-14
 

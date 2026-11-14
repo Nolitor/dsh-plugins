@@ -1,11 +1,11 @@
 # Custom Router — Standardised Architecture and Composition Diagrams
 
 <!-- skeleton:
-version: 0.0.1-rc.1
+version: 0.0.1-rc.2
 kind: spec
 status: active
-updated: 2026-11-06
-summary: The missing composition diagrams and normative per-service module contract for the three custom routers, the new Settings-Models (Custom) surface, and credential/readiness decision flow.
+updated: 2026-11-14
+summary: The missing composition diagrams and normative per-service module contract for the three custom routers, the new Settings-Models (Custom) surface, and credential/readiness decision flow. The OpenCode diagram names notation-classifier.js (renamed from stream-parser.js in e8b39f7).
 -->
 
 > Status: **specification only.** Produced because the owner pointed out that the previous
@@ -101,7 +101,7 @@ flowchart LR
     OC_HTTP["http.js (2400+ lines)<br/>resolveBackend → activeCredential<br/>prepareCall → stream"]
     OC_PLAN["plans.js<br/>PLAN_PROVIDERS go/zen<br/>planOfRoute · isNewModel · NEW_MODEL_DAYS"]
     OC_CAT["catalog-cache.js · verdict-store.js<br/>usage-ledger.js · resilience.js"]
-    OC_WIRE["upstream-map.js · stream-parser.js<br/>display-gate.js · arguments.js<br/>request-guards.js · trace.js"]
+    OC_WIRE["upstream-map.js · notation-classifier.js<br/>display-gate.js · arguments.js<br/>request-guards.js · trace.js"]
     OC_SRV["server.js<br/>/api/info · /api/provider/{id}<br/>/api/credential · /api/model<br/>/api/experimental/usage/limits"]
     OC_CLI["client.js<br/>cost-pill.js"]
   end
