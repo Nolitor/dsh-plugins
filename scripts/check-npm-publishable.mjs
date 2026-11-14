@@ -63,6 +63,8 @@ const TRACK_ONLY = [
   /^\.gitattributes$/,
   /^prototype-.*\//,
   /^\.gitignore$/,
+  /^HANDOFF\.md$/,
+  /^scripts\/extract-dictionaries\.mjs$/,
 ]
 
 const problems = []
