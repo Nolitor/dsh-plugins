@@ -1,11 +1,11 @@
 # Custom Router — Active Roadmap
 
 <!-- skeleton:
-version: 1.2
+version: 2.0
 kind: design
 status: active
 updated: 2026-11-14
-summary: Active roadmap for @nolit/dsh-custom-router at 0.0.1-rc.20: P0 security, P1 checks, and P2-A phased horizontally (Phase 1 serial core lock -> Phase 2 parallel vendor fan-out -> Phase 3 A7 host seam).
+summary: Active roadmap for @nolit/dsh-custom-router at 0.0.1-rc.20: P0 security, P1 checks, and P2-A phased horizontally. Phase 1 (core lock) and Phase 2 (vendor fan-out) are DONE and measured; A3 is deliberately PARTIAL (the OpenCode legacy opt-out branch and stream-parser.js survive), A6 has remnants, and Phase 3 (A7 host seam) is still measure-first.
 -->
 
 > This is the **only** document that lists active work. Historical phases are in
@@ -26,13 +26,15 @@ summary: Active roadmap for @nolit/dsh-custom-router at 0.0.1-rc.20: P0 security
   `lib/index.js` publishes `presetSettings`. The old "two registries / five hand-written places"
   model is superseded.
 - **One shared stream pipe.** `lib/stream/` normalizes every provider; vendors bind through
-  `stream-contract.js`. `verify:stream` proves the core runs with zero vendor loads — but only
-  against **3 of 4** vendors (`scripts/verify-stream.mjs:23` does not guard `dsh-exaone`). OpenCode
-  still defaults its request path to `pipe: 'legacy'`; the shared path exists and is test-proven.
-  The 2026-11-14 architecture audit measured that the pipe is **not** yet thin: one protocol
-  (Anthropic, 614 L — 80.4 % on top of the 764-line core, i.e. 44.6 % of the whole 1,378-line `lib/stream/` directory including itself) is forked inside it, and the four vendors carry
-  a measured **681-line** duplicated OpenAI wire across two vendors. The consolidation queue
-  is **§4 P2-A**.
+  `stream-contract.js`. **As of Phase 2 (2026-11-14)**: the pipe is **1 851 lines**
+  (`index` 345, `openai` 467, `anthropic` 433, `usage` 217, `sse` 216, `failure` 105, `wire` 68)
+  and **no longer contains a protocol fork**: Anthropic rides the shared SSE reader
+  (`anthropic.js` 614 → **433 L**), OpenAI has one core (`lib/stream/openai.js`, **467 L**), and
+  `verify:stream` now proves the core runs with zero vendor loads against **all 4** vendored
+  packages (measured: **4 probed, 8/8 specifiers refused, 0 loads**). The **OpenCode legacy
+  opt-out branch still exists** and `vendor/opencode/lib/stream-parser.js` (679 L) is still
+  imported by the shared path — so **A3 is PARTIAL**, not done. The remaining consolidation
+  queue is **§4 P2-A**.
 - **Specs and conformance are part of the product.** `specs/` holds the protocol/provider/pricing
   registry, `verify-specs` enforces freshness, `build-spec-matrix` generates the compatibility
   matrix, `spec:watch` reports upstream changes manually, and `test/conformance/` replays one
@@ -225,17 +227,38 @@ hand-written `USAGE_READERS` table (`lib/client.src.js:772`) with **no gate**.
 > standardised shared pipeline for OpenAI / Anthropic / Gemini. UPPER layer = thin vendor/preset
 > adapters that carry **vendor quirks only**.
 >
-> **Audit verdict 2026-11-14: the principle is not met.** The core pipe
+> **Audit verdict 2026-11-14 (before the phases): the principle was NOT met.** The core pipe
 > (`lib/stream/` = **764** lines across `index` 343, `sse` 180, `usage` 90, `wire` 68, `failure` 83)
-> is protocol-agnostic in code — zero protocol branches — **but `lib/stream/anthropic.js` is 614
-> lines — 80.4 % on top of the 764-line core**: one protocol is forked *inside* the lower layer. And the upper
-> layer is not thin: the four vendors carry **22 672** lines of `lib/` (antigravity 5 216, opencode
+> was protocol-agnostic in code — zero protocol branches — **but `lib/stream/anthropic.js` was 614
+> lines — 80.4 % on top of the 764-line core**: one protocol was forked *inside* the lower layer. And the upper
+> layer was not thin: the four vendors carried **22 672** lines of `lib/` (antigravity 5 216, opencode
 > 12 330, deepinfra 3 950, exaone 1 176) between them, with a measured **681-line** duplicated
 > OpenAI wire in two of them.
+>
+> **Phase 1 + Phase 2 verdict 2026-11-14 (after the phases): the principle is now met for the
+> three standard protocols, with named exceptions.** The core pipe is **1 851 lines**
+> (`index` 345, `openai` 467, `anthropic` 433, `usage` 217, `sse` 216, `failure` 105, `wire` 68):
+> **one** SSE reader, **one** usage writer, **one** finish table, **one** failure taxonomy, and
+> **one** OpenAI protocol core that DeepInfra, EXAONE and OpenCode all bind to by identity. The
+> vendor `lib/` totals moved to **22 228** (antigravity 5 275, opencode 12 631, deepinfra 3 480,
+> exaone 842) — net **−444 L** in the vendors, **+1 087 L** in the core, i.e. the duplication left
+> the upper layer and the standardisation entered the lower one. The **OpenAI** protocol is shared
+> (one `lib/stream/openai.js`); the **Anthropic** protocol is shared (one
+> `lib/stream/anthropic.js` on the shared SSE reader); the **Gemini** protocol was already thin
+> and stays thin. **What is NOT done:** A3 is partial, A6 has remnants — see the open-item table
+> below and the boundary verdict in [HANDOFF.md](./HANDOFF.md) §3.
 >
 > **Removed, not closed:** the former **P2-1** ("data-only preset install") remains **DELETED** as an
 > unreachable promise (0 of 4 presets are data-only; `kind:'declaration'` mounts nothing). Its real
 > host seam is **Phase 3 (A7)** below.
+
+#### Phase matrix — measured status (2026-11-14)
+
+| Phase | Mode | Status | Commits | Measured result |
+| :-: |---|---|---|---|
+| **1 — Core lock** | **SERIAL** (1 worker at a time) | ✅ **DONE** | `c0e48ab`, `3ac7a10`, `c2ba900`, `ae9fd1d` | `lib/stream/openai.js` (467 L) extracted; `anthropic.js` 614 → **433 L** (own SSE reader / usage writer / `abortError` copies deleted); `lib/stream/usage.js` 90 → **217 L** with `input+output+cache` as a first-class `TOTAL_FORMULAS` entry; `lib/stream/failure.js` 83 → **105 L** with one `abortError`; `lib/driver/contract.js` derives its formula vocabulary from the core; `lib/cost.js` 85 → **727 L**, `lib/plan.js` 254 → **510 L**, `lib/usage.js` 192 → **432 L**; new `lib/retry.js` (255 L) + `lib/catalog-cache.js` (314 L). Router suite **649 → 759** over the four commits. |
+| **2 — Upper-layer fan-out** | **PARALLEL** (disjoint scopes) | ✅ **DONE** | `8ee4ef1` | DeepInfra `map`/`wire`/`stream-contract`/`cost` now re-export the shared cores **by identity** (vendor `lib/` 3 950 → **3 480**); EXAONE the same (1 176 → **842**, dead `finishReason`/`isFinishEvent` gone); Antigravity retry → `lib/retry.js`, catalog cache → `lib/catalog-cache.js`, one `agy` usage mapper instead of two (5 216 → **5 275 L**, +59 = the core's own seams); OpenCode `pipe` default flipped to `'shared'` and the hardcoded `parser:'legacy'` literal removed (12 330 → **12 631 L**); gates: `verify:stream` 8/8 with **4 vendors probed, 8/8 specifiers refused, 0 loads**; `specs:check` OK; `verify:presets:mutation` **17 → 26/26**. Router **774/774**; vendors 193 / 222+7 / 555 / 19 unchanged. |
+| **3 — A7 host seam** | **SERIAL / measure-first** | ⬜ **NOT STARTED** | — | Measure `dsh-llm-pi-ai` `providers: z.dict(profile)` first; produce a written owner decision **before** any code or profile mutation. |
 
 **Horizontal split (replaces the vertical A2 → A1 → … single-worker silo):** lock all L0/L1 lower
 interfaces **serially** first (Phase 1), then fan out L2 vendor clean-ups and L3 gates **in parallel**
@@ -277,36 +300,39 @@ with provably disjoint write scopes (Phase 2), followed by the independent host-
     [W3-1: A7 — inspect @deepseek-ai/dsh-llm-pi-ai providers dict & write decision]
 ```
 
-#### Phase 1 — Core lock, SERIAL (single worker, sequential, file-conflict safety)
+#### Phase 1 — Core lock, SERIAL (single worker, sequential, file-conflict safety) — ✅ **DONE**
 
 Phase 1 touches shared core files (`lib/stream/index.js`, `lib/driver/contract.js`, `package.json`),
 so steps **must** run sequentially on one worker at a time.
 
-| Order | Step | Task scope | Why this order | Lock criteria (before next step / Phase 2) |
-| :-: |---|---|---|---|
-| **1.1** | **W1-1 (A2-core)** | Extract `lib/stream/openai.js` (delta→parts mapper, `readOpenAiEvent`, shared OpenAI request-projection helpers) + export in `lib/stream/index.js` / `package.json` | **Smallest blast radius** and pure duplication extraction; establishes the `lib/stream/<proto>.js` module pattern that A1 reuses | `lib/stream/openai.js` API frozen; comment-stripped diff vs extracted vendor functions = 0 changed lines (except parameterized vendor label); `openai-completions` conformance + `npm run verify` + all vendor suites green |
-| **1.2** | **W1-2 (A1-core)** | Consolidate `lib/stream/anthropic.js` onto eventName-aware `sse.js`, `usage.js` (`TOTAL_FORMULAS['input+output+cache']`), `failure.js` (single `abortError`), and `createHooks`; align `lib/driver/contract.js:14` `TOTAL_FORMULAS` | **Largest L1 violation** (614 L = 80.4 % on top of 764 L core) and requires the A2 core-module pattern; closes the split `totalFormula` vocabulary so drivers and `usageFrom` agree | `lib/stream/anthropic.js` ≤ 434 L (≥ 180 L removed); zero duplicate SSE/usage/`abortError` inside `lib/stream/`; `defineProviderDriver` accepts Anthropic & Antigravity descriptors; `anthropic-messages` conformance + `npm run verify` green |
-| **1.3** | **W1-3 (A4-core)** | Lock `lib/cost.js` + `lib/plan.js` + `lib/usage.js` as the single accounting & cost-ledger interface (incl. canonical `createCostStore`, `createCostLedger`, `numberOrNull`, `pickSession`) | Reads normalized token buckets from A1/A2 (`lib/stream/usage.js`), so it lands after stream normalization is locked | Core accounting & ledger exports frozen in `package.json`; core cost/plan/usage unit tests + `npm run verify` green; zero duplicate accounting helpers in `lib/` |
-| **1.4** | **W1-4 (A5-core)** | Add `lib/retry.js` (bounded transport retry per [RETRY-POLICY.md](./RETRY-POLICY.md)) and `lib/catalog-cache.js` (generic TTL + `?refresh=1` bypass) | Pure cross-vendor mechanics with zero wire coupling; locks right before Phase 2 vendor rewiring | `lib/retry.js` + `lib/catalog-cache.js` exports frozen; R1–R9 retry tests + cache TTL/refresh tests green; **CORE INTERFACE LOCKED** (`npm run verify` + all 4 vendor suites green) |
+| Order | Step | Task scope | Why this order | Lock criteria (before next step / Phase 2) | Measured outcome |
+| :-: |---|---|---|---|---|
+| **1.1** | **W1-1 (A2-core)** | Extract `lib/stream/openai.js` (delta→parts mapper, `readOpenAiEvent`, shared OpenAI request-projection helpers) + export in `lib/stream/index.js` / `package.json` | **Smallest blast radius** and pure duplication extraction; establishes the `lib/stream/<proto>.js` module pattern that A1 reuses | `lib/stream/openai.js` API frozen; comment-stripped diff vs extracted vendor functions = 0 changed lines (except parameterized vendor label); `openai-completions` conformance + `npm run verify` + all vendor suites green | ✅ `c0e48ab` — `lib/stream/openai.js` **467 L**; `lib/cost.js` 85 → **727 L**; `lib/retry.js` **255 L**; `lib/catalog-cache.js` **314 L**; router **649 → 699** |
+| **1.2** | **W1-2 (A1-core)** | Consolidate `lib/stream/anthropic.js` onto eventName-aware `sse.js`, `usage.js` (`TOTAL_FORMULAS['input+output+cache']`), `failure.js` (single `abortError`), and `createHooks`; align `lib/driver/contract.js:14` `TOTAL_FORMULAS` | **Largest L1 violation** (614 L = 80.4 % on top of 764 L core) and requires the A2 core-module pattern; closes the split `totalFormula` vocabulary so drivers and `usageFrom` agree | `lib/stream/anthropic.js` ≤ 434 L (≥ 180 L removed); zero duplicate SSE/usage/`abortError` inside `lib/stream/`; `defineProviderDriver` accepts Anthropic & Antigravity descriptors; `anthropic-messages` conformance + `npm run verify` green | ✅ `3ac7a10` (usage vocabulary 90 → **217 L**; one `abortError`; `anthropic.js` 614 → 582) + `c2ba900` (Anthropic rides the shared SSE reader; `anthropic.js` 582 → **433 L** ≤ 434 target); router 707 → **724** |
+| **1.3** | **W1-3 (A4-core)** | Lock `lib/cost.js` + `lib/plan.js` + `lib/usage.js` as the single accounting & cost-ledger interface (incl. canonical `createCostStore`, `createCostLedger`, `numberOrNull`, `pickSession`) | Reads normalized token buckets from A1/A2 (`lib/stream/usage.js`), so it lands after stream normalization is locked | Core accounting & ledger exports frozen in `package.json`; core cost/plan/usage unit tests + `npm run verify` green; zero duplicate accounting helpers in `lib/` | ✅ `ae9fd1d` — `lib/plan.js` 254 → **510 L**; `lib/usage.js` 192 → **432 L**; router **724 → 759** |
+| **1.4** | **W1-4 (A5-core)** | Add `lib/retry.js` (bounded transport retry per [RETRY-POLICY.md](./RETRY-POLICY.md)) and `lib/catalog-cache.js` (generic TTL + `?refresh=1` bypass) | Pure cross-vendor mechanics with zero wire coupling; locks right before Phase 2 vendor rewiring | `lib/retry.js` + `lib/catalog-cache.js` exports frozen; R1–R9 retry tests + cache TTL/refresh tests green; **CORE INTERFACE LOCKED** (`npm run verify` + all 4 vendor suites green) | ✅ shipped in `c0e48ab` (alongside 1.1) — `lib/retry.js` **255 L**, `lib/catalog-cache.js` **314 L**; **CORE INTERFACE LOCKED** at `ae9fd1d` |
 
-#### Phase 2 — Upper-layer fan-out, PARALLEL after core lock
+#### Phase 2 — Upper-layer fan-out, PARALLEL after core lock — ✅ **DONE** (`8ee4ef1`)
 
 Once Phase 1 locks every L1/core interface, launch **4 primary parallel workers** (`W2-A`..`W2-D`)
 plus optional disjoint **`W2-E`** (Antigravity A4/A5 rewiring) simultaneously. Every worker owns a
 **provably disjoint write scope** — zero shared files. Only **`W2-D`** may edit `scripts/verify-stream.mjs`.
 
-| Worker | Task | Allowed write scope (disjoint) | Forbidden paths | Owns `verify-stream.mjs`? |
-|---|---|---|---|---|
-| **W2-A** | **A3 — OpenCode onto shared pipe** (+ OpenCode ledger/retry/cache rewiring) | `vendor/opencode/lib/**`, `vendor/opencode/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,deepinfra,exaone}/**` | No |
-| **W2-B** | **DeepInfra dedup** (OpenAI `map`/`wire`/`stream-contract` + `cost` ledger + catalog TTL cache) | `vendor/deepinfra/lib/**`, `vendor/deepinfra/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,opencode,exaone}/**` | No |
-| **W2-C** | **EXAONE dedup + dead exports** (OpenAI `map`/`wire`/`stream-contract` + `map.js:96-130` 35 L dead exports) | `vendor/exaone/lib/**`, `vendor/exaone/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,opencode,deepinfra}/**` | No |
-| **W2-D** | **A6 — Dead surface removal & gate hardening** (`dsh-exaone` stream guard, spec↔preset mirror, dead-field allowlist, `L1` boundary lint) | `scripts/verify-stream.mjs`, `scripts/verify-specs.mjs`, `scripts/verify-presets-mutation.mjs`, `lib/driver/contract.js`, `lib/preset-drift.js`, `specs/**`, `test/specs.test.mjs`, `test/preset-drift.test.mjs`, `test/driver-contract.test.mjs`, `test/stream-boundary.test.mjs` | `lib/stream/**`, `lib/{cost,plan,usage,retry,catalog-cache}.js`, `vendor/**`, `package.json` | **YES (sole owner)** |
-| **W2-E** *(optional Wave 2)* | **Antigravity A4/A5 rewiring** (70 L retry + 92 L catalog cache + 28 L `agy` usage double-map) | `vendor/antigravity/lib/**`, `vendor/antigravity/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{opencode,deepinfra,exaone}/**` | No |
+| Worker | Task | Allowed write scope (disjoint) | Forbidden paths | Owns `verify-stream.mjs`? | Measured outcome |
+|---|---|---|---|---|---|
+| **W2-A** | **A3 — OpenCode onto shared pipe** (+ OpenCode ledger/retry/cache rewiring) | `vendor/opencode/lib/**`, `vendor/opencode/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,deepinfra,exaone}/**` | No | ⚠️ **PARTIAL** — `pipe` default is now `'shared'` (`http.js:312`) and the hardcoded `parser:'legacy'` literal is gone; the legacy opt-out branch and `stream-parser.js` survive. Suite **555/555**. See **A3 (partial)** below. |
+| **W2-B** | **DeepInfra dedup** (OpenAI `map`/`wire`/`stream-contract` + `cost` ledger + catalog TTL cache) | `vendor/deepinfra/lib/**`, `vendor/deepinfra/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,opencode,exaone}/**` | No | ✅ `stream-contract`/`wire`/`map`/`cost` re-export the shared cores **by identity**; `lib/` **3 950 → 3 480 L**; suite **222 pass / 7 skip** unchanged. The Anthropic-native route stays vendor-local by design. |
+| **W2-C** | **EXAONE dedup + dead exports** (OpenAI `map`/`wire`/`stream-contract` + `map.js:96-130` 35 L dead exports) | `vendor/exaone/lib/**`, `vendor/exaone/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{antigravity,opencode,deepinfra}/**` | No | ✅ `map.js` 130 → **32 L** (a re-export shim), `wire.js` 292 → **116 L**, `stream-contract.js` 141 → **81 L**; the dead `finishReason`/`isFinishEvent` (35 L) is gone; `lib/` **1 176 → 842 L**; suite **19/19** unchanged. EXAONE's effort fold / `preserve_thinking` / 16-stop cap stay local. |
+| **W2-D** | **A6 — Dead surface removal & gate hardening** (`dsh-exaone` stream guard, spec↔preset mirror, dead-field allowlist, `L1` boundary lint) | `scripts/verify-stream.mjs`, `scripts/verify-specs.mjs`, `scripts/verify-presets-mutation.mjs`, `lib/driver/contract.js`, `lib/preset-drift.js`, `specs/**`, `test/specs.test.mjs`, `test/preset-drift.test.mjs`, `test/driver-contract.test.mjs`, `test/stream-boundary.test.mjs` | `lib/stream/**`, `lib/{cost,plan,usage,retry,catalog-cache}.js`, `vendor/**`, `package.json` | **YES (sole owner)** | ⚠️ **PARTIAL** — the stream guard now probes **all 4** vendored packages (**8/8 specifiers refused, 0 loads**, self-tested + vacuity-guarded); `checkPresetMirror` landed (protocol/endpoint/pricing/model + `pricing.kind`↔`billing.mode`); `DECLARATION_RUNTIME_FIELDS` / `DECLARATION_DEAD_FIELDS` landed; mutation harness **17 → 26/26**. **The `L1` boundary lint (`test/stream-boundary.test.mjs`) was NOT written** — see **A6 (remnants)** below. |
+| **W2-E** *(optional Wave 2)* | **Antigravity A4/A5 rewiring** (70 L retry + 92 L catalog cache + 28 L `agy` usage double-map) | `vendor/antigravity/lib/**`, `vendor/antigravity/test/**` | `lib/**`, `scripts/**`, `specs/**`, `package.json`, `vendor/{opencode,deepinfra,exaone}/**` | No | ✅ retry loop → `lib/retry.js` (`adapter.js:27`); catalog cache → `lib/catalog-cache.js` (`index.js:32`); the `agy` usage double-map collapsed to **one** mapper (`backends.js:15` → `usageFromProjection`), `subagent.js` now delegates to it; suite **193/193** unchanged. |
 
-> **Integration bar after Phase 2:** once all Phase 2 branches land together, run the full gate suite
-> (`npm run verify`, `npm run verify:presets`, `npm run verify:presets:mutation`, `npm run verify:dispatch`,
-> all 4 vendor suites, repo-wide uniqueness grep checks for `mapDelta`/`numberOrNull`/`pickSession`/`createCostStore`/`backoffDelay`,
-> and the owner-verified live OpenCode shared-pipe turn).
+> **Integration bar after Phase 2 — MEASURED GREEN.** `npm run verify` exit 0; router
+> **774/774**; `verify:stream` **8/8** with **4 vendored packages probed, 8/8 specifiers refused,
+> vendor loads 0**; `specs:check` OK (`5 protocols, 4 providers, 4 pricing`); `verify:presets`
+> OK; `verify:presets:mutation` **26/26**; all 4 vendor suites at baseline
+> (antigravity **193**, deepinfra **222 pass / 7 skip**, opencode **555**, exaone **19**).
+> **The owner-verified live OpenCode shared-pipe turn is still outstanding** — it is an
+> owner action, not a worker action, and it is listed in §4's open items.
 
 #### Phase 3 — A7 Host Seam (measure-first, owner decision, sequential)
 
@@ -412,49 +438,76 @@ owner decision before any code or profile mutation is attempted.
 
 ---
 
-#### A3 — OpenCode onto the shared pipe
+#### A3 — OpenCode onto the shared pipe — ⚠️ **PARTIAL** (shared default landed; the deletion did not)
 
-- **Measured evidence.**
-  - `vendor/opencode/lib/http.js:302` — `pipe: Schema.union(['legacy','shared']).default('legacy')`.
-    The shared path is **not** the default.
-  - `vendor/opencode/lib/http.js:2284` — `parser: 'legacy'` is a **hardcoded literal** (not read
-    from config).
-  - Legacy loop `http.js:2091-2245`; own SSE reader `http.js:440-499`;
-    `vendor/opencode/lib/openai-mapping.js:14-92` (own usage writer **14-29** + own finish table
-    **34-92**); own tool-call assembly `http.js:1590-1924` (**335 lines**).
-    Deleting the legacy loop + own SSE reader + `openai-mapping.js:14-92` = **629 lines**.
-  - `vendor/opencode/lib/stream-parser.js` = **679 lines** and **the core has no parser slot for
-    it**.
-  - `vendor/opencode/lib/http.js` alone = **3 073 lines**; opencode `lib/` total = **12 330**.
-  - **Correction to the audit brief.** The brief says the `createHooks` seam "is used by NOBODY".
-    Measured: `vendor/opencode/lib/http.js:2358` **does** use it
-    (`createHooks: () => ({ ...hooks, readEvent: readEventWithCost, flush: composedFlush })`) — but
-    only inside the **non-default** `shared` branch (`http.js:2066`), so the seam is exercised only
-    when `pipe: 'shared'` is explicitly selected.
-  - The brief says "only 106 of the 681 core lines OpenCode 'consumes' are live". Measured: the
-    live path is the **legacy loop**, which uses **zero** lines of `lib/stream/`; the `shared`
-    branch does consume the core. The measured claim stands in substance (the shared pipe is
-    proven but not served) but the "106 of 681" figure was **not independently re-derived here**.
-- **Owner-principle reason.** One vendor serving a second, private protocol implementation defeats
-  the shared pipe: the "one standard" claim is false for exactly the vendor with the largest
-  surface. 3 073 lines in one adapter file is the opposite of a "thin vendor adapter".
-- **Concrete moves / deletes.**
-  1. Flip the `pipe` default to `'shared'` (`http.js:302`) and remove the `parser: 'legacy'`
-     literal (`http.js:2284`).
-  2. Delete the legacy loop `http.js:2091-2245`, the own SSE reader `http.js:440-499`, and
-     `openai-mapping.js:14-92` — **629 lines** in total.
-  3. **Decide and record** where `stream-parser.js` (**679 lines**) belongs — the core currently
-     has **no parser slot** for it. Either add a parser slot to the core, or move the file under
-     the vendor's own quirk surface and say so in writing. This decision is **not** made here; it
-     is a required recorded outcome of A3.
-  4. Move the **335-line** tool-call assembly onto the core's part assembler.
-- **Acceptance criteria (gate-provable).**
-  - opencode suite **555/555** green.
-  - `npm run verify:stream` green.
-  - **One live turn** on an OpenCode route through the shared pipe.
-  - A **parity fixture** replays one recorded OpenCode response through the legacy and the shared
-     path and asserts identical stream parts, usage buckets, finish reason and failure code.
-  - A grep gate proves the `parser: 'legacy'` literal and the `pipe` default `'legacy'` are gone.
+- **Status:** **PARTIAL — deliberately not claimed as done.** The Phase 2 commit (`8ee4ef1`)
+  records this explicitly: *"A3 DELETION NOT DONE: measured after A1, the opt-out branch is still
+  an explicit config path and `vendor/opencode/lib/stream-parser.js` is still imported by the
+  shared path (`http.js:66`, `stream-contract.js:56`), so the 629-line delete list was wrong.
+  Recorded as a follow-up, not silently dropped."*
+- **What IS done (measured).**
+  - `vendor/opencode/lib/http.js:312` — `pipe: Schema.union(['legacy','shared']).default('shared')`.
+    The **shared path IS the default** now.
+  - The hardcoded `parser: 'legacy'` literal is **gone**; the parser identity is now the data
+    value `OPENCODE_PARSER = 'shared-openai'` (`vendor/opencode/lib/stream-contract.js:71`), and
+    the wire boundary is the **shared OpenAI core** (`readSharedOpenAiEvent`, `stream-contract.js:63`).
+  - The live path is `streamViaSharedPipe()` (`http.js:2333`) over `lib/stream/openai.js` +
+    `normalizeStream` + `readSseEvents` (`http.js:70`).
+  - The shared path rides the core's seams: `createHooks` (`http.js:2455`), `mapFinish`, `onCut`,
+    `classifyText`, `beforeSettle`.
+  - Suite **555/555** green; `verify:stream` **8/8** with **4** vendors guarded, **0** loads.
+- **What is NOT done (measured, 2026-11-14).**
+  - **The legacy opt-out branch is still reachable.** `http.js:2078` reads `config.pipe.get()` per
+    request, so `pipe: 'legacy'` is a live, config-settable path — the legacy loop (its own
+    `chatSseEvents` SSE reader at `http.js:471`, its own `emitPart` tool-call assembly around
+    `http.js:1741`, its own `usageFromOpenAi`/`finishFromOpenAi` calls at `http.js:2150`/`2241`)
+    still exists in the file.
+  - **`vendor/opencode/lib/stream-parser.js` (679 L) is still imported by the SHARED path**:
+    `http.js:66` (`import { createStreamClassifier } from './stream-parser.js'`) and
+    `stream-contract.js:56` (the same import). The shared path's `classifyText` /
+    `classifyReasoning` hooks ARE the vendor-local notation classifier
+    (`stream-contract.js:302-340`), so the classifier is **not** legacy-only.
+  - **Consequence:** the originally-measured **629-line** delete list was wrong, because
+    `stream-parser.js` and the notation-recovery semantics are **shared-path live**, not
+    legacy-only. Deleting them without a replacement would change the shared path's behaviour.
+  - The vendor-local finish table (`vendor/opencode/lib/openai-mapping.js:37-92`) and usage
+    writer (`:14-28`) are **still vendor-local** and still used by the shared path's hook set
+    (`stream-contract.js:99`, `:109`) — a deliberate vendor-published-code exception, not a core
+    fork (see the boundary verdict in [HANDOFF.md](./HANDOFF.md) §3).
+- **Concrete next task to finish A3** (a single worker, scope `vendor/opencode/**` only):
+  1. **Decide and record the placement of `stream-parser.js` (679 L).** It is a *notation*
+     classifier (a tool call the model wrote as prose, and a marker split across deltas) — a
+     **vendor quirk**, not a protocol fact. The two admissible answers, and only these two:
+     (a) keep it vendor-local under an explicitly named quirk surface and say so in writing, or
+     (b) add a **named notation-classifier slot** to the core (`lib/stream/notation.js`) with the
+     hook seam (`classifyText` / `classifyReasoning` / `flush`) that already exists in
+     `normalizeStream` (`lib/stream/index.js:148-165`, `:192-197`). Option (b) is the one that
+     makes the core reusable by a second prose-notation provider; option (a) is the honest
+     minimal one. **Whichever is chosen must be recorded in
+     [ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md) §3.**
+  2. **Delete the legacy opt-out branch** — the `pipe: 'legacy'` union member
+     (`http.js:312`), the branch itself (`http.js:2078` → the end of `stream()`), the private
+     `chatSseEvents` SSE reader (`http.js:471`), and the legacy-only tool-call assembly
+     (`http.js:1741` `emitPart` and its callers). This is now safe **because** step 1 has
+     decided where the notation classifier lives and the shared path's hook set already consumes
+     it.
+  3. **Measure the real delete volume** and replace the wrong **629 L** figure with the measured
+     one. Do not carry the old number forward.
+  4. **Add the parity fixture** the original acceptance criteria named: replay one recorded
+     OpenCode response through the legacy path and the shared path and assert identical stream
+     parts, usage buckets, finish reason and failure code. **Do this BEFORE deleting the legacy
+     branch** — it is the only proof that the deletion is behaviour-preserving. (This is also the
+     natural home for the missing `openai-responses` conformance fixture.)
+  5. Then delete `openai-mapping.js:14-92` (the vendor-local usage writer + finish table) **only
+     if** step 1's placement decision says the core owns them; otherwise keep them and record
+     them as the vendor-published-code exception.
+- **Acceptance criteria (gate-provable), still open.**
+  - opencode suite **555/555** green — ✅ already met.
+  - `npm run verify:stream` green — ✅ already met.
+  - `pipe: 'legacy'` no longer exists as a config union member — ⬜ **open**.
+  - `stream-parser.js` placement recorded in writing — ⬜ **open**.
+  - A **parity fixture** over legacy vs shared — ⬜ **open**.
+  - **One live turn** on an OpenCode route through the shared pipe — ⬜ **open (owner action)**.
 
 ---
 
@@ -491,6 +544,38 @@ owner decision before any code or profile mutation is attempted.
     `createCostStore` each appear exactly once in the repo.
   - `npm run verify:presets` still reports `OK` (the dashboard's usage rows are unchanged).
 
+#### A4 result (measured 2026-11-14) — the CORE is done; the vendor ledgers are partly done
+
+- ✅ **Core (Phase 1, `c0e48ab` + `ae9fd1d`):** `lib/cost.js` 85 → **727 L**, `lib/plan.js` 254 →
+  **510 L**, `lib/usage.js` 192 → **432 L**. The core now owns `createCostStore`, `createCostLedger`,
+  `numberOrNull`, `pickSession` and the whole plan/usage vocabulary.
+- ✅ **DeepInfra (Phase 2, `8ee4ef1`):** `vendor/deepinfra/lib/cost.js` imports `LEDGER_VERSION`,
+  `createCostLedger as createSharedLedger`, `createCostStore as createSharedStore`,
+  `numberOrNull`, `pickSession` **from `../../../lib/cost.js`** (`:50-56`). What stays vendor-local
+  is the wire parsing (`parseCost`), the catalog list-price projection (`listPriceOf`) and the chip
+  renderer (`formatCost`) — DeepInfra-specific vocabulary. The ledger body is now a thin wrapper
+  over the core's (`:194-231`).
+- ✅ **Antigravity (Phase 2, `8ee4ef1`):** the `agy` usage double-map collapsed to **one** mapper —
+  `vendor/antigravity/lib/backends.js:15` imports `ADDITIVE_FORMULA` + `usageFromProjection` from
+  `../../../lib/stream/usage.js`, and `vendor/antigravity/lib/subagent.js:93` now delegates to
+  `agyTokenUsage` instead of mapping a second time.
+- ⚠️ **OpenCode still owns a private ledger** (`vendor/opencode/lib/cost.js`): its own
+  `numberOrNull` (`:61`), `pickSession` (`:332`), `createCostStore` (`:356`) and
+  `createCostLedger` (`:142`) — **four** re-definitions that the core already owns. Its
+  `vendor/opencode/lib/plans.js:25` also re-declares `PLAN_PROVIDERS` (the core has it at
+  `lib/plan.js:372`), and `vendor/opencode/lib/usage-ledger.js:21` re-declares `USAGE_BUCKETS`
+  (the core has it at `lib/usage.js:29`). **These are A4 remnants** — the OpenCode ledger is
+  deliberately left for the same wave that finishes A3 (one vendor, one file scope, one worker).
+  Measured: `grep -rn "function numberOrNull"` → **2** hits (`lib/cost.js:145`,
+  `vendor/opencode/lib/cost.js:61`); `pickSession` → **2**; `createCostStore` → **3**
+  (`lib/cost.js:672`, `vendor/opencode/lib/cost.js:356`, `vendor/deepinfra/lib/cost.js:172` — the
+  DeepInfra one is a 2-line wrapper over the core, so it is not a third implementation).
+- **Open A4 remnant (next worker, scope `vendor/opencode/lib/**`):** route OpenCode's
+  `numberOrNull` / `pickSession` / `createCostStore` / `createCostLedger` / `plans.js` /
+  `usage-ledger.js` onto `lib/cost.js` + `lib/plan.js` + `lib/usage.js`, keeping only OpenCode's
+  own wire vocabulary (`usage.opencode.billing_source`, `usage.opencode.allowance`, the
+  `list_cost` / `estimated` facts) in the vendor.
+
 ---
 
 #### A5 — one retry/backoff + one catalog cache in the core
@@ -521,6 +606,34 @@ owner decision before any code or profile mutation is attempted.
      4xx is not).
   - The three catalog caches are replaced by one core cache with the same TTL semantics; a
      refresh (`?refresh=1`) still bypasses it for every vendor.
+
+#### A5 result (measured 2026-11-14) — the CORE is done; two vendor caches remain
+
+- ✅ **Core (Phase 1, `c0e48ab`):** `lib/retry.js` **255 L** — `DEFAULT_RETRY_STATUSES`
+  (429/451/500/502/503/504), `isRetryableStatus`, `statusOf`, `isRetryableError`, `isAbortError`,
+  `abortError`, `backoffDelay`, `sleepFor`, `withRetry`. `lib/catalog-cache.js` **314 L** — TTL,
+  single-flight, `invalidate()`, stale-while-revalidate, a durable versioned snapshot with an
+  injected `fs` and an injected clock (so it is pure and browser-loadable).
+- ✅ **Antigravity (Phase 2, `8ee4ef1`):** its 70-line retry loop now rides the core —
+  `vendor/antigravity/lib/adapter.js:27` imports `DEFAULT_RETRY_STATUSES`, `isRetryableStatus`,
+  `statusOf`, `withRetry` from `../../../lib/retry.js`. Its 92-line catalog cache now rides the
+  core — `vendor/antigravity/lib/index.js:32` imports `createCatalogCache`,
+  `DEFAULT_CATALOG_TTL_MS` from `../../../lib/catalog-cache.js` (instantiated at `:272`).
+  The live quota RPC and its separate quota window stay vendor-local (a product fact).
+- ⚠️ **OpenCode's `backoffDelay` is still its own** (`vendor/opencode/lib/http.js:540`) and its
+  **two** retry loops are still local (`http.js:574` control-plane, `http.js:2021` backend status).
+  The signature is **inverted** relative to the core's — the vendor one is `backoffDelay(baseMs,
+  attempt)`, the core's is `backoffDelay(attempt, baseMs, capMs)` — so this is a real
+  re-implementation, not an alias. Measured: `grep -rn "function backoffDelay"` → **2** hits.
+- ⚠️ **Two vendor catalog caches remain**: `vendor/deepinfra/lib/index.js:209-237` (an in-memory
+  TTL closure, **not** routed through `lib/catalog-cache.js`) and
+  `vendor/opencode/lib/catalog-cache.js` (**362 L**, a durable class bound to fs/probe/timer).
+  Measured: `grep -rn "lib/catalog-cache.js" vendor/` → **1** hit (antigravity only).
+- **Open A5 remnant (next workers, scopes `vendor/opencode/lib/**` and `vendor/deepinfra/lib/**`):**
+  route OpenCode's two retry loops onto `lib/retry.js` (and reconcile the `backoffDelay`
+  signature) and route both remaining catalog caches onto `lib/catalog-cache.js`. Antigravity's
+  quota-window cache is a **legitimate exception** — it caches a *quota* fact, not a catalog, and
+  it has its own 1-minute window.
 
 ---
 
@@ -566,6 +679,49 @@ owner decision before any code or profile mutation is attempted.
   - The dead-field allowlist has **one entry per measured dead field**, each with a mutation case.
   - `npm run verify` (check + tests + `verify:stream` + `specs:check`) exits 0.
 
+#### A6 result (measured 2026-11-14) — the gates are hardened; two items are still OPEN
+
+- ✅ **The zero-vendor-loads guard is now honest for all 4 vendors.**
+  `scripts/verify-stream.mjs` no longer types a vendor list: it **measures** the vendor set from
+  `vendor/<name>/package.json` (`:34-51`), so a fifth vendor is guarded the moment it is vendored.
+  The guard **self-tests**: `guardSelfTest()` (`:94-122`) asks the resolver for every vendor's
+  alias and scoped name and **requires the refusal**; a specifier that resolves is reported as
+  `UNGUARDED` and fails the run. A **control probe** (`node:fs`, `:115-120`) proves the resolver
+  is consulted, so the self-test cannot pass by every call being ignored. A **vacuity guard**
+  (`:54-57`) exits **2** when no vendored package is found — a guard that guards nothing must not
+  report success. Measured 2026-11-14: **4 vendored packages probed, 8/8 specifiers refused,
+  vendor loads 0**.
+- ✅ **The spec↔preset mirror landed.** `checkPresetMirror(specs, { presets })`
+  (`scripts/verify-specs.mjs:216`, wired at `:372`) compares each provider spec against the
+  **preset declaration**, so a lying spec now fails. Proven by committed mutation cases:
+  `S1-spec-endpoint-contradicts-preset`, `S2-spec-protocol-contradicts-preset`,
+  `S3-spec-model-not-in-preset`, `S4-pricing-kind-contradicts-billing`,
+  `S5-provider-spec-missing-for-a-preset`, `S6-spec-pricing-names-another-file` — all **caught**.
+- ✅ **The dead-field allowlist landed.** `lib/preset-schema.js` gained
+  `DECLARATION_RUNTIME_FIELDS` (`:147`) and `DECLARATION_DEAD_FIELDS` (`:228`); `verify-presets.mjs`
+  now reports unknown fields as **errors** and allow-listed dead fields as **warnings**; the
+  mutation harness proves it: `D1-new-dead-field-on-a-declaration`,
+  `D2-dead-field-inside-the-usage-block`, `D3-new-surface-with-no-consumer` — all **caught**.
+- ✅ **The EXAONE dead exports are gone** (`vendor/exaone/lib/map.js` 130 → **32 L**, a pure
+  re-export shim); the 3 `abortError` copies are one (`lib/stream/failure.js:101`).
+- ✅ **The mutation harness grew 17 → 26/26** (registry 13, files 4, specs 6, declaration fields 3).
+- ⬜ **OPEN 1 — the L1 boundary lint was NOT written.** `test/stream-boundary.test.mjs` — the file
+  named in [ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md) §6.1 and in the W2-D dispatch
+  scope — **does not exist**. Measured: `ls test/stream-boundary.test.mjs` → no such file, and
+  `grep -rn "boundary" test/ scripts/` finds no such gate. The rule it was to enforce is currently
+  **unenforced by a gate**; it holds today by inspection (this doc's §3 verdict), but nothing
+  prevents a regression. **Concrete next task:** write `test/stream-boundary.test.mjs` scanning
+  `lib/stream/*` + `lib/{cost,plan,usage,retry,catalog-cache}.js` for (a) a `vendor/` or
+  `@nolit/dsh-(antigravity|deepinfra|exaone|opencode)` import, (b) a vendor name in a
+  non-comment token, (c) a forbidden runtime dependency (`ctx.`, `process.env`, `node:fs`,
+  `fetch(`), and (d) a per-vendor branch. Scope: `test/**` only, no `lib/**` change.
+- ⬜ **OPEN 2 — `USAGE_READERS` is still ungated.** `usage.routes[].normalize` still joins to the
+  hand-written `USAGE_READERS` table (`lib/client.src.js:772`) with **no gate**; measured:
+  `grep -rn "USAGE_READERS" lib/ scripts/ test/` → **2** hits, both in the browser bundle, **0**
+  in any script or test.
+- ⬜ **OPEN 3 — `classifyBlock` is still a dead hook slot.** `lib/driver/contract.js:27` declares
+  it in `OPTIONAL_HOOKS`; measured: **1** hit repo-wide (the declaration itself).
+
 ---
 
 #### A7 — the real "generic OpenAI-compatible provider" seam is in the HOST (measure-first)
@@ -605,26 +761,33 @@ owner decision before any code or profile mutation is attempted.
 
 ---
 
-### P2-2. Flip OpenCode's `pipe: 'shared'` default — **superseded by A3**
+### P2-2. Flip OpenCode's `pipe: 'shared'` default — ✅ **the default is flipped; the removal is not**
 
-- **Status:** **not started; folded into [A3](#a3--opencode-onto-the-shared-pipe)** on 2026-11-14.
-  A3 covers this item's scope (the `pipe` default at `http.js:302`) **and** the legacy-loop removal
-  it implicitly needs, so it is tracked there rather than twice.
-- **Why:** the shared path is implemented and test-proven, but the default remains `legacy`; two
-  stream implementations still exist in the serving path.
+- **Status:** **half done** (2026-11-14). The default IS now `'shared'`
+  (`vendor/opencode/lib/http.js:312`); the legacy path is **still present and still reachable** as
+  an explicit opt-out (`http.js:2078` reads `config.pipe.get()` per request). The rest of this item
+  is folded into [A3](#a3--opencode-onto-the-shared-pipe-partial-shared-default-landed-the-deletion-did-not),
+  which owns the deletion and the parity fixture.
+- **Why:** the shared path is implemented and test-proven, but two stream implementations still
+  exist in the serving path.
 - **Done when:** one owner-verified live turn runs with `pipe: 'shared'`, the legacy path is either
-  removed or kept as a documented fallback, and `verify:stream` stays green.
+  removed or kept as a documented fallback, and `verify:stream` stays green. **The live turn is
+  still an owner action; the removal is task R1.**
 
-### P2-3. Canonical parser (the only genuinely unstarted Phase F item) — **superseded by A3**
+### P2-3. Canonical parser (the only genuinely unstarted Phase F item) — ⚠️ **PARTIAL**
 
-- **Status:** **not started; folded into [A3](#a3--opencode-onto-the-shared-pipe)** on 2026-11-14.
-  The audit measured that the core has **no parser slot** for
-  `vendor/opencode/lib/stream-parser.js` (679 L), so "a canonical parser" is not one task but a
-  **recorded placement decision** — which A3 requires as an outcome.
-- **Why:** `vendor/opencode/lib/http.js:2284` hardcodes `parser: 'legacy'`; the canonical parser is
-  not implemented. Without it, the “one protocol standard” claim is incomplete for OpenCode.
-- **Done when:** a canonical parser exists behind a config seam, parity fixtures cover it, and the
-  prose/glyph/`content_filter` gates named in the old Phase F are measurable.
+- **Status:** **half done** (2026-11-14). The hardcoded `parser: 'legacy'` literal is **gone** and
+  the parser identity is now the data value `OPENCODE_PARSER = 'shared-openai'`
+  (`vendor/opencode/lib/stream-contract.js:71`); the wire boundary is the shared OpenAI core.
+  **What is still missing** is the *placement decision* for
+  `vendor/opencode/lib/stream-parser.js` (679 L) — and the measurement that overturned the
+  original plan: the shared path **imports it** (`http.js:66`, `stream-contract.js:56`), so it is
+  **not** legacy-only. That is why the 629-line delete list was wrong.
+- **Why:** the core still has **no parser slot** for the notation classifier; without a recorded
+  decision the “one protocol standard” claim stays incomplete for OpenCode.
+- **Done when:** the placement is **recorded in writing** (a vendor-local quirk surface, or a named
+  notation-classifier slot in the core), the parity fixture covers it, and the prose/glyph/
+  `content_filter` gates named in the old Phase F are measurable. **Task R1.**
 
 ### P2-5. S3 — Antigravity usage per model group
 
@@ -680,11 +843,21 @@ turn works, confirmed by the owner.
    [ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md), dispatch packages in
    [WORKER-DISPATCH.md](./WORKER-DISPATCH.md)):
 
-   | Phase | Mode | Tasks | Gate / Exit Bar |
+   | Phase | Mode | Tasks | Gate / Exit Bar | Status |
+   | :-: |---|---|---|---|
+   | **1** | **SERIAL** (1 worker, sequential) | **W1-1 (A2-core)** → **W1-2 (A1-core)** → **W1-3 (A4-core)** → **W1-4 (A5-core)** | **Core Interface Locked:** `lib/stream/*`, `lib/driver/contract.js`, `lib/{cost,plan,usage,retry,catalog-cache}.js` frozen; `anthropic.js` ≤ 434 L; `npm run verify` + all 4 vendor suites green | ✅ **DONE** — `c0e48ab`, `3ac7a10`, `c2ba900`, `ae9fd1d`; `anthropic.js` **433 L** ≤ 434 |
+   | **2** | **PARALLEL** (disjoint write scopes) | **W2-A (A3 OpenCode)** ‖ **W2-B (DeepInfra)** ‖ **W2-C (EXAONE)** ‖ **W2-D (A6 Gates, owns `scripts/verify-stream.mjs`)** ‖ **W2-E (Antigravity A4/A5)** | Zero vendor-local wire/ledger/retry/cache copies left; `verify:stream` 8/8 with `dsh-exaone` guarded (`vendor loads: 0`); `verify:presets:mutation` 17/17 + spec↔preset mirror + boundary lint green; 1 live OpenCode shared-pipe turn | ✅ **DONE** — `8ee4ef1`; `verify:stream` 8/8 with **4** vendors probed / 8/8 refused / 0 loads; mutation **26/26**; spec↔preset mirror green. ⚠️ **A3 partial** (legacy opt-out + `stream-parser.js` remain); ⚠️ **A6 remnant**: the boundary lint was not written; ⚠️ the live OpenCode shared-pipe turn is still an **owner** action |
+   | **3** | **SERIAL / Measure-first** | **W3-1 (A7 host seam)** | Measured answer on `dsh-llm-pi-ai` `providers` dict + owner decision (no unmeasured data-only promise) | ⬜ **NOT STARTED** |
+
+   **What remains in the P2-A queue, in order** (everything else is closed or owner-gated):
+
+   | # | Task | Scope | Gate |
    | :-: |---|---|---|
-   | **1** | **SERIAL** (1 worker, sequential) | **W1-1 (A2-core)** → **W1-2 (A1-core)** → **W1-3 (A4-core)** → **W1-4 (A5-core)** | **Core Interface Locked:** `lib/stream/*`, `lib/driver/contract.js`, `lib/{cost,plan,usage,retry,catalog-cache}.js` frozen; `anthropic.js` ≤ 434 L; `npm run verify` + all 4 vendor suites green |
-   | **2** | **PARALLEL** (disjoint write scopes) | **W2-A (A3 OpenCode)** ‖ **W2-B (DeepInfra)** ‖ **W2-C (EXAONE)** ‖ **W2-D (A6 Gates, owns `scripts/verify-stream.mjs`)** ‖ **W2-E (Antigravity A4/A5)** | Zero vendor-local wire/ledger/retry/cache copies left; `verify:stream` 8/8 with `dsh-exaone` guarded (`vendor loads: 0`); `verify:presets:mutation` 17/17 + spec↔preset mirror + boundary lint green; 1 live OpenCode shared-pipe turn |
-   | **3** | **SERIAL / Measure-first** | **W3-1 (A7 host seam)** | Measured answer on `dsh-llm-pi-ai` `providers` dict + owner decision (no unmeasured data-only promise) |
+   | **R1** | **Finish A3** — decide + record the placement of `stream-parser.js` (679 L), add the **legacy↔shared parity fixture**, then delete the `pipe:'legacy'` opt-out branch and the legacy-only SSE reader / tool-call assembly, and re-measure the real delete volume (the 629 L figure was wrong) | `vendor/opencode/**` only | opencode suite **555/555**; `verify:stream` green; a grep gate proves `pipe:'legacy'` is gone from the config union; a **parity fixture** passes |
+   | **R2** | **A4 remnant** — route OpenCode's private ledger (`numberOrNull`, `pickSession`, `createCostStore`, `createCostLedger`) and its re-declared `plans.js` / `usage-ledger.js` constants onto `lib/{cost,plan,usage}.js` | `vendor/opencode/lib/**` only | a grep gate proves `numberOrNull` / `pickSession` are defined **once** repo-wide |
+   | **R3** | **A5 remnant** — route OpenCode's two retry loops + its own `backoffDelay` onto `lib/retry.js`, and route OpenCode's + DeepInfra's catalog caches onto `lib/catalog-cache.js` | `vendor/opencode/lib/**`, `vendor/deepinfra/lib/**` | a grep gate proves `backoffDelay` is defined **once** repo-wide; `?refresh=1` still bypasses the cache for every vendor |
+   | **R4** | **A6 remnant** — write `test/stream-boundary.test.mjs` (the L1 boundary lint named in [ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md) §6.1) and a `USAGE_READERS` gate | `test/**`, `scripts/**` | the lint fails on a planted vendor import / vendor name / `ctx.` / `process.env` / `fetch(` inside `lib/stream/*`; a `usage.routes[].normalize` that names an unregistered reader fails |
+   | **R5** | **A7** — measure the host `providers: z.dict(profile)` seam, then produce the owner decision | `docs/**` first, then owner-gated code | a written, measured answer; no unmeasured data-only promise |
 
 4. The remaining **P2** items keep their own order and gates: **P2-2** and **P2-3** are superseded by
    **A3** (tracked there); **P2-5** (S3, owner deferred 2026-11-08) and **P2-6** (S4, blocked on owner
@@ -694,13 +867,44 @@ turn works, confirmed by the owner.
 
 ## 7. Evidence
 
-Current gates (measured 2026-11-14, after rc.20 and the three fixes): router `npm test` **649/649**,
-`npm run verify` exit 0 (check + 649 tests + `verify:stream` + `specs:check` — `5 protocols, 4
+Current gates (re-measured 2026-11-14, after Phase 1 + Phase 2): router `npm test` **774/774**,
+`npm run verify` exit 0 (check + 774 tests + `verify:stream` + `specs:check` — `5 protocols, 4
 providers, 4 pricing` — OK), `verify:presets` OK (`OK: preset declarations, the browser registry,
 the locales and the runtime registries all agree`; runtime providers `deepseek-account, antigravity,
 deepinfra, deepinfra-anthropic, exaone, opencode-http-agent`). Vendor suites: antigravity **193/193**
 (+3 from `642ee06`), deepinfra **222 pass / 7 skip** (229 total), opencode **555/555**, exaone
-**19/19**.
+**19/19** — **all four unchanged by the refactor.**
+
+`verify:stream` (re-measured 2026-11-14): **8/8** dispatch cases, **4** vendored packages probed
+(`@nolit/dsh-antigravity`, `@nolit/dsh-deepinfra`, `@nolit/dsh-exaone`, `@nolit/dsh-opencode-v2`),
+**8/8** specifiers refused, **vendor loads: 0**. The vendor set is **measured** from
+`vendor/*/package.json`, not typed in, and the guard is self-tested with a control probe and a
+vacuity guard — see A6's result above.
+
+`verify:presets:mutation` (re-measured 2026-11-14): **26/26** drift classes caught (registry 13,
+files 4, specs 6, declaration fields 3).
+
+**Size movement (measured by `wc -l`, `ead9daf` → `8ee4ef1`):**
+
+| Surface | `@ead9daf` | `8ee4ef1` | Δ |
+|---|---:|---:|---:|
+| `lib/stream/` total | **1 378** | **1 851** | **+473** |
+| ↳ `lib/stream/anthropic.js` | **614** | **433** | **−181** |
+| ↳ `lib/stream/usage.js` | 90 | 217 | +127 |
+| ↳ `lib/stream/sse.js` | 180 | 216 | +36 |
+| ↳ `lib/stream/openai.js` | — | **467** | **+467** |
+| `lib/{cost,plan,usage}.js` | **531** | **1 669** | **+1 138** |
+| `lib/retry.js` + `lib/catalog-cache.js` | — | **569** | **+569** |
+| vendor antigravity `lib/` | 5 216 | 5 275 | +59 |
+| vendor opencode `lib/` | 12 330 | 12 631 | +301 |
+| vendor deepinfra `lib/` | 3 950 | 3 480 | **−470** |
+| vendor exaone `lib/` | 1 176 | 842 | **−334** |
+| **vendor total** | **22 672** | **22 228** | **−444** |
+
+The reading: the **duplication left the upper layer** (−444 L across the four vendors) and the
+**standardisation entered the lower one** (+2 180 L across `lib/stream/` and the accounting /
+retry / cache cores). The core is bigger; the *vendors* are smaller and now bind to it by
+identity instead of carrying copies.
 
 The **synthetic `OpenCode (config default)` row** is closed: it was produced in
 `vendor/opencode/lib/http.js` (the `models` config default and the `listModels` prepend) and in
