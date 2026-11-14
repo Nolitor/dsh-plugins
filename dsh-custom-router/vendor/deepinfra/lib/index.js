@@ -14,6 +14,8 @@
  */
 import Schema from '@deepseek-ai/schemastery'
 
+import { createCatalogCache } from '../../../lib/catalog-cache.js'
+
 import { DeepInfraAdapter } from './adapter.js'
 import { DeepInfraAnthropicAdapter } from './anthropic-adapter.js'
 import {
@@ -205,44 +207,80 @@ export function apply(ctx, config) {
     /* an older host without deferred inject keeps the eager attempt */
   }
 
-  /** @type {{ entries: object[], fetchedAt: number } | undefined} */
-  let cache
+  /** One diagnostic per distinct outage message until a probe succeeds again. */
+  const catalogWarnings = new Set()
+  const warnCatalog = (message) => {
+    if (catalogWarnings.has(message)) return
+    catalogWarnings.add(message)
+    log.warn('dsh-deepinfra: ' + message)
+  }
+
   /**
-   * Drop the cached catalog so the next read reaches the provider.
+   * The model catalog cache.
    *
-   * The reader keeps a 30-minute TTL (DEFAULT_CATALOG_TTL_MS); the panel's
-   * `?refresh=1` calls this, otherwise a refresh button would replay the stale
-   * snapshot until the TTL expired (measured 2026-11-13).
-   * @returns {void}
+   * The TTL, the single-flight probe, the stale answer and the rule that a failed
+   * refresh never becomes fresh data belong to the router's one cache
+   * (`lib/catalog-cache.js`); this file keeps only the DeepInfra probe and the
+   * projection onto host metadata. Measured 2026-11-14: this reader owned a
+   * SECOND cache here (`invalidateCatalog` + a `fetchedAt` stamp), with no
+   * in-flight dedupe and an error path that refreshed `fetchedAt`, extending
+   * questionable data by another full TTL.
+   *
+   * `ttlMs` is a function so `catalogTtlMs` is re-read on every call and a
+   * settings change applies without rebuilding the reader. The fallback is THIS
+   * plugin's 30-minute `DEFAULT_CATALOG_TTL_MS` (catalog.js), not the router
+   * module's 15-minute default: the config default and the runtime fallback stay
+   * one number.
    */
-  const invalidateCatalog = () => { cache = undefined }
+  const catalogCache = createCatalogCache({
+    fetch: (signal) => fetchCatalog(stringAt('baseURL', DEFAULT_BASE_URL), { signal }),
+    ttlMs: () => numberAt('catalogTtlMs', DEFAULT_CATALOG_TTL_MS),
+    warn: warnCatalog,
+  })
+
+  /** Whether the current outage has already been announced to the operator. */
+  let outageAnnounced = false
+
+  /**
+   * Raw catalog entries, cached.
+   *
+   * A cold probe failure answers an EMPTY list instead of rejecting: the routes
+   * and the model picker call this without a `catch`. The empty answer is not
+   * stored (the core cache keeps "no value"), so the next read probes again
+   * rather than blanking the picker for a whole TTL after one bad poll — the
+   * defect the previous implementation had.
+   *
+   * @param {AbortSignal} [signal] Caller lifetime for a cold probe.
+   * @returns {Promise<object[]>} Raw entries; empty when the catalog is unreachable.
+   */
+  const catalogEntries = async (signal) => {
+    const value = await catalogCache.read(signal)
+    if (Array.isArray(value)) {
+      outageAnnounced = false
+      catalogWarnings.clear()
+      return value
+    }
+    if (!outageAnnounced) {
+      outageAnnounced = true
+      warnCatalog('catalog unavailable; serving an empty model list')
+    }
+    return []
+  }
+
+  const selected = (entries) => {
+    const allowed = configValue(config, 'enabledModels')
+    const routes = chatRoutes(entries)
+    if (!Array.isArray(allowed) || allowed.length === 0) return routes
+    const set = new Set(allowed)
+    return routes.filter((entry) => set.has(entry.id))
+  }
+
   const catalogReader = async (signal) => {
-    const ttl = numberAt('catalogTtlMs', DEFAULT_CATALOG_TTL_MS)
-    const baseURL = stringAt('baseURL', DEFAULT_BASE_URL)
-    const stale = cache === undefined || Date.now() - cache.fetchedAt > ttl
-    if (stale) {
-      try {
-        cache = { entries: await fetchCatalog(baseURL, { signal }), fetchedAt: Date.now() }
-      } catch (error) {
-        if (cache === undefined) {
-          log.warn('dsh-deepinfra: catalog unavailable: ' + (error instanceof Error ? error.message : String(error)))
-          cache = { entries: [], fetchedAt: Date.now() }
-        } else {
-          cache.fetchedAt = Date.now()
-        }
-      }
-    }
-    const selected = () => {
-      const allowed = configValue(config, 'enabledModels')
-      const routes = chatRoutes(cache.entries)
-      if (!Array.isArray(allowed) || allowed.length === 0) return routes
-      const set = new Set(allowed)
-      return routes.filter((entry) => set.has(entry.id))
-    }
+    const entries = await catalogEntries(signal)
     return {
-      list: (provider) => selected().map((entry) => toModelInfo(provider, entry)),
+      list: (provider) => selected(entries).map((entry) => toModelInfo(provider, entry)),
       resolve: (provider, model) => {
-        const route = selected().find((entry) => entry.id === model)
+        const route = selected(entries).find((entry) => entry.id === model)
         if (route === undefined) return toModelInfo(provider, { id: model, metadata: {} })
         return toResolvedModelInfo(provider, route, {
           defaultMaxTokens: numberAt('turnMaxTokens', DEFAULT_TURN_MAX_TOKENS),
@@ -297,17 +335,16 @@ export function apply(ctx, config) {
     catalog: {
       list: (provider) => catalogReader().then((reader) => reader.list(provider)),
       // Raw chat entries, so the panel can show prices and promotions that the
-      // host's advisory LlmModelInfo has no fields for. Await the refresh first,
-      // then read the closure cache (the reader exposes only list/resolve).
-      entries: async () => {
-        await catalogReader()
-        return chatRoutes(cache?.entries ?? [])
-      },
+      // host's advisory LlmModelInfo has no fields for. Read through the cache
+      // (not the reader, which exposes only list/resolve).
+      entries: async () => chatRoutes(await catalogEntries()),
     },
     onModelsApplied: async (enabled) => {
       await syncDeepInfraSelection(enabled)
     },
-    invalidateCatalog,
+    // `?refresh=1` must reach the provider: dropping the core cache's in-memory
+    // entry makes the next read a cold miss, which fetches.
+    invalidateCatalog: () => catalogCache.invalidate(),
     profileDir: typeof optional(ctx, 'profileDir') === 'string' ? optional(ctx, 'profileDir') : undefined,
     log,
   })
@@ -335,8 +372,8 @@ export function apply(ctx, config) {
   // 2026-11-08: a completed turn left the ledger empty while the chat route's
   // did not). The dependency object is therefore built ONCE and given to both.
   const catalogEntry = async (model) => {
-    await catalogReader()
-    return chatRoutes(cache?.entries ?? []).find((entry) => entry.id === model) ?? null
+    const entries = await catalogEntries()
+    return chatRoutes(entries).find((entry) => entry.id === model) ?? null
   }
   // The adapter asks for the turn at record time, so one DSH turn that makes
   // several model calls is still one turn's cost.

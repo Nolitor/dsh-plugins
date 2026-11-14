@@ -2029,9 +2029,9 @@ test('the trace records wire unverified for an unsupported package and wire chat
 })
 
 test('model-settings probes the catalog only when ?refresh=1 is asked for', async () => {
-  // `CatalogLifecycle.read()` answers from the snapshot and revalidates in the
-  // background, so a plain read never waits for a probe. The refresh button must
-  // actually probe; without the flag the panel kept rendering the cached rows
+  // `catalog.read()` answers from the snapshot and revalidates in the background,
+  // so a plain read never waits for a probe. The refresh button must actually
+  // probe; without the flag the panel kept rendering the cached rows
   // (measured 2026-11-13: `discoveryCacheMs` is 5 minutes).
   const { state, close } = await startServer()
   try {

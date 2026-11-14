@@ -5,6 +5,14 @@
  * The behaviour under test is what the Web model picker depends on: the first
  * `session/modelCatalog` after boot must not wait for the OpenCode daemon, and a
  * changed catalog must reach connected clients without a manual refresh.
+ *
+ * Retargeted 2026-11-14 when `lib/catalog-cache.js` was folded into the router's
+ * one cache (`../../../lib/catalog-cache.js`, `createCatalogCache`): the removed
+ * `CatalogStore`/`CatalogLifecycle` classes were this module's own internals, so
+ * the tests that constructed them now construct `createCatalogLifecycle` with a
+ * snapshot PATH instead of a store double. The shared behaviour they pin — cold
+ * seed, single-flight, stale-while-revalidate, announce-only-on-change — is
+ * unchanged, and none of those assertions was relaxed.
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -14,13 +22,12 @@ import { join } from 'node:path'
 
 import {
   CATALOG_FILE_VERSION,
-  CatalogLifecycle,
-  CatalogStore,
   catalogSignature,
   readCatalogSnapshot,
   resolveCatalogPath,
   writeCatalogSnapshot,
-} from '../lib/catalog-cache.js'
+} from '../lib/catalog-file.js'
+import { createCatalogLifecycle } from '../lib/catalog-lifecycle.js'
 import { OpencodeHttpAdapter, Config as HttpConfig } from '../lib/http.js'
 
 const MODEL = { id: 'opencode-go/deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash', contextWindow: 1000000, maxTokens: 384000 }
@@ -32,17 +39,22 @@ async function tempDir(t) {
   return dir
 }
 
-/** In-memory store double recording writes. */
-function memoryStore(initial = null) {
-  const store = {
-    saved: [],
-    load: () => initial,
-    save(snapshot) {
-      store.saved.push(snapshot)
-      return Promise.resolve()
-    },
-  }
-  return store
+/**
+ * Seed a snapshot file the way a previous boot would have left it, and return
+ * the path. This replaces the removed `CatalogStore` double: the lifecycle now
+ * writes through its own fs seam, so asserting on the FILE is what actually pins
+ * the durable path (and the format an operator already has on disk).
+ */
+async function seeded(dir, snapshot = { savedAt: 1, source: 'probe', models: [MODEL] }) {
+  const path = join(dir, 'opencode-models.json')
+  await writeCatalogSnapshot(path, snapshot)
+  return path
+}
+
+/** Number of catalog rows currently on disk, or 0 when there is no file yet. */
+async function persistedRows(path) {
+  const snapshot = readCatalogSnapshot(path)
+  return snapshot === null ? 0 : snapshot.models.length
 }
 
 test('resolveCatalogPath prefers explicit config, then the profile, then DSH_HOME', () => {
@@ -80,20 +92,35 @@ test('a snapshot round-trips and rejects foreign or malformed files', async (t) 
   assert.equal(readCatalogSnapshot(path), null, 'an empty catalog is not a usable snapshot')
 })
 
-test('CatalogStore with no path stays in memory', async () => {
-  const store = new CatalogStore('')
-  assert.equal(store.load(), null)
-  await store.save({ savedAt: 1, source: 'probe', models: [MODEL] })
+test('an empty path keeps the catalog in memory and writes no file', async () => {
+  let probes = 0
+  const lifecycle = createCatalogLifecycle({
+    probe: async () => {
+      probes += 1
+      return { models: [MODEL] }
+    },
+    path: '',
+    cacheMs: () => 300000,
+    syncMs: () => 0,
+  })
+  assert.equal(lifecycle.seed(), null, 'nothing to seed without a path')
+  assert.deepEqual((await lifecycle.read())?.models, [MODEL])
+  assert.equal(probes, 1)
+  // No path, no snapshot: the second read is served from memory.
+  assert.deepEqual((await lifecycle.read())?.models, [MODEL])
+  assert.equal(probes, 1)
 })
 
-test('a seeded catalog answers synchronously while a probe is still running', async () => {
+test('a seeded catalog answers synchronously while a probe is still running', async (t) => {
+  const dir = await tempDir(t)
+  const path = await seeded(dir)
   let probing = 0
-  const lifecycle = new CatalogLifecycle({
+  const lifecycle = createCatalogLifecycle({
     probe: () => {
       probing += 1
       return new Promise(() => {})
     },
-    store: memoryStore({ savedAt: 1, source: 'probe', models: [MODEL] }),
+    path,
     cacheMs: () => 300000,
     syncMs: () => 0,
     now: () => 10,
@@ -105,16 +132,17 @@ test('a seeded catalog answers synchronously while a probe is still running', as
   assert.equal(probing, 0, 'a fresh seed must not start a probe')
 })
 
-test('a stale seed revalidates in the background exactly once', async () => {
+test('a stale seed revalidates in the background exactly once', async (t) => {
+  const dir = await tempDir(t)
+  const path = await seeded(dir)
   let probes = 0
-  const store = memoryStore({ savedAt: 1, source: 'probe', models: [MODEL] })
-  const lifecycle = new CatalogLifecycle({
+  const lifecycle = createCatalogLifecycle({
     probe: async () => {
       probes += 1
       await new Promise((resolve) => setTimeout(resolve, 5))
       return { models: [MODEL] }
     },
-    store,
+    path,
     cacheMs: () => 1000,
     syncMs: () => 0,
     now: () => 5000,
@@ -126,14 +154,15 @@ test('a stale seed revalidates in the background exactly once', async () => {
   assert.equal(probes, 1)
 })
 
-test('refresh persists the catalog and announces only real changes', async () => {
-  const store = memoryStore()
+test('refresh persists the catalog and announces only real changes', async (t) => {
+  const dir = await tempDir(t)
+  const path = join(dir, 'opencode-models.json')
   let changes = 0
   let now = 1000
   let catalog = [MODEL]
-  const lifecycle = new CatalogLifecycle({
+  const lifecycle = createCatalogLifecycle({
     probe: async () => ({ models: catalog }),
-    store,
+    path,
     cacheMs: () => 300000,
     syncMs: () => 0,
     onChanged: () => {
@@ -144,27 +173,29 @@ test('refresh persists the catalog and announces only real changes', async () =>
 
   await lifecycle.refresh()
   assert.equal(changes, 1, 'the first catalog is a change from nothing')
-  assert.equal(store.saved.length, 1)
+  assert.equal(await persistedRows(path), 1)
 
   now = 2000
   await lifecycle.refresh()
   assert.equal(changes, 1, 'an identical catalog must not notify clients')
-  assert.equal(store.saved.length, 2, 'freshness is still persisted')
+  assert.equal(await persistedRows(path), 1, 'freshness is still persisted')
+  assert.equal(readCatalogSnapshot(path).savedAt, 2000, 'the write refreshed the timestamp')
 
   catalog = [{ ...MODEL, name: 'DeepSeek V4.1 Flash (Go)' }]
   await lifecycle.refresh()
   assert.equal(changes, 2)
-  assert.equal(store.saved.at(-1).models[0].name, 'DeepSeek V4.1 Flash (Go)')
+  assert.equal(readCatalogSnapshot(path).models[0].name, 'DeepSeek V4.1 Flash (Go)')
 })
 
-test('a failed probe keeps the last good catalog and reports the reason', async () => {
-  const store = memoryStore({ savedAt: 1, source: 'probe', models: [MODEL] })
+test('a failed probe keeps the last good catalog and reports the reason', async (t) => {
+  const dir = await tempDir(t)
+  const path = await seeded(dir)
   const warnings = []
-  const lifecycle = new CatalogLifecycle({
+  const lifecycle = createCatalogLifecycle({
     probe: async () => {
       throw new Error('daemon state unreadable')
     },
-    store,
+    path,
     cacheMs: () => 0,
     syncMs: () => 0,
     warn: (message) => warnings.push(message),
@@ -178,13 +209,14 @@ test('a failed probe keeps the last good catalog and reports the reason', async 
 })
 
 test('start() refreshes immediately, repeats on the timer, and stop() clears it', async (t) => {
+  const dir = await tempDir(t)
   let probes = 0
-  const lifecycle = new CatalogLifecycle({
+  const lifecycle = createCatalogLifecycle({
     probe: async () => {
       probes += 1
       return { models: [MODEL] }
     },
-    store: memoryStore(),
+    path: join(dir, 'opencode-models.json'),
     cacheMs: () => 300000,
     syncMs: () => 10,
   })
@@ -251,4 +283,43 @@ test('catalogSignature changes when the wire package or compatibility changes', 
     catalogSignature([{ ...MODEL, compatibility: { streamUsage: true } }]),
   )
   assert.notEqual(catalogSignature([{ ...MODEL, unverifiedWire: true }]), base)
+})
+
+test('an existing on-disk snapshot keeps loading, and a refresh keeps the measured format', async (t) => {
+  // COMPATIBILITY GATE (2026-11-14). Folding `lib/catalog-cache.js` into the
+  // router's `createCatalogCache` changed the record the cache speaks internally
+  // (`value` instead of `models`). An operator's profile already holds a
+  // `{ version: 1, savedAt, source, models }` file, so the fs seam must translate
+  // rather than invalidate it: otherwise the first boot after an upgrade would
+  // ignore the last good catalog and wait on the daemon again — the exact cold
+  // start this module exists to prevent.
+  const dir = await tempDir(t)
+  const path = join(dir, 'opencode-models.json')
+  const legacy = { version: CATALOG_FILE_VERSION, savedAt: 12345, source: 'probe', models: [MODEL] }
+  await writeFile(path, JSON.stringify(legacy))
+
+  let probes = 0
+  const lifecycle = createCatalogLifecycle({
+    probe: async () => {
+      probes += 1
+      return { models: [{ ...MODEL, name: 'Renamed Model' }] }
+    },
+    path,
+    cacheMs: () => 300000,
+    syncMs: () => 0,
+    now: () => 13000,
+  })
+
+  const seededRecord = lifecycle.seed()
+  assert.deepEqual(seededRecord?.result.models, [MODEL], 'the legacy file still seeds the cache')
+  assert.equal(seededRecord.at, 12345, 'the snapshot keeps its own freshness stamp')
+  const read = await lifecycle.read()
+  assert.deepEqual(read?.models, [MODEL])
+  assert.equal(probes, 0, 'a legacy snapshot must not cause a cold probe')
+
+  await lifecycle.refresh()
+  const written = JSON.parse(await readFile(path, 'utf8'))
+  assert.equal(written.version, CATALOG_FILE_VERSION)
+  assert.deepEqual(written.models, [{ ...MODEL, name: 'Renamed Model' }], 'the measured on-disk key is still `models`')
+  assert.equal(written.value, undefined, 'the internal record shape must not leak into the operator file')
 })

@@ -66,7 +66,8 @@ import {
   turnCompletionReservation,
   unsupportedEffortMessage,
 } from './shared.js'
-import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
+import { resolveCatalogPath } from './catalog-file.js'
+import { createCatalogLifecycle } from './catalog-lifecycle.js'
 import { createVerdictStore } from './verdict-store.js'
 import { PLANS, PLAN_PROVIDERS, NEW_MODEL_DAYS, isNewModel, orderModels, planOfRoute, rankingForRoutes, rankingFromDataIndex } from './plans.js'
 import {
@@ -78,6 +79,7 @@ import { createDisplayGate } from './display-gate.js'
 import { createStreamHooks, OPENCODE_DESCRIPTOR } from './stream-contract.js'
 import { createStreamLifecycle } from './stream-lifecycle.js'
 import { normalizeStream, readSseEvents } from '../../../lib/stream/index.js'
+import { backoffDelay, isRetryableStatus, sleepFor, statusOf, withRetry } from '../../../lib/retry.js'
 import { inferToolFromArguments, normalizeArguments } from './arguments.js'
 import { createTrace, summarizeRequest } from './trace.js'
 import { finishFromOpenAi, reasoningAccounting, usageFromOpenAi } from './openai-mapping.js'
@@ -444,44 +446,6 @@ export function resolveWorkspaceDirectory(ctx, options) {
 }
 
 /**
- * Abortable sleep used by the retry loops.
- *
- * @param ms - delay in milliseconds.
- * @param signal - caller cancellation; resolves `false` when it fires first.
- * @returns whether the full delay elapsed.
- */
-async function sleepFor(ms, signal) {
-  if (!(ms > 0)) return !signal?.aborted
-  if (signal?.aborted) return false
-  return new Promise((resolve) => {
-    let settled = false
-    const finish = (elapsed) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      signal?.removeEventListener?.('abort', onAbort)
-      resolve(elapsed)
-    }
-    const timer = setTimeout(() => finish(true), ms)
-    const onAbort = () => finish(false)
-    signal?.addEventListener?.('abort', onAbort, { once: true })
-  })
-}
-
-/**
- * Exponential backoff step: `base`, `base*2`, `base*4`, ...
- *
- * @param baseMs - first delay.
- * @param attempt - zero-based retry index.
- * @returns delay in milliseconds.
- */
-export function backoffDelay(baseMs, attempt) {
-  const base = Number(baseMs)
-  if (!Number.isFinite(base) || base <= 0) return 0
-  return Math.round(base * 2 ** Math.max(0, Math.trunc(attempt)))
-}
-
-/**
  * The local OpenCode control-plane endpoint. It supplies catalog, provider
  * metadata, and credentials only; generation never goes through it.
  */
@@ -509,26 +473,42 @@ export class ServerManager {
     // route (or the daemon was replaced). Re-resolving before each retry turns
     // that from a dead turn into a recoverable control-plane miss.
     const retryable404 = path.startsWith('/api/provider/')
-    for (let attempt = 0; ; attempt += 1) {
-      const endpoint = await this.ensure()
-      try {
+    // The endpoint the CURRENT attempt resolved; `undefined` means `ensure()`
+    // itself threw, and a resolve failure is never retried here.
+    let attemptEndpoint
+    return withRetry(
+      async () => {
+        attemptEndpoint = undefined
+        const endpoint = await this.ensure()
+        attemptEndpoint = endpoint
         return await this.requestOnce(endpoint, method, path, body, { signal, timeoutMs })
-      } catch (error) {
-        const aborted = signal?.aborted
-        const status = error?.status
-        const retryable = !aborted && status === 404 && retryable404
-        const refreshable = !aborted && !endpoint.owned && status === undefined
-        if (!retryable && !refreshable) throw error
-        if (attempt >= maxRetries) throw error
-        const delay = backoffDelay(baseMs, attempt)
-        this.ctx?.logger?.warn?.(
-          `opencode-http-agent: control-plane ${method} ${path} failed (${errorText(error)}); ` +
-            `retry ${attempt + 1}/${maxRetries} in ${delay}ms`,
-        )
-        this.resolved = null
-        if (!(await sleepFor(delay, signal))) throw error
-      }
-    }
+      },
+      {
+        retries: maxRetries,
+        baseMs,
+        // The measured control-plane loop had no ceiling: keep it uncapped so
+        // the delay progression is unchanged (1s -> 2s -> 4s -> ...).
+        capMs: Number.MAX_SAFE_INTEGER,
+        // This loop classifies failures itself (a bare 404 only matters on a
+        // provider path; a status-less failure only on an attached daemon).
+        retryStatuses: [],
+        shouldRetry: (error) => {
+          if (signal?.aborted || !attemptEndpoint) return false
+          const status = statusOf(error)
+          if (status === undefined) return !attemptEndpoint.owned
+          return status === 404 && retryable404
+        },
+        onRetry: ({ attempt, delay, error }) => {
+          this.ctx?.logger?.warn?.(
+            `opencode-http-agent: control-plane ${method} ${path} failed (${errorText(error)}); ` +
+              `retry ${attempt + 1}/${maxRetries} in ${delay}ms`,
+          )
+          // Drop the cached endpoint so the next attempt re-resolves.
+          this.resolved = null
+        },
+        signal,
+      },
+    )
   }
 
   async requestOnce(endpoint, method, path, body, { signal, timeoutMs } = {}) {
@@ -979,17 +959,16 @@ export class OpencodeHttpAdapter {
     this.planCache = null
     this.backendCache = null
     this.lastWorkspace = ''
-    this.catalogStore = new CatalogStore(
-      resolveCatalogPath({
+    // The cache is the router's one module (`lib/catalog-cache.js`); this
+    // adapter keeps only the probe, the snapshot path, and the timings.
+    this.catalog = createCatalogLifecycle({
+      probe: () => this.discoverOnce(),
+      path: resolveCatalogPath({
         explicit: config.catalogPath.get(),
         profileDir: ctx?.get?.('profileContext')?.dir,
         dshHome: process.env.DSH_HOME,
         fileName: options.catalogFileName ?? 'opencode-models.json',
       }),
-    )
-    this.catalog = new CatalogLifecycle({
-      probe: () => this.discoverOnce(),
-      store: this.catalogStore,
       cacheMs: () => this.config.discoveryCacheMs.get(),
       syncMs: () => this.config.catalogSyncMs.get(),
       onChanged: () => this.announce(),
@@ -1619,32 +1598,32 @@ export class OpencodeHttpAdapter {
         signal,
         redirect: 'error',
       })
-      response = await send()
-      if (response.status === 401) {
-        backend = await this.resolveBackend(signal, { force: true })
+      // One generation attempt's POST. A 401 means the credential rotated, so the
+      // backend is re-resolved and the request re-sent ONCE inside the same
+      // attempt: that refresh is not a retry and must not consume the budget.
+      const postOnce = async () => {
         response = await send()
+        if (response.status === 401) {
+          backend = await this.resolveBackend(signal, { force: true })
+          response = await send()
+        }
+        return response
       }
+      response = await postOnce()
 
-      let statusRetries = 0
       const maxStatusRetries = Math.max(0, Math.trunc(config.httpRetries.get()) || 0)
       const retryStatuses = new Set((config.httpRetryStatuses.get() ?? []).map((value) => Number(value)))
       const statusBaseMs = Math.max(0, Number(config.httpRetryBaseMs.get()) || 0)
-      for (let attempt = 0; ; attempt += 1) {
-        if (attempt > 0) {
-          response = await send()
-          if (response.status === 401) {
-            backend = await this.resolveBackend(signal, { force: true })
-            response = await send()
-          }
-        }
+      let statusRetries = 0
+      for (;;) {
         if (!response.ok) {
           const text = await response.text().catch(() => '')
           // A retryable refusal (429/451/502/503/504) is a backend condition, not
           // a request defect: nothing reached the transcript, so the same body is
           // sent again after backoff (1s → 2s → 4s). Only the final refusal is
           // recorded as the route's verdict.
-          if (retryStatuses.has(response.status) && statusRetries < maxStatusRetries) {
-            const delay = backoffDelay(statusBaseMs, statusRetries)
+          if (isRetryableStatus(response.status, retryStatuses) && statusRetries < maxStatusRetries) {
+            const delay = backoffDelay(statusRetries, statusBaseMs, Number.MAX_SAFE_INTEGER)
             statusRetries += 1
             trace.error({ detail: `HTTP ${response.status}; adapter retry ${statusRetries}/${maxStatusRetries}`, transient: true, emitted: 0, retried: statusRetries })
             this.ctx?.logger?.warn?.(
@@ -1655,6 +1634,7 @@ export class OpencodeHttpAdapter {
               yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } } }
               return
             }
+            response = await postOnce()
             continue
           }
           // Free entitlement evidence: the backend just answered for this route, so
@@ -1713,11 +1693,7 @@ export class OpencodeHttpAdapter {
               this.ctx?.logger?.warn?.(
                 `opencode-http-agent: upstream stream cut before any output (${detail}); retry ${streamAttempt}/${maxStreamRetries}`,
               )
-              response = await send()
-              if (response.status === 401) {
-                backend = await this.resolveBackend(signal, { force: true })
-                response = await send()
-              }
+              response = await postOnce()
               if (!response.ok) {
                 yield {
                   type: 'finish',
@@ -2531,10 +2507,10 @@ export function registerModelSettingsRoutes(ctx, adapter, config, log = () => {}
     /**
      * `model-settings` reports the served catalog and the current allow-list.
      *
-     * `?refresh=1` forces a catalog probe first. `CatalogLifecycle.read()`
-     * answers from the snapshot and only revalidates in the background, so
-     * without this flag the panel's refresh button would render the same rows
-     * again (measured 2026-11-13: `discoveryCacheMs` is 5 minutes).
+     * `?refresh=1` forces a catalog probe first. `catalog.read()` answers from
+     * the snapshot and only revalidates in the background, so without this flag
+     * the panel's refresh button would render the same rows again (measured
+     * 2026-11-13: `discoveryCacheMs` is 5 minutes).
      * @param {Request} request - the route request.
      */
     'model-settings': async (request) => {

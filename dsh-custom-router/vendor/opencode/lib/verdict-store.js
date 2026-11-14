@@ -13,7 +13,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-import { resolveCatalogPath } from './catalog-cache.js'
+import { resolveCatalogPath } from './catalog-file.js'
 
 /** Default file name of the persisted verdict snapshot. */
 export const VERDICT_FILE_NAME = 'opencode-model-verdicts.json'

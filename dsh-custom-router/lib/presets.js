@@ -373,6 +373,49 @@ export const PRESETS = Object.freeze([
   }),
 ])
 
+/* ------------------------------------------------------------------ *
+ * Plan → provider-id mapping (R5 boundary closure, 2026-11-14)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Provider id that carries each plan's routes, per preset family.
+ *
+ * This table used to live in `lib/plan.js` as `PLAN_PROVIDERS`, where it put
+ * vendor names inside the shared L1 core — forbidden by
+ * `docs/ARCHITECTURE-LAYERED.md` §2.5 #1 ("no vendor identifiers in
+ * `lib/{cost,plan,usage}.js`"). `lib/plan.js` is L1 and executes against
+ * descriptors only; the preset declaration layer is the measured, vendor-aware
+ * owner of this data (it already names `opencode`, `antigravity`, ...).
+ *
+ * `lib/plan.js` takes the map as an argument (`planOfProvider(id, providers)`,
+ * `availabilityOf(model, { providers })`, `orderModels(models, { providers })`)
+ * or as a process-wide default installed with `bindPlanProviders()` from
+ * `lib/plan.js`. Injection is explicit: L1 never imports this module.
+ *
+ * Measured 2026-11-14 from `vendor/opencode/lib/plans.js:25`.
+ */
+export const PLAN_PROVIDERS = Object.freeze({ go: 'opencode-go', zen: 'opencode' })
+
+/**
+ * Per-preset plan map. Only a preset whose routes are partitioned by plan
+ * declares one; every other preset maps to an empty (never `undefined`) map so
+ * callers need no null check.
+ */
+export const PLAN_PROVIDERS_BY_PRESET = Object.freeze({
+  opencode: PLAN_PROVIDERS,
+})
+
+/**
+ * The plan → provider-id map a preset family owns.
+ * @param {unknown} presetId - preset id (`opencode`, `deepinfra`, ...).
+ * @returns {Readonly<Record<string,string>>} the map, empty when the preset
+ *   declares no plans.
+ */
+export function planProvidersOf(presetId) {
+  const key = typeof presetId === 'string' ? presetId : ''
+  return PLAN_PROVIDERS_BY_PRESET[key] ?? Object.freeze({})
+}
+
 /**
  * A pure-JSON provider preset (no package, no code): a local OpenAI-compatible
  * endpoint on loopback. This is the shape a new provider fills when the

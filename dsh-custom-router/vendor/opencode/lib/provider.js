@@ -37,7 +37,8 @@ import {
   unsupportedEffortMessage,
   withVariant,
 } from './shared.js'
-import { CatalogLifecycle, CatalogStore, resolveCatalogPath } from './catalog-cache.js'
+import { resolveCatalogPath } from './catalog-file.js'
+import { createCatalogLifecycle } from './catalog-lifecycle.js'
 import { createUsageLedger } from './usage-ledger.js'
 
 /** Row id kept for the worker package's identity and settings namespace. */
@@ -447,17 +448,17 @@ export class OpencodeLlmAdapter {
     this.config = config
     this.providerId = options.providerId ?? 'opencode-agent'
     this.usage = createUsageLedger()
-    this.catalogStore = new CatalogStore(
-      resolveCatalogPath({
+    // The cache is the router's one module; this adapter keeps only the probe,
+    // the snapshot path, and the timings. The store object the previous
+    // implementation exposed separately had no other caller.
+    this.catalog = createCatalogLifecycle({
+      probe: (signal) => this.discoverOnce(signal),
+      path: resolveCatalogPath({
         explicit: config.catalogPath.get(),
         profileDir: ctx?.get?.('profileContext')?.dir,
         dshHome: process.env.DSH_HOME,
         fileName: options.catalogFileName ?? 'opencode-models.json',
       }),
-    )
-    this.catalog = new CatalogLifecycle({
-      probe: (signal) => this.discoverOnce(signal),
-      store: this.catalogStore,
       cacheMs: () => this.config.discoveryCacheMs.get(),
       syncMs: () => this.config.catalogSyncMs.get(),
       onChanged: () => this.announce(),

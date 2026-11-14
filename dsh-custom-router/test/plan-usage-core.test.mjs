@@ -19,15 +19,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { createCostLedger } from '../lib/cost.js'
-import { findPreset } from '../lib/presets.js'
+import { PLAN_PROVIDERS, findPreset } from '../lib/presets.js'
 import {
   BILLING_MODES,
   NEW_MODEL_DAYS,
   PLANS,
-  PLAN_PROVIDERS,
   availabilityOf,
   billingModeOf,
   billingOutcome,
+  bindPlanProviders,
   isNewModel,
   normalizeWindow as planNormalizeWindow,
   orderModels,
@@ -37,6 +37,13 @@ import {
   rankingForRoutes,
   readDeclaredWindows,
 } from '../lib/plan.js'
+
+// R5 (2026-11-14): the plan → provider map is VENDOR data and now lives in the
+// preset declaration layer (`lib/presets.js`). L1 (`lib/plan.js`) holds no
+// vendor ids, so a host installs the declared map through this seam. Every
+// assertion below is therefore unchanged, including the bare `planOfRoute(route)`
+// calls: they read the binding, exactly as they used to read the old literal.
+bindPlanProviders(PLAN_PROVIDERS)
 import {
   USAGE_BUCKETS,
   bindUsage,

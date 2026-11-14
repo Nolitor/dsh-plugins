@@ -41,7 +41,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-import { resolveCatalogPath } from './catalog-cache.js'
+import { resolveCatalogPath } from './catalog-file.js'
 
 /** Billing sources this adapter knows how to report. */
 export const BILLING_SOURCES = Object.freeze(['free', 'balance', 'go', 'go-plus', 'byok'])

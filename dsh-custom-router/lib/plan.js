@@ -6,9 +6,10 @@
  * `PLAN-AND-USAGE-SPEC.md`:
  *   - `PlanVerdict` (§1.4): declared (L1) / account (L2) / endpoint probe (L3),
  *     with `unknown` as a **visible** state — never a fabricated `0` or "no plan".
- *   - `usage.billing.mode` names the billing model: `subscription` (Antigravity,
- *     5h/weekly/monthly windows), `flat` (OpenCode go/zen, per-request allowance),
- *     `pay-per-token` (DeepInfra), `none` (loopback).
+ *   - `usage.billing.mode` names the billing model: `subscription` (a paid plan
+ *     with 5h/weekly/monthly windows), `flat` (a fixed plan with a per-request
+ *     allowance), `pay-per-token`, `none` (loopback). Which vendor declares
+ *     which mode is preset data, not L1 knowledge (`lib/presets.js`).
  *
  * Pure module: no host context, no I/O. The vendor plugins still own the actual
  * probes; this layer only judges and prices.
@@ -22,7 +23,7 @@ const SETTLED_PROBES = new Set(['ok', 'free-limit', 'throttled'])
 /**
  * Billing modes that charge per token, whatever the provider calls them.
  *
- * `pay-per-token` is the preset vocabulary (`lib/presets.js`, deepinfra);
+ * `pay-per-token` is the preset vocabulary (`lib/presets.js`);
  * `metered` is the same thing named by `specs/pricing/*.kind: 'live-catalog'`.
  * Both bill the catalog estimate and neither is ever covered by a plan.
  */
@@ -89,8 +90,8 @@ export function normalizeWindow(label) {
  *
  * This field was validated, projected to the browser and read by nothing —
  * measured 2026-11-14 (`docs/ROADMAP.md:201`, "dead declarations"). It is the
- * only window information that exists before any probe runs: antigravity
- * declares `5h` / `weekly` / `monthly`, opencode-v2 declares `per-request`.
+ * only window information that exists before any probe runs: a subscription
+ * preset declares `5h` / `weekly` / `monthly`, a flat-rate one `per-request`.
  * A declaration says a window EXISTS; it never says how much is consumed, so the
  * result carries `measured: false` and no `percent`.
  *
@@ -155,7 +156,7 @@ export function buildVerdict(input = {}) {
  *   `/console/api/v2/{me,orgs,members,subscription,billing,plan,usage}` answer
  *   404; `/console/api/orgs` has no plan).
  *
- *   **Track B — observed correction (post-request).** `usage.opencode.billing_source`
+ *   **Track B — observed correction (post-request).** A billing-source field
  *   (`go` / `go-plus`) arrives on the wire AFTER a turn completes. It is a
  *   receipt, so it can never judge a pre-dispatch decision. It is instead a
  *   **correction proposal**: `proposeCorrection()` names the difference, and only
@@ -231,7 +232,8 @@ export function judgePlan(input = {}) {
  * **proposal**: the caller shows it, and only an operator-consented write
  * (`settings.update` on the row's own field) applies it.
  *
- * The vocabulary split this depends on (measured in `vendor/opencode/lib/cost.js`):
+ * The vocabulary split this depends on (measured in the vendor cost module that
+ * this core replaced, 2026-11-14):
  * `PLANS = ['go','zen']` are plan ids the route prefix decides;
  * `billing_source` adds the **tier** (`go`, `go-plus`). A tier difference is a
  * real, actionable difference: the two tiers bill against different monthly
@@ -359,7 +361,8 @@ export function billingOutcome({ billing, verdict, cost } = {}) {
 }
 
 /* ------------------------------------------------------------------ *
- * Plan availability and ordering (union of `vendor/opencode/lib/plans.js`)
+ * Plan availability and ordering (the union that was duplicated per vendor;
+ * the semantics below are vendor-neutral by construction)
  * ------------------------------------------------------------------ */
 
 /**
@@ -368,8 +371,38 @@ export function billingOutcome({ billing, verdict, cost } = {}) {
  */
 export const PLANS = Object.freeze(['go', 'zen'])
 
-/** Provider id that owns each plan's routes (measured: opencode-go / opencode). */
-export const PLAN_PROVIDERS = Object.freeze({ go: 'opencode-go', zen: 'opencode' })
+/**
+ * Provider id that owns each plan's routes — INJECTED, never declared here.
+ *
+ * Which provider id carries which plan is VENDOR data, so this module holds no
+ * ids of its own: `lib/plan.js` is the shared L1 core and must not name a
+ * vendor (`docs/ARCHITECTURE-LAYERED.md` §2.5 #1). The data is declared in the
+ * preset layer (`lib/presets.js` → `PLAN_PROVIDERS`) and reaches this module
+ * only through a caller argument or `bindPlanProviders()`.
+ *
+ * The object is deliberately MUTABLE (the previous literal was frozen) so a
+ * binding keeps the identity importers already hold. Unbound, the map is empty
+ * and every provider classifies as `other` — a visible "no plan declared"
+ * instead of a guessed vendor.
+ */
+export const PLAN_PROVIDERS = Object.create(null)
+
+/**
+ * Install the plan → provider-id map this module classifies against.
+ *
+ * Called by a host that owns the declarations (`lib/presets.js`), never by L1
+ * itself: a host-bind seam keeps the direction of the dependency downward while
+ * leaving every function below usable with an explicit `providers` argument.
+ * @param {object|null} [map] - plan → provider id (`{ go: 'provider-a', ... }`).
+ * @returns {Readonly<Record<string,string>>} the bound map.
+ */
+export function bindPlanProviders(map = null) {
+  for (const key of Object.keys(PLAN_PROVIDERS)) delete PLAN_PROVIDERS[key]
+  for (const [plan, provider] of Object.entries(map ?? {})) {
+    if (typeof plan === 'string' && typeof provider === 'string' && provider.length > 0) PLAN_PROVIDERS[plan] = provider
+  }
+  return PLAN_PROVIDERS
+}
 
 /** How long a newly appeared route keeps priority ordering. */
 export const NEW_MODEL_DAYS = 7
@@ -379,7 +412,7 @@ const REFUSALS = new Set(['unavailable', 'deprecated', 'auth', 'forbidden'])
 
 /**
  * The plan a provider id belongs to.
- * @param {string} providerId - catalog row provider (`opencode-go`, `opencode`, ...).
+ * @param {string} providerId - catalog row provider id (see the injected map).
  * @param {Record<string,string>} [providers] - plan → provider map (defaults to `PLAN_PROVIDERS`).
  * @returns {string} `go` | `zen` | `other`.
  */
@@ -476,7 +509,7 @@ export function orderModels(
 
 /**
  * Extract `model -> weekly usage rank` from a public data index payload.
- * @param {unknown} payload - parsed `opencode.ai/data/index.json`.
+ * @param {unknown} payload - parsed public data-index payload (`leaderboard.pastWeek`).
  * @returns {{ranking: Record<string, number>, updatedAt: string|null, covered: number}} the ranking.
  */
 export function rankingFromDataIndex(payload) {
