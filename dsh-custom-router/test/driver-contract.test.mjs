@@ -103,6 +103,18 @@ test('the new stream hooks still reject a non-function value by field path', () 
   }
 })
 
+test('classifyBlock is NOT a hook slot: the dead declaration is gone (R4)', () => {
+  // `classifyBlock` was declared in OPTIONAL_HOOKS but referenced nowhere in the
+  // repo — a dead surface that made the contract document a hook no driver could
+  // use. It was REMOVED rather than wired (nothing produces a block-level
+  // classification; the shared pipe classifies text and reasoning only).
+  // A spec naming it is now an unknown key: the built driver must not carry it.
+  const spec = makeSpec()
+  spec.hooks.classifyBlock = () => []
+  const driver = defineProviderDriver(spec)
+  assert.equal('classifyBlock' in driver.hooks, false)
+})
+
 test('a present but non-function hook throws with the field path', () => {
   const spec = makeSpec()
   spec.hooks.mapFinish = 'stop'

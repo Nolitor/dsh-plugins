@@ -142,7 +142,7 @@ const PARAM_ANY_CLOSE = /<\/(?:(?:[｜│|]{1,2}\s*DSML\s*[｜│|]{1,2}\s*)?par
  *            stripped: number, degraded: number, stray: number, dsml: number },
  * }}
  */
-export function createStreamClassifier(options = {}) {
+export function createNotationClassifier(options = {}) {
   const toolNames = options.toolNames instanceof Set
     ? options.toolNames
     : new Set(options.toolNames ?? [])

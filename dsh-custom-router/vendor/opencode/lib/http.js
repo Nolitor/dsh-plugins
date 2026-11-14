@@ -26,14 +26,25 @@
  *   - persona `brief` strings or `[note: the caller declared ...]`
  *   - static `cwd` overrides for model context
  *
- * Stream implementation (Phase 2). This adapter now rides the shared downstream
- * pipe by default: `pipe` defaults to `'shared'`, so `streamViaSharedPipe()` is
- * the live path and the block lifecycle, finish table, usage ordering and the
- * empty/cut/abort terminal policy come from `lib/stream`. The pre-Phase-B loop
- * below is reachable only through the explicit opt-out `pipe: 'legacy'`; it is
- * kept byte-identical so the shared path can still be diffed against it, and
- * **W2-A2 deletes it** together with the vendor-local notation classifier it
- * shares with the shared branch.
+ * Stream implementation (A3/R1 — SHARED ONLY). There is exactly one pipeline:
+ *
+ *   HTTPS response bytes
+ *     -> `readSseEvents` / `normalizeStream` from `lib/stream` (shared reader +
+ *        shared pipe, shared block lifecycle, finish table, usage ordering and
+ *        empty/cut/abort terminal policy)
+ *     -> `createStreamHooks` (lib/stream-contract.js), whose `readEvent` delegates
+ *        the WIRE to `lib/stream/openai.js` (shared OpenAI core)
+ *     -> the vendor-local NOTATION classifier (lib/notation-classifier.js),
+ *        reached through the single named export `createNotationClassifier`,
+ *        which recovers a call the model wrote as prose.
+ *
+ * `streamViaSharedPipe()` below is the ONLY stream loop in this file.
+ *
+ * No legacy fallback remains. The pre-Phase-B loop, the `pipe: 'legacy'` config
+ * key, its opt-out branch and the vendor-local SSE reader (`chatSseEvents` /
+ * `parseSseBlock`) were DELETED in A3/R1; there is no config that selects a
+ * different pipeline, and no second implementation to diff against. The shared
+ * output is pinned by literal golden-sequence tests in test/http.test.mjs.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
@@ -63,15 +74,12 @@ import {
   detectRouterConflicts,
   normalizeConflictPolicy,
 } from './conflicts.js'
-import { createStreamClassifier } from './stream-parser.js'
 import { createDisplayGate } from './display-gate.js'
 import { createStreamHooks, OPENCODE_DESCRIPTOR } from './stream-contract.js'
 import { createStreamLifecycle } from './stream-lifecycle.js'
 import { normalizeStream, readSseEvents } from '../../../lib/stream/index.js'
 import { inferToolFromArguments, normalizeArguments } from './arguments.js'
-import { createTrace, summarizePart, summarizeRequest } from './trace.js'
-import { stripThinkingTags } from './display-clean.js'
-import { mapChatDelta } from './upstream-map.js'
+import { createTrace, summarizeRequest } from './trace.js'
 import { finishFromOpenAi, reasoningAccounting, usageFromOpenAi } from './openai-mapping.js'
 import { createCostLedger, createCostStore, describeCost, parseCost, pickSession, sharedCostLedger } from './cost.js'
 import { installResilience } from './resilience.js'
@@ -300,17 +308,6 @@ export const Config = Schema.object({
    */
   streamCutPreserve: Schema.boolean().default(true).volatile(),
   /**
-   * Which stream implementation serves a generation request.
-   *
-   * `shared` is the DEFAULT (Phase 2): the response goes through the shared
-   * downstream pipe (`lib/stream`) with this provider's own hook set, so the
-   * block lifecycle, terminal policy and usage ordering come from the one core.
-   * `legacy` is an explicit OPT-OUT that keeps the pre-Phase-B loop, byte for
-   * byte; the follow-up cell (W2-A2) deletes it once the shared path has held.
-   * Read per request (volatile), so a mode can be flipped without a restart.
-   */
-  pipe: Schema.union(['legacy', 'shared']).default('shared').volatile(),
-  /**
    * Adapter-level retries when the backend answers a generation request with a
    * retryable status (see `httpRetryStatuses`). Exponential backoff:
    * `httpRetryBaseMs`, x2, x4. `0` keeps the pre-2026-11-05 single-attempt
@@ -443,65 +440,6 @@ export function resolveWorkspaceDirectory(ctx, options) {
     return ctx?.sessions?.get?.(id)?.header?.cwd ?? ''
   } catch {
     return ''
-  }
-}
-
-/** Parse one SSE block (`event:` optional, `data:` concatenated). */
-export function parseSseBlock(block) {
-  let data = ''
-  for (const line of String(block).split(/\r?\n/)) {
-    if (line.startsWith('data:')) data += line.slice(5).trim()
-  }
-  if (!data || data === '[DONE]') return null
-  try {
-    return JSON.parse(data)
-  } catch {
-    return null
-  }
-}
-
-/**
- * Async iterator over an OpenAI-compatible SSE body.
- * @param {ReadableStream<Uint8Array>} body
- * @param {AbortSignal} signal
- * @param {{ done?: boolean }} [state] - set `done` when the stream carried the
- *   protocol's own terminator. Without it a clean EOF and a cut are
- *   indistinguishable, which is the ambiguity measured on 2026-11-03.
- */
-export async function* chatSseEvents(body, signal, state = undefined) {
-  // Start from "no terminator seen" so a caller never reads a stale `true` from
-  // a previous attempt.
-  if (state) state.done = false
-  const reader = body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  try {
-    for (;;) {
-      if (signal?.aborted) return
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      for (;;) {
-        const match = buffer.match(/\r?\n\r?\n/)
-        if (!match) break
-        const block = buffer.slice(0, match.index)
-        buffer = buffer.slice(match.index + match[0].length)
-        if (String(block).includes('data: [DONE]')) {
-          if (state) state.done = true
-          return
-        }
-        const event = parseSseBlock(block)
-        if (event) yield event
-      }
-    }
-    const tail = parseSseBlock(buffer)
-    if (tail) yield tail
-  } finally {
-    try {
-      await reader.cancel()
-    } catch {
-      /* already closed */
-    }
   }
 }
 
@@ -1597,344 +1535,20 @@ export class OpencodeHttpAdapter {
       }
     }
 
-    const blocks = new Map()
-    const toolCalls = new Map()
-    const displayLogger = this.ctx?.logger
-    // Two layers (0.0.1). TOP: lib/stream-parser.js classifies the text stream into
-    // text / reasoning / tool-call parts. BOTTOM: lib/display-gate.js routes those
-    // parts to the DSH parser channel (tool-call) or the screen channel (text,
-    // reasoning) and drops protocol notation from the screen entirely.
     const declaredTools = (Array.isArray(options.tools) ? options.tools : [])
       .filter((tool) => tool && typeof tool.name === 'string' && tool.name.length > 0)
     const declaredToolNames = new Set(declaredTools.map((tool) => tool.name))
-    /** Declared parameter schema of one tool, for snapshot selection. */
-    const schemaFor = (name) => {
-      const tool = declaredTools.find((item) => item.name === name)
-      const parameters = tool?.parameters
-      return parameters && typeof parameters === 'object' ? parameters : null
-    }
-    let classifier = createStreamClassifier({ toolNames: declaredToolNames, tools: declaredTools })
-    // The model also writes calls into the reasoning channel (measured: 5 of 6
-    // leaking requests on rc.6 had the marker in reasoning, and when such a call was
-    // not promoted the step produced no tool call at all - the "model spacing out"
-    // the owner reported). Reasoning text goes through the same classifier; prose
-    // stays reasoning, a recovered call is promoted.
-    let reasoningClassifier = createStreamClassifier({ toolNames: declaredToolNames, tools: declaredTools })
-    let displayGate = createDisplayGate({ toolNames: declaredToolNames })
-    const resetGates = () => {
-      classifier = createStreamClassifier({ toolNames: declaredToolNames, tools: declaredTools })
-      reasoningClassifier = createStreamClassifier({ toolNames: declaredToolNames, tools: declaredTools })
-      displayGate = createDisplayGate({ toolNames: declaredToolNames })
-    }
-    const open = (kind, index) => {
-      const key = `${kind}:${index}`
-      let block = blocks.get(key)
-      if (!block) {
-        block = { index, kind, closed: false, text: '', id: '', name: '', arguments: '' }
-        blocks.set(key, block)
-      }
-      return block
-    }
-    /**
-     * Finalize a tool call's arguments before the block is handed to the host.
-     *
-     * Measured 2026-11-01: the route re-sends a complete arguments snapshot instead
-     * of a fragment, so the accumulated string was two concatenated objects and
-     * every dispatch failed with 'invalid arguments: "arguments" must be an object'.
-     * normalizeArguments() collapses that to the last complete snapshot; anything it
-     * cannot parse is passed through unchanged so the host still reports the error.
-     */
-    const finalArguments = (block) => {
-      const normalized = normalizeArguments(block.arguments, schemaFor(block.name))
-      if (normalized.mode === 'duplicate' || normalized.mode === 'restated') {
-        displayLogger?.debug?.(
-          `opencode-http-agent: tool call ${block.name || block.id} arrived as ${normalized.snapshots} snapshots (${normalized.mode}); kept the last`,
-        )
-      } else if (normalized.mode === 'invalid') {
-        displayLogger?.warn?.(
-          `opencode-http-agent: tool call ${block.name || block.id} arguments are not one JSON object; passing them through so the host reports it`,
-        )
-      }
-      return normalized.value
-    }
-    const closeAll = function* () {
-      for (const block of [...blocks.values()].sort((left, right) => left.index - right.index)) {
-        if (block.closed) continue
-        block.closed = true
-        yield {
-          type: 'block-end',
-          index: block.index,
-          block: block.kind === 'tool-call'
-            ? { type: 'tool-call', id: block.id || `call_${block.index}`, name: block.name, arguments: finalArguments(block) }
-            : { type: block.kind, text: block.text },
-        }
-      }
-    }
-    /**
-     * Close every open block after an upstream cut.
-     *
-     * A tool call whose arguments were cut mid-JSON cannot be repaired reliably,
-     * so it is closed with the closest valid prefix of its arguments (or `{}`)
-     * instead of being left open or carrying invalid JSON.
-     * @returns {object[]} the `block-end` chunks.
-     */
-    const closeCut = () => {
-      const chunks = []
-      for (const block of [...blocks.values()].sort((left, right) => left.index - right.index)) {
-        if (block.closed) continue
-        block.closed = true
-        if (block.kind === 'tool-call') {
-          const normalized = normalizeArguments(block.arguments, schemaFor(block.name))
-          const repaired = normalized.mode === 'invalid'
-            ? (repairJson(block.arguments) ?? '{}')
-            : normalized.value
-          chunks.push({
-            type: 'block-end',
-            index: block.index,
-            block: { type: 'tool-call', id: block.id || `call_${block.index}`, name: block.name, arguments: repaired },
-          })
-          continue
-        }
-        chunks.push({
-          type: 'block-end',
-          index: block.index,
-          block: { type: block.kind, text: block.text },
-        })
-      }
-      return chunks
-    }
-    /** Drop every in-flight block, so a retried attempt starts from nothing. */
-    const resetBlocks = () => {
-      blocks.clear()
-      toolCalls.clear()
-      resetGates()
-    }
 
     // Whether the backend sent the protocol terminator for the current attempt.
     // An EOF without it is a cut, not a completion: measured 2026-11-03, four
     // long requests ended this way carrying reasoning only, and the default
-    // branch of finishFromOpenAi() reported them as a clean `stop`.
+    // branch of the finish table reported them as a clean `stop`.
     const sseState = { done: false }
+    /** The current attempt's response; the status-retry loop below replaces it. */
     let response = null
     let backend = null
-    let usage = null
-    // Whether the route reported `reasoning_tokens`, and what it said. Kept
-    // beside `usage` so the two never disagree: dropping the field and never
-    // receiving it are different facts (measured 2026-11-04: 2 of 35 steps had it).
-    let lastReasoning = reasoningAccounting(null)
-    let finishReason = null
-    let textStarted = false
-    let reasoningStarted = false
-    let emitted = 0
-
-    /**
-     * Write one typed part of the model output as block chunks.
-     *
-     * The part's type was decided upstream by the wire field that carried it
-     * (lib/upstream-map.js) or by the restored classifier (lib/stream-parser.js);
-     * this function only maps a part onto its block lifecycle.
-     *
-     * @param {object} part - `{ kind: 'text'|'reasoning', text }` or
-     *   `{ kind: 'tool-call', ordinal, id, name, arguments }`.
-     * @returns {Generator<object>} the chunks for that part.
-     */
-    const emitPart = function* (part) {
-      if (part.kind === 'tool-call') {
-        const ordinal = Number.isInteger(part.ordinal) ? part.ordinal : 0
-        let entry = toolCalls.get(ordinal)
-        if (!entry) {
-          entry = { block: open('tool-call', TOOL_INDEX_BASE + ordinal * 2), started: false }
-          toolCalls.set(ordinal, entry)
-        }
-        const block = entry.block
-        if (part.id) block.id = String(part.id)
-        if (part.name) block.name = String(part.name)
-        const args = typeof part.arguments === 'string' ? part.arguments : ''
-        if (!entry.started) {
-          block.arguments += args
-          // Identity first: an arguments-only fragment stays accumulated but silent
-          // until the ordinal has an id or a name.
-          if (!block.id && !block.name) return
-          entry.started = true
-          emitted += 1
-          yield { type: 'block-start', index: block.index, blockType: 'tool-call' }
-          yield {
-            type: 'tool-call-delta',
-            index: block.index,
-            id: block.id || `call_${block.index}`,
-            ...(block.name ? { name: block.name } : {}),
-            argumentsDelta: block.arguments,
-          }
-          return
-        }
-        if (args.length > 0) {
-          block.arguments += args
-          emitted += 1
-          yield {
-            type: 'tool-call-delta',
-            index: block.index,
-            id: block.id || `call_${block.index}`,
-            argumentsDelta: args,
-          }
-        }
-        return
-      }
-      if (typeof part.text !== 'string' || part.text.length === 0) return
-      if (part.kind === 'reasoning') {
-        const block = open('reasoning', REASONING_INDEX)
-        if (!reasoningStarted) {
-          reasoningStarted = true
-          yield { type: 'block-start', index: block.index, blockType: 'reasoning' }
-        }
-        block.text += part.text
-        emitted += 1
-        yield { type: 'reasoning-delta', index: block.index, text: part.text }
-        return
-      }
-      const block = open('text', TEXT_INDEX)
-      if (!textStarted) {
-        textStarted = true
-        yield { type: 'block-start', index: block.index, blockType: 'text' }
-      }
-      block.text += part.text
-      emitted += 1
-      yield { type: 'text-delta', index: block.index, text: part.text }
-    }
-    /** Structured calls of this response, in the shape the gate decides against. */
-    const structuredCalls = () => [...blocks.values()]
-      .filter((block) => block.kind === 'tool-call')
-      .map((block) => ({ id: block.id, name: block.name, arguments: normalizeArguments(block.arguments, schemaFor(block.name)).value }))
-    /**
-     * Route classified parts to their destination.
-     *
-     * A structured call (wire field) goes to the DSH parser immediately. A call the
-     * classifier recovered from text is queued: the gate can only tell promote from
-     * echo once the structured calls of the whole response are known. Prose and
-     * reasoning go to the screen, with any remaining wrapper token stripped.
-     */
-    /**
-     * A body payload that is nothing but a JSON object may be a tool call the
-     * route failed to send as a structured one (measured 2026-11-01: after every
-     * dispatch error the model re-typed {"code":…,"description":…} as content and
-     * the screen showed it verbatim). The probe holds such a payload until it parses,
-     * then promotes it when the keys match a declared tool's schema; otherwise the
-     * held text is released unchanged. Only a payload that starts the visible text
-     * is probed, so a JSON example inside prose is never reinterpreted.
-     */
-    const MAX_JSON_PROBE = 65536
-    let jsonProbe = ''
-    const fencedBody = (text) => {
-      const match = /^\s```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/.exec(text)
-      return match ? match[1].trim() : null
-    }
-    const holdJsonText = function* (text) {
-      jsonProbe += text
-      const candidates = fencedBody(jsonProbe) !== null ? [fencedBody(jsonProbe)] : [jsonProbe.trim()]
-      for (const body of candidates) {
-        let value = null
-        try { value = JSON.parse(body) } catch { value = null }
-        if (value === null || typeof value !== 'object' || Array.isArray(value)) continue
-        const name = inferToolFromArguments(value, declaredTools)
-        if (name === null) continue
-        displayGate.addCandidate({ kind: 'tool-call', id: '', name, arguments: JSON.stringify(value), source: 'json' })
-        jsonProbe = ''
-        return
-      }
-      if (jsonProbe.length > MAX_JSON_PROBE) {
-        yield* emitPart({ kind: 'text', text: jsonProbe })
-        jsonProbe = ''
-      }
-    }
-    const textBlockEmpty = () => {
-      const block = blocks.get(`text:${TEXT_INDEX}`)
-      return !block || block.text.length === 0
-    }
-    const flushJsonProbe = function* () {
-      if (jsonProbe.length === 0) return
-      const pending = jsonProbe
-      const before = jsonProbe
-      yield* holdJsonText('')
-      if (jsonProbe === before) {
-        yield* emitPart({ kind: 'text', text: pending })
-        jsonProbe = ''
-      }
-    }
-    /**
-     * Route parts that came from the reasoning channel: prose stays reasoning, any
-     * call the classifier recovers is queued for the parser channel.
-     */
-    const routeReasoning = function* (parts) {
-      if (!Array.isArray(parts)) return
-      for (const part of parts) {
-        if (!part || typeof part !== 'object') continue
-        if (part.kind === 'tool-call') {
-          displayGate.addCandidate({ ...part, source: 'text' })
-          continue
-        }
-        if (typeof part.text === 'string' && part.text.length > 0) {
-          yield* emitPart({ kind: 'reasoning', text: part.text })
-        }
-      }
-    }
-    const routeParts = function* (parts) {
-      if (!Array.isArray(parts)) return
-      for (const part of parts) {
-        if (!part || typeof part !== 'object') continue
-        if (part.kind === 'tool-call') {
-          if (part.source === 'text' || part.source === 'json') displayGate.addCandidate(part)
-          else yield* emitPart(part)
-          continue
-        }
-        if (part.kind === 'reasoning') {
-          const cleaned = stripThinkingTags(typeof part.text === 'string' ? part.text : '')
-          if (cleaned.text.length > 0) yield* routeReasoning(reasoningClassifier.push(cleaned.text))
-          continue
-        }
-        if (typeof part.text === 'string' && part.text.length > 0) {
-          if (jsonProbe.length > 0) { yield* holdJsonText(part.text); continue }
-          const trimmed = part.text.trimStart()
-          if (textBlockEmpty() && (trimmed.startsWith('{') || trimmed.startsWith('```'))) {
-            yield* holdJsonText(part.text)
-            continue
-          }
-          yield* emitPart(part)
-        }
-      }
-    }
-    /**
-     * Finish the classifier, settle the bottom gate, close the blocks.
-     *
-     * The screen channel already received every prose/reasoning part; what is left
-     * is the notation. A recovered call is promoted here only when no structured
-     * call of the same name exists in this response (promote) or is discarded as an
-     * echo/superseded/undeclared call, so notation never reaches the screen and a
-     * call never executes twice.
-     */
-    const flushGates = function* () {
-      yield* routeParts(classifier.flush())
-      yield* routeReasoning(reasoningClassifier.flush())
-      yield* flushJsonProbe()
-      const settled = displayGate.settle(structuredCalls())
-      // A promoted call takes the next free ordinal: a structured call of another
-      // name may already own ordinal 0, and two blocks may not share an index.
-      let nextOrdinal = 0
-      for (const ordinal of toolCalls.keys()) nextOrdinal = Math.max(nextOrdinal, ordinal + 1)
-      for (const promoted of settled.promote) {
-        yield* emitPart({ ...promoted, ordinal: nextOrdinal })
-        nextOrdinal += 1
-      }
-      const classifierStats = classifier.stats
-      if (classifierStats.degraded > 0 || classifierStats.stripped > 0) {
-        displayLogger?.debug?.(
-          `opencode-http-agent: classified body notation (${JSON.stringify(classifierStats)}); ` +
-          `gate promoted ${settled.stats.promoted}, dropped ${settled.dropped.length}`,
-        )
-      }
-      resetGates()
-    }
 
     const maxStreamRetries = Math.max(0, Math.trunc(config.streamRetries.get()) || 0)
-    const preserveCut = config.streamCutPreserve.get()
 
     try {
       backend = await this.resolveBackend(signal, { model: options.model })
@@ -1997,8 +1611,6 @@ export class OpencodeHttpAdapter {
       // G3: `wire: 'unverified'` means the catalog did not confirm an OpenAI chat
       // package (or had no record at all), so a silent wire change is visible.
       trace.request({ ...summarizeRequest(body), session: options.sessionId ?? null, wire: wireState })
-      const traceCounts = { content: 0, reasoning: 0, 'tool-call': 0, markerDeltas: 0 }
-      const traceChars = { content: 0, reasoning: 0 }
       const headers = sessionHeaders(backend.headers, options, config)
       const send = () => fetch(joinUrl(backend.baseURL, config.chatPath.get()), {
         method: 'POST',
@@ -2013,7 +1625,6 @@ export class OpencodeHttpAdapter {
         response = await send()
       }
 
-      let retried = 0
       let statusRetries = 0
       const maxStatusRetries = Math.max(0, Math.trunc(config.httpRetries.get()) || 0)
       const retryStatuses = new Set((config.httpRetryStatuses.get() ?? []).map((value) => Number(value)))
@@ -2035,7 +1646,7 @@ export class OpencodeHttpAdapter {
           if (retryStatuses.has(response.status) && statusRetries < maxStatusRetries) {
             const delay = backoffDelay(statusBaseMs, statusRetries)
             statusRetries += 1
-            trace.error({ detail: `HTTP ${response.status}; adapter retry ${statusRetries}/${maxStatusRetries}`, transient: true, emitted, retried: statusRetries })
+            trace.error({ detail: `HTTP ${response.status}; adapter retry ${statusRetries}/${maxStatusRetries}`, transient: true, emitted: 0, retried: statusRetries })
             this.ctx?.logger?.warn?.(
               `opencode-http-agent: backend HTTP ${response.status} (${text.slice(0, 120)}); ` +
                 `retry ${statusRetries}/${maxStatusRetries} in ${delay}ms`,
@@ -2069,229 +1680,67 @@ export class OpencodeHttpAdapter {
         // A served route clears any stale refusal recorded for it.
         if (String(options.model ?? '').includes('/')) this.observe(options.model, 'usable')
 
-        // Phase 2: the shared pipe IS the live path (`pipe` defaults to
-        // `'shared'`). The loop below survives only behind the explicit
-        // `pipe: 'legacy'` opt-out, kept for one more cell so the two paths can
-        // still be diffed; W2-A2 deletes it. The flag is read per request, so a
-        // mode can be flipped without a restart.
-        if (config.pipe.get() === 'shared') {
-          // The shared pipe owns the terminal policy, but the transparent retry
-          // of a cut that produced NO visible output stays here: the pipe rethrows
-          // that case precisely so this loop can re-run the request from a clean
-          // attempt, which is invisible to the transcript.
-          let streamAttempt = 0
-          for (;;) {
-            try {
-              yield* this.streamViaSharedPipe(options, {
-                response,
-                declaredTools,
-                declaredToolNames,
-                routeReasoningField: routeReasoningField ?? config.reasoningField.get(),
-                config,
-                signal,
-                timeout,
-                sseState,
-              })
+        // The shared pipe owns the terminal policy, but the transparent retry
+        // of a cut that produced NO visible output stays here: the pipe rethrows
+        // that case precisely so this loop can re-run the request from a clean
+        // attempt, which is invisible to the transcript.
+        let streamAttempt = 0
+        for (;;) {
+          try {
+            yield* this.streamViaSharedPipe(options, {
+              response,
+              declaredTools,
+              declaredToolNames,
+              routeReasoningField: routeReasoningField ?? config.reasoningField.get(),
+              config,
+              signal,
+              timeout,
+              sseState,
+            })
+            return
+          } catch (error) {
+            if (options.signal?.aborted) {
+              yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } } }
               return
-            } catch (error) {
-              if (options.signal?.aborted) {
-                yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } } }
+            }
+            const detail = errorText(error)
+            const transient = isTransientStreamError(error)
+            trace.error({ detail: detail.slice(0, 240), transient, emitted: 0, retried: streamAttempt })
+            // Only a transport cut with nothing on screen is retryable, and the
+            // budget is the same `streamRetries` the pipe consumer honours.
+            if (transient && streamAttempt < maxStreamRetries) {
+              streamAttempt += 1
+              this.ctx?.logger?.warn?.(
+                `opencode-http-agent: upstream stream cut before any output (${detail}); retry ${streamAttempt}/${maxStreamRetries}`,
+              )
+              response = await send()
+              if (response.status === 401) {
+                backend = await this.resolveBackend(signal, { force: true })
+                response = await send()
+              }
+              if (!response.ok) {
+                yield {
+                  type: 'finish',
+                  reason: {
+                    kind: 'error',
+                    failure: { code: 'OPENCODE_BACKEND_HTTP', message: `OpenCode backend HTTP ${response.status}` },
+                  },
+                }
                 return
               }
-              const detail = errorText(error)
-              const transient = isTransientStreamError(error)
-              trace.error({ detail: detail.slice(0, 240), transient, emitted: 0, retried: streamAttempt })
-              // Only a transport cut with nothing on screen is retryable, and the
-              // budget is the same `streamRetries` the legacy loop honours.
-              if (transient && streamAttempt < maxStreamRetries) {
-                streamAttempt += 1
-                this.ctx?.logger?.warn?.(
-                  `opencode-http-agent: upstream stream cut before any output (${detail}); retry ${streamAttempt}/${maxStreamRetries}`,
-                )
-                response = await send()
-                if (response.status === 401) {
-                  backend = await this.resolveBackend(signal, { force: true })
-                  response = await send()
-                }
-                if (!response.ok) {
-                  yield {
-                    type: 'finish',
-                    reason: {
-                      kind: 'error',
-                      failure: { code: 'OPENCODE_BACKEND_HTTP', message: `OpenCode backend HTTP ${response.status}` },
-                    },
-                  }
-                  return
-                }
-                continue
-              }
-              // Nothing to preserve: keep the honest error verdict.
-              yield {
-                type: 'finish',
-                reason: { kind: 'error', failure: { code: 'OPENCODE_BACKEND', message: detail } },
-              }
-              return
+              continue
             }
-          }
-        }
-
-        usage = null
-        lastReasoning = reasoningAccounting(null)
-        finishReason = null
-        textStarted = false
-        reasoningStarted = false
-        emitted = 0
-        resetBlocks()
-        bootBeacon('stream', { tools: (options.tools ?? []).length })
-
-        try {
-          for await (const chunk of chatSseEvents(response.body, signal, sseState)) {
-            if (chunk?.usage) {
-              usage = usageFromOpenAi(chunk.usage)
-              // Reasoning accounting: the raw object decides whether the route
-              // reported the field, the mapping only carries the value.
-              const reasoning = reasoningAccounting(chunk.usage)
-              lastReasoning = reasoning
-              if (reasoning.state !== 'reported' && (traceChars.reasoning > 0 || reasoningStarted)) {
-                this.ctx?.logger?.debug?.(
-                  `opencode-http-agent: the route reported no reasoning_tokens for this stream (${reasoning.state}); reasoning characters were streamed`,
-                )
-              }
-              // The same chunk carries what the request cost: cost/opencode.*.
-              // Parsed here, on the one event that reports it, and handed to the
-              // cost ledger — the streaming and display paths stay untouched.
-              this.recordCost(options.sessionId, options.model, parseCost(chunk.usage))
-            }
-            const choice = chunk?.choices?.[0]
-            if (!choice) continue
-            const delta = choice.delta ?? {}
-
-            // Upstream mapping (OpenAI / AI SDK boundary): reasoning_content ->
-            // reasoning, tool_calls -> tool-call, content -> text. A text payload is
-            // then classified by the restored state machine (lib/stream-parser.js),
-            // and every classified part is routed by the bottom gate.
-            // Measured 2026-11-03: the catalog names the field per route
-            // (`compatibility.reasoningField`), and a route that omits it emits
-            // no reasoning delta at all. The configured field is the fallback.
-            for (const part of mapChatDelta(delta, {
-              reasoningField: routeReasoningField ?? config.reasoningField.get(),
-            })) {
-              const summary = summarizePart(part)
-              traceCounts[summary.field] = (traceCounts[summary.field] ?? 0) + 1
-              if (summary.field === 'content' || summary.field === 'reasoning') traceChars[summary.field] += summary.len
-              if (summary.marker) {
-                traceCounts.markerDeltas += 1
-                trace.delta({ ...summary, emitted })
-              }
-              if (part.kind === 'text') yield* routeParts(classifier.push(part.text))
-              else yield* routeParts([part])
-            }
-
-            if (choice.finish_reason) finishReason = choice.finish_reason
-          }
-
-          // A stream that stops without a finish_reason is a CUT, not a completion.
-          // Measured 2026-11-03: four requests (111-171 messages, 256k-311k chars)
-          // ended exactly this way, carrying reasoning deltas and nothing else; the
-          // default branch of finishFromOpenAi() reported them as a clean `stop`,
-          // so the host committed a half response and no retry ran. Reporting a
-          // retryable TRANSPORT failure here hands the step back to llm-retry,
-          // which re-runs the request from a clean attempt.
-          const visibleOutput = textStarted || [...toolCalls.values()].some((entry) => entry.started)
-          if (finishReason === null && visibleOutput === false) {
-            const reason = sseState.done ? 'without finish_reason' : 'before [DONE]'
-            const detail = `stream ended ${reason} after ${emitted} delta(s) and no visible output`
-            trace.error({ detail, transient: true, emitted, retried: 0 })
-            displayLogger?.warn?.(`opencode-http-agent: ${detail}; reporting a transport cut so the host retries`)
-            for (const chunk of closeAll()) yield chunk
+            // Nothing to preserve: keep the honest error verdict.
             yield {
               type: 'finish',
-              reason: {
-                kind: 'error',
-                failure: { code: 'TRANSPORT', message: `OpenCode backend ${detail}` },
-              },
+              reason: { kind: 'error', failure: { code: 'OPENCODE_BACKEND', message: detail } },
             }
             return
           }
-
-          yield* flushGates()
-          for (const chunk of closeAll()) yield chunk
-          if (usage) yield { type: 'usage', usage }
-          if (options.signal?.aborted) {
-            yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } } }
-          } else if (timeout.aborted) {
-            yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_TIMEOUT', message: `OpenCode backend exceeded timeoutMs=${config.timeoutMs.get()}` } } }
-          } else {
-            // Reasoning accounting travels with the finish record: the trace is
-            // where "the route did not report reasoning_tokens" is measured,
-            // because the host's TokenUsage type has no field for an absence.
-            if (lastReasoning.state !== 'reported' && traceChars.reasoning > 0) {
-              this.ctx?.logger?.warn?.(
-                `opencode-http-agent: streamed ${traceChars.reasoning} reasoning characters but the route reported no reasoning_tokens (${lastReasoning.state})`,
-              )
-            }
-            trace.finish({
-              finish: finishReason ?? null,
-              parts: { ...traceCounts },
-              chars: { ...traceChars },
-              blocks: blocks.size,
-              toolCalls: [...blocks.values()].filter((block) => block.kind === 'tool-call').length,
-              reasoning: lastReasoning,
-            })
-            yield { type: 'finish', reason: finishFromOpenAi(finishReason) }
-          }
-          return
-        } catch (error) {
-          // The caller's own verdicts keep their meaning across a cut.
-          if (options.signal?.aborted) {
-            for (const chunk of closeAll()) yield chunk
-            yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'request cancelled by the caller' } } }
-            return
-          }
-          if (timeout.aborted) {
-            for (const chunk of closeAll()) yield chunk
-            yield { type: 'finish', reason: { kind: 'error', failure: { code: 'OPENCODE_TIMEOUT', message: `OpenCode backend exceeded timeoutMs=${config.timeoutMs.get()}` } } }
-            return
-          }
-          const detail = errorText(error)
-          const transient = isTransientStreamError(error)
-          trace.error({ detail: detail.slice(0, 240), transient, emitted, retried })
-          // 1. Nothing reached the model yet: retry the request transparently. A
-          //    silent retry is invisible to the transcript, so it cannot corrupt it.
-          if (transient && emitted === 0 && retried < maxStreamRetries) {
-            retried += 1
-            this.ctx?.logger?.warn?.(
-              `opencode-http-agent: upstream stream cut before any output (${detail}); retry ${retried}/${maxStreamRetries}`,
-            )
-            continue
-          }
-          // 2. Partial output: keep it. A hard error here kills a turn that had
-          //    already produced usable work (measured: 3 of the last 6 sessions
-          //    ended on a bare `terminated` with the whole step discarded).
-          if (preserveCut && emitted > 0) {
-            yield* flushGates()
-            for (const chunk of closeCut()) yield chunk
-            if (usage) yield { type: 'usage', usage }
-            this.ctx?.logger?.warn?.(
-              `opencode-http-agent: upstream stream cut after ${emitted} delta(s) (${detail}); partial output preserved and closed as a stop`,
-            )
-            yield { type: 'finish', reason: { kind: 'stop' } }
-            return
-          }
-          // 3. Nothing to preserve: keep the honest error verdict.
-          for (const chunk of closeAll()) yield chunk
-          yield {
-            type: 'finish',
-            reason: {
-              kind: 'error',
-              failure: { code: 'OPENCODE_BACKEND', message: detail },
-            },
-          }
-          return
         }
+
       }
     } catch (error) {
-      for (const chunk of closeAll()) yield chunk
       yield {
         type: 'finish',
         reason: options.signal?.aborted
@@ -2311,7 +1760,7 @@ export class OpencodeHttpAdapter {
    *
    * Everything provider-specific stays here; the block lifecycle, finish table,
    * usage ordering and the empty/cut/abort terminal policy come from
-   * `lib/stream/index.js`. Three contracts are preserved from the legacy loop:
+   * `lib/stream/index.js`. Three provider contracts are preserved here:
    *
    *   1. **Cost is recorded once per usage event**, on arrival, through the same
    *      `recordCost` path.
@@ -2342,8 +1791,8 @@ export class OpencodeHttpAdapter {
     // forwarded into it, and the listener removed on dispose.
     const lifecycle = createStreamLifecycle(signal)
 
-    // The display gate is the same one the legacy path uses, built from the
-    // same declared names, so a recovered call is judged identically.
+    // The display gate is built from the declared names, so a call recovered
+    // from prose is judged by exactly the same rules as a structured one.
     const gate = createDisplayGate({ toolNames: declaredToolNames })
     // The probe drain is handed to the contract as its pre-settle seam, so a body
     // payload that is really a tool call is still a candidate when the gate
@@ -2367,7 +1816,7 @@ export class OpencodeHttpAdapter {
     /** The terminal cut, once known: only a cut justifies repairing arguments. */
     let cutFailure = null
 
-    // The JSON probe is the one legacy behaviour the contract does not model:
+    // The JSON probe is the one provider behaviour the contract does not model:
     // a body that is nothing but a JSON object may be a tool call the route
     // failed to send structurally. It holds such text back instead of showing
     // it, and its drain must run AFTER the contract's own flush (which settles
@@ -2413,7 +1862,7 @@ export class OpencodeHttpAdapter {
     // Cost is parsed from the RAW usage object, which the pipe does not hand
     // back to `onUsage` (it passes the normalized usage), so the raw object is
     // kept on arrival and cost is written exactly once, through the same
-    // ledger path as the legacy loop.
+    // ledger path.
     const readEventWithCost = (payload) => {
       const record = hooks.readEvent(payload)
       if (record?.usage !== undefined) this.recordCost(options.sessionId, options.model, parseCost(record.usage))
@@ -2422,7 +1871,7 @@ export class OpencodeHttpAdapter {
 
     // The probe owns text BEFORE it becomes a block: a body that is only a
     // tool-shaped JSON object must never reach the screen. This is the same
-    // predicate the legacy `routeParts` used (probe already holding, or the
+    // predicate the retired routeParts used (probe already holding, or the
     // text block has not started and the text opens like JSON).
     const classifyText = (text) => {
       const parts = hooks.classifyText(text)
@@ -2449,7 +1898,7 @@ export class OpencodeHttpAdapter {
     }
 
     // The contract flush already drains both classifiers, runs the probe through
-    // the `beforeSettle` seam, then settles the gate — exactly the legacy order.
+    // the `beforeSettle` seam, then settles the gate — the required order.
     drainProbe = flushJsonProbe
 
     const createHooks = () => ({
@@ -2545,7 +1994,7 @@ export class OpencodeHttpAdapter {
         // Any other chunk means the pipe is past its block-closing phase.
         yield* releaseToolEnds()
         // A caller timeout reaches the pipe as an abort; the adapter publishes
-        // its own stable code for it, exactly as the legacy loop did.
+        // its own stable code for it, exactly as the retirement path did.
         if (chunk?.type === 'finish' && chunk.reason?.kind === 'aborted' && timeout?.aborted && !options.signal?.aborted) {
           yield {
             type: 'finish',

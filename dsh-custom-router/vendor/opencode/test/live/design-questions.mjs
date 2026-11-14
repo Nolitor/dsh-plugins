@@ -16,7 +16,7 @@ console.log('bytes per row      ', Math.round(JSON.stringify(payload.models).len
 const SRC = '/home/minami/Workspace/projects/dsh-workspace/dsh-plugins/dsh-opencode-v2/lib/'
 const lines = (f) => readFileSync(SRC + f, 'utf8').split('\n').length
 console.log('\n=== serving pipeline modules ===')
-const modules = ['http.js', 'stream-parser.js', 'display-gate.js', 'display-clean.js', 'upstream-map.js', 'arguments.js', 'trace.js']
+const modules = ['http.js', 'notation-classifier.js', 'display-gate.js', 'display-clean.js', 'upstream-map.js', 'arguments.js', 'trace.js']
 for (const m of modules) console.log(String(lines(m)).padStart(5), m)
 console.log(String(modules.reduce((s, m) => s + lines(m), 0)).padStart(5), 'total in pipeline')
 

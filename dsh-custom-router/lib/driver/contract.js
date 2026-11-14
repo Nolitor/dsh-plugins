@@ -24,7 +24,6 @@ const AUTH_MODES = Object.freeze(['web-auth', 'api-key', 'daemon'])
 const OPTIONAL_HOOKS = Object.freeze([
   'classifyText',
   'classifyReasoning',
-  'classifyBlock',
   'onPart',
   'flush',
   'mapFinish',

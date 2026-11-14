@@ -14,12 +14,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createStreamClassifier } from '../lib/stream-parser.js'
+import { createNotationClassifier } from '../lib/notation-classifier.js'
 
 const TOOLS = new Set(['bash', 'run_code'])
 
 function classify(text, chunkSize = 0) {
-  const classifier = createStreamClassifier({ toolNames: TOOLS })
+  const classifier = createNotationClassifier({ toolNames: TOOLS })
   const out = []
   if (chunkSize > 0) {
     for (let at = 0; at < text.length; at += chunkSize) {
@@ -147,7 +147,7 @@ test('model-written element closers are removed, even split across deltas', () =
 
 const NEW_TOOLS = [{ name: 'run_code', parameters: { type: 'object', properties: { code: {}, description: {} }, required: ['code'] } }]
 function classifyWithTools(text) {
-  const classifier = createStreamClassifier({ toolNames: new Set(['run_code']), tools: NEW_TOOLS })
+  const classifier = createNotationClassifier({ toolNames: new Set(['run_code']), tools: NEW_TOOLS })
   return { parts: [...classifier.push(text), ...classifier.flush()], stats: classifier.stats }
 }
 
@@ -190,7 +190,7 @@ test('an unknown name is inferred from the argument schema', () => {
 
 
 function classifyCharByChar(text) {
-  const classifier = createStreamClassifier({ toolNames: new Set(['run_code']), tools: NEW_TOOLS })
+  const classifier = createNotationClassifier({ toolNames: new Set(['run_code']), tools: NEW_TOOLS })
   const parts = []
   for (const ch of text) parts.push(...classifier.push(ch))
   parts.push(...classifier.flush())
@@ -222,7 +222,7 @@ test('a DSML opener with attributes split across deltas is not printed', () => {
 test('every two-way split of a mixed payload leaves no marker on screen', () => {
   const source = 'a\n<tool_call #call_1>\n</│DSML│ parameter name="code">const x = 1</│DSML│>'
   for (let cut = 1; cut < source.length; cut += 1) {
-    const classifier = createStreamClassifier({ toolNames: new Set(['run_code']), tools: NEW_TOOLS })
+    const classifier = createNotationClassifier({ toolNames: new Set(['run_code']), tools: NEW_TOOLS })
     const parts = [
       ...classifier.push(source.slice(0, cut)),
       ...classifier.push(source.slice(cut)),

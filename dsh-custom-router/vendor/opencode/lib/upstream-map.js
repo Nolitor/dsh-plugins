@@ -14,7 +14,7 @@
  *
  * Nothing here inspects prose: no tag patterns, no heuristics, no rewriting. A
  * delta that arrives as `content` is text, full stop — even when the model put
- * transcript notation inside it. Everything downstream (lib/stream-parser.js)
+ * transcript notation inside it. Everything downstream (lib/notation-classifier.js)
  * is a pass-through reducer over these already-typed parts.
  *
  * Measured 2026-11-01 on 29,940 recorded content deltas: 37.6% pure prose,

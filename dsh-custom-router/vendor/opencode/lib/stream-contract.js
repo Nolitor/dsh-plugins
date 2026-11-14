@@ -45,15 +45,17 @@
  * (a route-configured reasoning field name, structured `content` arrays, and the
  * legacy top-level `{ name, arguments }` tool-call entry) are folded into the
  * core's vocabulary by `adaptForSharedCore()` before the delegation, never by a
- * second classifier. The vendor-local NOTATION classifier (lib/stream-parser.js)
- * still classifies text/reasoning prose and is now the only legacy piece left;
- * the explicit `pipe: 'legacy'` opt-out in http.js is deleted together with it
- * by W2-A2.
+ * second classifier. The vendor-local NOTATION classifier
+ * (lib/notation-classifier.js) is the ONE named export that classifies
+ * text/reasoning prose into typed parts. It is L2 vendor glue, not a wire
+ * classifier and not the deleted legacy parser: the wire is the shared core, and
+ * this file is the only consumer. The `pipe: 'legacy'` opt-out and its loop are
+ * deleted (A3/R1), so the shared pipe is the only pipeline.
  *
  * @module @nolit/dsh-opencode-v2/stream-contract
  */
 
-import { createStreamClassifier } from './stream-parser.js'
+import { createNotationClassifier } from './notation-classifier.js'
 import { contentText } from './upstream-map.js'
 import { finishFromOpenAi, usageFromOpenAi } from './openai-mapping.js'
 import {
@@ -214,14 +216,15 @@ function adaptForSharedCore(payload, reasoningField) {
  * @param {object[]} [options.tools] - declared tools (schemas), for inference.
  * @param {string} [options.parser] - the parser identity to report; defaults to
  *   `OPENCODE_PARSER` (the shared OpenAI core). Data only: nothing branches on
- *   it, and the legacy text-notation classifier is still used for prose.
+ *   it, and the vendor-local notation classifier (`notation-classifier.js`) is
+ *   still used for prose.
  * @param {(context: object) => object[]} [options.beforeSettle] - drain run
  *   between the classifier flush and the gate's verdict; returns parts to emit.
  * @param {object} [options.gate] - a display gate (lib/display-gate.js). When a
  *   gate is present, a call recovered from text is QUEUED for the gate instead
  *   of being emitted: the gate can only tell promote from echo once the
  *   structured calls of the whole response are known. Without a gate the
- *   legacy behaviour is unchanged.
+ *   behaviour is unchanged.
  * @returns {{
  *   readEvent: (payload: unknown) => {parts?: object[], usage?: object, finish?: string, defect?: object}|undefined,
  *   classifyText: (text: string) => object[],
@@ -244,11 +247,11 @@ export function createStreamHooks(options = {}) {
   } = options
 
   // ONE classifier per stream, held in this closure. Two streams never share it.
-  const classifier = createStreamClassifier({ toolNames, tools })
+  const classifier = createNotationClassifier({ toolNames, tools })
   // The reasoning channel gets its own classifier, exactly like the legacy path:
   // the model also writes calls into the reasoning channel (measured: 5 of 6
   // leaking requests had the marker in reasoning).
-  const reasoningClassifier = createStreamClassifier({ toolNames, tools })
+  const reasoningClassifier = createNotationClassifier({ toolNames, tools })
   // The structured calls of this response, as the gate decides against them.
   const structuredCalls = []
   // Whether a display gate was handed in. With a gate, recovered calls are
@@ -299,10 +302,10 @@ export function createStreamHooks(options = {}) {
    * The `classifyText` hook: notation the route left inside a text payload.
    *
    * This is the remaining VENDOR-LOCAL piece: the notation classifier
-   * (lib/stream-parser.js) recovers a tool call the model wrote as prose and
+   * (lib/notation-classifier.js) recovers a tool call the model wrote as prose and
    * holds back a marker that is split across two deltas. The WIRE classifier is
-   * the shared core; only this prose-notation recovery is still per-vendor, and
-   * W2-A2 deletes it together with the legacy loop it came from.
+   * the shared core; this prose-notation recovery stays per-vendor by decision
+   * (it is L2 glue, kept behind one named export).
    *
    * A recovered call gets its own ordinal, from a space the wire never uses.
    * The legacy path assigns it "the next free ordinal after the structured

@@ -20,7 +20,6 @@ import {
   OpencodeHttpAdapter,
   addUsage,
   authHeader,
-  chatSseEvents,
   errorText,
   finishFromOpenAi,
   modelKey,
@@ -296,18 +295,6 @@ test('buildChatRequest is prompt-neutral and forwards DSH tools', () => {
   assert.ok(!/You are OpenCode|caller declared|complete the work with your own/.test(serialized), 'no persona/note text')
 })
 
-test('chatSseEvents frames JSON data and ignores [DONE]', async () => {
-  const body = new ReadableStream({
-    start(controller) {
-      controller.enqueue(new TextEncoder().encode('data: {"a":1}\n\ndata: [DONE]\n\n'))
-      controller.close()
-    },
-  })
-  const events = []
-  for await (const event of chatSseEvents(body, new AbortController().signal)) events.push(event)
-  assert.deepEqual(events, [{ a: 1 }])
-})
-
 test('pure stream maps reasoning, text, usage, and finish without session calls', async () => {
   const { server, state, close } = await startServer()
   try {
@@ -428,22 +415,6 @@ test('a stream that ends without finish_reason is a retryable transport cut', as
   } finally {
     await close()
   }
-})
-
-test('chatSseEvents reports the protocol terminator it saw', async () => {
-  const make = (text) => new ReadableStream({
-    start(controller) {
-      controller.enqueue(new TextEncoder().encode(text))
-      controller.close()
-    },
-  })
-  const terminated = {}
-  for await (const _event of chatSseEvents(make('data: {"a":1}\n\ndata: [DONE]\n\n'), new AbortController().signal, terminated)) { /* drain */ }
-  assert.equal(terminated.done, true)
-
-  const cut = {}
-  for await (const _event of chatSseEvents(make('data: {"a":1}\n\n'), new AbortController().signal, cut)) { /* drain */ }
-  assert.equal(cut.done, false, 'a clean EOF without [DONE] is not a terminator')
 })
 
 test('a stream cut after real content still finishes as stop', async () => {
@@ -1635,51 +1606,67 @@ function normalizeBlockIndices(chunks) {
   return out
 }
 
-test('shared pipe matches the legacy sequence for reasoning, text, usage and finish', async () => {
+test("the shared pipe emits the golden chunk sequence for reasoning, text, usage and finish", async () => {
+  // The golden sequence was CAPTURED from the shared pipe itself while the
+  // legacy opt-out was still present, and is asserted literally here. The legacy
+  // loop and the vendor-local {pipe:"legacy"} branch were deleted (A3/R1), so this
+  // test no longer diffs against a live oracle: it pins the shared output that the
+  // deleted path had to match. Reformatting it is a behaviour change.
   const events = [
-    { choices: [{ delta: { reasoning_content: 'think' } }] },
-    { choices: [{ delta: { content: 'Answer' } }] },
-    { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 7, completion_tokens: 4, total_tokens: 11, prompt_tokens_details: { cached_tokens: 4 } } },
+    { choices: [{ delta: { reasoning_content: "think" } }] },
+    { choices: [{ delta: { content: "Answer" } }] },
+    { choices: [{ delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 7, completion_tokens: 4, total_tokens: 11, prompt_tokens_details: { cached_tokens: 4 } } },
   ]
-  const run = async (pipe) => {
-    const { server, state, close } = await startServer({ events })
-    try {
-      const adapter = adapterFor(state, { baseUrl: controlURL(state), pipe })
-      return await collect(adapter.stream({
-        provider: 'opencode-http-agent',
-        model: 'opencode-go/minimax-m3.1-flash',
-        messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
-      }))
-    } finally {
-      await close()
-    }
+  const { server, state, close } = await startServer({ events })
+  let chunks
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    chunks = await collect(adapter.stream({
+      provider: "opencode-http-agent",
+      model: "opencode-go/minimax-m3.1-flash",
+      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+    }))
+  } finally {
+    await close()
   }
-  const legacy = await run('legacy')
-  const shared = await run('shared')
-  assert.deepEqual(normalizeBlockIndices(shared), normalizeBlockIndices(legacy), 'the shared pipe must be semantically identical to legacy')
+  assert.deepEqual(normalizeBlockIndices(chunks), [
+    { type: "block-start", index: 0, blockType: "reasoning" },
+    { type: "reasoning-delta", index: 0, text: "think" },
+    { type: "block-start", index: 1, blockType: "text" },
+    { type: "text-delta", index: 1, text: "Answer" },
+    { type: "block-end", index: 0, block: { type: "reasoning", text: "think" } },
+    { type: "block-end", index: 1, block: { type: "text", text: "Answer" } },
+    { type: "usage", usage: { inputTokens: 3, outputTokens: 4, cacheReadTokens: 4, cacheWriteTokens: 0, totalTokens: 11 } },
+    { type: "finish", reason: { kind: "stop" } },
+  ])
 })
 
-test('shared pipe matches the legacy fragmented tool-call sequence', async () => {
+test("the shared pipe emits the golden chunk sequence for a fragmented tool call", async () => {
+  // Captured from the shared pipe while the legacy iteration existed; the legacy
+  // loop is gone, so this pins the assembled argument snapshot literally.
   const events = [
-    { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'bash', arguments: '{"command":' } }] } }] },
-    { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '"ls"}' } }] }, finish_reason: 'tool_calls' }] },
+    { choices: [{ delta: { tool_calls: [{ index: 0, id: "call_1", function: { name: "bash", arguments: "{\"command\":" } }] } }] },
+    { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: "\"ls\"}" } }] }, finish_reason: "tool_calls" }] },
   ]
-  const run = async (pipe) => {
-    const { server, state, close } = await startServer({ events })
-    try {
-      const adapter = adapterFor(state, { baseUrl: controlURL(state), pipe })
-      return await collect(adapter.stream({
-        provider: 'opencode-http-agent',
-        model: 'opencode-go/minimax-m3.1-flash',
-        messages: [{ role: 'user', content: [{ type: 'text', text: 'list' }] }],
-      }))
-    } finally {
-      await close()
-    }
+  const { server, state, close } = await startServer({ events })
+  let chunks
+  try {
+    const adapter = adapterFor(state, { baseUrl: controlURL(state) })
+    chunks = await collect(adapter.stream({
+      provider: "opencode-http-agent",
+      model: "opencode-go/minimax-m3.1-flash",
+      messages: [{ role: "user", content: [{ type: "text", text: "list" }] }],
+    }))
+  } finally {
+    await close()
   }
-  const legacy = await run('legacy')
-  const shared = await run('shared')
-  assert.deepEqual(normalizeBlockIndices(shared), normalizeBlockIndices(legacy), 'fragmented tool calls must not change under the shared pipe')
+  assert.deepEqual(normalizeBlockIndices(chunks), [
+    { type: "block-start", index: 0, blockType: "tool-call" },
+    { type: "tool-call-delta", index: 0, id: "call_1", name: "bash", argumentsDelta: "{\"command\":" },
+    { type: "tool-call-delta", index: 0, id: "call_1", argumentsDelta: "\"ls\"}" },
+    { type: "block-end", index: 0, block: { type: "tool-call", id: "call_1", name: "bash", arguments: "{\"command\":\"ls\"}" } },
+    { type: "finish", reason: { kind: "tool-calls" } },
+  ])
 })
 
 // ---------------------------------------------------------------------------
