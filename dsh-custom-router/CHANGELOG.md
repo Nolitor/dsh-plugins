@@ -1,12 +1,151 @@
 # Changelog — @nolit/dsh-custom-router
 
 <!-- skeleton:
-version: 0.0.1-rc.20
+version: 0.0.1-rc.21
 kind: report
 status: active
 updated: 2026-11-14
-summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events) and rc.15 with the preset-registry drift gate (static registry diff, `usageRoutes` on every preset, and a mutation harness that proves each drift class is rejected), and rc.17 with the `google-generative-ai` vendor wire plus JSON-Schema enums derived from their constant arrays instead of hand-copied, rc.18 with the subagent-activation contract migration that restores the `opencode`/`agy_worker` managed-child delegation on DSH 0.2.2-rc.3, and rc.19 with the living-spec gates (a 14-day age check on the manual `spec:watch` baseline, the four-preset live-route smoke gate), the vendored Antigravity fix that replays a Gemini `thoughtSignature` as a part-level sibling of `functionCall` instead of nesting it inside (live 400 → 200), the Anthropic/Google conformance fixtures, the approved deletion of two dead surfaces, and DSH credential-store support (`credentialRef`) for the DeepInfra and EXAONE keys, and rc.20 with the automatic plaintext-key migration (profile patch → DSH credential store), the EXAONE subagent-allowlist entry in both the live profile and the repo default, the atomic owner-only write the migration commits through, and the removal of the synthetic `OpenCode (config default)` model row from the picker (the `default` pseudo-route still resolves server-side), three post-rc.20 fixes found by live probing (the credential-store ref read through the inject-free accessor, the Gemini replay argument pruning, and the deferred credential injection) with a live verification block, and the A3 completion plus R4 closure (the OpenCode legacy pipeline and the `pipe` config key deleted — one pipeline, no config selects it — `stream-parser.js` renamed to `notation-classifier.js` because it was measured to be shared-path glue, the L1 boundary lint and the `USAGE_READERS` gate shipped with negative proofs, and the dead `classifyBlock` slot removed).
+summary: Engineering history for the Custom Router track: created 2026-11-06 as a specification track, extended 2026-11-07 with the OpenCodex bridge library and preset mounts, extended 2026-11-08 with the browser dashboard, the settings schema, the shared stream pipe, the browser redesign, and the owner-ordered integration of the Antigravity/DeepInfra plugins into the router vendor tree, extended 2026-11-10 with the preset-based CLI dispatch policy, extended 2026-11-12 with the two-track plan evidence contract (declared baseline plus consent-gated correction), extended 2026-11-13 with the model-serving refresh design (vendor `?refresh=1` cache bypass, a refresh button on both surfaces, one refresh bus fed by host events) and rc.15 with the preset-registry drift gate (static registry diff, `usageRoutes` on every preset, and a mutation harness that proves each drift class is rejected), and rc.17 with the `google-generative-ai` vendor wire plus JSON-Schema enums derived from their constant arrays instead of hand-copied, rc.18 with the subagent-activation contract migration that restores the `opencode`/`agy_worker` managed-child delegation on DSH 0.2.2-rc.3, and rc.19 with the living-spec gates (a 14-day age check on the manual `spec:watch` baseline, the four-preset live-route smoke gate), the vendored Antigravity fix that replays a Gemini `thoughtSignature` as a part-level sibling of `functionCall` instead of nesting it inside (live 400 → 200), the Anthropic/Google conformance fixtures, the approved deletion of two dead surfaces, and DSH credential-store support (`credentialRef`) for the DeepInfra and EXAONE keys, and rc.20 with the automatic plaintext-key migration (profile patch → DSH credential store), the EXAONE subagent-allowlist entry in both the live profile and the repo default, the atomic owner-only write the migration commits through, and the removal of the synthetic `OpenCode (config default)` model row from the picker (the `default` pseudo-route still resolves server-side), three post-rc.20 fixes found by live probing (the credential-store ref read through the inject-free accessor, the Gemini replay argument pruning, and the deferred credential injection) with a live verification block, and the A3 completion plus R4 closure (the OpenCode legacy pipeline and the `pipe` config key deleted — one pipeline, no config selects it — `stream-parser.js` renamed to `notation-classifier.js` because it was measured to be shared-path glue, the L1 boundary lint and the `USAGE_READERS` gate shipped with negative proofs, and the dead `classifyBlock` slot removed), and rc.21 with the R2 closure (OpenCode's private ledger, plan table and usage constants now delegate to the core, so `numberOrNull` / `pickSession` / `USAGE_BUCKETS` / `usageTotal` are each defined once repo-wide), the R6 closure (the uniqueness greps are now a WIRED gate — `test/uniqueness.test.mjs` plus `scripts/verify-uniqueness.mjs`, with a negative proof), the A7 measurement (the host `dsh-llm-pi-ai` `providers: z.dict(profile)` seam models provider profiles only, so it cannot replace this router; keep `llm-pi-ai` dormant), the new structural tool-argument contract seam at the L1 emission point (the host's escalation-pairing contract is derived from its own schema prose, so a differently-named pair is covered with no edit), and the `sync-derive.mjs` idempotency fix.
 -->
+
+## 0.0.1-rc.21 — R2 closed (one ledger), R6 closed (the uniqueness gate is WIRED), A7 measured, the tool-argument contract seam, and the sync-derive idempotency fix — 2026-11-14
+
+> **Version bumped `rc.20` → `rc.21`.** The numeric part (`0.0.1`) is the owner's; the `rc.<n>`
+> suffix is the agent's session history marker, and this session changed code and docs.
+> **No** `~/.dsh` write, **no** service restart, **no** API key read, printed or reproduced, and
+> **no** other track's pending change was touched or committed.
+
+### R2 — one cost / usage / plan implementation
+
+| Item | Before | After | Evidence |
+|---|---|---|---|
+| `vendor/opencode/lib/cost.js` | owned its own `numberOrNull`, `pickSession`, `createCostStore`, `createCostLedger` and the `bySource` partition logic | **delegates** to the core `lib/cost.js`; the vendor wrapper keeps only the OpenCode wire vocabulary and **projects the core's `bySource` spend PARTITIONS back to the COUNT map** the frozen `lib/client.src.js` `detectOpencodeTier()` reads | `vendor/opencode/lib/cost.js` (324 → 161 diff lines); `git diff --stat` |
+| `vendor/opencode/lib/plans.js` | re-declared `PLAN_PROVIDERS` | imports it from **`lib/presets.js`** and re-exports it; the functions close over the imported map, so the two cannot drift | `vendor/opencode/lib/plans.js:20` |
+| `vendor/opencode/lib/usage-ledger.js` | re-declared `USAGE_BUCKETS` and `usageTotal` | imports both from **`lib/usage.js`**; `createUsageLedger()` returns the core's `createUsageBaseline()` | `vendor/opencode/lib/usage-ledger.js` |
+| `numberOrNull` | **2** definitions | **1** (`lib/cost.js:145`) | `grep -rn "function numberOrNull" lib/ vendor/` |
+| `pickSession` | **2** definitions | **1** (`lib/cost.js:229`) | `grep -rn "function pickSession" lib/ vendor/` |
+| `USAGE_BUCKETS` | **2** definitions | **1** (`lib/usage.js:51`) | `grep -rn "USAGE_BUCKETS = " lib/ vendor/` |
+| `usageTotal` | **2** definitions | **1** (`lib/usage.js:75`) | `grep -rn "function usageTotal" lib/ vendor/` |
+| `createCostStore` / `createCostLedger` | **3** total | **3** total = **1** core + **2** legitimate thin wrappers (DeepInfra + OpenCode) | the **accepted precedent** the R6 gate encodes — see below |
+
+**Two design points worth keeping.**
+
+1. **`PLAN_PROVIDERS` comes from `lib/presets.js`, NOT `lib/plan.js`.** `plan.PLAN_PROVIDERS`
+   (`lib/plan.js:388`) is an **unbound mutable** `Object.create(null)` (`{}`) until
+   `bindPlanProviders()` runs. Importing it would have been a **silent** behaviour change:
+   `planOfProvider('opencode-go')` would answer `'other'` and every route would classify as
+   `unknown`. `lib/presets.js` holds the **frozen** `{ go: 'opencode-go', zen: 'opencode' }` and
+   is cycle-free (`presets.js` imports only `preset-schema.js`).
+2. **`bySource` is a spend PARTITION in the core, a COUNT map on the wire.** The core ledger
+   stores `bySource` as spend partitions (`lib/cost.js:358-361`), but the frozen
+   `lib/client.src.js` `detectOpencodeTier()` reads it as a **count** map
+   (`lib/client.src.js:2570-2572`). The vendor wrapper therefore projects partitions back to
+   counts (`vendor/opencode/lib/cost.js:141-152`), so the **served payload is byte-identical**.
+   Both shapes are documented at their definitions.
+
+### R6 — the uniqueness greps are a WIRED gate
+
+| Item | Before | After | Evidence |
+|---|---|---|---|
+| the uniqueness greps | a **manual grep**, recorded as prose in a verdict table | a **wired gate** — `test/uniqueness.test.mjs` (**23 cases**) + `scripts/verify-uniqueness.mjs` (standalone, `--json`, exit **0** clean / **1** violation / **2** could-not-run) | `node scripts/verify-uniqueness.mjs` → **clean, exit 0** |
+| CI wiring | — | `test/uniqueness.test.mjs` **rides the existing `npm test` glob** — so **no `package.json` change** was needed | `npm test` → **843/843** |
+| the rule itself | "one definition repo-wide" (which is **false** for `createCostStore`) | (a) exactly **ONE** core implementation in `lib/**`; (b) a vendor definition is legal **ONLY** if it imports the core symbol **AND** calls it; (c) definitions outside `lib/`+`vendor/` are **strays** and fail; (d) the vendor set is **MEASURED** from `vendor/*/package.json`, never hand-listed | `scripts/verify-uniqueness.mjs` `GATED_NAMES` / `scanUniqueness()` |
+| measured counts | `numberOrNull` 2, `pickSession` 2, `USAGE_BUCKETS` 2, `usageTotal` 2 | `mapDelta` **1/0**, `numberOrNull` **1/0**, `pickSession` **1/0**, `backoffDelay` **1/0**, `createCostStore` **1 core / 2 vendor = 3**; **4** vendors measured; **2** generated artifacts excluded | `node scripts/verify-uniqueness.mjs` |
+| negative proof | — | a **dual plant** (**5** strays in `scripts/` + **3** vendor re-implementations) produced exactly **8** findings and reverted to a **0**-finding baseline; the tree hash is stable across a scan; no scratch file survives | `test/uniqueness.test.mjs` "a REAL planted duplicate on disk makes the wired gate fail, and the revert is byte-identical" |
+
+### A7 — CLOSED as a MEASUREMENT (the host `dsh-llm-pi-ai` `providers` seam)
+
+Full evidence: [docs/HOST-PROVIDERS-SEAM.md](./docs/HOST-PROVIDERS-SEAM.md) (new document).
+
+| Item | Measured value |
+|---|---|
+| the seam | `providers: z.dict(profile).default({}).volatile()` — **4** wire protocols (`openai-completions`, `openai-responses`, `anthropic-messages`, `google-generative-ai`) |
+| the catalog | pi-ai's installed `builtinProviders()` returns **43** providers and already ships `opencode` (**85** models) and `opencode-go` (**32**) |
+| the four preset provider ids | `antigravity`, `opencode-http-agent`, `deepinfra`, `exaone` — **NONE** is a pi-ai catalog route |
+| what it cannot express | daemon indirection, the cost/usage ledger, plan windows, the model picker, dispatch gates, the dashboard — the seam models **provider profiles only** |
+| the verdict | the seam **cannot replace this router**; this **confirms** the earlier removal of **P2-1** ("data-only preset") as an **unreachable promise**, not a regression |
+| the recommended owner decision | **keep `llm-pi-ai` dormant** — it is dormant today (no `llm-pi-ai:` section exists in the live profile), so the recommended option changes nothing, which is why it is the safe close |
+
+**Nothing was changed for A7**: no router code, no profile value, no service restart.
+
+### The tool-argument contract seam (new)
+
+- **The bug:** a live Gemini/Antigravity subagent run died with
+  `Error: invalid escalation: justification is only valid together with sandbox_permissions`.
+- **The root cause was NOT a Gemini quirk.** The host (`@deepseek-ai/dsh-sandbox`
+  `validateEscalationArgs`) enforces the escalation pairing on the **EXECUTION** path; a
+  **provider schema cannot express** a pairing; and **every** vendor hands its calls to the
+  **ONE** shared pipe — so a drifted call reached execution intact, and the turn died where the
+  model could not see it coming.
+- **Placement:** the single **L1 emission point** — `finalBlock` in `lib/stream/index.js` — where
+  the produced `block-end` block is authoritative for execution (the host's `BlockAssembler` keeps
+  `partial.block` and ignores the accumulated deltas once a block closes). All **five** vendor
+  `normalizeStream` call sites now pass `tools: options.tools`
+  (`vendor/antigravity/lib/adapter.js:294`, `vendor/deepinfra/lib/adapter.js:229`,
+  `vendor/deepinfra/lib/anthropic-adapter.js:263`, `vendor/exaone/lib/adapter.js:147`,
+  `vendor/opencode/lib/http.js:1950`).
+- **The rule is DERIVED, not hardcoded:** the module reads the host's own schema prose
+  `Required with <field>` out of the tool schema the request carries. Measured **identically** on
+  `dsh-tool-bash`, `dsh-tool-fs` and `dsh-tool-pwsh`, so a differently-named pair is covered with
+  **no edit** to this repo.
+- **The repair never fabricates a justification.** A dependent field present **without** its
+  principal is **dropped** (a lone reason asks for nothing); a principal with a **blank** dependent
+  keeps the escalation and drops the blank value. A **fabricated** approval reason would be a
+  **safety regression**, not a repair. A well-formed escalation is preserved **byte-for-byte**,
+  and a call that needs no repair is returned by identity.
+- **Gate:** `test/tool-argument-contract.test.mjs` (**13 cases**) — it pins the derivation against
+  the measured host text, so an upstream rephrasing fails a test instead of going quiet.
+
+### `scripts/sync-derive.mjs` was non-idempotent — now fixed
+
+- **The bug:** `locate()` ended at the **bare** `END` marker while `deriveBlock()` writes
+  `END + ' ---…'` (40 dash bytes). Every `npm run build` therefore appended **40 bytes** to the
+  END line of `lib/client.src.js` with **no content change**.
+- **Measured at HEAD in an isolated copy:** `node scripts/sync-derive.mjs` four times grew
+  `lib/client.src.js` **188 602 → 188 762 bytes** (**+40 bytes per run**; the END line grew
+  **3 239 → 3 439 chars**). A full `npm run build` grew it **+41 bytes per run** — the extra byte
+  comes from `build-presets.mjs` (see *Not done, deliberately* below).
+- **The fix:** `locate()` now ends at the **end of the marker's line**, so a repeat run finds
+  exactly what it wrote and reports `unchanged`. **Proven:** runs 2–4 produce identical hashes.
+- **Consequence:** `lib/client.src.js` and `lib/client.js` show a **lossless whitespace-only
+  diff** against HEAD (the accumulated padding collapsing to the canonical form). Measured with
+  the repo's own `stripCode()`: HEAD vs the canonical rebuild is **byte-identical** for both
+  files — expected and correct, **not** a functional change.
+
+### Gates (independently re-measured, not quoted from a commit message)
+
+router `npm test` **843/843** (was **807/807** before this session: **+23** from the R6 gate,
+**+13** from the tool-argument-contract gate); `npm run verify` **exit 0** (check + test +
+`verify:stream` + `specs:check` — `5 protocols, 4 providers, 4 pricing`); `verify:stream` **8/8**
+with **4** vendored packages probed, **8/8** specifiers refused, **vendor loads 0**;
+**`node scripts/verify-uniqueness.mjs` clean, exit 0**; vendor suites antigravity **193/193**,
+deepinfra **222 pass / 7 skip** (229 total), opencode **554/554**, exaone **19/19**.
+
+### Not done, deliberately
+
+- **The OpenCode-backend 404 — OPEN.** When a subagent runs through the OpenCode backend the
+  runtime reports
+  `opencode GET /api/provider/opencode-go -> HTTP 404: {"_tag":"ProviderNotFoundError","providerID":"opencode-go","message":"Provider not found: opencode-go"} OPENCODE_BACKEND`.
+  Measured context: `vendor/opencode/lib/http.js:263` defaults `backendProviderId: 'opencode-go'`;
+  `backendProviderForRoute()` (≈`:2224`) takes the route's prefix as the provider id and passes an
+  unknown prefix through rather than falling back; `ensure()` (≈`:1193`) issues
+  `GET /api/provider/<id>` and throws when the response carries no `settings.baseURL`. The 404
+  means the **attached daemon's catalog does not expose that provider id** — the id must be
+  **resolved against the daemon's real catalog** rather than assumed from the route prefix. The
+  fix belongs at the **provider-id resolution seam** and must be a **resolution**, **not a
+  string-substitution patch**. This is a **live-runtime observation, not reproduced in the test
+  suite**, so no gate covers it today. Recorded, **not fixed**.
+- **`build-presets.mjs` appends 1 byte per run — OPEN, pre-existing.** The baked declaration line
+  is written with a **trailing newline** while its `DECLARATION_LINE` regex
+  (`/^\s*const PRESET_DECLARATIONS = .*$/m`) never captures one, so each run appends exactly
+  **1 byte** (one blank line) after the declaration line. Measured in an isolated copy:
+  **185 407 → 185 408 → 185 409 → 185 410** bytes over 4 runs, with the code content unchanged.
+  `build-presets.mjs` is **unchanged from HEAD**, and it is a **different script** from the one
+  this session fixed — recorded, **not fixed** (fixing it would be a code change outside this
+  session's remit).
+- **No restart** — the live service still runs the `e8b39f7` build, so the live-probe record in
+  [HANDOFF.md](./docs/HANDOFF.md) §1 is unchanged and remains the last measured live state.
+- **No** `~/.dsh` write. **No** API key was read, printed or reproduced.
 
 ## 0.0.1-rc.20 (cont. 4) — R3 closed (one retry, one catalog cache) and R5 closed (no vendor ids in L1) — 2026-11-14
 

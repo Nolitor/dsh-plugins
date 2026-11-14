@@ -100,7 +100,7 @@
     "@deepseek-ai/dsh-llm": "^0.2.2-alpha.2",
     "@deepseek-ai/dsh-subprocess": "^0.2.2-alpha.2",
     "@deepseek-ai/dsh-tools": "^0.2.2-alpha.2",
-    "@nolit/dsh-custom-router": "0.0.1-rc.20"
+    "@nolit/dsh-custom-router": "0.0.1-rc.21"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {

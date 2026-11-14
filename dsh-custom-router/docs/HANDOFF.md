@@ -1,11 +1,11 @@
 # Custom Router — Handoff
 
 <!-- skeleton:
-version: 8.0
+version: 9.0
 kind: report
 status: active
 updated: 2026-11-14
-summary: Forward handoff for @nolit/dsh-custom-router at 0.0.1-rc.20. Phase 1 (core lock) and Phase 2 (vendor fan-out) of the horizontal layered architecture are DONE and measured: one OpenAI protocol core, one Anthropic core on the shared SSE reader, one usage writer, one finish table, one failure taxonomy, one retry/catalog-cache core, and four vendors that bind to them by identity. A3 is COMPLETE (the OpenCode legacy pipeline is gone — no config selects a pipeline any more), R4 is CLOSED (the L1 boundary lint and the USAGE_READERS gate exist and carry negative proofs), R3 is CLOSED (one retry core, one catalog cache) and R5 is CLOSED (no vendor ids in L1). Active work is the FOUR-key rotation (owner), the EXAONE child turn from a NEW session (owner), the P0-3 scan, and the R2/R6/A7 tail; closed items are in ROADMAP-ARCHIVE.md.
+summary: Forward handoff for @nolit/dsh-custom-router at 0.0.1-rc.21. Phase 1 (core lock) and Phase 2 (vendor fan-out) of the horizontal layered architecture are DONE and measured. A3 is COMPLETE, R4 is CLOSED (L1 boundary lint + USAGE_READERS gate, with negative proofs), R3 is CLOSED (one retry core, one catalog cache), R5 is CLOSED (no vendor ids in L1), R2 is CLOSED (OpenCode's ledger, plans and usage constants now ride the core), R6 is CLOSED (the uniqueness greps are a WIRED gate with a negative proof), and A7 is CLOSED as a measurement (the host dsh-llm-pi-ai providers seam cannot replace this router). NEW in rc.21: the structural tool-argument contract seam at the L1 emission point, and the sync-derive idempotency fix. Active work is the FOUR-key rotation (owner), the EXAONE child turn from a NEW session (owner), the P0-3 scan, and the OPEN OpenCode-backend 404; closed items are in ROADMAP-ARCHIVE.md.
 -->
 
 > Active work: [ROADMAP.md](./ROADMAP.md). Closed/deprecated history:
@@ -16,15 +16,15 @@ summary: Forward handoff for @nolit/dsh-custom-router at 0.0.1-rc.20. Phase 1 (c
 
 | Item | Value |
 | :--- | :--- |
-| Package | `@nolit/dsh-custom-router@0.0.1-rc.20` (**not bumped** — docs-only pass) |
-| Vendored | antigravity `rc.14`, opencode `rc.8`, deepinfra `rc.14`, exaone `rc.1` (peer pins aligned to `rc.20`) |
+| Package | `@nolit/dsh-custom-router@0.0.1-rc.21` (**bumped** — this session changed code and docs) |
+| Vendored | antigravity `rc.14`, opencode `rc.8`, deepinfra `rc.14`, exaone `rc.1` (peer pins aligned to `rc.21`) |
 | Host | DSH `0.2.2-rc.3` / Node `v24.22.1` |
-| Tests | router **807/807** (was 802 at `e8b39f7`); antigravity **193/193**; deepinfra **222 pass / 7 skip** (229 total); opencode **554/554** (was 553 — the R3 catalog split added one case); exaone **19/19** — **the three non-OpenCode vendor suites are unchanged** |
-| Gates | `npm run verify` exit 0 (check + 807 tests + `verify:stream` + `specs:check` — `5 protocols, 4 providers, 4 pricing`), `verify:presets` **OK** (declarations ↔ browser registry ↔ locales ↔ runtime registries agree), `verify:presets:mutation` **26/26** drift classes caught, **`verify:usage-readers` OK** (4 presets / 4 routes / 3 readers) |
+| Tests | router **843/843** (was 807 before this session; **+23** R6 uniqueness gate, **+13** tool-argument-contract gate); antigravity **193/193**; deepinfra **222 pass / 7 skip** (229 total); opencode **554/554**; exaone **19/19** — **the three non-OpenCode vendor suites are unchanged** |
+| Gates | `npm run verify` **exit 0** (check + 843 tests + `verify:stream` + `specs:check` — `5 protocols, 4 providers, 4 pricing`), `verify:presets` **OK** (declarations ↔ browser registry ↔ locales ↔ runtime registries agree), `verify:presets:mutation` **26/26** drift classes caught, **`verify:usage-readers` OK** (4 presets / 4 routes / 3 readers), **`node scripts/verify-uniqueness.mjs` clean, exit 0** |
 | Vendor guard | `verify:stream` **8/8** dispatch cases · **4** vendored packages probed · **8/8** specifiers refused · **vendor loads 0** — the vendor set is *measured* from `vendor/*/package.json`, self-tested, control-probed and vacuity-guarded |
-| Boundary gates | **`test/stream-boundary.test.mjs` (15 cases)** enforces the L1 boundary; **`scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (12 cases)** gate the `usage.routes[].normalize` names with browser source↔bundle parity; the dead `classifyBlock` slot is **removed** from `lib/driver/contract.js`. Both carry **negative proofs** (a planted regression → failure → reverted with a hash check) |
-| Phase commits | Phase 1: `c0e48ab`, `3ac7a10`, `c2ba900`, `ae9fd1d` · Phase 2: `8ee4ef1` · A3 completion + R4 closure: `e8b39f7` · **R3 + R5 closure: `77a53b0`** |
-| Live service | **`PID 361248`, started 09:37:14 KST** (`dsh` on `127.0.0.1:3080`) |
+| Boundary gates | **`test/stream-boundary.test.mjs` (15 cases)** enforces the L1 boundary; **`scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (12 cases)** gate the `usage.routes[].normalize` names with browser source↔bundle parity; the dead `classifyBlock` slot is **removed** from `lib/driver/contract.js`. Both carry **negative proofs** (a planted regression → failure → reverted with a hash check). **NEW in rc.21:** `test/uniqueness.test.mjs` (**23 cases**) + `scripts/verify-uniqueness.mjs` (the R6 uniqueness gate) and `test/tool-argument-contract.test.mjs` (**13 cases**) — the tool-argument contract gate |
+| Phase commits | Phase 1: `c0e48ab`, `3ac7a10`, `c2ba900`, `ae9fd1d` · Phase 2: `8ee4ef1` · A3 completion + R4 closure: `e8b39f7` · **R3 + R5 closure: `77a53b0`** · **R2 + R6 + A7 + the tool-argument contract seam + the sync-derive fix: the rc.21 commit (this session)** |
+| Live service | **`PID 361248`, started 09:37:14 KST** (`dsh` on `127.0.0.1:3080`) — **not restarted by this session** |
 | Credentials | store `~/.dsh/.credentials.yaml` (mode **0600**) holds refs for **`DEEPSEEK_API_KEY`, `OPENCODE_API_KEY`, `DEEPINFRA_API_KEY`, `EXAONE_API_KEY`** — **names only; no value is ever reproduced in this document.** Live profile patch `apiKey:` count = **0**; it carries `credentialRef: DEEPINFRA_API_KEY` / `EXAONE_API_KEY` |
 | Allowlist | **live 7 routes** incl. `exaone/k-exaone_v2.5`; repo default in `cordis.patch.yml` + `lib/allowlist.js` + `test/allowlist.test.mjs` |
 | Model picker | the synthetic **`OpenCode (config default)`** row is **gone** from the `OpenCode Go (direct)` group |
@@ -60,6 +60,59 @@ A3-completed OpenCode vendor. The probes below are measured against that PID.
   `verify:refresh` fails when one of the four presets, its route, or an expected model row disappears.
 - **The credential store path works live.** The `credentialRef` route is no longer a paper feature:
   a store-backed DeepInfra turn succeeded end to end after the restart.
+- **One cost/usage/plan implementation (R2).** The OpenCode vendor's private ledger, its
+  re-declared plan table and its re-declared usage constants now **delegate** to the core
+  `lib/cost.js`, `lib/presets.js` and `lib/usage.js` instead of carrying their own bodies.
+  Measured duplicate-definition counts: `numberOrNull` **2 → 1**, `pickSession` **2 → 1**,
+  `USAGE_BUCKETS` **2 → 1**, `usageTotal` **2 → 1**. `createCostStore` / `createCostLedger` stay
+  at **3** total = **1** core + **2** legitimate thin wrappers (DeepInfra + OpenCode) — the
+  accepted precedent the R6 gate encodes.
+- **The uniqueness greps are a WIRED gate (R6).** `test/uniqueness.test.mjs` (**23 cases**, it
+  rides the existing `npm test` glob, so **no `package.json` change**) plus
+  `scripts/verify-uniqueness.mjs` (a standalone runner with `--json` and exit **0 / 1 / 2**).
+  The rule is **not** the naive "one definition repo-wide" (that would be false for
+  `createCostStore`): (a) exactly **ONE** core implementation in `lib/**`; (b) a vendor
+  definition is legal **only** if it imports the core symbol **and** calls it; (c) definitions
+  outside `lib/` **and** `vendor/` are strays and fail; (d) the vendor set is **MEASURED** from
+  `vendor/*/package.json`, never hand-listed.
+- **The host provider seam is measured, not promised (A7).** See
+  [HOST-PROVIDERS-SEAM.md](./HOST-PROVIDERS-SEAM.md). The host `dsh-llm-pi-ai` seam is
+  `providers: z.dict(profile)` with 4 wire protocols; pi-ai's installed catalog already ships
+  `opencode` (**85** models) and `opencode-go` (**32**), but **none** of the router's four preset
+  provider ids (`antigravity`, `opencode-http-agent`, `deepinfra`, `exaone`) is a catalog route.
+  The seam models **provider profiles only** — no daemon indirection, no ledger/billing, no plan
+  windows, no picker, no dispatch gates — so **it cannot replace this router**. Recommended owner
+  decision: keep `llm-pi-ai` **dormant** (it is dormant today; no `llm-pi-ai:` section exists in
+  the live profile). This confirms the earlier removal of **P2-1** as an unreachable promise.
+- **A structural tool-argument contract seam (new in rc.21).** `lib/stream/tool-argument-contract.js`
+  (**163 L**) + `test/tool-argument-contract.test.mjs` (**13 cases**). A live Gemini/Antigravity
+  subagent run died with `Error: invalid escalation: justification is only valid together with
+  sandbox_permissions`. The root cause was **not** a Gemini quirk: the host
+  (`@deepseek-ai/dsh-sandbox` `validateEscalationArgs`) enforces the escalation pairing on the
+  **EXECUTION** path, a provider schema cannot express it, and every vendor hands calls to the
+  **ONE** shared pipe — so a drifted call reached execution intact. The seam sits at the single
+  **L1 emission point** (`finalBlock` in `lib/stream/index.js`), where the produced `block-end`
+  block is authoritative for execution (the host `BlockAssembler` keeps `partial.block` and ignores
+  the accumulated deltas once closed). All **five** vendor `normalizeStream` call sites now pass
+  `tools: options.tools`. The rule is **DERIVED, not hardcoded**: it reads the host's own schema
+  prose `Required with <field>` (measured identically on `dsh-tool-bash`, `dsh-tool-fs`,
+  `dsh-tool-pwsh`), so a differently-named pair is covered with no edit. Repair direction: a
+  dependent field present **without** its principal is **dropped** (a lone reason asks for
+  nothing); a principal with a **blank** dependent keeps the escalation and drops the blank value
+  — it **NEVER fabricates a justification** (a fabricated approval reason would be a safety
+  regression). A well-formed escalation is preserved **byte-for-byte**.
+- **`scripts/sync-derive.mjs` is idempotent (new in rc.21).** It was not: `locate()` ended at the
+  bare `END` marker while `deriveBlock()` writes `END + ' ---…'` (40 dash bytes), so every
+  `npm run build` appended **40 bytes** to the END line of `lib/client.src.js` with **no content
+  change**. **Measured at HEAD in an isolated copy:** `node scripts/sync-derive.mjs` four times
+  grew `lib/client.src.js` **188 602 → 188 762 bytes** (**+40 bytes per run**, the END line
+  growing **3 239 → 3 439 chars**); a full `npm run build` grew it **+41 bytes per run** (the
+  extra byte is `build-presets.mjs` — see the residual below). It now ends at the marker's **line**,
+  so a repeat run finds what it wrote and reports `unchanged` (proven: runs 2–4 identical hashes).
+  Because of this, `lib/client.src.js` and `lib/client.js` show a **lossless whitespace-only
+  diff** against HEAD (the accumulated padding collapsing to the canonical form) — expected and
+  correct, not a functional change. Measured: the repo's own `stripCode()` comparison of HEAD vs
+  the canonical rebuild is **byte-identical** for both files.
 
 ## 2. The three fixes (rc.20, same session)
 
@@ -193,11 +246,12 @@ The duplication left the upper layer; the standardisation entered the lower one.
 | **No vendor owns an SSE decoder** (ARCH §4 MUST-NOT #1) | ✅ **PASS** | `vendor/{antigravity,deepinfra}/lib/sse.js` are re-export shims (33 L / 43 L); every adapter uses `readSseEvents` (`antigravity/adapter.js:21`, `deepinfra/adapter.js:29`, `exaone/adapter.js:28`, `opencode/http.js:70`). **The one exception is gone:** the OpenCode private SSE reader (`chatSseEvents` / `parseSseBlock`) was **deleted** with the legacy pipeline (`e8b39f7`) — there is no second decoder left. |
 | **No vendor owns a usage writer / finish table** (ARCH §4 MUST-NOT #2) | ⚠️ **EXCEPTION-OK** | `vendor/opencode/lib/openai-mapping.js:14` (`usageFromOpenAi`) and `:62` (`finishFromOpenAi`) are the vendor's **published** code — they carry the vendor's own `OPENCODE_FINISH_*` failure codes and its published total contract (`input + output + cacheRead`), which the shared writer deliberately does not reproduce. Used by the shared path (`stream-contract.js:99`, `:109`). **EXCEPTION-OK** as a published-contract exception. |
 | **No vendor owns a tool-call assembler** (ARCH §4 MUST-NOT #3) | ✅ **PASS** | The 335-line assembler is gone from the live path; the shared path uses the core's part assembler (`lib/stream/index.js:291-344` `emitToolCall`). **The legacy copy is gone too** — it was deleted with the legacy pipeline (`e8b39f7`); there is no `pipe:'legacy'` path left that could reach it. |
-| **No vendor owns a cost ledger** (ARCH §4 MUST-NOT #5) | ⚠️ **EXCEPTION-OK / partially remediated** | DeepInfra now imports the core's `createCostLedger`/`createCostStore`/`numberOrNull`/`pickSession` (`vendor/deepinfra/lib/cost.js:50-56`); only its wire parsing (`parseCost`) and price vocabulary stay local. **OpenCode still owns a private ledger** (`vendor/opencode/lib/cost.js:61`, `:142`, `:332`, `:356`) and re-declares `USAGE_BUCKETS` (`usage-ledger.js:21`) → follow-up **R2**. (Its `plans.js:25` `PLAN_PROVIDERS` duplicate is vendor-local and stays there — the **L1** copy is what R5 removed.) |
+| **No vendor owns a cost ledger** (ARCH §4 MUST-NOT #5) | ✅ **PASS (was `EXCEPTION-OK / partially remediated`)** | **CLOSED by R2.** DeepInfra imports the core's `createCostLedger`/`createCostStore`/`numberOrNull`/`pickSession` (`vendor/deepinfra/lib/cost.js:50-56`); only its wire parsing (`parseCost`) and price vocabulary stay local. **OpenCode no longer owns a private ledger**: `vendor/opencode/lib/cost.js` (**324 → 161 diff lines**), `vendor/opencode/lib/plans.js` and `vendor/opencode/lib/usage-ledger.js` now **delegate** to the core `lib/cost.js`, `lib/presets.js` and `lib/usage.js`. Measured duplicate-definition counts after the change: `numberOrNull` **2 → 1** (`lib/cost.js:145`), `pickSession` **2 → 1** (`lib/cost.js:229`), `USAGE_BUCKETS` **2 → 1** (`lib/usage.js:51`), `usageTotal` **2 → 1** (`lib/usage.js:75`). `createCostStore`/`createCostLedger` stay at **3** = **1** core + **2** legitimate thin wrappers (DeepInfra + OpenCode). **Two design points worth keeping:** (i) `PLAN_PROVIDERS` is imported from **`lib/presets.js`**, NOT `lib/plan.js`, because `plan.PLAN_PROVIDERS` is an unbound mutable `Object.create(null)` (`{}`) until `bindPlanProviders()` runs — importing it would have silently broken plan grouping (every route would classify as `other`); (ii) the core ledger stores `bySource` as **spend PARTITIONS**, while the frozen `lib/client.src.js` `detectOpencodeTier()` reads it as a **COUNT map**, so the vendor wrapper projects partitions back to counts to keep the served payload identical. |
 | **No vendor owns a retry/backoff loop** (ARCH §4 MUST-NOT #4) | ✅ **PASS** (was `EXCEPTION-OK / partially remediated`) | Antigravity's 70-line loop rides `lib/retry.js` (`vendor/antigravity/lib/adapter.js:27`). **OpenCode's two loops now ride it too** (`77a53b0`): its own `sleepFor` (**24 L**) and its **inverted-signature** `backoffDelay` (**12 L**) are **deleted**. Measured: `grep -rn "function backoffDelay\|function sleepFor" lib/ vendor/` → **2** hits, **both** in `lib/retry.js` (`backoffDelay` `:130`, `sleepFor` `:147`). **R3 is CLOSED.** |
 | **No vendor owns a generic TTL catalog cache** (ARCH §4 MUST-NOT #6) | ✅ **PASS** (was `EXCEPTION-OK / partially remediated`) | Antigravity rides `lib/catalog-cache.js` (`vendor/antigravity/lib/index.js:32`, instantiated `:274`). **OpenCode** (`77a53b0`): `vendor/opencode/lib/catalog-cache.js` (**362 L**) is **deleted**; its snapshot file and SWR lifecycle are split into `catalog-file.js` (**236 L**) + `catalog-lifecycle.js` (**181 L**) over the core `createCatalogCache`. **DeepInfra** (`77a53b0`): the local 30-min in-memory cache, `invalidateCatalog` closure and `fetchedAt` math are replaced by the core cache with a `ttlMs` **function** (`vendor/deepinfra/lib/index.js:237`); its 30-min default and `catalogTtlMs` config key are unchanged. Measured: `grep -rn "lib/catalog-cache.js" vendor/` → **3** hits (antigravity, deepinfra, opencode) — **one** core cache for every vendor. Antigravity's **quota**-window cache stays vendor-local (it caches a quota fact, not a catalog). |
 | **The zero-vendor-loads guard is honest for all 4 vendors** (ARCH §6 #2) | ✅ **PASS** | `scripts/verify-stream.mjs:34-51` **measures** the vendor set from `vendor/*/package.json` (a 5th vendor is guarded automatically). `:94-122` **self-tests**: every alias and scoped name must be **refused**, and a specifier that resolves is reported `UNGUARDED` and fails the run. `:115-120` **control probe** (`node:fs`) proves the resolver is consulted. `:54-57` **vacuity guard**: exits **2** if no vendored package exists. Measured 2026-11-14: **4 probed, 8/8 refused, 0 loads**. |
-| **Repo-wide uniqueness greps** (ARCH §6 #3) | ⚠️ **PARTIAL** | `mapDelta` → **1** definition (`lib/stream/openai.js:73`) ✅. `numberOrNull` → **2** (`lib/cost.js:145`, `vendor/opencode/lib/cost.js:61`) ❌. `pickSession` → **2** ❌. `createCostStore` → **3** (one is a 2-line DeepInfra wrapper) ❌. `backoffDelay` → **1** (`lib/retry.js:130`) ✅ — the OpenCode duplicate is **gone** (`77a53b0`). `parser:'legacy'` literal → **0** ✅. **No uniqueness gate is wired into CI** — it is a manual grep, not a test → follow-up **R6**. |
+| **Repo-wide uniqueness greps** (ARCH §6 #3) | ✅ **PASS (was `PARTIAL`)** | **CLOSED by R6.** `mapDelta` → **1** (`lib/stream/openai.js`), `numberOrNull` → **1** (`lib/cost.js:145`), `pickSession` → **1** (`lib/cost.js:229`), `backoffDelay` → **1** (`lib/retry.js:130`), `createCostStore` → **3** = 1 core + 2 legal thin wrappers. `parser:'legacy'` literal → **0**. The greps are now a **WIRED gate**, not a manual grep: `test/uniqueness.test.mjs` (**23 cases**) rides the existing `npm test` glob (**no `package.json` change**) and `scripts/verify-uniqueness.mjs` is a standalone runner (`--json`, exit **0/1/2**). The rule is **not** naive "one definition repo-wide" — (a) exactly **ONE** core implementation in `lib/**`; (b) a vendor definition is legal **only** if it imports the core symbol **and** calls it; (c) definitions outside `lib/`+`vendor/` are strays and fail; (d) the vendor set is **MEASURED** from `vendor/*/package.json`, never hand-listed. **Negative proof:** a planted duplicate produced **8** findings, then reverted; the tree was hash-verified file-by-file. |
+| **Tool-argument contract at the L1 emission point** (new seam, ARCH §2.5 / §6) | ✅ **PASS (gate exists)** | `lib/stream/tool-argument-contract.js` (**163 L**) reconciles a tool call's arguments against the tool's **own declared** schema before they leave the pipe. Placed at **`finalBlock`** in `lib/stream/index.js` — the single L1 emission point, where the `block-end` block is authoritative for execution (the host `BlockAssembler` keeps `partial.block` and ignores the accumulated deltas once a block closes). All **five** vendor `normalizeStream` call sites pass `tools: options.tools` (`vendor/antigravity/lib/adapter.js:294`, `vendor/deepinfra/lib/adapter.js:229`, `vendor/deepinfra/lib/anthropic-adapter.js:263`, `vendor/exaone/lib/adapter.js:147`, `vendor/opencode/lib/http.js:1950`). The rule is **DERIVED** from the host's schema prose `Required with <field>` (measured identically on `dsh-tool-bash`, `dsh-tool-fs`, `dsh-tool-pwsh`), so a differently-named pair is covered with **no edit**. The seam carries **no vendor name, no model name and no per-vendor branch**, so the L1 boundary rule is untouched. Gate: `test/tool-argument-contract.test.mjs` (**13 cases**) pins the derivation against the measured host text. |
 | **L1 boundary lint test** (`test/stream-boundary.test.mjs`, ARCH §6 #1) | ✅ **PASS (gate exists)** | `test/stream-boundary.test.mjs` (**15 cases**) exists and fails on a vendor import, a vendor identifier, `ctx.` / `process.env` / `node:fs` / `fetch(` / `require(` / a dynamic `import(` inside `lib/stream/*`, a per-vendor equality, and on more than one SSE decoder / usage writer / finish table / `abortError`. **Negative proof:** a planted forbidden import failed **3** rules; the plant was reverted with a **sha256 verification**. |
 | **`USAGE_READERS` gate** (ARCH §6 #3) | ✅ **PASS (gate exists)** | `scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (**12 cases**): every preset's `usage.routes[].normalize` must name a real reader, no reader may be dead, and the browser **source ↔ bundle** must stay in parity. Measured: **4 presets / 4 routes / 3 readers**; a renamed route exits **1**. |
 | **`classifyBlock` dead hook slot** (ARCH §6 #3 / A6) | ✅ **PASS (removed)** | `lib/driver/contract.js` no longer declares `classifyBlock`; `test/driver-contract.test.mjs` asserts `'classifyBlock' in driver.hooks === false`. Repo-wide hits are now **0** outside the test that names it. |
@@ -335,17 +389,173 @@ read, printed or reproduced.
 repo-wide uniqueness greps are still a manual grep, not a wired gate), and **A7** (the host
 `dsh-llm-pi-ai` `providers` seam — measure-first, owner-gated).
 
-### Follow-up tasks (no code changed by this check)
+### R2 + R6 closed, A7 closed as a measurement, and the tool-argument contract seam (measured 2026-11-14, commit `rc.21`)
+
+**R2 is CLOSED, R6 is CLOSED, and A7 is CLOSED as a MEASUREMENT.** All three were open caveats in
+the previous revision of this file; this subsection replaces them.
+
+**R2 — one cost / usage / plan implementation.**
+
+- `vendor/opencode/lib/cost.js`, `vendor/opencode/lib/plans.js` and
+  `vendor/opencode/lib/usage-ledger.js` now **delegate** to the core `lib/cost.js`,
+  `lib/presets.js` and `lib/usage.js` instead of carrying their own bodies. Measured
+  duplicate-definition counts: `numberOrNull` **2 → 1** (`lib/cost.js:145`), `pickSession`
+  **2 → 1** (`lib/cost.js:229`), `USAGE_BUCKETS` **2 → 1** (`lib/usage.js:51`), `usageTotal`
+  **2 → 1** (`lib/usage.js:75`).
+- `createCostStore` / `createCostLedger` remain **3** total = **1** core + **2** legitimate thin
+  wrappers (DeepInfra + OpenCode). This is the **accepted precedent**, not a residual: the
+  architecture allows a vendor to keep a same-named wrapper as long as it imports the core
+  symbol and calls it, and the R6 gate encodes exactly that rule.
+- **Design point 1 — `PLAN_PROVIDERS` comes from `lib/presets.js`, NOT `lib/plan.js`.**
+  `plan.PLAN_PROVIDERS` is an **unbound mutable** `Object.create(null)` (`{}`) until
+  `bindPlanProviders()` runs, so importing it would have silently broken plan grouping — every
+  route would classify as `other`. `lib/presets.js` holds the **frozen**
+  `{ go: 'opencode-go', zen: 'opencode' }` and is cycle-free (`presets.js` imports only
+  `preset-schema.js`).
+- **Design point 2 — `bySource` is a spend PARTITION in the core, a COUNT map on the wire.**
+  The core ledger stores `bySource` as spend partitions, but the frozen `lib/client.src.js`
+  `detectOpencodeTier()` reads it as a **count** map. The vendor wrapper therefore **projects
+  partitions back to counts** so the served payload stays byte-identical. Both shapes are
+  documented at their definitions.
+
+**R6 — the uniqueness greps are a wired gate.**
+
+- `test/uniqueness.test.mjs` (**23 cases**) **rides the existing `npm test` glob** — it needs
+  **no `package.json` change** — and `scripts/verify-uniqueness.mjs` is a **standalone runner**
+  with `--json` and exit **0** (clean) / **1** (gate failure) / **2** (the gate could not run,
+  i.e. vacuity).
+- The rule is **NOT** the naive "one definition repo-wide" — that would be **false** for
+  `createCostStore`. The encoded rule is: (a) exactly **ONE** core implementation in `lib/**`;
+  (b) a vendor definition is legal **ONLY** if it imports the core symbol **AND** calls it;
+  (c) definitions outside `lib/` **and** `vendor/` are **strays** and fail; (d) the vendor set
+  is **MEASURED** from `vendor/*/package.json`, never hand-listed — so a fifth vendored
+  package is covered without editing the gate.
+- **Negative proof (re-measured for this handoff):** a dual plant — **5** names in `scripts/`
+  (strays) plus **3** vendor re-implementations — produced exactly **8** findings, and the
+  revert restored the baseline exactly (findings back to **0**). A single-file stray plant
+  produced **1** finding and reverted cleanly; the tree hash is stable across a scan, and no
+  negative-proof scratch file survives in `scripts/`.
+
+**A7 — closed as a MEASUREMENT, not as a feature.** Full evidence:
+[HOST-PROVIDERS-SEAM.md](./HOST-PROVIDERS-SEAM.md).
+
+- The host `dsh-llm-pi-ai` seam is `providers: z.dict(profile)` with **4** wire protocols.
+  pi-ai's installed catalog already ships `opencode` (**85** models) and `opencode-go`
+  (**32**) — but **NONE** of the router's four preset provider ids (`antigravity`,
+  `opencode-http-agent`, `deepinfra`, `exaone`) is a catalog route.
+- The seam models **provider profiles only** — **no** daemon indirection, **no** ledger/billing,
+  **no** plan windows, **no** picker, **no** dispatch gates — so **it cannot replace this
+  router**. This confirms the earlier removal of **P2-1** ("data-only preset") as an
+  **unreachable promise** rather than a regression.
+- **Recommended owner decision: keep `llm-pi-ai` dormant.** It is dormant today (no
+  `llm-pi-ai:` section exists in the live profile), so the recommended option changes nothing —
+  which is why it is the safe close. Nothing here authorises declaring catalog-backed profiles.
+
+**The tool-argument contract seam — new, and it is a structural fix, not a provider patch.**
+
+- **The bug:** a live Gemini/Antigravity subagent run died with
+  `Error: invalid escalation: justification is only valid together with sandbox_permissions`.
+- **The root cause was NOT a Gemini quirk.** The host (`@deepseek-ai/dsh-sandbox`
+  `validateEscalationArgs`) enforces the escalation pairing on the **EXECUTION** path; a
+  provider schema cannot express it; and **every** vendor hands its calls to the **ONE** shared
+  pipe. So a drifted call reached execution intact, and the turn died where the model could not
+  see it coming.
+- **Placement:** the single **L1 emission point** — `finalBlock` in `lib/stream/index.js` — where
+  the produced `block-end` block is authoritative for execution (the host `BlockAssembler` keeps
+  `partial.block` and ignores the accumulated deltas once a block closes). All **five** vendor
+  `normalizeStream` call sites now pass `tools: options.tools`.
+- **The rule is DERIVED, not hardcoded:** it reads the host's own schema prose
+  `Required with <field>` (measured **identically** on `dsh-tool-bash`, `dsh-tool-fs` and
+  `dsh-tool-pwsh`), so a differently-named pair is covered with **no edit** to this repo.
+- **Repair direction:** a dependent field present **WITHOUT** its principal is **dropped** (a lone
+  reason asks for nothing); a principal with a **blank** dependent keeps the escalation and drops
+  the blank value — it **NEVER fabricates a justification**, because a fabricated approval reason
+  would be a **safety regression**, not a repair. A well-formed escalation is preserved
+  **byte-for-byte**, and a call that needs no repair is returned by identity.
+- **Gate:** `test/tool-argument-contract.test.mjs` (**13 cases**) pins the derivation against the
+  measured host text, so an upstream rephrasing fails a test instead of going quiet.
+
+**`scripts/sync-derive.mjs` was non-idempotent — now fixed (closed).**
+
+- **The bug:** `locate()` ended at the **bare** `END` marker while `deriveBlock()` writes
+  `END + ' ---…'` (40 dash bytes). Every `npm run build` therefore appended **40 bytes** to the
+  END line of `lib/client.src.js` with **no content change**. **Measured at HEAD in an isolated
+  copy:** `node scripts/sync-derive.mjs` four times grew `lib/client.src.js`
+  **188 602 → 188 762 bytes** (**+40 bytes per run**; the END line grew **3 239 → 3 439 chars**).
+  A full `npm run build` grew it **+41 bytes per run** — the extra byte is `build-presets.mjs`
+  (see the residual below), which is a *different* script.
+- **The fix:** `locate()` now ends at the **end of the marker's line**, so a repeat run finds
+  exactly what it wrote and reports `unchanged`. **Proven:** runs 2–4 produce identical hashes
+  (`node scripts/sync-derive.mjs` three times in a row → `unchanged` ×3, same sha256).
+- **Consequence:** `lib/client.src.js` and `lib/client.js` show a **lossless whitespace-only
+  diff** against HEAD (the accumulated padding collapsing to the canonical form) — expected and
+  correct, **not** a functional change. Measured: the repo's own `stripCode()` comparison of
+  HEAD vs the canonical rebuild is **byte-identical** for both files.
+- ⚠️ **Residual, measured and NOT fixed by this session** (it is a *different* script and a
+  *pre-existing* defect): `scripts/build-presets.mjs` writes the baked declaration line with a
+  **trailing newline** while its `DECLARATION_LINE` regex (`/^\s*const PRESET_DECLARATIONS = .*$/m`)
+  never captures one — so **each** `build-presets` run appends exactly **1 byte** (one blank line)
+  after the declaration line. Measured in an isolated copy: `client.src.js` grew
+  **185 407 → 185 408 → 185 409 → 185 410** bytes over 4 runs, with the code content
+  unchanged. This is a **pre-existing** defect (`build-presets.mjs` is **unchanged** from HEAD)
+  and it was **outside this session's scope**, so it is recorded here rather than fixed.
+**Gates (independently re-measured for this handoff, not quoted from a commit message):**
+router `npm test` **843/843**; `npm run verify` **exit 0**; `verify:stream` **8/8** with **4**
+vendored packages probed, **8/8** specifiers refused, **vendor loads 0**; `specs:check` OK
+(`5 protocols, 4 providers, 4 pricing`); **`node scripts/verify-uniqueness.mjs` clean, exit 0**;
+vendor suites antigravity **193/193**, deepinfra **222 pass / 7 skip**, opencode **554/554**,
+exaone **19/19**. **No restart**, **no** `~/.dsh` write, **no** API key read, printed or
+reproduced.
+
+**What this did NOT close (still open):** the **OpenCode-backend 404** (see below) — a
+live-runtime observation at the provider-id resolution seam, **not** reproduced in the test
+suite.
+
+### Follow-up tasks
 
 | # | Task | Scope |
 | :-: |---|---|
 | ~~**R1**~~ | ~~Finish A3~~ — **CLOSED** by `e8b39f7` (see *A3 completion + R4 closure* above) | — |
-| **R2** | A4 remnant: route OpenCode's private ledger (`numberOrNull`, `pickSession`, `createCostStore`, `createCostLedger`) and its re-declared `plans.js` / `usage-ledger.js` constants onto `lib/{cost,plan,usage}.js` | `vendor/opencode/lib/**` |
+| ~~**R2**~~ | ~~A4 remnant~~ — **CLOSED** in rc.21: OpenCode's private ledger, its re-declared `plans.js` plan table and its `usage-ledger.js` constants now **delegate** to `lib/{cost,presets,usage}.js`; `numberOrNull` / `pickSession` / `USAGE_BUCKETS` / `usageTotal` are each defined **once** repo-wide; `createCostStore`/`createCostLedger` stay at 3 = 1 core + 2 legal thin wrappers | — |
 | ~~**R3**~~ | ~~A5 remnant~~ — **CLOSED** by `77a53b0`: OpenCode's own `sleepFor` / inverted-signature `backoffDelay` are deleted and both retry sites ride `lib/retry.js`; `vendor/opencode/lib/catalog-cache.js` (362 L) is split into `catalog-file.js` + `catalog-lifecycle.js` over the core cache; DeepInfra's local 30-min cache rides the core cache too | — |
 | ~~**R4**~~ | ~~A6 remnant~~ — **CLOSED** by `e8b39f7`: the L1 boundary lint, the `USAGE_READERS` gate and the removal of the dead `classifyBlock` slot are all done, with negative proofs | — |
 | ~~**R5**~~ | ~~`PLAN_PROVIDERS` in L1~~ — **CLOSED** by `77a53b0`: the vendor-id table moved to `lib/presets.js` (+ `planProvidersOf`); `lib/plan.js` takes an explicit `providers` argument or a `bindPlanProviders()` binding; vendor-id count **2 code ids (9 with comments) → 0**; `test/plan-boundary.test.mjs` (**5 cases**) measures the vendor words from `vendor/*/package.json` | — |
-| **R6** | Add the repo-wide uniqueness greps (`mapDelta` / `numberOrNull` / `pickSession` / `createCostStore` / `backoffDelay`) as a **wired gate**, not a manual grep | `test/**` or `scripts/**` |
-| **A7** | Measure the host `dsh-llm-pi-ai` `providers: z.dict(profile)` seam, then produce the owner decision | `docs/**` first, then owner-gated code |
+| ~~**R6**~~ | ~~Uniqueness greps as a wired gate~~ — **CLOSED** in rc.21: `test/uniqueness.test.mjs` (**23 cases**, rides the `npm test` glob, **no `package.json` change**) + `scripts/verify-uniqueness.mjs` (standalone, `--json`, exit 0/1/2). Rule: one core implementation in `lib/**`; a vendor definition is legal only if it imports the core symbol **and** calls it; strays outside `lib/`+`vendor/` fail; the vendor set is **measured** from `vendor/*/package.json`. Negative proof: a dual plant produced **8** findings and reverted exactly | — |
+| ~~**A7**~~ | ~~Host seam~~ — **CLOSED as a MEASUREMENT** in rc.21: [HOST-PROVIDERS-SEAM.md](./HOST-PROVIDERS-SEAM.md). The seam is `providers: z.dict(profile)` with 4 wires; the catalog ships `opencode` (85 models) and `opencode-go` (32) but **none** of the router's four preset provider ids is a catalog route, and the seam models **profiles only** — so it **cannot replace this router**. Recommended: keep `llm-pi-ai` **dormant** | — |
+| **NEW** | **OpenCode-backend 404** — see *§3c*. A live-runtime observation at the **provider-id resolution seam**: the attached daemon's catalog does not expose `opencode-go`. Needs a fix that resolves the id **against the daemon's real catalog**, not a string substitution | `vendor/opencode/lib/http.js` |
+| **NEW** | **`build-presets.mjs` appends 1 byte per run** — a **pre-existing** defect (unchanged from HEAD), measured at **+1 byte / run**; recorded here, not fixed in this session | `scripts/build-presets.mjs` |
+
+## 3c. OPEN — the OpenCode-backend 404 (provider-id resolution seam)
+
+**This is recorded, NOT fixed.** It is a **live-runtime observation**; it is **not reproduced in
+the test suite**, so no gate covers it today.
+
+**The observed failure.** When a subagent runs through the OpenCode backend, the runtime reports:
+
+```
+opencode GET /api/provider/opencode-go -> HTTP 404: {"_tag":"ProviderNotFoundError","providerID":"opencode-go","message":"Provider not found: opencode-go"} OPENCODE_BACKEND
+```
+
+**Measured context (the three code sites that produce it).**
+
+| Site | Measured behaviour |
+| :--- | :--- |
+| `vendor/opencode/lib/http.js:263` | `backendProviderId` **defaults** to `'opencode-go'` |
+| `vendor/opencode/lib/http.js` `backendProviderForRoute()` (≈ **:2224**) | takes the **route's prefix** as the provider id and passes an **unknown prefix through**, rather than falling back to the configured default |
+| `vendor/opencode/lib/http.js` `ensure()` (≈ **:1193**) | issues `GET /api/provider/<id>` and **throws** when the response carries no `settings.baseURL` |
+
+**What the 404 means.** The **attached daemon's catalog does not expose that provider id**. The id
+must be **resolved against the daemon's real catalog** rather than **assumed** from the route
+prefix — the two are separate things, and the current code conflates them.
+
+**Where the fix belongs.** At the **provider-id resolution seam** (`backendProviderForRoute()` /
+`ensure()`), and it must be a **resolution** — read the daemon's catalog and pick the id that
+actually exists — **not a string-substitution patch**. Substituting a different literal would
+hardcode a second assumption in place of the first and would break again the moment the daemon's
+catalog changes.
+
+**Status:** OPEN. Recorded so the next session does not rediscover it, and so the fix is done at
+the right seam rather than as a string swap.
 
 ## 4. What is open (details and criteria in ROADMAP.md)
 
@@ -359,10 +569,12 @@ repo-wide uniqueness greps are still a manual grep, not a wired gate), and **A7*
 | **P2** | ~~P2-1 data-only preset install~~ | **REMOVED 2026-11-14** — deleted as an unreachable promise (0 of 4 presets are data-only); replaced by the **P2-A** queue in ROADMAP.md §4 |
 | **P2-A** | **Phase 1 + Phase 2** (core lock + vendor fan-out) | ✅ **DONE** — `c0e48ab`, `3ac7a10`, `c2ba900`, `ae9fd1d` (Phase 1) + `8ee4ef1` (Phase 2). Boundary verdict in §3b. |
 | **P2-A** | **A3 — OpenCode onto the shared pipe** | ✅ **COMPLETE** (`e8b39f7`) — the legacy pipeline, the `pipe` config key and the vendor's own SSE reader are deleted (`http.js` 3 272 → **2 721 L**); `stream-parser.js` was measured to be **shared-path glue** and was **renamed** `notation-classifier.js`; the live shared-pipe turn is owner-verified. |
-| **P2-A** | **A4 / A5 remnants** | ⚠️ OpenCode still owns a private ledger (`numberOrNull`, `pickSession`, `createCostStore`, `createCostLedger`) → task **R2**. The retry and catalog-cache remnants are **CLOSED**: **R3** (`77a53b0`) — one retry core, one catalog cache for every vendor. |
-| **P2-A** | **A6 remnants** | ✅ **CLOSED** (`e8b39f7`) — `test/stream-boundary.test.mjs` (**15** cases), `scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (**12** cases), and the dead `classifyBlock` slot removed. The **uniqueness greps** remain a manual grep → **R6**. |
+| **P2-A** | **A4 / A5 remnants** | ✅ **BOTH CLOSED** — **R2** (rc.21): OpenCode's private ledger now delegates to `lib/{cost,presets,usage}.js`; `numberOrNull` / `pickSession` / `USAGE_BUCKETS` / `usageTotal` are each defined **once** repo-wide. **R3** (`77a53b0`): one retry core, one catalog cache for every vendor. |
+| **P2-A** | **A6 remnants** | ✅ **CLOSED** (`e8b39f7`) — `test/stream-boundary.test.mjs` (**15** cases), `scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (**12** cases), and the dead `classifyBlock` slot removed. The **uniqueness greps** are now a **wired gate** → **R6 CLOSED** (rc.21). |
 | **P2-A** | **R5 — no vendor ids in L1** | ✅ **CLOSED** (`77a53b0`) — `PLAN_PROVIDERS` moved to `lib/presets.js`; `lib/plan.js` vendor-id count **→ 0**; `test/plan-boundary.test.mjs` (**5 cases**) measures the vendor words from `vendor/*/package.json`. |
-| **P2-A** | **A7 — host seam** (measure-first) | ⬜ **Not started** — a measured answer on `dsh-llm-pi-ai` `providers: z.dict(profile)` + an owner decision. |
+| **P2-A** | **A7 — host seam** (measure-first) | ✅ **CLOSED as a MEASUREMENT** (rc.21) — [HOST-PROVIDERS-SEAM.md](./HOST-PROVIDERS-SEAM.md): the seam models **provider profiles only**, so it **cannot replace this router**; **recommended: keep `llm-pi-ai` dormant** (owner decision, and the recommended option changes nothing). |
+| **P2-A** | **R7 — tool-argument contract seam** (new, rc.21) | ✅ **SHIPPED** — `lib/stream/tool-argument-contract.js` (**163 L**) at the L1 emission point (`finalBlock`); the rule is **derived** from the host's `Required with <field>` schema prose; **five** vendor call sites pass `tools`; gate `test/tool-argument-contract.test.mjs` (**13 cases**). |
+| **P2-A** | **R8 — OpenCode-backend 404** (new, rc.21) | ⬜ **OPEN** — live-runtime observation at the **provider-id resolution seam**; the attached daemon's catalog does not expose `opencode-go`. Not reproduced in the test suite. See §3c. |
 | **P2** | P2-2 `pipe:'shared'` default | ✅ **DONE** — the `pipe` config key is deleted entirely; no config selects a pipeline any more |
 | **P2** | P2-3 canonical parser | ✅ **DONE** — the placement is recorded: `notation-classifier.js`, a vendor-local notation-quirk surface (single named export, one consumer) |
 | **P2** | P2-5 S3 Antigravity usage per model group | **Not started** (owner deferred 2026-11-08) |
@@ -390,11 +602,14 @@ track migrated. **No value is reproduced here or in any other document.**
    inherits the parent's frozen list, so an existing session cannot prove it.
 3. **Owner/agent:** the post-migration secret-hygiene scan (P0-3).
 4. **P2-A** — Phase 1 and Phase 2 are **done**; **A3 is COMPLETE**, **R4 is CLOSED** (both by
-   `e8b39f7`), and **R3 and R5 are CLOSED** (both by `77a53b0`: one retry core, one catalog cache,
-   no vendor ids in L1). What remains is the three-task tail recorded in
-   [ROADMAP.md](./ROADMAP.md) §6: **R2** OpenCode's private ledger onto the core → **R6** the
-   uniqueness greps as a wired gate → **A7** the host `dsh-llm-pi-ai` `providers` seam
-   (measure-first, owner-gated). **R2 / R6** are agent work; **A7** may need an owner decision.
+   `e8b39f7`), **R3 and R5 are CLOSED** (both by `77a53b0`: one retry core, one catalog cache,
+   no vendor ids in L1), and **R2 and R6 are CLOSED** and **A7 is CLOSED as a measurement** (all
+   three in rc.21: the OpenCode ledger rides the core, the uniqueness greps are a wired gate,
+   and the host `dsh-llm-pi-ai` seam is measured and cannot replace this router). The
+   **rc.21 tail is now:** the **OpenCode-backend 404** (§3c — a fix at the **provider-id
+   resolution seam**, not a string patch) and the **pre-existing** `build-presets.mjs` +1 byte/run
+   growth. The `llm-pi-ai` **owner decision** (keep it dormant) is still the owner's, but the
+   recommended option changes nothing, so nothing is blocked on it.
 
 ## 5. Do not repeat these closed items
 
@@ -413,9 +628,10 @@ track migrated. **No value is reproduced here or in any other document.**
 ```bash
 cd dsh-custom-router
 
-npm test                 # 807: surface + specs + spec-watch + refresh expectations + conformance
+npm test                 # 843: surface + specs + spec-watch + refresh expectations + conformance
                          #        + the L1 boundary lint + the usage-readers gate
                          #        + the plan-boundary lint
+                         #        + the uniqueness gate (23) + the tool-argument contract gate (13)
 npm run verify           # check + test + verify:stream + specs:check
 npm run specs:check      # schema + cross-ref + freshness + watch-baseline age + matrix-current
 npm run verify:freshness:strict   # a stale/missing watch baseline becomes an error
@@ -426,6 +642,9 @@ npm run verify:dispatch  # 17/17 admission/reclamation checks
 npm run verify:refresh   # 4/4 preset routes, expected model rows on both reads
 npm run verify:stream    # 8/8 dispatch cases; 4 vendors probed, 8/8 refused, 0 loads
 node scripts/verify-usage-readers.mjs   # usage.routes[].normalize vs the USAGE_READERS table
+node scripts/verify-uniqueness.mjs      # the R6 uniqueness gate; --json for machine output
+                                       # exit 0 = clean, 1 = violation, 2 = could not run
+node scripts/sync-derive.mjs            # rewrites the derivation block; reports `unchanged` when current
 
 (cd vendor/antigravity && npm test)   # 193
 (cd vendor/deepinfra  && npm test)    # 229 (222 pass + 7 skip)
@@ -448,8 +667,8 @@ node scripts/verify-usage-readers.mjs   # usage.routes[].normalize vs the USAGE_
 - **Subagent depth is 1**: a worker cannot spawn a router-path child. Live-probe workers must read
   existing router-path sessions or the owner must run the probe at the top level.
 - **Version discipline:** the numeric part (`0.0.1`) is the owner's; the `rc.<n>` suffix is the
-  agent's history marker. The Phase 1 + Phase 2 refactor already landed on `rc.20`; this
-  session's changes are **documentation-only**, so the version was **held** at `rc.20`.
+  agent's history marker. The Phase 1 + Phase 2 refactor landed on `rc.20`; **this session
+  changed code and docs, so the version was BUMPED to `rc.21`.**
 
 ## 8. Session record — 2026-11-14 (fourth session)
 
@@ -579,3 +798,61 @@ node scripts/verify-usage-readers.mjs   # usage.routes[].normalize vs the USAGE_
 - **No progress is claimed *by the audit itself*.** (Phase 1 and Phase 2 have since landed — see
   §3b and [ROADMAP.md](./ROADMAP.md) §6.) P0-1 (rotation), P0-3 (scan) and the EXAONE child
   verification remain open, exactly as before this audit.
+
+---
+
+## 12. Session record — 2026-11-14 (R2 + R6 closure, A7 measurement, tool-argument contract seam, sync-derive fix)
+
+- **Scope:** verification, documentation sync and commit of the work that landed in this session:
+  **R2** (OpenCode's ledger, plan table and usage constants now delegate to the core),
+  **R6** (the uniqueness greps are now a **wired gate**), **A7** (the host `dsh-llm-pi-ai` seam,
+  closed as a **measurement** — see [HOST-PROVIDERS-SEAM.md](./HOST-PROVIDERS-SEAM.md)), the new
+  **tool-argument contract seam** (`lib/stream/tool-argument-contract.js`), and the
+  **`sync-derive.mjs` idempotency fix**. **Version bumped `rc.20` → `rc.21`** (code and docs
+  changed). **No** `~/.dsh` write, **no** service restart, **no** API key read, printed or
+  reproduced, and **no other track's pending change** was touched or committed.
+- **Measured (independently re-run by this session, not quoted from the commit message):**
+  router `npm test` **843/843** (was **807/807** before this session: **+23** R6 gate,
+  **+13** tool-argument-contract gate); `npm run verify` **exit 0**; `verify:stream` **8/8** with
+  **4** vendored packages probed, **8/8** specifiers refused, **vendor loads 0**; `specs:check`
+  OK (`5 protocols, 4 providers, 4 pricing`); **`node scripts/verify-uniqueness.mjs` clean,
+  exit 0**; vendor suites antigravity **193/193**, deepinfra **222 pass / 7 skip**,
+  opencode **554/554**, exaone **19/19**.
+- **R2 evidence (measured, not asserted):** `numberOrNull` **2 → 1** (`lib/cost.js:145`),
+  `pickSession` **2 → 1** (`lib/cost.js:229`), `USAGE_BUCKETS` **2 → 1** (`lib/usage.js:51`),
+  `usageTotal` **2 → 1** (`lib/usage.js:75`); `createCostStore`/`createCostLedger` remain **3** =
+  **1** core + **2** legitimate thin wrappers (DeepInfra + OpenCode).
+- **R6 evidence (measured, not asserted):** a dual plant (**5** strays in `scripts/` + **3**
+  vendor re-implementations) produced exactly **8** findings and reverted to a **0**-finding
+  baseline; the tree hash is stable across a scan; no scratch file survives in `scripts/`.
+- **A7 evidence:** the seam is `providers: z.dict(profile)` with **4** wires; pi-ai's installed
+  catalog ships `opencode` (**85** models) and `opencode-go` (**32**) but **none** of the router's
+  four preset provider ids is a catalog route; the seam models **profiles only** and therefore
+  **cannot replace this router**.
+- **Tool-argument contract evidence:** the host's `validateEscalationArgs` enforces the pairing on
+  the **execution** path; the host's own schema prose spells the dependency **identically** on
+  `dsh-tool-bash`, `dsh-tool-fs` and `dsh-tool-pwsh` (`Required with sandbox_permissions: …`);
+  the seam sits at `finalBlock` (`lib/stream/index.js`) and **all five** vendor
+  `normalizeStream` call sites pass `tools: options.tools`.
+- **`sync-derive.mjs` evidence:** at HEAD the script appended **40 bytes** per run to the END
+  line of `lib/client.src.js` with **no content change** (measured in an isolated copy:
+  **188 602 → 188 762 bytes** over 4 runs, the END line growing **3 239 → 3 439 chars**; a full
+  `npm run build` grew **+41 bytes/run**, the extra byte being `build-presets.mjs`); after the
+  fix, three consecutive runs report `unchanged` with identical sha256. The resulting
+  `lib/client.src.js` / `lib/client.js` diff against HEAD is **lossless whitespace-only** — the
+  repo's own `stripCode()` comparison of HEAD vs the canonical rebuild is **byte-identical** for
+  both files.
+- **Docs changed:** [ROADMAP.md](./ROADMAP.md) (R2 / R6 / A7 marked CLOSED with their evidence;
+  the two new items added), [ARCHITECTURE-LAYERED.md](./ARCHITECTURE-LAYERED.md) (the stale
+  "R6 is still open" summary and gate list corrected; the L1 section describes the tool-argument
+  contract seam), [WORKER-DISPATCH.md](./WORKER-DISPATCH.md) (the stale remaining-queue line
+  corrected), this file (§1 state table, §1 shipped list, §3b verdict rows, the new §3c, the new
+  closure subsection, the follow-up table, §4 open items, §4 next-session order, §6 commands, and
+  this record), [HOST-PROVIDERS-SEAM.md](./HOST-PROVIDERS-SEAM.md) (new),
+  [CHANGELOG.md](../CHANGELOG.md) (the `0.0.1-rc.21` section), and the regenerated
+  [INDEX.md](./INDEX.md).
+- **Deliberately left open:** the four-key rotation (P0-1/P0-2, owner); the EXAONE **child** turn
+  from a NEW session (P1-3, owner); the post-migration secret-hygiene scan (P0-3); the
+  **OpenCode-backend 404** (§3c — needs a fix at the **provider-id resolution seam**); and the
+  **pre-existing** `build-presets.mjs` **+1 byte/run** growth (measured, a different script from
+  the one this session fixed, and unchanged from HEAD).

@@ -17,12 +17,29 @@
  * by name. Routes the ranking does not cover keep a stable name order behind the
  * ranked ones.
  */
+import { PLAN_PROVIDERS } from '../../../lib/presets.js'
 
 /** Plans in display order. */
 export const PLANS = ['go', 'zen']
 
-/** Provider id that owns each plan's routes. */
-export const PLAN_PROVIDERS = { go: 'opencode-go', zen: 'opencode' }
+/**
+ * Provider id that owns each plan's routes.
+ *
+ * Declared ONCE, in the router's preset declaration layer (`lib/presets.js`), and
+ * imported here. Measured 2026-11-14 while routing this module onto the core (R2):
+ *
+ *   - `lib/presets.js` `PLAN_PROVIDERS` is the frozen `{ go: 'opencode-go',
+ *     zen: 'opencode' }` this file used to re-declare, and it is cycle-free:
+ *     `presets.js` imports only `preset-schema.js`, which imports nothing.
+ *   - `lib/plan.js` `PLAN_PROVIDERS` is the WRONG source: it is a mutable
+ *     `Object.create(null)` binding that production never binds, so
+ *     `planOfProvider('opencode-go')` answers `'other'` and every route would
+ *     classify as `unknown`. Importing it would change behaviour, not
+ *     consolidate it.
+ *
+ * The functions below close over this imported map, so the two cannot drift.
+ */
+export { PLAN_PROVIDERS }
 
 /**
  * @param {string} providerId Provider of a catalog row (`opencode-go`, `opencode`, ...).

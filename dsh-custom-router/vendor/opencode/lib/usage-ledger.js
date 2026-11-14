@@ -12,41 +12,26 @@
  * request of a long-lived session: the second generation of a session already
  * carries the first one's tokens, and the hundredth carries all hundred.
  *
- * This ledger keeps the total already reported per OpenCode session, so a
+ * The accumulator keeps the total already reported per OpenCode session, so a
  * cumulative snapshot yields only the growth since the last report, and a step
  * total is reported as it is while still advancing the baseline.
+ *
+ * ROUTED ONTO THE CORE (R2, 2026-11-14): `USAGE_BUCKETS`, `usageTotal` and the
+ * baseline itself are `lib/usage.js` (`createUsageBaseline`), imported below.
+ * They were measured to be genuinely identical, not merely similar — the
+ * differential test over plain / missing / negative / null / partition-shaped
+ * input produced byte-equal results for both `steps` and `cumulative`. The only
+ * divergence found is a string or NaN bucket value, which the sole producer
+ * (`shared.js` `usageFromSessionExport`) cannot emit: it funnels every counter
+ * through `Number(...)` with a finite/non-negative clamp and defaults to `0`.
+ * `reported`/`forget` keep this package's names; `sessions()` is the core's extra
+ * and is re-exported for free.
+ *
+ * @module @nolit/dsh-opencode-v2/usage-ledger
  */
+import { USAGE_BUCKETS, createUsageBaseline, usageTotal } from '../../../lib/usage.js'
 
-/** The usage buckets the host understands. */
-export const USAGE_BUCKETS = Object.freeze([
-  'inputTokens',
-  'outputTokens',
-  'reasoningTokens',
-  'cacheReadTokens',
-  'cacheWriteTokens',
-])
-
-/**
- * A zeroed usage record.
- * @returns {Record<string, number>} every bucket at zero.
- */
-function zeroUsage () {
-  const usage = {}
-  for (const bucket of USAGE_BUCKETS) usage[bucket] = 0
-  usage.totalTokens = 0
-  return usage
-}
-
-/**
- * Sum the buckets of one usage record.
- * @param {Record<string, number>} usage - the usage record.
- * @returns {number} the total.
- */
-export function usageTotal (usage) {
-  let total = 0
-  for (const bucket of USAGE_BUCKETS) total += usage?.[bucket] ?? 0
-  return total
-}
+export { USAGE_BUCKETS, usageTotal }
 
 /**
  * Create the per-session usage ledger.
@@ -57,83 +42,6 @@ export function usageTotal (usage) {
  *
  * @returns {object} the ledger.
  */
-export function createUsageLedger () {
-  /** @type {Map<string, Record<string, number>>} */
-  const baselines = new Map()
-
-  /**
-   * The baseline of one session, created on first use.
-   * @param {string} sessionId - the OpenCode session id.
-   * @returns {Record<string, number>} the mutable baseline.
-   */
-  function baselineOf (sessionId) {
-    let baseline = baselines.get(sessionId)
-    if (baseline === undefined) {
-      baseline = zeroUsage()
-      baselines.set(sessionId, baseline)
-    }
-    return baseline
-  }
-
-  return {
-    /**
-     * Report a generation measured by its own steps.
-     *
-     * The steps are the generation's own tokens, so they are reported as they
-     * are; the baseline advances by the same amount, so a later cumulative
-     * snapshot yields only what this session grew since.
-     *
-     * @param {string} sessionId - the OpenCode session id.
-     * @param {Record<string, number>} usage - the generation's summed step usage.
-     * @returns {Record<string, number>} the usage to report.
-     */
-    steps (sessionId, usage) {
-      const baseline = baselineOf(sessionId)
-      for (const bucket of USAGE_BUCKETS) {
-        const value = Math.max(0, usage?.[bucket] ?? 0)
-        baseline[bucket] += value
-      }
-      const reported = zeroUsage()
-      for (const bucket of USAGE_BUCKETS) reported[bucket] = Math.max(0, usage?.[bucket] ?? 0)
-      reported.totalTokens = usageTotal(reported)
-      return reported
-    },
-
-    /**
-     * Report the growth of a session's cumulative counters.
-     *
-     * @param {string} sessionId - the OpenCode session id.
-     * @param {Record<string, number>} cumulative - the session's cumulative usage.
-     * @returns {Record<string, number>} the growth since the last report.
-     */
-    cumulative (sessionId, cumulative) {
-      const baseline = baselineOf(sessionId)
-      const delta = zeroUsage()
-      for (const bucket of USAGE_BUCKETS) {
-        const value = Math.max(0, cumulative?.[bucket] ?? 0)
-        delta[bucket] = Math.max(0, value - baseline[bucket])
-        baseline[bucket] = Math.max(baseline[bucket], value)
-      }
-      delta.totalTokens = usageTotal(delta)
-      return delta
-    },
-
-    /**
-     * The usage already reported for one session.
-     * @param {string} sessionId - the OpenCode session id.
-     * @returns {Record<string, number>} the baseline.
-     */
-    reported (sessionId) {
-      return { ...baselineOf(sessionId) }
-    },
-
-    /**
-     * Forget one session's baseline.
-     * @param {string} sessionId - the OpenCode session id.
-     * @returns {void}
-     */
-    forget (sessionId) {
-      baselines.delete(sessionId)
-    },
-  }
+export function createUsageLedger() {
+  return createUsageBaseline()
 }

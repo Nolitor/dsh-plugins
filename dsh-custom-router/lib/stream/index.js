@@ -21,6 +21,7 @@
 
 import { abortError, abortedCompletion, CODES, cutCompletion, emptyCompletion, fail } from './failure.js'
 import { readSseEvents } from './sse.js'
+import { reconcileArgumentText } from './tool-argument-contract.js'
 import { usageFrom as defaultUsageFrom } from './usage.js'
 import { finishReasonFor } from './wire.js'
 
@@ -37,6 +38,30 @@ export {
   usageFromProjection,
 } from './usage.js'
 export { count, finishReasonFor } from './wire.js'
+export { dependentArguments, reconcileArgumentText, reconcileToolArguments } from './tool-argument-contract.js'
+
+/**
+ * The declared `parameters` schema per tool name, from the request's own tools.
+ *
+ * Only the shapes this layer reads are kept: a tool without a `name` or without
+ * an object `parameters` declares nothing to reconcile against.
+ *
+ * @param {unknown} tools - DSH tool declarations (`{ name, parameters }[]`).
+ * @returns {Map<string, object>} tool name -> parameters schema.
+ */
+function declaredSchemas(tools) {
+  const map = new Map()
+  if (!Array.isArray(tools)) return map
+  for (const tool of tools) {
+    const name = tool?.name
+    const parameters = tool?.parameters
+    if (typeof name !== 'string' || name.length === 0) continue
+    if (parameters === null || typeof parameters !== 'object') continue
+    map.set(name, parameters)
+  }
+  return map
+}
+
 
 /**
  * Run one provider event stream through the shared pipeline.
@@ -69,6 +94,12 @@ export { count, finishReasonFor } from './wire.js'
 export async function* normalizeStream(options = {}) {
   const { events, descriptor = {}, createHooks, signal, onUsage } = options
   if (events === null || events === undefined) throw new TypeError('normalizeStream requires an events iterable')
+
+  // The tool schemas this request declared, indexed by tool name. Tool-call
+  // arguments must satisfy the HOST's contracts, not only the provider's
+  // schema; `finalBlock` reconciles the call against the declaration here so
+  // every vendor inherits the repair through this one pipe.
+  const toolSchemas = declaredSchemas(options.tools)
 
   // One resolution per stream. A provider whose hooks accumulate state across
   // deltas (an in-text tool-call classifier) supplies a factory, so concurrent
@@ -258,7 +289,13 @@ export async function* normalizeStream(options = {}) {
   /** The fully accumulated block, never a placeholder. */
   function finalBlock(block) {
     if (block.kind === 'tool-call') {
-      return { type: 'tool-call', id: block.id || `call_${block.index}`, name: block.name, arguments: block.arguments, ...(typeof block.thoughtSignature === 'string' && block.thoughtSignature !== '' ? { thoughtSignature: block.thoughtSignature } : {}) }
+      // The host executes the arguments this block carries (`BlockAssembler`
+      // keeps `block` and ignores the accumulated deltas once closed), so this
+      // is where a call is made EXECUTABLE: arguments the provider emitted in a
+      // shape the host's own contract refuses are reconciled against the tool
+      // declaration before they leave the pipe (see ./tool-argument-contract.js).
+      const argumentsText = reconcileArgumentText(block.arguments, toolSchemas.get(block.name))
+      return { type: 'tool-call', id: block.id || `call_${block.index}`, name: block.name, arguments: argumentsText, ...(typeof block.thoughtSignature === 'string' && block.thoughtSignature !== '' ? { thoughtSignature: block.thoughtSignature } : {}) }
     }
     return { type: block.kind, text: block.text }
   }

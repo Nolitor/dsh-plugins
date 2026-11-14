@@ -1,11 +1,11 @@
 # Custom Router — Worker Dispatch Packages
 
 <!-- skeleton:
-version: 1.0
+version: 1.1
 kind: reference
 status: active
 updated: 2026-11-14
-summary: Copy-paste dispatch packages for Phase 1 (serial core lock W1-1..W1-4) and Phase 2 (parallel upper-layer fan-out W2-A..W2-E) with disjoint write scopes and exact gates. W2-A (A3) and W2-D (A6 gates) are SHIPPED as of 2026-11-14 (e8b39f7); the remaining queue is R2, R3, R5, R6.
+summary: Copy-paste dispatch packages for Phase 1 (serial core lock W1-1..W1-4) and Phase 2 (parallel upper-layer fan-out W2-A..W2-E) with disjoint write scopes and exact gates. W2-A (A3) and W2-D (A6 gates) are SHIPPED as of 2026-11-14 (e8b39f7); R2, R3, R5, R6 and A7 are ALL CLOSED as of rc.21, so the remaining queue is the OpenCode-backend 404.
 -->
 
 > **Execution guide.** Follow [ROADMAP.md](./ROADMAP.md) §4 P2-A and the layer contract in
@@ -22,7 +22,23 @@ summary: Copy-paste dispatch packages for Phase 1 (serial core lock W1-1..W1-4) 
 >     `scripts/verify-usage-readers.mjs` + `test/usage-readers.test.mjs` (**12** cases), and the
 >     dead `classifyBlock` slot removed.
 >   - The blocks below are kept as the **record of what shipped**; the *open* work is
->     **R2 / R3 / R5 / R6** in [ROADMAP.md](./ROADMAP.md) §6, not a re-run of W2-A / W2-D.
+>     **R8** (the OpenCode-backend 404, provider-id resolution seam) in
+>     [ROADMAP.md](./ROADMAP.md) §6 — **not** a re-run of W2-A / W2-D.
+> - **CLOSED 2026-11-14 (rc.21) — R2, R3, R5, R6 and A7 are all closed:**
+>   - **R2** — OpenCode's private ledger, plan table and usage constants now delegate to the
+>     core (`numberOrNull` / `pickSession` / `USAGE_BUCKETS` / `usageTotal` are each defined
+>     **once** repo-wide).
+>   - **R3 / R5** — closed by `77a53b0` (one retry core, one catalog cache, no vendor ids in L1).
+>   - **R6** — the repo-wide uniqueness greps are now a **wired gate**
+>     (`test/uniqueness.test.mjs` **23 cases** + `scripts/verify-uniqueness.mjs`), with a
+>     negative proof.
+>   - **A7** — closed as a **measurement**
+>     ([HOST-PROVIDERS-SEAM.md](./HOST-PROVIDERS-SEAM.md)): the host `dsh-llm-pi-ai` seam models
+>     **provider profiles only**, so it **cannot replace this router**; recommended: keep it
+>     dormant.
+>   - **NEW in rc.21** — the **tool-argument contract seam**
+>     (`lib/stream/tool-argument-contract.js`, at the L1 emission point) and the
+>     `sync-derive.mjs` **idempotency** fix.
 >
 > - **Phase 1 (`W1-1` → `W1-2` → `W1-3` → `W1-4`) is STRICTLY SERIAL.** Never run two Phase 1
 >   workers concurrently: they share `lib/stream/index.js`, `lib/driver/contract.js`, and
@@ -30,7 +46,7 @@ summary: Copy-paste dispatch packages for Phase 1 (serial core lock W1-1..W1-4) 
 > - **Phase 2 (`W2-A`, `W2-B`, `W2-C`, `W2-D`, `W2-E`) is PARALLEL** only **after** Phase 1 passes
 >   its **Core Interface Locked** bar. Every Phase 2 worker has a provably disjoint write scope;
 >   **only `W2-D` owns `scripts/verify-stream.mjs`**.
-> - **Shared baseline numbers** (measured 2026-11-14 at `@nolit/dsh-custom-router@0.0.1-rc.20`):
+> - **Shared baseline numbers** (measured 2026-11-14 at `@nolit/dsh-custom-router@0.0.1-rc.21`):
 >   router `649/649`, antigravity `193/193`, deepinfra `222 pass / 7 skip` (`229` total),
 >   opencode `555/555`, exaone `19/19`, `verify:stream` `8/8` (`vendor loads: 0`),
 >   `verify:presets:mutation` `17/17`, `specs:check` `5 protocols, 4 providers, 4 pricing — OK`.
@@ -62,7 +78,7 @@ WORKER_ID: W1-1
 TASK: A2-core — Extract standardized OpenAI stream + request-projection profile into lib/stream/openai.js
 MODE: SERIAL (Phase 1, Step 1.1 — must complete and pass before W1-2 starts; do NOT run alongside other workers)
 REPO: /home/minami/Workspace/projects/dsh-workspace/dsh-plugins
-PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.20)
+PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.21)
 
 ALLOWED_WRITE_SCOPE:
   - dsh-custom-router/lib/stream/openai.js (new)
@@ -136,7 +152,7 @@ WORKER_ID: W1-2
 TASK: A1-core — Fold Anthropic SSE/usage/abort into core L0/L1, wire createAnthropicHooks onto createHooks, unify totalFormula
 MODE: SERIAL (Phase 1, Step 1.2 — starts ONLY after W1-1 passes; do NOT run concurrently)
 REPO: /home/minami/Workspace/projects/dsh-workspace/dsh-plugins
-PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.20)
+PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.21)
 
 ALLOWED_WRITE_SCOPE:
   - dsh-custom-router/lib/stream/anthropic.js
@@ -218,7 +234,7 @@ WORKER_ID: W1-3
 TASK: A4-core — Lock canonical cost/plan/usage/ledger interface in lib/{cost,plan,usage}.js
 MODE: SERIAL (Phase 1, Step 1.3 — starts ONLY after W1-2 passes; do NOT run concurrently)
 REPO: /home/minami/Workspace/projects/dsh-workspace/dsh-plugins
-PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.20)
+PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.21)
 
 ALLOWED_WRITE_SCOPE:
   - dsh-custom-router/lib/cost.js
@@ -287,7 +303,7 @@ WORKER_ID: W1-4
 TASK: A5-core — Implement lib/retry.js and lib/catalog-cache.js and sign off CORE INTERFACE LOCKED
 MODE: SERIAL (Phase 1, Step 1.4 — starts ONLY after W1-3 passes; must pass before ANY Phase 2 worker launches)
 REPO: /home/minami/Workspace/projects/dsh-workspace/dsh-plugins
-PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.20)
+PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.21)
 
 ALLOWED_WRITE_SCOPE:
   - dsh-custom-router/lib/retry.js (new)
@@ -364,7 +380,7 @@ WORKER_ID: W2-A
 TASK: A3 — Flip OpenCode default to shared pipe, delete legacy loop/SSE/mapping/tool-assembly, rewire cost/retry/cache onto locked core
 MODE: PARALLEL (Phase 2 — launch simultaneously with W2-B, W2-C, W2-D after Phase 1 Core Lock)
 REPO: /home/minami/Workspace/projects/dsh-workspace/dsh-plugins
-PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.20)
+PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.21)
 
 ALLOWED_WRITE_SCOPE:
   - dsh-custom-router/vendor/opencode/lib/**
@@ -440,7 +456,7 @@ WORKER_ID: W2-B
 TASK: DeepInfra dedup — Remove vendor-local OpenAI map/wire/readEvent, private cost ledger, and TTL cache
 MODE: PARALLEL (Phase 2 — launch simultaneously with W2-A, W2-C, W2-D after Phase 1 Core Lock)
 REPO: /home/minami/Workspace/projects/dsh-workspace/dsh-plugins
-PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.20)
+PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.21)
 
 ALLOWED_WRITE_SCOPE:
   - dsh-custom-router/vendor/deepinfra/lib/**
@@ -495,7 +511,7 @@ WORKER_ID: W2-C
 TASK: EXAONE dedup — Remove vendor-local OpenAI map/wire/readEvent and dead map.js:96-130 exports
 MODE: PARALLEL (Phase 2 — launch simultaneously with W2-A, W2-B, W2-D after Phase 1 Core Lock)
 REPO: /home/minami/Workspace/projects/dsh-workspace/dsh-plugins
-PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.20)
+PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.21)
 
 ALLOWED_WRITE_SCOPE:
   - dsh-custom-router/vendor/exaone/lib/**
@@ -541,8 +557,8 @@ CONSTRAINTS:
 
 ### W2-D — A6: Dead Surface Removal + Spec/Preset/Boundary Gates (Sole `verify-stream.mjs` Owner) — ✅ **SHIPPED** (`8ee4ef1` + `e8b39f7`)
 
-> **This block is the record of what shipped — do not execute it again.** The only open part is
-> **R6** (the repo-wide uniqueness greps as a wired gate), tracked in
+> **This block is the record of what shipped — do not execute it again.** **R6** (the repo-wide
+> uniqueness greps as a wired gate) is now **CLOSED** (rc.21) — see
 > [ROADMAP.md](./ROADMAP.md) §6.
 
 ```text
@@ -550,7 +566,7 @@ WORKER_ID: W2-D
 TASK: A6 — Remove unused classifyBlock hook, guard dsh-exaone in verify-stream.mjs, add spec<->preset mirror, dead-field allowlist, and L1 boundary lint
 MODE: PARALLEL (Phase 2 — launch simultaneously with W2-A, W2-B, W2-C after Phase 1 Core Lock)
 REPO: /home/minami/Workspace/projects/dsh-workspace/dsh-plugins
-PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.20)
+PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.21)
 
 ALLOWED_WRITE_SCOPE:
   - dsh-custom-router/scripts/verify-stream.mjs (SOLE OWNER in Phase 2)
@@ -612,8 +628,10 @@ MEASURED_OUTCOME:
     test/usage-readers.test.mjs -> 12 cases, live (4 presets / 4 routes / 3 readers).
   - Both gates carry NEGATIVE PROOFS: a planted forbidden import failed 3 boundary rules; a renamed
     usage route exits 1. Both plants were reverted with a sha256 verification.
-  - STILL OPEN -> R6: the repo-wide uniqueness greps (mapDelta / numberOrNull / pickSession /
-    createCostStore / backoffDelay) are still a manual grep, not a wired gate.
+  - R6 IS NOW CLOSED (rc.21): the repo-wide uniqueness greps (mapDelta / numberOrNull /
+    pickSession / createCostStore / backoffDelay) are a WIRED gate — test/uniqueness.test.mjs
+    (23 cases) + scripts/verify-uniqueness.mjs (--json, exit 0/1/2), with a negative proof
+    (a dual plant produced 8 findings and reverted to a 0-finding baseline).
 
 COMMIT_TEMPLATE:
   git add dsh-custom-router/scripts/ dsh-custom-router/lib/driver/contract.js dsh-custom-router/lib/preset-drift.js dsh-custom-router/test/
@@ -633,7 +651,7 @@ WORKER_ID: W2-E
 TASK: Antigravity A4/A5 rewiring — Replace 70 L retry loop, 92 L catalog cache, and 28 L agy usage double-map with locked core
 MODE: PARALLEL (Phase 2 — completely disjoint vendor/antigravity/** scope; run alongside W2-A..D or as Wave 2b before final grep gates)
 REPO: /home/minami/Workspace/projects/dsh-workspace/dsh-plugins
-PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.20)
+PACKAGE_DIR: dsh-custom-router (@nolit/dsh-custom-router@0.0.1-rc.21)
 
 ALLOWED_WRITE_SCOPE:
   - dsh-custom-router/vendor/antigravity/lib/**
@@ -693,6 +711,12 @@ npm run verify:dispatch           # 17/17
 (cd vendor/exaone     && npm test)    # 19/19
 ```
 
-Only then schedule **Phase 3 (A7)** — a dedicated measure-first inspection of
-`@deepseek-ai/dsh-llm-pi-ai` (`providers: z.dict(profile)`) to decide whether the router writes
-host provider profiles or documents an operator procedure.
+**Phase 3 (A7) is DONE as a MEASUREMENT (rc.21)** — see
+[HOST-PROVIDERS-SEAM.md](./HOST-PROVIDERS-SEAM.md). The seam is `providers: z.dict(profile)` with
+**4** wire protocols; it models **provider profiles only** — no daemon indirection, no
+ledger/billing, no plan windows, no picker, no dispatch gates — so it **cannot replace this
+router**, and none of this router's four preset provider ids is a pi-ai catalog route.
+**Recommended owner decision: keep `llm-pi-ai` dormant.**
+
+The remaining open item is **R8** (the OpenCode-backend 404) — a fix at the **provider-id
+resolution seam**, not a string patch.

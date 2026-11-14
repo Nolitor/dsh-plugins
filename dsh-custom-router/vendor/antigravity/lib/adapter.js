@@ -291,6 +291,7 @@ export class AntigravityAdapter extends LlmAdapter {
       events: readSseEvents(response, { signal: options.signal, malformed: STREAM_DESCRIPTOR.malformedRecord }),
       descriptor: STREAM_DESCRIPTOR,
       hooks: STREAM_HOOKS,
+      tools: options.tools,
       signal: options.signal,
       // The host may stop iterating as soon as it sees `finish`, so the ledger
       // is written from the usage chunk itself rather than after the stream.

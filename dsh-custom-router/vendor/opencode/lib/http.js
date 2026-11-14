@@ -1947,6 +1947,7 @@ export class OpencodeHttpAdapter {
         events,
         descriptor: OPENCODE_DESCRIPTOR,
         createHooks,
+        tools: options.tools,
         signal: lifecycle.signal,
       })
       // A tool block's final arguments depend on whether the stream was CUT: only

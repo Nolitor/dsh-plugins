@@ -144,6 +144,7 @@ export class EXAONEAdapter extends LlmAdapter {
         }),
         descriptor: STREAM_DESCRIPTOR,
         hooks: STREAM_HOOKS,
+        tools: options.tools,
         signal: options.signal,
       })
     } catch (error) {

@@ -260,6 +260,7 @@ export class DeepInfraAnthropicAdapter extends LlmAdapter {
         }),
         descriptor: binding.descriptor,
         hooks: binding.hooks,
+        tools: options.tools,
         signal: options.signal,
         // Recorded at record time, so a turn that makes several model calls is
         // still one turn's cost. `binding.usage()` is the cumulative snapshot,

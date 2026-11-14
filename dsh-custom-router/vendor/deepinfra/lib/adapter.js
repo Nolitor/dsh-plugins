@@ -226,6 +226,7 @@ export class DeepInfraAdapter extends LlmAdapter {
         events: readSseEvents(body, { signal: options.signal, malformed: STREAM_DESCRIPTOR.malformedRecord }),
         descriptor: STREAM_DESCRIPTOR,
         hooks,
+        tools: options.tools,
         signal: options.signal,
         onUsage: () => {
           if (costRecorded) return

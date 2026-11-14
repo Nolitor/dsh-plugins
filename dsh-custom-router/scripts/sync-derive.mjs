@@ -67,11 +67,17 @@ export function deriveBlock() {
 /** Find the current block. */
 function locate(source) {
   const begin = source.indexOf(BEGIN)
-  // Locate the END marker on its own line: the trailing dashes must not be
-  // part of the search, or a second run appends them again.
-  const end = source.indexOf(END, begin)
-  if (begin < 0 || end < 0 || end < begin) throw new Error('sync-derive: lib/client.src.js has no DERIVED PRESET REGISTRY markers')
-  return { begin, end: end + END.length }
+  // The END marker owns its ENTIRE line, including the trailing run of dashes
+  // that `deriveBlock()` writes with it. Slicing at the bare marker instead
+  // leaves the previous run's dashes in the file and appends a fresh group, so
+  // every invocation grew the line by 40 bytes with no content change —
+  // measured +40 bytes/run over four runs (189 831 → 189 951 bytes). The block
+  // is therefore located through the end of the marker's line, which makes a
+  // repeat run find exactly what it wrote and report `unchanged`.
+  const marker = source.indexOf(END, begin)
+  if (begin < 0 || marker < 0 || marker < begin) throw new Error('sync-derive: lib/client.src.js has no DERIVED PRESET REGISTRY markers')
+  const newline = source.indexOf('\n', marker)
+  return { begin, end: newline < 0 ? source.length : newline }
 }
 
 if (process.argv[1] !== undefined && import.meta.url.endsWith(process.argv[1].split('/').pop())) {
