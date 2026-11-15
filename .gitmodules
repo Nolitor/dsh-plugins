@@ -1,3 +1,12 @@
 [submodule "dsh-korean-locale"]
 path = dsh-korean-locale
 url = https://github.com/Nolitor/dsh-korean-locale.git
+[submodule "dsh-notify"]
+	path = dsh-notify
+	url = https://github.com/Nolitor/dsh-notify.git
+[submodule "dsh-sidebar-manager"]
+	path = dsh-sidebar-manager
+	url = https://github.com/Nolitor/dsh-sidebar-manager.git
+[submodule "dsh-tokeneconomizer"]
+	path = dsh-tokeneconomizer
+	url = https://github.com/Nolitor/dsh-tokeneconomizer.git
