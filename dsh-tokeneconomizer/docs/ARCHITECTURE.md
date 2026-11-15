@@ -103,7 +103,7 @@ layout; [README.md](../README.md) carries the same list in short form.
 | `lib/interrupt-bridge.js` | 184 | the shared interrupt registry the watchdog attributes through |
 | `lib/upstream.js` | 290 | **NEW** — the embedded engine's identity and the upstream comparison |
 | `lib/types/records.d.ts` | 80 | `PluginRecordMap` augmentation |
-| `bin/te-dsh.mjs` | 756 | operator commands: bootstrap, cold-start, purge, status, doctor |
+| `bin/dsh-te.mjs` | 756 | operator commands: bootstrap, cold-start, purge, status, doctor |
 | `scripts/audit-deprecations.mjs` | 327 | the deprecation gate (exit 0/1/2) |
 | `scripts/check-syntax.mjs` | 62 | walks `lib/`, `bin/`, `scripts/` instead of a hardcoded file list |
 | `scripts/bootstrap.mjs` | 238 | pinned clone + patch + launchers + verification + bounded migration |
@@ -605,7 +605,7 @@ the three-question doctor (§2b):
 - `npm test` → **260 tests / 259 pass / 0 fail / 1 skipped** (the skip is still the opt-in engine
   fixture, `TE_DSH_TEST_HOME` not set).
 - `npm run check` → exit **0**, "check: 25 module(s) parse".
-- `node bin/te-dsh.mjs doctor` → exit **0**: `manifest.ok: true` (`manifestVersion: 1`, `expected:
+- `node bin/dsh-te.mjs doctor` → exit **0**: `manifest.ok: true` (`manifestVersion: 1`, `expected:
   1`), `config.keys` length **36** with `overridden: []`, and `identity.computed`
   `dsh-plugins-4806902e1d` matched against the **33** repository keys the engine holds under
   `repos/`.

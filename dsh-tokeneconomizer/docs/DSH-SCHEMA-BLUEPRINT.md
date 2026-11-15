@@ -333,7 +333,7 @@ L3 feature    : lib/tiering.js  lib/settings-api.js
                 lib/devstats.js  lib/watchdog.js  lib/interrupt-bridge.js
                                                       (imports L0–L2)
 L4 view       : lib/devstats-server.js  lib/client.js (imports L0–L3)
-L5 edge       : lib/bridge.js  bin/te-dsh.mjs        (imports L0–L3; engine boundary)
+L5 edge       : lib/bridge.js  bin/dsh-te.mjs        (imports L0–L3; engine boundary)
 L6 orchestr   : lib/index.js                        (imports L0–L5; wiring only)
 ```
 
@@ -352,9 +352,9 @@ L6 orchestr   : lib/index.js                        (imports L0–L5; wiring onl
 | `lib/bridge.js` | Engine child-process boundary (`te`, `te-hook`) | Spawn/pipe for every engine call; the JSON contract with the vendored engine | Compute identity (receives `identityKey`/`liveDir` from caller); write `~/.tokeneconomizer` outside the engine protocol | L0–L3 |
 | `lib/watchdog.js` `lib/interrupt-bridge.js` `lib/dedup.js` `lib/prefix.js` | Unchanged responsibilities; watchdog gains the once-per-key `warnOnce(key, msg)` channel used by every P4 failure policy | As today | As today | L0–L3, per layer |
 | `lib/index.js` | Slim orchestrator, ≤300 lines | ctx wiring; hook registration (`agent/created`, `agent/pre-step`, `session/event`, `working-directory/change`); per-agent state object creation; passes probe results and identity to feature modules | Feature logic; surface writes; identity computation; probing; engine protocol; settings logic | L0–L5 |
-| `bin/te-dsh.mjs` | CLI: `status`, `doctor`, `cold-start`, `purge`, `--only <repoKey>` | Same as today; `--only` accepts the new `identityKey` with the old `repoKey` as a migration alias | Compute identity inline (uses `lib/identity.js`) | L0–L3 |
+| `bin/dsh-te.mjs` | CLI: `status`, `doctor`, `cold-start`, `purge`, `--only <repoKey>` | Same as today; `--only` accepts the new `identityKey` with the old `repoKey` as a migration alias | Compute identity inline (uses `lib/identity.js`) | L0–L3 |
 
-**Current → target mapping — all 12 `lib/*.js` + `bin/te-dsh.mjs` accounted for, nothing orphaned
+**Current → target mapping — all 12 `lib/*.js` + `bin/dsh-te.mjs` accounted for, nothing orphaned
 (line counts = measured `wc -l`)**:
 
 
@@ -371,7 +371,7 @@ L6 orchestr   : lib/index.js                        (imports L0–L5; wiring onl
 | `lib/interrupt-bridge.js` (184) | unchanged | — |
 | `lib/dedup.js` (83) | unchanged | — |
 | `lib/prefix.js` (88) | unchanged | — |
-| `bin/te-dsh.mjs` (603) | unchanged (role) | `--only` accepts `identityKey` with old-key alias |
+| `bin/dsh-te.mjs` (603) | unchanged (role) | `--only` accepts `identityKey` with old-key alias |
 
 **Tiering honesty note (contract-mandated).** `agent/pre-step`
 (`dsh-agent/lib/types/runtime-types.d.ts:333-341`) does not document the exact "after `step/start`,
@@ -390,7 +390,7 @@ coders (WA–WD) plus one headless-Chromium verifier (V) that writes nothing und
 | W1 scaffolding | `lib/identity.js` (new, absorbs `repokey.js`; deletes it) | `lib/probes.js` (new) | `lib/attribution.js` (new) + `lib/surface-attribution.js` (new) + their `lib/types/` augmentation | `npm test` green |
 | W2 trigger migration | `lib/tiering.js` (re-point) | `lib/settings-api.js` (absorbs `settings.js`) | `scripts/audit-deprecated.mjs` (new) | `npm test` + audit pass |
 | W3 slim orchestrator | `lib/index.js` (rewrite ≤300) | `lib/devstats.js` (`identityKey` param) | `lib/devstats-server.js` | full `npm test` |
-| W4 client + edge | `lib/client.js` + `locale/ko.json` + `locale/en.json` | `lib/bridge.js` + `bin/te-dsh.mjs` | `lib/watchdog.js` (`warnOnce`) | `npm test` + `docs:check` |
+| W4 client + edge | `lib/client.js` + `locale/ko.json` + `locale/en.json` | `lib/bridge.js` + `bin/dsh-te.mjs` | `lib/watchdog.js` (`warnOnce`) | `npm test` + `docs:check` |
 | W5 integration | (none — lead only) | | | `npm test` + `node scripts/check-doc-links.mjs` + `npm run docs:check` |
 
 Disjointness proof: every file name appears at most once per wave row. Per-feature test files follow
@@ -529,9 +529,9 @@ Rule: **adopt, never orphan.**
    records carry different `projectDir` values but the same `key` (one of which no longer
    realpaths on disk) is **not** adopted: the session runs on a fresh key so evidence cannot
    cross-contaminate, and the conflict raises a P4 loud warning (once per key via
-   `lib/watchdog.js`) plus a `bin/te-dsh.mjs doctor` line. Wrong adoption is loud, not silent.
+   `lib/watchdog.js`) plus a `bin/dsh-te.mjs doctor` line. Wrong adoption is loud, not silent.
 4. Test debris is never silently merged: the adoption pass emits a list; removal is the explicit
-   `te-dsh.mjs purge` action, never an automatic delete.
+   `dsh-te.mjs purge` action, never an automatic delete.
 
 #### Root and subagent sessions
 
@@ -574,7 +574,7 @@ The claim that `repokey.js` reproduces the vendored engine's key rule "exactly" 
 against the engine: the plugin's docstring asserts it, but no engine-side key algorithm was
 verified in the measurements (the vendored engine at
 `~/.tokeneconomizer/vendor/TokenEconomizer-6141bb92/` was not read for this; INFERRED). The probe
-that resolves it: a `bin/te-dsh.mjs doctor --probe-engine-key` mode that (a) picks N
+that resolves it: a `bin/dsh-te.mjs doctor --probe-engine-key` mode that (a) picks N
 representative directories (repo-with-remote, bare checkout, subdirectory, symlinked path),
 (b) runs the engine's own repo-opening code through the `te hook` boundary and reads back the
 engine's chosen key, (c) diffs it against `legacyKeyFor()` and the new algorithm's key, and
@@ -1207,7 +1207,7 @@ must display the concrete stored enum; it may offer an `on` chip that writes the
 
 `history_import` rule (**explicit**): a whole-engine grep for `history_import` returns **zero
 hits**. It is **not** a config field. It maps to the plugin-owned importer
-`bin/te-dsh.mjs cold-start` (flags `--reimport`, `--limit N`, `--all`, `--dry-run`,
+`bin/dsh-te.mjs cold-start` (flags `--reimport`, `--limit N`, `--all`, `--dry-run`,
 `--only <repoKey>`, `--include-missing`) and is exposed as an **action with progress and result**
 (§4.2), not a config control. Do not invent an engine key.
 
@@ -1505,7 +1505,7 @@ invariant is: label is a function of current locale, evaluated per render.
 | W3 | Trigger migration + deprecated-read migration | `lib/tiering.js` (re-point), `lib/settings.js`→read resolver, deprecation-audit script | tiering fires on `agent/pre-step`; zero calls to `eventAt`/`snapshotEvents`/`deriveMessages` remain |
 | W4 | The three mechanisms | `lib/tiering.js` (mechanisms), `lib/attribution.js` (prune record) | cold-tier rewrite + tool pruning + loop-guard degraded path all fire and are attributed |
 | W5 | Settings GUI + client + locale | `lib/settings-api.js`, `lib/client.js`, `locale/ko.json`, `locale/en.json`, `lib/devstats.js`, `lib/devstats-server.js` | `토큰절약기 · 환경설정` renders, writes via bridge, survives reload |
-| W6 | Slim orchestrator + edge + integration | `lib/index.js` (≤300), `lib/bridge.js` (identityKey param), `bin/te-dsh.mjs`, `lib/watchdog.js` | full E2E: Chromium GUI + live DSH session with persisted records |
+| W6 | Slim orchestrator + edge + integration | `lib/index.js` (≤300), `lib/bridge.js` (identityKey param), `bin/dsh-te.mjs`, `lib/watchdog.js` | full E2E: Chromium GUI + live DSH session with persisted records |
 
 **File ownership matrix** (workers × files; `W` = writes, `R` = reads; one worker per file per wave — proof below).
 
@@ -1518,7 +1518,7 @@ invariant is: label is a function of current locale, evaluated per render.
 | W3 | `W lib/tiering.js` (re-point) | `W scripts/audit-deprecations.mjs`, `W lib/settings.js` (resolver only) | — | `R` |
 | W4 | `W lib/tiering.js` (mechanisms) | `W lib/attribution.js` (tool-prune record) | — | `R` |
 | W5 | `W lib/settings-api.js` | `W lib/client.js`, `W locale/ko.json`, `W locale/en.json` | `W lib/devstats.js`, `W lib/devstats-server.js` | `R` + headless Chromium |
-| W6 | `W lib/index.js` | `W lib/bridge.js`, `W bin/te-dsh.mjs`, `W lib/watchdog.js` | — | `R` + full E2E |
+| W6 | `W lib/index.js` | `W lib/bridge.js`, `W bin/dsh-te.mjs`, `W lib/watchdog.js` | — | `R` + full E2E |
 
 **Proof obligation: no two workers write the same file in the same wave.** Every file name appears at most once per wave row above. `lib/index.js` is the contention point (1,396 lines) and is single-writer per wave: W1 Worker C (attribution seam patch), W3 Worker A (trigger re-point), and W6 Worker A (slim rewrite) are the only writers across all six waves; no other worker ever writes it. It is written in W6 by Worker A after W1–W5 created every module it will delegate to; until then its existing code keeps running against the new modules via the small, single-wave patches owned exactly once per wave. Each such patch is listed under the owning worker in §5.2 and is the only write to `lib/index.js` in that wave.
 
@@ -1562,7 +1562,7 @@ Worker naming: `W<wave>.<letter>`. Every worker is one OpenCode DeepSeek session
 | W3 | A (trigger), B (audit + resolver) | `lib/tiering.js`, `scripts/audit-deprecations.mjs`, `lib/settings.js`, 1 patch to `lib/index.js` |
 | W4 | A (mechanisms), B (prune plumbing) | `lib/tiering.js`, `lib/attribution.js` |
 | W5 | A (settings API), B (client+locale), C (devstats) | `lib/settings-api.js`, `lib/client.js`, `locale/ko.json`, `locale/en.json`, `lib/devstats.js`, `lib/devstats-server.js` |
-| W6 | A (orchestrator), B (edge+boundary) | `lib/index.js`, `lib/bridge.js`, `bin/te-dsh.mjs`, `lib/watchdog.js`, `package.json` |
+| W6 | A (orchestrator), B (edge+boundary) | `lib/index.js`, `lib/bridge.js`, `bin/dsh-te.mjs`, `lib/watchdog.js`, `package.json` |
 
 #### W1.A — Identity resolver (`lib/identity.js` new, `lib/repokey-bridge.js` new)
 - Depends on: nothing. / Parallel-safe with: W1.B, W1.C, W1.V.
@@ -1668,12 +1668,12 @@ Worker naming: `W<wave>.<letter>`. Every worker is one OpenCode DeepSeek session
 - Tests: `index.js exports unchanged surface after slim-down` (compat smoke).
 - Gap IDs closed: G-A-04 (removal), G-A-06, G-A-10.
 
-#### W6.B — Edge + boundary hardening (`lib/bridge.js`, `bin/te-dsh.mjs`, `lib/watchdog.js`, `package.json`)
+#### W6.B — Edge + boundary hardening (`lib/bridge.js`, `bin/dsh-te.mjs`, `lib/watchdog.js`, `package.json`)
 - Depends on: W5.A (route uses bridge signature). / Parallel-safe with: W6.A.
 - Objective: engine boundary carries identityKey; CLI aliases it; contract dependencies declared.
-- Concrete changes: `lib/bridge.js` spawn/pipe signature gains `identityKey` param; `bin/te-dsh.mjs --only` accepts `identityKey` + legacy `repoKey` shim, `doctor` gains the engine-canonicalization diff probe (§3.3); `lib/watchdog.js` gains `warnOnce(key, msg)`; `package.json`: add `dependencies` on `@deepseek-ai/dsh-session`, `@deepseek-ai/dsh-agent`, `@deepseek-ai/dsh-working-directory`; narrow `engines.dsh`; add `dsh.manifestVersion` self-check at activation (§3.5.5).
-- Acceptance gate: `npm test` green; `node bin/te-dsh.mjs doctor` exits 0; `npm run check` passes.
-- Tests: `manifestVersion mismatch warns and degrades, not crash`; `te-dsh --only <identityKey> status` resolves.
+- Concrete changes: `lib/bridge.js` spawn/pipe signature gains `identityKey` param; `bin/dsh-te.mjs --only` accepts `identityKey` + legacy `repoKey` shim, `doctor` gains the engine-canonicalization diff probe (§3.3); `lib/watchdog.js` gains `warnOnce(key, msg)`; `package.json`: add `dependencies` on `@deepseek-ai/dsh-session`, `@deepseek-ai/dsh-agent`, `@deepseek-ai/dsh-working-directory`; narrow `engines.dsh`; add `dsh.manifestVersion` self-check at activation (§3.5.5).
+- Acceptance gate: `npm test` green; `node bin/dsh-te.mjs doctor` exits 0; `npm run check` passes.
+- Tests: `manifestVersion mismatch warns and degrades, not crash`; `dsh-te --only <identityKey> status` resolves.
 - Gap IDs closed: G-C-14, G-C-08, G-C-09, G-A-13 (CLI alias), G-C-12 (boundary).
 
 ### 5.3 Acceptance gates
@@ -1699,7 +1699,7 @@ Baseline drift: any count other than 164/163/1 without a named, reviewed new tes
 | W3 | `npm test -- --grep prestep`; `node scripts/audit-deprecations.mjs` exit 0 |
 | W4 | `npm test -- --grep 'mechanism\|prune\|loopguard'` |
 | W5 | `npm test -- --grep 'settings\|client\|devstats'`; Chromium slot-render check (below) |
-| W6 | `wc -l lib/index.js` ≤ 300; `node bin/te-dsh.mjs doctor`; full E2E below |
+| W6 | `wc -l lib/index.js` ≤ 300; `node bin/dsh-te.mjs doctor`; full E2E below |
 
 A wave is **not done** until both the global gates and its per-wave gate pass; a failed per-wave gate blocks the next wave's start (the DAG in §5.1 is a hard ordering, not advisory).
 
@@ -1744,9 +1744,9 @@ A wave is **not done** until both the global gates and its per-wave gate pass; a
 | R-11 | Test baseline drift (164/163/1) masks a regression | Medium | High — a real regression hidden behind new pass count | Global gate asserts the exact triple every wave; any deviation must be explained test-by-test in the wave report | New tests are additive and counted; a drop in total tests without a named removal is a fail | — |
 | R-12 | `agent/request` is removed upstream while a fallback listener is being added | Low | Medium — tiering silently dead | Activation probe of both triggers records misses in the record stream + GUI warn (§3.5.2 step 3) | New listeners on `agent/request` prohibited (deprecation note); `session/event` fallback is first-class, always available | G-C-02, G-C-10 |
 | R-13 | Dev-hours overrun on the `lib/index.js` slim-down (1,396 → ≤300) | Medium | Medium — W6 slips, contention risk returns | W6 gate `wc -l`; interim: contention avoided because W1/W3 patches are single-owner (W1.C, W3.A) and only W6.A rewrites it | Slim-down deferred to W6 exactly so W1–W5 never collide; fallback: ≤450 lines accepted with lead sign-off, recorded in CHANGELOG | G-A-04 |
-| R-14 | Identity adoption collides with the engine's 31 existing `repos/` entries (15 test debris) | Medium | Medium — false adoption pollutes evidence | Doctor probe diff; `bin/te-dsh.mjs purge` report lists unclaimed dirs | Never delete engine state from the plugin; adoption keeps the existing dir + shim; cleanup is only `purge`'s job | G-A-01, G-A-12 |
+| R-14 | Identity adoption collides with the engine's 31 existing `repos/` entries (15 test debris) | Medium | Medium — false adoption pollutes evidence | Doctor probe diff; `bin/dsh-te.mjs purge` report lists unclaimed dirs | Never delete engine state from the plugin; adoption keeps the existing dir + shim; cleanup is only `purge`'s job | G-A-01, G-A-12 |
 | R-15 | `PreStepDecision` union variants change upstream, breaking `{kind:'enter'}` handling | Low | High — pre-step path crashes or no-ops silently | W3.B audit step 3 re-verifies the union at each version-up; runtime `assertKnownKind()`-style check on the payload | Probe + narrow switch over known variants; unknown variant → loud warn + session/event fallback | G-C-01, G-C-02 |
-| R-16 | Engine canonicalization differs from `lib/identity.js` computed keys (UNVERIFIABLE from host) | Medium | High — every key mismatches the engine's `repos/` layout | Doctor-mode diff in `bin/te-dsh.mjs doctor` against the engine's live `repos/<key>/` index | Mismatch → loud P4 warn + migration shim; recorded as gap-register follow-up until engine source is inspectable | G-A-14 |
+| R-16 | Engine canonicalization differs from `lib/identity.js` computed keys (UNVERIFIABLE from host) | Medium | High — every key mismatches the engine's `repos/` layout | Doctor-mode diff in `bin/dsh-te.mjs doctor` against the engine's live `repos/<key>/` index | Mismatch → loud P4 warn + migration shim; recorded as gap-register follow-up until engine source is inspectable | G-A-14 |
 
 **Register cross-check:** every detection column names an artifact that exists after this plan (a test name in §5.2, a script in W3.B, a probe in W1.B, a doctor command in W6.B, a log-line format from `watchdog.warnOnce`). No row says "monitor". Risk rows are reviewed at each wave gate; a risk realized mid-wave reopens the affected wave only, not the DAG.
 
@@ -1768,7 +1768,7 @@ Severity classes: blocker / high / medium / low, inherited from §1.4 and §2.10
 | G-A-10 | low | W6.A | `agent/created` never awaits engine startup unguarded | `agent/created does not block on engine startup` |
 | G-A-11 | high | W1.A | Two-value model: `projectDir` immutable, `liveDir` from `working-directory/change` | `identity resolves once and returns the persisted record verbatim` |
 | G-A-12 | high | W1.A | Rename = re-adoption of the persisted record (`moved: true`), key never changes | `rename re-adopts under new path with moved:true` |
-| G-A-13 | low | W5.C + W6.B | Identity-key grouping + `--only` alias accepting `identityKey` | `te-dsh --only <identityKey> status` resolves |
+| G-A-13 | low | W5.C + W6.B | Identity-key grouping + `--only` alias accepting `identityKey` | `dsh-te --only <identityKey> status` resolves |
 | G-A-14 | high | W1.A | `repokey.js` rule folded into identity as one bounded call site, marked UNVERIFIABLE; doctor probe diffs engine key | `doctor probe flags key mismatch` |
 | G-A-15 | high | W1.A | `working-directory/change` listener updates `liveDir` mid-session | `cd mid-session updates liveDir only` |
 | G-B-01 | blocker | W1.C → W2.A → W4.B | Three record types via `appendPluginRecord` + `PluginRecordMap` augmentation; every rewrite attributed | `rewrite accepted ⇒ surface-rewrite record with matching startSeq/endSeq` |

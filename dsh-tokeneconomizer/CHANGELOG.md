@@ -12,7 +12,28 @@ summary: Engineering history for @nolit/dsh-tokeneconomizer. Seeded from git his
 > the owner's unfinished asks; they are not a changelog. See `docs/RULES.md` §6.1 in the
 > `dsh-plugins` workspace (workspace-level document; not part of this package).
 
-Current version: `0.0.1-rc.8`
+Current version: `0.0.1-rc.9`
+
+## 0.0.1-rc.9 — the CLI name follows the workspace convention — 2026-11-15
+
+**Why.** The owner measured the naming: every DSH-side surface in this workspace starts with
+`dsh-` — the package (`dsh-tokeneconomizer`), the plugin id, the patch row — while the CLI was
+`te-dsh`, the only surface that put the platform marker last. The engine's own launchers stay
+`te` / `te-hook` (they are the upstream project's names, written by `scripts/bootstrap.mjs`
+into the state root); this package's CLI is the DSH-facing one, so it reads `dsh-te`.
+
+**What.** `bin/te-dsh.mjs` → `bin/dsh-te.mjs` (`git mv`, history preserved); `package.json`
+`bin` retargeted; `lib/settings-api.js` spawn path, `scripts/bootstrap.mjs` references, four
+test files and every affected document updated. No behaviour changed — same commands
+(`status`, `doctor`, `cold-start`, `purge`, `bootstrap`, `update`).
+
+**npm note.** `npm publish` had warned "bin[te-dsh] ... was invalid and removed" while
+publishing rc.8, yet the registry still carried `bin: {"te-dsh": "bin/te-dsh.mjs"}` — the
+warning text was wrong about the effect. The rename makes both the warning and the ambiguity
+moot.
+
+Verify: `npm test` 260 — 259 pass / 0 fail / 1 skip; `check-syntax` 26 modules;
+`check-npm-publishable` all six checks; tarball import OK.
 
 ## 0.0.1-rc.8 — three defects the operator found: the version, the model slots, the repository — 2026-11-15
 
@@ -334,7 +355,7 @@ nine numeric thresholds with the default/override/effective distinction and a pe
 `toolprune restore`, reset-to-defaults, history import, and a judge-unavailable banner.
 
 **`history_import` is not an engine key** — a whole-engine grep finds zero hits. It maps to
-`bin/te-dsh.mjs cold-start`.
+`bin/dsh-te.mjs cold-start`.
 
 Engine writes go through the `child_process` boundary (`te config set`), **never** a direct file
 write, and every write **re-reads `te config show` before responding**: the answer carries the
@@ -779,7 +800,7 @@ output 18,751 / reasoning 5,833 / llmMs 413,105 / toolMs 55,396 / ttftMs 328,504
     with a writable root.
 - `npm run check` → `node --check` passes for `lib/index.js`, `lib/bridge.js`, `lib/dedup.js`,
   `lib/prefix.js`, `lib/repokey.js`, `lib/tiering.js`, `lib/watchdog.js`, `lib/devstats.js`,
-  `lib/devstats-server.js`, `lib/client.js`, `bin/te-dsh.mjs`, `scripts/bootstrap.mjs`.
+  `lib/devstats-server.js`, `lib/client.js`, `bin/dsh-te.mjs`, `scripts/bootstrap.mjs`.
 - Isolated `DSH_HOME` browser boot (minimal profile: `dsh-base` + `dsh-web-app` +
   `@nolit/dsh-tokeneconomizer`, thrown-away tree, cleaned up afterwards): the tk client entry
   reported active, the Settings card rendered

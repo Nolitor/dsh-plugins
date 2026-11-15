@@ -54,12 +54,12 @@ dsh plugin --profile web add link:$PWD
 # "@nolit/dsh-tokeneconomizer"를 추가하고 그 프로필을 재시작한다
 
 # 3. 남은 모든 세션을 마이그레이션한다 (bootstrap 단계는 상한이 있다)
-node bin/te-dsh.mjs cold-start
+node bin/dsh-te.mjs cold-start
 ```
 
 `dsh plugin add`는 패키지를 설치하지만 조합하지는 않는다. 패치 행이 적용되려면 번들이
 `dsh.profile.bundles`에 올라 있어야 한다. `--dump-config` 통과는 그 행이 마운트된다는 증거가 아니다.
-세션 후 `te-dsh status`와 `$TOKENECONOMIZER_HOME/errors.log`를 확인하라.
+세션 후 `dsh-te status`와 `$TOKENECONOMIZER_HOME/errors.log`를 확인하라.
 
 이전 세션 회상이 뭔가를 하려면 조합이 하네스 자체 인덱스를 켜야 한다. 배포 기본값은 꺼진 상태
 (`path: ':memory:'`, `openAt: never`)이므로 프로필 패치에 행 하나를 추가한다. 설정 객체는 통째로
@@ -77,11 +77,11 @@ node bin/te-dsh.mjs cold-start
 ```sh
 node scripts/bootstrap.mjs [--source <checkout>] [--sha <commit>] [--home <state root>]
                            [--verify-only] [--no-migrate] [--migrate-limit N]
-node bin/te-dsh.mjs cold-start [--dsh-home <dir>] [--limit N] [--all] [--dry-run]
+node bin/dsh-te.mjs cold-start [--dsh-home <dir>] [--limit N] [--all] [--dry-run]
                                [--reimport] [--only <repoKey>] [--include-missing]
-node bin/te-dsh.mjs purge [--exports] [--state] [--all] [--dry-run] [--yes]
-node bin/te-dsh.mjs status [--cwd <dir>]
-node bin/te-dsh.mjs doctor
+node bin/dsh-te.mjs purge [--exports] [--state] [--all] [--dry-run] [--yes]
+node bin/dsh-te.mjs status [--cwd <dir>]
+node bin/dsh-te.mjs doctor
 npm test
 ```
 
@@ -186,7 +186,7 @@ lib/tiering.js      호스트 로컬: 도구 출력의 턴 기반 계층 메모�
 lib/devstats.js     커밋된 세션 원장의 턴별/단계별 폴드
 lib/devstats-server.js  통계 카드 뒤의 읽기 전용 호스트 라우트
 lib/client.js       Web 절반: settings.section 통계 카드
-bin/te-dsh.mjs      운영자 명령: bootstrap, cold-start, purge, status, doctor
+bin/dsh-te.mjs      운영자 명령: bootstrap, cold-start, purge, status, doctor
 scripts/bootstrap.mjs  고정 클론 + 패치 + 런처 + 검증 + 상한 있는 마이그레이션
 patch/              업스트림 엔진용 DSH 호스트 패치 (파일 7개, 새 리더 1개)
 test/               node --test: 브리지 형태, 모듈 로드, 패키지 계약,

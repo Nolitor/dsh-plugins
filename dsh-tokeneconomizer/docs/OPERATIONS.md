@@ -59,7 +59,7 @@ and restart that profile. The row is inserted by `cordis.patch.yml`
 (`id: tokeneconomizer-dsh`). Verify the mount, not the config dump:
 
 ```sh
-node bin/te-dsh.mjs status --cwd <repository>
+node bin/dsh-te.mjs status --cwd <repository>
 ```
 
 `status` reads `te status --json` for that repository: `host: dsh`, `state`,
@@ -69,10 +69,10 @@ plugin mounted shows up there after `agent/disposed` folds it.
 ## 3. Cold start (learn from sessions that already ran)
 
 ```sh
-node bin/te-dsh.mjs cold-start --dry-run      # list what would be folded, write nothing
-node bin/te-dsh.mjs cold-start                # oldest-first, guarded, fold the rest
-node bin/te-dsh.mjs cold-start --limit 20     # newest 20 only
-node bin/te-dsh.mjs cold-start --only <key>   # one repository, from the dry run
+node bin/dsh-te.mjs cold-start --dry-run      # list what would be folded, write nothing
+node bin/dsh-te.mjs cold-start                # oldest-first, guarded, fold the rest
+node bin/dsh-te.mjs cold-start --limit 20     # newest 20 only
+node bin/dsh-te.mjs cold-start --only <key>   # one repository, from the dry run
 ```
 
 It walks `$DSH_HOME/sessions/<project>/<session>/session.v*.jsonl.zstd`, decompresses with Node's
@@ -115,9 +115,9 @@ ended-green turns before it has a repository envelope.
 ### 3.2 Purging the engine state
 
 ```sh
-node bin/te-dsh.mjs purge --all --dry-run     # plan: paths, file counts, bytes
-node bin/te-dsh.mjs purge --all --yes         # delete
-node bin/te-dsh.mjs purge --exports --yes     # only $TOKENECONOMIZER_HOME/dsh-sessions
+node bin/dsh-te.mjs purge --all --dry-run     # plan: paths, file counts, bytes
+node bin/dsh-te.mjs purge --all --yes         # delete
+node bin/dsh-te.mjs purge --exports --yes     # only $TOKENECONOMIZER_HOME/dsh-sessions
 ```
 
 `--state` removes the engine's per-repository state, the session records and the launchers;
@@ -329,7 +329,7 @@ did not persist comes back as `ok: false`.
 zero hits for it. It maps to:
 
 ```sh
-node bin/te-dsh.mjs cold-start
+node bin/dsh-te.mjs cold-start
 ```
 
 The import route spawns that command with a validated argument allow-list (`--all`, `--dry-run`,
@@ -347,8 +347,8 @@ judge-independent strict heuristic, and its decision is marked degraded in the r
 ## 6. Verify and diagnose
 
 ```sh
-node bin/te-dsh.mjs doctor                 # launchers, vendored tree, HEAD, live check, manifest, config, identity
-node bin/te-dsh.mjs status --cwd <repo>    # what the engine knows about this repository
+node bin/dsh-te.mjs doctor                 # launchers, vendored tree, HEAD, live check, manifest, config, identity
+node bin/dsh-te.mjs status --cwd <repo>    # what the engine knows about this repository
 npm test                                   # 252 tests, one needs TE_DSH_TEST_HOME
 TE_DSH_TEST_HOME=$TOKENECONOMIZER_HOME npm test  # includes the end-to-end session
 npm run check                              # syntax-check every module under lib/, bin/, scripts/
@@ -409,7 +409,7 @@ Failure signals:
 
 | Symptom | Where to look |
 |---|---|
-| no facts, no proposal | `te-dsh status` shows 0 sessions: the fold never ran (`agent/disposed` not reached, or the engine missing) |
+| no facts, no proposal | `dsh-te status` shows 0 sessions: the fold never ran (`agent/disposed` not reached, or the engine missing) |
 | facts learned but none injected | `microskills` is `off`, or the next session's brief failed (`errors.log`) |
 | `errors.log` traceback | engine bug or unreadable state; the session itself was unaffected |
 | proposal never forms | catalog missing (`hosts/dsh/catalog.json`) or fewer than 5 sessions / 10 prompts |
@@ -431,7 +431,7 @@ Use an isolated home for anything experimental:
 
 ```sh
 node scripts/bootstrap.mjs --home /tmp/te-probe
-DSH_HOME=/tmp/dsh-probe TOKENECONOMIZER_HOME=/tmp/te-probe node bin/te-dsh.mjs cold-start --all
+DSH_HOME=/tmp/dsh-probe TOKENECONOMIZER_HOME=/tmp/te-probe node bin/dsh-te.mjs cold-start --all
 ```
 
 `cold-start` passes the same home to `te dsh-import`; a mismatch here would write the live state

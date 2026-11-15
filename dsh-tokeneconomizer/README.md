@@ -55,12 +55,12 @@ dsh plugin --profile web add link:$PWD
 # $DSH_HOME/profiles/web/package.json and restart that profile
 
 # 3. Migrate every remaining session (the bootstrap pass is bounded)
-node bin/te-dsh.mjs cold-start
+node bin/dsh-te.mjs cold-start
 ```
 
 `dsh plugin add` installs the package but does not compose it: the bundle must be listed in
 `dsh.profile.bundles` for its patch row to be applied. `--dump-config` passing does not prove the
-row mounts; check `te-dsh status` after a session and `$TOKENECONOMIZER_HOME/errors.log`.
+row mounts; check `dsh-te status` after a session and `$TOKENECONOMIZER_HOME/errors.log`.
 
 For prior-session recall to do anything, the composition must enable the harness's own index. The
 shipped base leaves it off (`path: ':memory:'`, `openAt: never`), so add one row to the profile
@@ -78,11 +78,11 @@ patch — both keys are required, because a config object is replaced whole:
 ```sh
 node scripts/bootstrap.mjs [--source <checkout>] [--sha <commit>] [--home <state root>]
                            [--verify-only] [--no-migrate] [--migrate-limit N]
-node bin/te-dsh.mjs cold-start [--dsh-home <dir>] [--limit N] [--all] [--dry-run]
+node bin/dsh-te.mjs cold-start [--dsh-home <dir>] [--limit N] [--all] [--dry-run]
                                [--reimport] [--only <repoKey>] [--include-missing]
-node bin/te-dsh.mjs purge [--exports] [--state] [--all] [--dry-run] [--yes]
-node bin/te-dsh.mjs status [--cwd <dir>]
-node bin/te-dsh.mjs doctor
+node bin/dsh-te.mjs purge [--exports] [--state] [--all] [--dry-run] [--yes]
+node bin/dsh-te.mjs status [--cwd <dir>]
+node bin/dsh-te.mjs doctor
 npm test
 npm run check                  # syntax-check every module under lib/, bin/, scripts/
 npm run audit:deprecations     # the deprecation gate over the consumed DSH seams
@@ -197,7 +197,7 @@ The plugin's own locale files carry the display title: `locale/en.json` is
 `loopguard` → `nudge`), never a stored value.
 
 `on` is a **write alias, never a stored value**. `history_import` is a plugin-owned action, not an
-engine key — it maps to `bin/te-dsh.mjs cold-start`.
+engine key — it maps to `bin/dsh-te.mjs cold-start`.
 
 Eight routes under `/api/local/tokeneconomizer/settings`: `GET /settings`,
 `POST /settings/config` (batched, per-key results), `POST /settings/restore`,
@@ -233,7 +233,7 @@ lib/settings.js     the external settings file, merged on top of the Cordis conf
 lib/client.js       the Web half: one settings row with two internal tabs
 lib/upstream.js     the embedded engine's identity and the upstream comparison
 lib/types/records.d.ts  the PluginRecordMap augmentation for the three record types
-bin/te-dsh.mjs      operator commands: bootstrap, cold-start, purge, status, doctor
+bin/dsh-te.mjs      operator commands: bootstrap, cold-start, purge, status, doctor
 scripts/bootstrap.mjs  pinned clone + patch + launchers + verification + bounded migration
 scripts/audit-deprecations.mjs  the deprecation gate over the consumed DSH seams
 scripts/check-syntax.mjs  syntax-checks every module under lib/, bin/, scripts/

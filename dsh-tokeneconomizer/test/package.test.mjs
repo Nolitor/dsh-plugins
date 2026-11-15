@@ -23,7 +23,7 @@ test('the running DSH prerelease is inside the declared window', () => {
 test('the track follows the owner version and the rc.1 runtime floor', () => {
   // Owner decision 2026-11-05: every @nolit track is normalized to 0.0.1-rc.N, and rc.1 needs
   // Node >= 24.9. Both are packaging facts, so they are pinned rather than left to review.
-  assert.equal(pkg.version, '0.0.1-rc.8')
+  assert.equal(pkg.version, '0.0.1-rc.9')
   assert.equal(pkg.engines.node, '>=24.9')
   assert.equal(pkg.dsh.manifestVersion, 1)
 })
@@ -94,7 +94,7 @@ test('the side call keeps its Session inside the throwaway directory', () => {
 
 test('the operator and statistics entry points exist', () => {
   for (const file of [
-    'bin/te-dsh.mjs',
+    'bin/dsh-te.mjs',
     'scripts/bootstrap.mjs',
     'lib/index.js',
     'lib/bridge.js',

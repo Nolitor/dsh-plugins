@@ -198,7 +198,7 @@ export function main(argv = process.argv.slice(2)) {
   // Install-time migration: fold the sessions that ran before this plugin was mounted, so the
   // first new session already has evidence. Bounded on purpose — a fold may run the engine's
   // paid proposer, so the default takes the newest sessions only and a full pass stays an
-  // explicit operator decision (`te-dsh cold-start --all`).
+  // explicit operator decision (`dsh-te cold-start --all`).
   let migration = { skipped: 'verification failed' }
   if (checked.ok) {
     if (argv.includes('--no-migrate')) {
@@ -206,7 +206,7 @@ export function main(argv = process.argv.slice(2)) {
     } else {
       const limit = flag('--migrate-limit', '20')
       const result = spawnSync(process.execPath, [
-        join(HERE, '..', 'bin', 'te-dsh.mjs'),
+        join(HERE, '..', 'bin', 'dsh-te.mjs'),
         'cold-start',
         '--limit', limit,
         '--home', root,
@@ -217,7 +217,7 @@ export function main(argv = process.argv.slice(2)) {
         folded: /"folded":\s*(\d+)/.exec(result.stdout ?? '')?.[1] ?? null,
         skippedFolded: /"skippedFolded":\s*(\d+)/.exec(result.stdout ?? '')?.[1] ?? null,
         stderr: (result.stderr ?? '').trim() || undefined,
-        next: 'te-dsh cold-start --all  migrates every remaining session',
+        next: 'dsh-te cold-start --all  migrates every remaining session',
       }
     }
   }

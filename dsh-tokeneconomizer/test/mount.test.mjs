@@ -250,7 +250,7 @@ test('headless detection reads the profile argv', () => {
 
 test('an agent scope composes with no engine present', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-mount-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-mount-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'missing-te'), hookPath: join(home, 'missing-hook') })
   const created = ctx.listeners.get('agent/created')
   assert.equal(typeof created, 'function')
@@ -268,7 +268,7 @@ test('an agent scope composes with no engine present', async () => {
 
 test('subagent gets the in-memory levers but no engine', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-sub-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-sub-'))
   const engine = countingLaunchers(home)
   apply(ctx, { stateHome: home, tePath: engine.te, hookPath: engine.hook })
   const agent = fakeAgent('session-sub', home)
@@ -297,7 +297,7 @@ test('subagent gets the in-memory levers but no engine', async () => {
 
 test('a subagent stays off the engine across a whole turn lifecycle', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-sub-life-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-sub-life-'))
   const engine = countingLaunchers(home)
   apply(ctx, { stateHome: home, tePath: engine.te, hookPath: engine.hook })
   const agent = fakeAgent('session-sub-life', home)
@@ -330,7 +330,7 @@ test('a subagent stays off the engine across a whole turn lifecycle', async () =
 
 test('a subagent still deduplicates a repeated tool output', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-sub-dedup-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-sub-dedup-'))
   const engine = countingLaunchers(home)
   apply(ctx, { stateHome: home, tePath: engine.te, hookPath: engine.hook })
   const agent = fakeAgent('session-sub-dedup', home)
@@ -366,7 +366,7 @@ test('a subagent still deduplicates a repeated tool output', async () => {
 
 test('a subagent still runs the loop breaker and the watchdog', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-sub-loop-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-sub-loop-'))
   const engine = countingLaunchers(home)
   apply(ctx, {
     stateHome: home,
@@ -402,7 +402,7 @@ test('a subagent still runs the loop breaker and the watchdog', async () => {
 
 test('subagentMemory false restores no economy of its own for a child', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-sub-off-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-sub-off-'))
   const engine = countingLaunchers(home)
   apply(ctx, {
     stateHome: home,
@@ -430,7 +430,7 @@ test('subagentMemory false restores no economy of its own for a child', async ()
 
 test('the root session keeps its full engine lifecycle', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-root-engine-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-root-engine-'))
   const engine = countingLaunchers(home)
   apply(ctx, { stateHome: home, tePath: engine.te, hookPath: engine.hook })
   const agent = fakeAgent('session-root', home)
@@ -490,7 +490,7 @@ test('devstats lists root sessions only, never a child as a sibling', async () =
 
 test('the observers are registered before the session brief resolves', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-timing-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-timing-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y') })
   const agent = fakeAgent('session-timing', home)
   const created = ctx.listeners.get('agent/created')
@@ -502,7 +502,7 @@ test('the observers are registered before the session brief resolves', async () 
 
 test('the pinned rules are mounted as a prompt section', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-pinned-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-pinned-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y'), pinnedRules: 'stay on task' })
   const agent = fakeAgent('session-pinned', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
@@ -519,7 +519,7 @@ test('the pinned rules are mounted as a prompt section', async () => {
 
 test('no pinned rules still mounts the Think-in-Code routing, and thinkInCode off mounts nothing', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-nopinned-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-nopinned-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y') })
   const agent = fakeAgent('session-nopinned', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
@@ -529,7 +529,7 @@ test('no pinned rules still mounts the Think-in-Code routing, and thinkInCode of
   assert.equal(agent.calls.sections[0].interpolate, false)
 
   const off = fakeContext()
-  const offHome = mkdtempSync(join(tmpdir(), 'te-dsh-nopinned-off-'))
+  const offHome = mkdtempSync(join(tmpdir(), 'dsh-te-nopinned-off-'))
   apply(off, {
     stateHome: offHome,
     tePath: join(offHome, 'x'),
@@ -543,7 +543,7 @@ test('no pinned rules still mounts the Think-in-Code routing, and thinkInCode of
 
 test('a repeated tool output is replaced by a pointer', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-dedup-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-dedup-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y') })
   const agent = fakeAgent('session-dedup', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
@@ -575,7 +575,7 @@ test('a repeated tool output is replaced by a pointer', async () => {
 
 test('a failed tool result is never replaced', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-failed-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-failed-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y') })
   const agent = fakeAgent('session-failed', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
@@ -594,7 +594,7 @@ test('a failed tool result is never replaced', async () => {
 
 test('a decision carrying a canonical value is left untouched', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-value-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-value-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y') })
   const agent = fakeAgent('session-value', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
@@ -618,7 +618,7 @@ test('a decision carrying a canonical value is left untouched', async () => {
 
 test('a blocked call stays blocked', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-block-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-block-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y') })
   const agent = fakeAgent('session-block', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
@@ -634,7 +634,7 @@ test('a blocked call stays blocked', async () => {
 
 test('consecutive identical failures stop the turn and ask for guidance', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-loop-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-loop-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y') })
   const agent = fakeAgent('session-loop', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
@@ -660,7 +660,7 @@ test('consecutive identical failures stop the turn and ask for guidance', async 
 
 test('a new user message clears the loop chain', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-reset-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-reset-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y') })
   const agent = fakeAgent('session-reset', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
@@ -679,7 +679,7 @@ test('a new user message clears the loop chain', async () => {
 
 test('watchdogAction warn is advisory and never interrupts the turn', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-watchdog-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-watchdog-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y'), watchdogThresholdMs: 20, watchdogAction: 'warn' })
   const agent = fakeAgent('session-watchdog', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
@@ -697,7 +697,7 @@ test('watchdogAction warn is advisory and never interrupts the turn', async () =
 
 test('watchdogAction interrupt is the opt-in that stops the turn', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-watchdog-int-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-watchdog-int-'))
   apply(ctx, {
     stateHome: home,
     tePath: join(home, 'x'),
@@ -719,7 +719,7 @@ test('watchdogAction interrupt is the opt-in that stops the turn', async () => {
 
 test('a slow tool is caught by its own budget instead of holding the turn open', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-watchdog-suspend-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-watchdog-suspend-'))
   apply(ctx, {
     stateHome: home,
     tePath: join(home, 'x'),
@@ -744,7 +744,7 @@ test('a slow tool is caught by its own budget instead of holding the turn open',
 
 test('a watch that only warns does not interrupt the turn', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-warnonly-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-warnonly-'))
   apply(ctx, {
     stateHome: home,
     tePath: join(home, 'x'),
@@ -765,7 +765,7 @@ test('a watch that only warns does not interrupt the turn', async () => {
 
 test('a changed system prompt is reported once', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-prefix-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-prefix-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y') })
   const agent = fakeAgent('session-prefix', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
@@ -781,7 +781,7 @@ test('a changed system prompt is reported once', async () => {
 
 test('every host-local event writes a diagnostic line', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-diagnostics-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-diagnostics-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y'), watchdogThresholdMs: 20 })
   const agent = fakeAgent('session-diagnostics', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })
@@ -828,7 +828,7 @@ test('every host-local event writes a diagnostic line', async () => {
 
 test('disposing the agent stops the watchdog', async () => {
   const ctx = fakeContext()
-  const home = mkdtempSync(join(tmpdir(), 'te-dsh-dispose-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-te-dispose-'))
   apply(ctx, { stateHome: home, tePath: join(home, 'x'), hookPath: join(home, 'y'), watchdogThresholdMs: 20 })
   const agent = fakeAgent('session-dispose', home)
   await ctx.listeners.get('agent/created')({ agent, source: 'startup' })

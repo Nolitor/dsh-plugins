@@ -99,10 +99,22 @@ export function runJson(program, args, payload, options = {}) {
     })
     child.on('error', () => finish(null))
     child.on('close', () => {
-      const line = out.trim().split('\n').filter(Boolean).pop()
+      // The engine's machine output is a JSON document, but not always a single line:
+      // `te status --json` (plugin/cli.py) prints `json.dumps(out, indent=2)`, while the hook
+      // and the dsh-import answer print one line. Parse the last line first (the single-line
+      // protocol), and when that is not JSON but the whole output is, parse the whole output.
+      // Measured 2026-11-15: `status --json` returned null through this path before the
+      // whole-output fallback — the last line alone is `}`.
+      const lines = out.trim().split('\n').filter(Boolean)
+      const line = lines.pop()
       if (!line) return finish(null)
       try {
         const value = JSON.parse(line)
+        finish(value && typeof value === 'object' ? value : null)
+        return
+      } catch { /* not a one-line answer; try the whole document */ }
+      try {
+        const value = JSON.parse(out)
         finish(value && typeof value === 'object' ? value : null)
       } catch {
         finish(null)

@@ -1,6 +1,6 @@
 {
   "name": "@nolit/dsh-tokeneconomizer",
-  "version": "0.0.1-rc.8",
+  "version": "0.0.1-rc.9",
   "description": "TokenEconomizer for the DeepSeek Harness: session micro-skills, evidence-based tool pruning applied as an in-memory restriction, and a tool-loop guard, bridged to the stdlib-only Python engine through its own te/te-hook launchers, plus host-local in-memory features: tool-result hash deduplication, a KV-cache-safe prompt slot with constant Think-in-Code routing, a loop breaker with an advisory thinking watchdog, turn-based output tiering, prior-session recall through the harness's own FTS5 index, and the engine's repository-key mapping. Zero runtime imports outside node: builtins.",
   "keywords": [
     "dsh",
@@ -18,7 +18,7 @@
   "type": "module",
   "main": "lib/index.js",
   "bin": {
-    "te-dsh": "./bin/te-dsh.mjs"
+    "dsh-te": "./bin/dsh-te.mjs"
   },
   "exports": {
     ".": {
@@ -70,7 +70,7 @@
     "check": "node scripts/check-syntax.mjs",
     "audit:deprecations": "node scripts/audit-deprecations.mjs",
     "bootstrap": "node scripts/bootstrap.mjs",
-    "cold-start": "node bin/te-dsh.mjs cold-start",
+    "cold-start": "node bin/dsh-te.mjs cold-start",
     "docs:index": "node ../scripts/doc-index-track.mjs",
     "docs:check": "node ../scripts/doc-index-track.mjs --check"
   }

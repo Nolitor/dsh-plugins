@@ -94,7 +94,7 @@ was left alone.
 ```bash
 cd dsh-tokeneconomizer && npm test          # 260 tests, 259 pass, 1 skip
 cd dsh-tokeneconomizer && npm run check     # every module parses
-node bin/te-dsh.mjs doctor                   # install, manifest, 36 config keys, identity
+node bin/dsh-te.mjs doctor                   # install, manifest, 36 config keys, identity
 cd ../.. && npm run docs:check               # headers, generated indexes, relative links
 ```
 

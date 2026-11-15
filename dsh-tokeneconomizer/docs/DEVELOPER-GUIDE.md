@@ -265,7 +265,7 @@ So the plugin checks its own field at activation (`lib/index.js`, `checkManifest
 mismatch **warns and degrades; it never throws** — a throw inside `apply()` costs the entire
 plugin, and a cost optimizer must not be the reason a session breaks.
 
-`node bin/te-dsh.mjs doctor` reports the same comparison, next to the install, the plugin's
+`node bin/dsh-te.mjs doctor` reports the same comparison, next to the install, the plugin's
 36 configuration keys, and the engine's repository key for the current directory.
 
 ## 9. The gates
@@ -275,7 +275,7 @@ plugin, and a cost optimizer must not be the reason a session breaks.
 | unit / regression | `npm test` | the whole plugin: **260 tests, 259 passing, 1 skipped** (measured 2026-11-15 at `0.0.1-rc.8`) |
 | syntax | `npm run check` | every module under `lib/`, `bin/`, `scripts/` parses — the script **walks** the tree, so a new module is checked the moment it exists |
 | deprecations | `npm run audit:deprecations` | the consumed DSH seams are present and none is newly deprecated |
-| doctor | `node bin/te-dsh.mjs doctor` | the install, the manifest, the 36 config keys, the identity |
+| doctor | `node bin/dsh-te.mjs doctor` | the install, the manifest, the 36 config keys, the identity |
 | engine suite | `python -m pytest tests/ -q` in the vendored tree | the engine's own tests: **419 passed, 1 skipped** (8 of them new for the side-call model slots) |
 | docs | `npm run docs:check` at the repo root | the skeleton headers, the generated indexes, the relative links |
 | history | `node scripts/check-plugin-history.mjs` | every plugin track owns its CHANGELOG |

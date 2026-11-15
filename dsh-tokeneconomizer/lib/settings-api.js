@@ -750,7 +750,7 @@ function importArgs (body) {
 }
 
 /**
- * Start the asynchronous `te-dsh cold-start` job behind the import route.
+ * Start the asynchronous `dsh-te cold-start` job behind the import route.
  * @param {Function} runEngine - unused by the child, kept in the signature for symmetry.
  * @param {string[]} args - validated cold-start flags.
  * @param {Map<string, object>} jobs - live job records.
@@ -769,7 +769,7 @@ function startImportJob (runEngine, args, jobs, order, log) {
     if (dropped !== undefined) jobs.delete(dropped)
   }
   try {
-    const bin = new URL('../bin/te-dsh.mjs', import.meta.url)
+    const bin = new URL('../bin/dsh-te.mjs', import.meta.url)
     const child = spawn(process.execPath, [fileURLToPath(bin), 'cold-start', ...args], {
       cwd: process.cwd(),
       env: process.env,

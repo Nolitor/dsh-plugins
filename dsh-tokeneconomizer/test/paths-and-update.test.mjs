@@ -4,7 +4,7 @@
  * 1. The interrupt registry is found, not hardcoded. The bridge used to carry the owner's
  *    absolute `file:///home/minami/...` URL as its only default, so an installed copy recorded
  *    nothing and said so nowhere.
- * 2. `te-dsh update --check` answers "is the pin still the branch head?" without fetching,
+ * 2. `dsh-te update --check` answers "is the pin still the branch head?" without fetching,
  *    without writing, and without hanging on a credential prompt.
  *
  * Both are tested against synthetic checkouts and a local bare repository, so neither needs the
@@ -18,11 +18,11 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { interruptRootCandidates, resolveInterruptSources } from '../lib/interrupt-bridge.js'
-import { localDistance, remoteHead } from '../bin/te-dsh.mjs'
+import { localDistance, remoteHead } from '../bin/dsh-te.mjs'
 
 /** A throwaway directory that is removed when the test's scope ends. */
 function scratch(t) {
-  const dir = mkdtempSync(join(tmpdir(), 'te-dsh-paths-'))
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-te-paths-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   return dir
 }
@@ -94,7 +94,7 @@ test('a shipped source file carries no absolute home path', async () => {
   // The regression this guards is measurable: the previous default spelled one owner's home
   // into the package. Measured over the shipped sources only — tests and docs may quote it.
   const { readFileSync } = await import('node:fs')
-  for (const file of ['lib/interrupt-bridge.js', 'bin/te-dsh.mjs', 'scripts/bootstrap.mjs']) {
+  for (const file of ['lib/interrupt-bridge.js', 'bin/dsh-te.mjs', 'scripts/bootstrap.mjs']) {
     const text = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8')
     assert.ok(!text.includes('file:///home/'), `${file} still carries an absolute home path`)
   }

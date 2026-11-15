@@ -21,7 +21,7 @@ Version 1.0 of this file (2026-11-13) listed two whole features as "not in use, 
 | `watchdog.js` — "currently unused, only adds complexity" | **35 distinct watchdog notices across 15 sessions** in `~/.dsh/sessions` (239 logs, 745.9 MB decompressed). 27 are the advisory warning path, 8 are the opt-in interrupt. 16 turn-level and 9 tool-level budgets expired; 1 turn was actually cancelled by it (`action=interrupted`). | **False.** The watchdog is the plugin's only stall detector and it fires in real use. Not removable. |
 | `devstats.js` / `devstats-server.js` — "written for debugging, no longer needed" | `lib/index.js` mounts the route (`registerDevStatsRoutes`); `lib/client.js` renders the card and carries **65** `devstats.*` keys; `locale/en.json` and `locale/ko.json` each carry all 65. `docs/DEV-STATISTICS.md` documents it as a shipped surface. | **False.** It is a shipped Web surface with three consumers. Not removable. |
 | (unstated) | `lib/configValue` was exported and referenced **nowhere** — not by `lib/`, not by `bin/`, not by any test. | **True, removed.** |
-| (unstated) | `bin/te-dsh.mjs` purge listed a `'ho'` path — a two-character typo of `hosts` from commit `d1547b9`. The live state root has no `ho`, so it purged nothing while carrying a live `rmSync` against an unrelated name. | **True, removed.** |
+| (unstated) | `bin/dsh-te.mjs` purge listed a `'ho'` path — a two-character typo of `hosts` from commit `d1547b9`. The live state root has no `ho`, so it purged nothing while carrying a live `rmSync` against an unrelated name. | **True, removed.** |
 
 The lesson is in the method, not the list: both wrong claims are the kind a reader makes from
 file names, and both are falsified by one grep over the corpus and one grep over the importers.
@@ -157,7 +157,7 @@ rather than trusted. The four stale rows were corrected in this pass.
 | Item | Evidence | Change |
 | :--- | :--- | :--- |
 | `lib/index.js` `configValue()` | referenced by no module and no test | deleted (the internal `rawValue()` it wrapped stays) |
-| `bin/te-dsh.mjs` purge entry `'ho'` | typo of `hosts` since `d1547b9`; absent from the live state root; a live `rmSync` target | deleted, with a comment naming the reason |
+| `bin/dsh-te.mjs` purge entry `'ho'` | typo of `hosts` since `d1547b9`; absent from the live state root; a live `rmSync` target | deleted, with a comment naming the reason |
 | `lib/interrupt-bridge.js` absolute default URLs | one owner's home spelled into a published artifact; unresolvable for any installed copy | replaced with ordered discovery (`DSH_INTERRUPT_CORE_URL`/`REASONS_URL` → `DSH_INTERRUPT_ROOT` → sibling checkout → `~/Workspace/projects/total_skill`), fail-open as before |
 
 ## 4. Not candidates, and why

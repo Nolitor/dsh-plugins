@@ -87,12 +87,12 @@ function fakeAgent(id, cwd) {
 }
 
 test('one session crosses the bridge and is folded', { skip }, async (t) => {
-  const stateHome = mkdtempSync(join(tmpdir(), 'te-dsh-e2e-state-'))
-  const repo = mkdtempSync(join(tmpdir(), 'te-dsh-e2e-repo-'))
+  const stateHome = mkdtempSync(join(tmpdir(), 'dsh-te-e2e-state-'))
+  const repo = mkdtempSync(join(tmpdir(), 'dsh-te-e2e-repo-'))
   // The engine spawns `dsh --profile headless` for side calls, so this test must own a
   // throwaway DSH_HOME. Without it the call writes the owner's live session log under
   // cwd = /tmp/te-*, which shows up as an orphan in the sidebar (measured 2026-11-05).
-  const isolatedDshHome = mkdtempSync(join(tmpdir(), 'te-dsh-e2e-dsh-home-'))
+  const isolatedDshHome = mkdtempSync(join(tmpdir(), 'dsh-te-e2e-dsh-home-'))
   const previousDshHome = process.env.DSH_HOME
   const previousTeHome = process.env.TOKENECONOMIZER_HOME
   process.env.DSH_HOME = isolatedDshHome

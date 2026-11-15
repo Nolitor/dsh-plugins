@@ -2,11 +2,11 @@
 /**
  * Operator command line for @nolit/dsh-tokeneconomizer.
  *
- *   te-dsh bootstrap [--source <checkout>] [--sha <commit>] [--home <state root>]
+ *   dsh-te bootstrap [--source <checkout>] [--sha <commit>] [--home <state root>]
  *       Materialize the patched TokenEconomizer core, write `bin/te` and `bin/te-hook`, and
  *       verify that `te --host dsh` answers. See scripts/bootstrap.mjs.
  *
- *   te-dsh cold-start [--dsh-home <dir>] [--limit N] [--all] [--dry-run] [--reimport]
+ *   dsh-te cold-start [--dsh-home <dir>] [--limit N] [--all] [--dry-run] [--reimport]
  *                     [--only <repoKey>] [--include-missing]
  *       Decompress every finished DSH session and fold it into the engine, so what earlier
  *       sessions taught is available before the next one starts. Sessions modified in the last
@@ -14,18 +14,18 @@
  *       Skipped by default: a session this state root already folded, one that already has a
  *       record carrying turns, and one whose working directory no longer exists (a throwaway
  *       test tree). `--reimport` forces the first two, `--include-missing` forces the third.
- *       `--only <repoKey>` migrates one repository, as printed by `te-dsh cold-start --dry-run`.
+ *       `--only <repoKey>` migrates one repository, as printed by `dsh-te cold-start --dry-run`.
  *       A full run folds oldest-first; `--limit` folds the newest N.
  *
- *   te-dsh purge [--exports] [--state] [--all] [--dry-run] [--yes]
+ *   dsh-te purge [--exports] [--state] [--all] [--dry-run] [--yes]
  *       Remove this plugin's engine state. `--exports` removes the decompressed session copies,
  *       `--state` removes the engine's per-repository state and the launchers. The state-root
  *       directory itself stays, and DSH's own session logs are never touched.
  *
- *   te-dsh status [--cwd <dir>]
+ *   dsh-te status [--cwd <dir>]
  *       Print `te --host dsh status --json` for a directory.
  *
- *   te-dsh update --check [--branch main] [--remote <url>] [--timeout-ms N]
+ *   dsh-te update --check [--branch main] [--remote <url>] [--timeout-ms N]
  *       Compare the pinned upstream commit this package patches against the branch head that
  *       `git ls-remote` reports, and print the distance when a local checkout can measure it.
  *       Read-only: nothing is fetched, checked out, or written. Exit `0` when the pin is the
@@ -33,7 +33,7 @@
  *       git, a timeout) — the failure is reported as JSON, never as a crash. Without `--check`
  *       the same comparison runs, exits `0`, and adds the command that would apply it.
  *
- *   te-dsh doctor
+ *   dsh-te doctor
  *       Report which launchers and patch are in place, without changing anything.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -188,7 +188,7 @@ function purge() {
     process.stdout.write(`${JSON.stringify({
       root,
       nothing: 'pass --exports, --state, or --all; nothing was deleted',
-      hint: 'te-dsh purge --all --dry-run  shows the plan first',
+      hint: 'dsh-te purge --all --dry-run  shows the plan first',
     }, null, 2)}\n`)
     return 0
   }
@@ -272,18 +272,18 @@ export function exportFromStore(source, dir) {
 }
 
 /**
- * `te-dsh cold-start`.
+ * `dsh-te cold-start`.
  * @returns {Promise<number>} exit code.
  */
 async function coldStart() {
   if (typeof zstdDecompressSync !== 'function') {
-    process.stderr.write('te-dsh: this Node has no zstd decoder (need >= 22.15); use the harness Node\n')
+    process.stderr.write('dsh-te: this Node has no zstd decoder (need >= 22.15); use the harness Node\n')
     return 1
   }
   const bins = launchers(withHome())
   if (!existsSync(bins.te) || !existsSync(bins.hook)) {
-    process.stderr.write(`te-dsh: no launchers in ${join(bins.root, 'bin')}; `
-      + 'run `te-dsh bootstrap` first\n')
+    process.stderr.write(`dsh-te: no launchers in ${join(bins.root, 'bin')}; `
+      + 'run `dsh-te bootstrap` first\n')
     return 1
   }
   const exportDir = join(bins.root, 'dsh-sessions')
@@ -379,7 +379,7 @@ async function coldStart() {
 }
 
 /**
- * `te-dsh status`.
+ * `dsh-te status`.
  * @returns {Promise<number>} exit code.
  */
 async function status() {
@@ -392,7 +392,7 @@ async function status() {
 }
 
 /**
- * `te-dsh doctor`: what is in place, without changing anything.
+ * `dsh-te doctor`: what is in place, without changing anything.
  *
  * The report answers three questions that were previously unanswerable from one place: the
  * install (launchers, vendored tree, pinned commit), the PLUGIN's own configuration keys
@@ -652,7 +652,7 @@ export function localDistance(tree, from, to) {
 }
 
 /**
- * `te-dsh update`: is the pinned upstream commit still the branch head?
+ * `dsh-te update`: is the pinned upstream commit still the branch head?
  *
  * With `--check` this is a read-only report: exit `0` when the pin is the head, `1` when an
  * update is available, `2` when the question could not be answered. Without `--check` it keeps
@@ -704,7 +704,7 @@ function update() {
     observed.detail = distance.behind === null
       ? 'the branch head moved past the pin; the distance is unknown without a fetch'
       : `the branch head is ${distance.behind} commit(s) ahead of the pin`
-    observed.next = `te-dsh bootstrap --sha ${head.sha}` + (distance.behind === null ? '  (after fetching that commit)' : '')
+    observed.next = `dsh-te bootstrap --sha ${head.sha}` + (distance.behind === null ? '  (after fetching that commit)' : '')
   }
   process.stdout.write(`${JSON.stringify(observed, null, 2)}\n`)
   if (!checkOnly) return 0
@@ -744,7 +744,7 @@ async function main() {
       process.stdout.write(readFileSync(new URL(import.meta.url), 'utf8').split('*/')[0] + '*/\n')
       return 0
     default:
-      process.stderr.write(`te-dsh: unknown command ${command}\n`)
+      process.stderr.write(`dsh-te: unknown command ${command}\n`)
       return 2
   }
 }

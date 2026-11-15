@@ -272,7 +272,7 @@ readings, and each has its own per-key reset.
 ### 6.4 `history_import` is not an engine key
 
 `history_import` is a **plugin-owned action**, not a config key. A whole-engine grep finds **zero**
-hits for it. It maps to `bin/te-dsh.mjs cold-start` — the import route spawns that command with a
+hits for it. It maps to `bin/dsh-te.mjs cold-start` — the import route spawns that command with a
 validated argument allow-list (`--all`, `--dry-run`, `--reimport`, `--include-missing`,
 `--dsh-home`, `--limit`, `--only`) and answers `202` with a job id.
 
@@ -412,7 +412,7 @@ is structural debt rather than a defect: every capability works today, and the t
 | `package.json` `dependencies` on consumed contracts | **absent** | declared | G-C-08 |
 | `engines.dsh` range / `manifestVersion` self-check | wide range; the **self-check is present** (`checkManifestVersion()`), the range is still wide | narrowed + activation self-check | G-C-09, G-C-14 |
 | Frozen `SOURCE_KINDS` / `ORIGIN_VALUES` / `SECTION_NAMES` | **none present** | one frozen constant each | G-C-11, G-C-12, G-C-13 |
-| `bin/te-dsh.mjs` `identityKey` alias + `doctor` key diff | the **`doctor` key diff is present** (the identity report); the `identityKey` alias is absent | aliased, probed | G-A-13 |
+| `bin/dsh-te.mjs` `identityKey` alias + `doctor` key diff | the **`doctor` key diff is present** (the identity report); the `identityKey` alias is absent | aliased, probed | G-A-13 |
 
 Two cautions for whoever picks it up, both learned the hard way in this session:
 
@@ -457,7 +457,7 @@ $ python -m pytest tests
 ```sh
 npm test                                        # 260 tests / 259 pass / 1 skip / 0 fail
 npm run check                                   # walks lib/, bin/, scripts/
-node bin/te-dsh.mjs doctor                      # the install, the manifest, the 36 config keys, the identity
+node bin/dsh-te.mjs doctor                      # the install, the manifest, the 36 config keys, the identity
 node scripts/audit-deprecations.mjs             # exit 0 with two allowed deprecations
 node scripts/audit-deprecations.mjs --json      # machine-readable form
 ```
@@ -466,7 +466,7 @@ node scripts/audit-deprecations.mjs --json      # machine-readable form
 hardcoded 12-file list **silently skipped new modules** — `identity.js`, `repokey-bridge.js` and
 `probes.js` were all added unchecked.
 
-`node bin/te-dsh.mjs doctor` answers **three** questions it previously answered one: the install
+`node bin/dsh-te.mjs doctor` answers **three** questions it previously answered one: the install
 (launchers, vendored tree, pinned commit), the **manifest** (the package's own
 `dsh.manifestVersion` against the one this build understands), the **configuration** (every one
 of the plugin's **36** configuration keys, its default, its current value, and which keys are
