@@ -1,0 +1,13 @@
+## 사후 기록 (2026-11-15, central push)
+
+GitHub push protection이 히스토리 속 Antigravity installed-app OAuth 쌍을 차단해,
+소유자 승인(2026-11-15) 하에 `git filter-repo --replace-text`로 전체 히스토리에서
+값을 치환했다. 치환 전 3커밋(구 63078c2b, 27e7052, 3bb6645의 원문 버전)에서
+해당 값이 발견됐다.
+
+- 치환 대상: agy 바이너리에서 추출된 client id/secret (Google installed-app 설계상 공개.
+  측정 기록 2026-11-05 ANTIGRAVITY-DIRECTSDK-MEASUREMENT.md)
+- 결과: 전체 이력 스캔 0건 (client-id, secret 모두). 커밋 수 244 보존, 구조 커밋과
+  gitlink 4종, .gitmodules 생존 확인.
+- 실제 값은 로컬 워크스페이스 사본과 공개 설계 문서에만 남는다. (npm tarball은
+  이미 그 값으로 게시돼 있다 — installed-app 공개 설계에 따라 의도된 사항.)
