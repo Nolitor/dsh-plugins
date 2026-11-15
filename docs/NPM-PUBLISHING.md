@@ -157,6 +157,28 @@ A publish is not done until `npm view` returns the version. Exit code 0 from
 `npm publish` means npm accepted the upload; it does not mean the registry serves it yet
 and it does not mean the tarball works.
 
+### 4.2 GitHub tag + release — the step this document used to omit
+
+Measured 2026-11-15: four `@nolit` plugins were published to npm but their GitHub
+tags/releases stopped at older versions — dsh-notify rc.6, dsh-korean-locale rc.4,
+dsh-sidebar-manager rc.2, dsh-tokeneconomizer rc.8/rc.9 all had **no** tag or release
+until this session added them. npm 게시와 GitHub 릴리즈는 같은 배포의 두 절반이다.
+
+Rules (recorded because they were learned the hard way today):
+
+1. Tag name `v<version>`, e.g. `v0.0.1-rc.6`. The release reuses the same name.
+2. The tag must point at **the commit that made the version** (measured per repo),
+   not at the current default-branch HEAD.
+3. Release notes = the current-version section of the track's own CHANGELOG.md
+   (header `## <version>` up to the next `## `).
+4. Verify by reading the raw ref (`/git/ref/tags/<name>`), not the `tags` listing —
+   the listing endpoint served a stale CDN value right after the PATCH today.
+5. A release body is not done until `gh release view <tag>` shows the notes.
+
+A deploy is **done** only when npm `rc` dist-tag, the git tag and the release all name
+the same version. Central repo: `Nolitor/dsh-plugins` (submodules per track, since
+2026-11-15 owner decision).
+
 ## 5. Build and pack state (measured 2026-11-06)
 
 | Track | Version | Files | Packed | Unpacked | `access` |

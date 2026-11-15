@@ -21,10 +21,10 @@
 | :--- | :--- |
 | `dsh-command-skill/` | [dsh-command-skill/docs/INDEX.md](../dsh-command-skill/docs/INDEX.md) |
 | `dsh-custom-router/` | [dsh-custom-router/docs/INDEX.md](../dsh-custom-router/docs/INDEX.md) |
-| `dsh-notify/` | [dsh-notify/docs/INDEX.md](../dsh-notify/docs/INDEX.md) |
-| `dsh-sidebar-manager/` | [dsh-sidebar-manager/docs/INDEX.md](../dsh-sidebar-manager/docs/INDEX.md) |
-| `dsh-tokeneconomizer/` | [dsh-tokeneconomizer/docs/INDEX.md](../dsh-tokeneconomizer/docs/INDEX.md) |
 | `dsh-korean-locale/` (submodule) | separate repository — read `dsh-korean-locale/README.md` there |
+| `dsh-notify/` (submodule) | separate repository — read `dsh-notify/README.md` there |
+| `dsh-sidebar-manager/` (submodule) | separate repository — read `dsh-sidebar-manager/README.md` there |
+| `dsh-tokeneconomizer/` (submodule) | separate repository — read `dsh-tokeneconomizer/README.md` there |
 | `pending-docs/` | [pending-docs/INDEX.md](../pending-docs/INDEX.md) — 미승격 · 미구현 · 폐기 · 미정 |
 
 ## rule
@@ -199,4 +199,4 @@
 
 ---
 
-65 workspace docs (65 boot cards), 0 with problems, 5 subprojects.
+65 workspace docs (65 boot cards), 0 with problems, 2 subprojects.
